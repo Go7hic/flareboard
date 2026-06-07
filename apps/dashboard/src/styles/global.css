@@ -498,7 +498,6 @@ textarea {
   height: var(--brand-logo-size, 26px);
   max-width: var(--brand-logo-size, 26px);
   max-height: var(--brand-logo-size, 26px);
-  object-fit: contain;
 }
 
 .brand-logo-wordmark {
@@ -3016,22 +3015,13 @@ code {
   flex-shrink: 0;
 }
 
-.landing-hero-subbadge {
-  margin: 0.5rem 0 0;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--text-muted);
-  letter-spacing: -0.01em;
-}
-
 .landing-headline {
   margin: 0;
-  font-size: clamp(2rem, 4.5vw, 3.125rem);
+  font-size: clamp(1.75rem, 3.8vw, 2.75rem);
   font-weight: 600;
-  letter-spacing: -0.045em;
-  line-height: 1.08;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
   text-wrap: balance;
-  max-width: 14ch;
 }
 
 .landing-lead {
@@ -3047,11 +3037,6 @@ code {
   flex-wrap: wrap;
   gap: 0.75rem;
   margin-top: 1.5rem;
-}
-
-.landing-hero-pipeline {
-  margin-top: 1.75rem;
-  max-width: 100%;
 }
 
 .landing-hero-visual {
@@ -3154,7 +3139,6 @@ code {
   letter-spacing: -0.03em;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-subtle);
-  border-left: 3px solid var(--cf-orange);
 }
 
 .landing-compare-grid {
@@ -3333,35 +3317,16 @@ code {
 }
 
 .landing-feature-grid-6 {
-  grid-template-columns: repeat(12, 1fr);
-  grid-template-rows: auto auto auto;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: auto auto;
 }
 
 .landing-feature-grid-6 .landing-feature-accent {
-  grid-column: 1 / span 5;
-  grid-row: 1 / span 2;
-}
-
-.landing-feature-grid-6 .landing-feature-card:nth-child(2) {
-  grid-column: 6 / span 4;
-}
-
-.landing-feature-grid-6 .landing-feature-card:nth-child(3) {
-  grid-column: 10 / span 3;
-}
-
-.landing-feature-grid-6 .landing-feature-card:nth-child(4) {
-  grid-column: 6 / span 7;
+  grid-row: span 1;
 }
 
 .landing-feature-grid-6 .landing-feature-highlight {
-  grid-column: 1 / span 7;
-  grid-row: 3;
-}
-
-.landing-feature-grid-6 .landing-feature-card:nth-child(6) {
-  grid-column: 8 / span 5;
-  grid-row: 3;
+  grid-column: span 1;
 }
 
 .landing-paths {
@@ -3414,11 +3379,12 @@ code {
 
 .landing-plans-header {
   margin-bottom: 2.25rem;
-  max-width: 58ch;
+  text-align: center;
 }
 
 .landing-plans-lead {
-  max-width: 58ch;
+  max-width: 52ch;
+  margin-inline: auto;
 }
 
 .landing-plans-row {
@@ -4052,8 +4018,9 @@ code {
 }
 
 .landing-cta-inner {
-  max-width: 52ch;
-  margin: 0;
+  max-width: var(--container-max);
+  margin: 0 auto;
+  text-align: center;
 }
 
 .landing-cta-title {
@@ -4218,14 +4185,8 @@ code {
     width: 100%;
   }
 
-  .landing-feature-grid-6 .landing-feature-accent,
-  .landing-feature-grid-6 .landing-feature-card:nth-child(2),
-  .landing-feature-grid-6 .landing-feature-card:nth-child(3),
-  .landing-feature-grid-6 .landing-feature-card:nth-child(4),
-  .landing-feature-grid-6 .landing-feature-highlight,
-  .landing-feature-grid-6 .landing-feature-card:nth-child(6) {
-    grid-column: span 6;
-    grid-row: auto;
+  .landing-feature-grid-6 {
+    grid-template-columns: 1fr 1fr;
   }
 
   .landing-plans.landing-section {
@@ -4299,14 +4260,10 @@ code {
     grid-template-columns: 1fr;
   }
 
-  .landing-feature-grid-6 .landing-feature-accent,
-  .landing-feature-grid-6 .landing-feature-card:nth-child(2),
-  .landing-feature-grid-6 .landing-feature-card:nth-child(3),
-  .landing-feature-grid-6 .landing-feature-card:nth-child(4),
-  .landing-feature-grid-6 .landing-feature-highlight,
-  .landing-feature-grid-6 .landing-feature-card:nth-child(6) {
+  .landing-feature-accent,
+  .landing-feature-highlight {
+    grid-row: span 1;
     grid-column: span 1;
-    grid-row: auto;
   }
 
   .shell-links {

@@ -1,0 +1,13 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "flareboard-dashboard",
+  "compatibility_date": "2025-06-01",
+  // VITE_API_URL / VITE_INGEST_URL are NOT wrangler [vars] — set them in Cloudflare Workers
+  // Builds → Environment variables for this worker (baked in at `vite build`). Example:
+  // VITE_API_URL=https://api.flareboard.dev  VITE_INGEST_URL=https://t.flareboard.dev
+  // If unset, production infers API as https://api.<dashboard-host> (see src/lib/api-url.ts).
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}

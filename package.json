@@ -1,0 +1,38 @@
+{
+  "name": "flareboard",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "private": false,
+  "scripts": {
+    "dev:api": "pnpm --filter @flareboard/api dev",
+    "dev:ingest": "pnpm --filter @flareboard/ingest dev",
+    "dev:dashboard": "pnpm --filter @flareboard/dashboard dev",
+    "dev:aggregator": "pnpm --filter @flareboard/aggregator dev",
+    "dev": "pnpm run dev:api",
+    "typecheck": "pnpm -r typecheck",
+    "db:migrate": "pnpm --filter @flareboard/db migrate:local",
+    "db:migrate:remote": "pnpm --filter @flareboard/db migrate:remote",
+    "seed": "tsx scripts/seed.ts",
+    "seed:remote": "tsx scripts/seed.ts --remote --password flareboard",
+    "migrate:legacy": "tsx scripts/migrate-legacy-analytics.ts",
+    "validate:migration": "tsx scripts/validate-migration.ts",
+    "backfill:rollups": "tsx scripts/backfill-rollups.ts",
+    "validate:wrangler": "node scripts/validate-wrangler.mjs",
+    "deploy:api": "node scripts/validate-wrangler.mjs && pnpm --filter @flareboard/api run deploy",
+    "deploy:ingest": "node scripts/validate-wrangler.mjs && pnpm --filter @flareboard/ingest run deploy",
+    "deploy:aggregator": "node scripts/validate-wrangler.mjs && pnpm --filter @flareboard/aggregator run deploy",
+    "deploy:dashboard": "pnpm --filter @flareboard/dashboard run deploy"
+  },
+  "dependencies": {
+    "@flareboard/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.32",
+    "@types/pg": "^8.11.14",
+    "pg": "^8.16.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "wrangler": "^4.19.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "version": "1.0.0"
+}

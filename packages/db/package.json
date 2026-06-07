@@ -1,0 +1,28 @@
+{
+  "name": "@flareboard/db",
+  "version": "1.0.0",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "migrate:local": "wrangler d1 migrations apply flareboard-db --local --config ../../apps/api/wrangler.jsonc",
+    "migrate:remote": "wrangler d1 migrations apply flareboard-db --remote --config ../../apps/api/wrangler.jsonc --env production",
+    "seed": "tsx ../../scripts/seed.ts"
+  },
+  "dependencies": {
+    "@flareboard/shared": "workspace:*",
+    "drizzle-orm": "^0.44.2"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250603.0",
+    "@types/node": "^22.15.32",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "wrangler": "^4.19.0"
+  }
+}

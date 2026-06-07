@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+.next/
+.turbo/
+*.tsbuildinfo
+coverage/
+
+# Cloudflare / Wrangler local
+.wrangler/
+.dev.vars
+.dev.vars.*
+.mf/
+
+# Miniflare local state (also under .wrangler/)
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Vite cache
+.vite/
+
+# Secrets & env (keep .env.example)
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Internal developer docs (not for open source)
+docs/FUTURE.md
+docs/migration.md
+docs/UMAMI-GAP-CHECKLIST.md
+docs/hosted-saas.md
+docs/*checklist*
+docs/*roadmap*
+*.plan.md
+

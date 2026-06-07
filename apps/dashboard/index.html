@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/logo-mark.png" sizes="256x256" />
+    <link rel="apple-touch-icon" href="/logo-mark.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flareboard · Privacy-first Google Analytics alternative</title>
+    <meta name="description" content="Flareboard — privacy-focused web analytics. No cookies, fast collection, secure storage, and dashboards you control." />
+    <script>
+      (function () {
+        try {
+          var s = localStorage.getItem('flareboard-theme');
+          var t =
+            s === 'light' || s === 'dark'
+              ? s
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
+          document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

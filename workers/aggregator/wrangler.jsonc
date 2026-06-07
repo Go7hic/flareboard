@@ -1,0 +1,62 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "flareboard-aggregator",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-06-01",
+  "compatibility_flags": ["nodejs_compat_v2"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "flareboard-db",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "../../packages/db/migrations"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "queue": "flareboard-events-dlq",
+        "binding": "DLQ"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "flareboard-events",
+        "max_batch_size": 50,
+        "max_batch_timeout": 2,
+        "dead_letter_queue": "flareboard-events-dlq"
+      }
+    ]
+  },
+  "observability": {
+    "enabled": true
+  },
+  "env": {
+    "production": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "flareboard-db",
+          "database_id": "d722f47e-8fd8-4414-8994-8fd73001a9b1",
+          "migrations_dir": "../../packages/db/migrations"
+        }
+      ],
+      "queues": {
+        "producers": [
+          {
+            "queue": "flareboard-events-dlq",
+            "binding": "DLQ"
+          }
+        ],
+        "consumers": [
+          {
+            "queue": "flareboard-events",
+            "max_batch_size": 50,
+            "max_batch_timeout": 2,
+            "dead_letter_queue": "flareboard-events-dlq"
+          }
+        ]
+      }
+    }
+  }
+}

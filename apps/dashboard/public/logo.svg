@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 168 32" fill="none">
+  <rect x="4" y="4" width="24" height="24" rx="6" fill="#0d9488"/>
+  <path d="M9 22.5 L13.5 17 L17.5 19.5 L22 12.5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="22" cy="12.5" r="2.25" fill="#f6821f"/>
+  <path d="M24 4 H30 V10 L24 4 Z" fill="#f6821f"/>
+  <text
+    x="40"
+    y="21.5"
+    fill="#12151c"
+    font-family="Outfit, system-ui, -apple-system, sans-serif"
+    font-size="18"
+    font-weight="600"
+    letter-spacing="-0.54"
+  >Flareboard</text>
+</svg>

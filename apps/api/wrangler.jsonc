@@ -1,0 +1,90 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "flareboard-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-06-01",
+  "compatibility_flags": ["nodejs_compat_v2"],
+  "vars": {
+    "ENVIRONMENT": "development"
+  },
+  "dev": {
+    "port": 8788
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "flareboard-db",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "../../packages/db/migrations"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "CACHE",
+      "id": "00000000-0000-0000-0000-000000000002"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "REPLAY_BUCKET",
+      "bucket_name": "flareboard-replays"
+    }
+  ],
+  "send_email": [
+    {
+      "name": "EMAIL"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "invocation_logs": true,
+      "head_sampling_rate": 1
+    }
+  },
+  "env": {
+    "production": {
+      "vars": {
+        "ENVIRONMENT": "production",
+        "HOSTED_MODE": "true",
+        "EMAIL_FROM": "noreply@flareboard.dev",
+        "EMAIL_FROM_NAME": "Flareboard",
+        "DASHBOARD_URL": "https://flareboard.dev"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "flareboard-db",
+          "database_id": "d722f47e-8fd8-4414-8994-8fd73001a9b1",
+          "migrations_dir": "../../packages/db/migrations"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "CACHE",
+          "id": "8db5ae0c6ed9492ca9e591f02bc56727"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "REPLAY_BUCKET",
+          "bucket_name": "flareboard-replays"
+        }
+      ],
+      "send_email": [
+        {
+          "name": "EMAIL"
+        }
+      ],
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1,
+        "logs": {
+          "invocation_logs": true,
+          "head_sampling_rate": 1
+        }
+      }
+    }
+  }
+}

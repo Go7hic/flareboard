@@ -1,0 +1,24 @@
+{
+  "name": "@flareboard/api",
+  "version": "1.0.0",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8788",
+    "deploy": "wrangler deploy --env production",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@flareboard/db": "workspace:*",
+    "@flareboard/shared": "workspace:*",
+    "drizzle-orm": "^0.44.2",
+    "hono": "^4.8.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250603.0",
+    "@types/node": "^22.15.32",
+    "typescript": "^5.8.3",
+    "wrangler": "^4.19.0"
+  }
+}

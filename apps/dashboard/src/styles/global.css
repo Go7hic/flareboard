@@ -4255,3 +4255,113 @@ code {
     align-items: flex-start;
   }
 }
+
+/* Retention heatmap + goals progress (P1) */
+.retention-heatmap-wrap {
+  margin-top: 0.5rem;
+}
+
+.retention-heatmap-cell {
+  min-width: 2.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.retention-heatmap-week {
+  white-space: nowrap;
+  font-size: 0.8125rem;
+}
+
+.retention-heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  max-width: 960px;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.retention-heatmap-legend-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, var(--bg-subtle), var(--accent));
+}
+
+.goal-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  margin-top: 0.35rem;
+  overflow: hidden;
+}
+
+.goal-progress-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.goal-config-panel {
+  margin-top: 1rem;
+  padding: 1rem;
+}
+
+.realtime-session-btn {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.realtime-session-drawer {
+  margin-top: 1rem;
+  padding: 1rem;
+}
+
+.realtime-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.realtime-timeline {
+  margin: 0.75rem 0;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.heatmap-iframe-fallback {
+  width: 100%;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  text-align: center;
+  gap: 0.35rem;
+}
+
+.segment-condition-row {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.segment-list-item {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.path-sort-toolbar {
+  margin-bottom: 0.75rem;
+}

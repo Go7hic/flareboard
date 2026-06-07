@@ -29,6 +29,18 @@ export function WebsiteSubNav() {
         {t('sessionReplays')}
       </NavLink>
       <NavLink
+        to={`${base}/heatmaps`}
+        className={({ isActive }) => `website-sub-nav-link${isActive ? ' active' : ''}`}
+      >
+        {t('heatmaps')}
+      </NavLink>
+      <NavLink
+        to={`${base}/revenue`}
+        className={({ isActive }) => `website-sub-nav-link${isActive ? ' active' : ''}`}
+      >
+        {t('revenue')}
+      </NavLink>
+      <NavLink
         to={`${base}/settings`}
         className={({ isActive }) => `website-sub-nav-link${isActive ? ' active' : ''}`}
       >

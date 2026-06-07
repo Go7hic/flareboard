@@ -15,6 +15,27 @@
       "when": 1748976000000,
       "tag": "0001_audit_log",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1749235200000,
+      "tag": "0005_gap_features",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1749321600000,
+      "tag": "0006_gap_features_full",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1749408000000,
+      "tag": "0007_goals",
+      "breakpoints": true
     }
   ]
 }

@@ -38,6 +38,20 @@ const LOGIN_WINDOW_SEC = 60;
 const RESET_TTL = 3600;
 const VERIFY_TTL = 86400;
 
+/** Production hosted SaaS only — local/dev skips email verification for seeded admins. */
+function requiresEmailVerification(env: Env): boolean {
+  return isHostedMode(env) && env.ENVIRONMENT === 'production';
+}
+
+async function resolveLoginUser(env: Env, identifier: string) {
+  const byUsername = await getUserByUsername(env, identifier);
+  if (byUsername) return byUsername;
+  if (identifier.includes('@')) {
+    return getUserByEmail(env, identifier);
+  }
+  return null;
+}
+
 export async function handleRegister(c: Ctx) {
   if (!isHostedMode(c.env)) {
     return json({ message: 'Registration is not enabled' }, 404);
@@ -117,12 +131,12 @@ export async function handleLogin(c: Ctx) {
     return badRequest('Invalid credentials');
   }
 
-  const user = await getUserByUsername(c.env, parsed.data.username);
+  const user = await resolveLoginUser(c.env, parsed.data.username);
   if (!user || !checkPassword(parsed.data.password, user.password)) {
     return unauthorized({ message: 'Invalid username or password' });
   }
 
-  if (isHostedMode(c.env) && user.email && !user.emailVerifiedAt) {
+  if (requiresEmailVerification(c.env) && user.email && !user.emailVerifiedAt) {
     return json({ message: 'Please verify your email before signing in.' }, 403);
   }
 

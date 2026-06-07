@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, blob, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, blob, index, primaryKey } from 'drizzle-orm/sqlite-core';
 
 export const user = sqliteTable('user', {
   userId: text('user_id').primaryKey(),
@@ -86,6 +86,8 @@ export const website = sqliteTable(
     deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
     replayEnabled: integer('replay_enabled', { mode: 'boolean' }).default(false),
     replayConfig: text('replay_config', { mode: 'json' }),
+    heatmapConfig: text('heatmap_config', { mode: 'json' }),
+    goalConfig: text('goal_config', { mode: 'json' }),
   },
   (t) => [
     index('website_user_idx').on(t.userId),
@@ -489,6 +491,60 @@ export const auditLog = sqliteTable(
     index('audit_log_created_at_idx').on(t.createdAt),
     index('audit_log_entity_idx').on(t.entityType, t.entityId),
   ],
+);
+
+export const heatmapCell = sqliteTable(
+  'heatmap_cell',
+  {
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    urlPath: text('url_path').notNull(),
+    day: text('day').notNull(),
+    kind: text('kind').notNull(),
+    normX: integer('norm_x').notNull(),
+    normY: integer('norm_y').notNull(),
+    deviceClass: text('device_class').notNull().default(''),
+    viewportW: integer('viewport_w').notNull().default(0),
+    viewportH: integer('viewport_h').notNull().default(0),
+    count: integer('count').notNull().default(0),
+  },
+  (t) => [
+    index('heatmap_cell_lookup_idx').on(t.websiteId, t.urlPath, t.day),
+    primaryKey({
+      columns: [t.websiteId, t.urlPath, t.day, t.kind, t.normX, t.normY, t.deviceClass],
+    }),
+  ],
+);
+
+export const websiteEmailReport = sqliteTable('website_email_report', {
+  websiteId: text('website_id')
+    .primaryKey()
+    .references(() => website.websiteId),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
+  frequency: text('frequency').notNull().default('weekly'),
+  recipientEmail: text('recipient_email'),
+  timezone: text('timezone').notNull().default('UTC'),
+  lastSentAt: integer('last_sent_at', { mode: 'timestamp_ms' }),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+});
+
+export const cohort = sqliteTable(
+  'cohort',
+  {
+    cohortId: text('cohort_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    name: text('name').notNull(),
+    type: text('type').notNull(),
+    value: text('value').notNull(),
+    definition: text('definition', { mode: 'json' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('cohort_website_idx').on(t.websiteId)],
 );
 
 export const sessionReplaySaved = sqliteTable(

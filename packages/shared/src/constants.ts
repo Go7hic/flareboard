@@ -13,6 +13,7 @@ export const COLLECTION_TYPE = {
   identify: 'identify',
   performance: 'performance',
   record: 'record',
+  heatmap: 'heatmap',
 } as const;
 
 export const EVENT_TYPE = {
@@ -21,7 +22,18 @@ export const EVENT_TYPE = {
   linkEvent: 3,
   pixelEvent: 4,
   performance: 5,
+  heatmapClick: 6,
+  heatmapScroll: 7,
 } as const;
+
+/** @deprecated Use HEATMAP_NORM_SIZE — kept for backward compat in API responses */
+export const HEATMAP_GRID_SIZE = 20;
+
+/** Device-independent normalized coordinate range (0 .. NORM_SIZE-1). */
+export const HEATMAP_NORM_SIZE = 1000;
+
+export const HEATMAP_DEVICE_CLASSES = ['', 'desktop', 'mobile', 'tablet'] as const;
+export type HeatmapDeviceClass = (typeof HEATMAP_DEVICE_CLASSES)[number];
 
 export const ENTITY_TYPE = {
   website: 1,

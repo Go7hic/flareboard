@@ -36,7 +36,8 @@ import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
 import { defaultRange, loadWebsiteRange, saveWebsiteRange } from '../lib/websiteRangeStorage';
 
-const METRIC_TABS = ['path', 'referrer', 'country', 'browser', 'os', 'device', 'language'] as const;
+const METRIC_TABS = ['path', 'referrer', 'country', 'region', 'city', 'browser', 'os', 'device', 'language'] as const;
+type PathSortBy = 'views' | 'visitors' | 'time';
 
 const CountryMap = lazy(() =>
   import('../components/CountryMap').then((m) => ({ default: m.CountryMap })),
@@ -84,6 +85,7 @@ export default function WebsiteStatsPage() {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [segmentId, setSegmentId] = useState('');
   const [metricTab, setMetricTab] = useState<(typeof METRIC_TABS)[number]>('path');
+  const [pathSortBy, setPathSortBy] = useState<PathSortBy>('views');
   const [compareEnabled, setCompareEnabled] = useState(false);
   const [range, setRange] = useState(() => {
     if (websiteId) {
@@ -124,14 +126,16 @@ export default function WebsiteStatsPage() {
   const useSegmentFilter = Boolean(segmentId);
 
   const overviewQuery = useQuery({
-    queryKey: ['overview', websiteId, metricTab, range],
+    queryKey: ['overview', websiteId, metricTab, pathSortBy, range],
     enabled: Boolean(websiteId) && !useSegmentFilter,
-    queryFn: () =>
-      api<{
+    queryFn: () => {
+      const sortQs = metricTab === 'path' ? `&sortBy=${pathSortBy}` : '';
+      return api<{
         stats: WebsiteStats;
         pageviews: { pageviews: { x: string; y: number }[] };
         metrics: MetricRow[];
-      }>(`/api/websites/${websiteId}/stats/overview?unit=day&type=${metricTab}&${rangeQs}`),
+      }>(`/api/websites/${websiteId}/stats/overview?unit=day&type=${metricTab}&${rangeQs}${sortQs}`);
+    },
   });
 
   const statsQuery = useQuery({
@@ -160,10 +164,12 @@ export default function WebsiteStatsPage() {
   });
 
   const metricsQuery = useQuery({
-    queryKey: ['metrics', websiteId, metricTab, segmentId, range],
+    queryKey: ['metrics', websiteId, metricTab, pathSortBy, segmentId, range],
     enabled: Boolean(websiteId) && useSegmentFilter,
-    queryFn: () =>
-      api<MetricRow[]>(`/api/websites/${websiteId}/metrics?type=${metricTab}&${qs}`),
+    queryFn: () => {
+      const sortQs = metricTab === 'path' ? `&sortBy=${pathSortBy}` : '';
+      return api<MetricRow[]>(`/api/websites/${websiteId}/metrics?type=${metricTab}&${qs}${sortQs}`);
+    },
   });
 
   const eventsQuery = useQuery({
@@ -331,11 +337,27 @@ export default function WebsiteStatsPage() {
                 variant={metricTab === tab ? 'primary' : 'secondary'}
                 onClick={() => setMetricTab(tab)}
               >
-                {tab}
+                {tab === 'region' ? t('topRegion') : tab === 'city' ? t('topCity') : tab}
               </Button>
             ))}
           </div>
         </div>
+        {metricTab === 'path' ? (
+          <div className="path-sort-toolbar stats-toolbar">
+            <span className="text-muted">{t('pagesSortBy')}:</span>
+            {(['views', 'visitors', 'time'] as PathSortBy[]).map((sort) => (
+              <Button
+                key={sort}
+                type="button"
+                size="sm"
+                variant={pathSortBy === sort ? 'primary' : 'secondary'}
+                onClick={() => setPathSortBy(sort)}
+              >
+                {t(`pagesSort_${sort}`)}
+              </Button>
+            ))}
+          </div>
+        ) : null}
         {metricTab === 'country' ? (
           <div className="breakdown-map">
             <h3 className="section-title">{t('countryMap')}</h3>
@@ -346,9 +368,18 @@ export default function WebsiteStatsPage() {
         ) : null}
         <MetricsTable
           embedded
-          title={metricTab === 'country' ? t('topCountry') : `${t('topMetric')} ${metricTab}`}
+          title={
+            metricTab === 'country'
+              ? t('topCountry')
+              : metricTab === 'region'
+                ? t('topRegion')
+                : metricTab === 'city'
+                  ? t('topCity')
+                  : `${t('topMetric')} ${metricTab}`
+          }
           rows={metricsRows}
           loading={metricsLoading}
+          showPageStats={metricTab === 'path'}
         />
       </section>
 

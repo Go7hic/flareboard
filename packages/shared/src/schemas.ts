@@ -30,6 +30,12 @@ export const sendPayloadSchema = z
     ttfb: z.number().nonnegative().max(60000).optional(),
     revenue: z.coerce.number().optional(),
     currency: z.string().max(10).optional(),
+    heatmapType: z.enum(['click', 'scroll']).optional(),
+    x: z.coerce.number().int().min(0).max(10000).optional(),
+    y: z.coerce.number().int().min(0).max(10000).optional(),
+    viewportWidth: z.coerce.number().int().min(1).max(10000).optional(),
+    viewportHeight: z.coerce.number().int().min(1).max(10000).optional(),
+    scrollDepth: z.coerce.number().int().min(0).max(100).optional(),
   })
   .refine(
     (data) => {
@@ -39,10 +45,33 @@ export const sendPayloadSchema = z
     { message: 'Exactly one of website, link, or pixel must be provided' },
   );
 
-export const sendSchema = z.object({
-  type: z.enum(['event', 'identify', 'performance']),
-  payload: sendPayloadSchema,
-});
+export const heatmapPayloadSchema = z
+  .object({
+    website: z.string().uuid(),
+    url: urlOrPathParam.optional(),
+    hostname: z.string().max(100).optional(),
+    kind: z.enum(['click', 'scroll']),
+    x: z.coerce.number().int().min(0).max(10000).optional(),
+    y: z.coerce.number().int().min(0).max(10000).optional(),
+    viewportWidth: z.coerce.number().int().min(1).max(10000).optional(),
+    viewportHeight: z.coerce.number().int().min(1).max(10000).optional(),
+    scrollDepth: z.coerce.number().int().min(0).max(100).optional(),
+    timestamp: z.coerce.number().int().optional(),
+  })
+  .refine(
+    (d) =>
+      d.kind === 'scroll'
+        ? d.scrollDepth != null
+        : d.x != null && d.y != null && d.viewportWidth != null && d.viewportHeight != null,
+    { message: 'Click heatmaps require x, y, viewportWidth, viewportHeight; scroll requires scrollDepth' },
+  );
+
+export const sendSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('event'), payload: sendPayloadSchema }),
+  z.object({ type: z.literal('identify'), payload: sendPayloadSchema }),
+  z.object({ type: z.literal('performance'), payload: sendPayloadSchema }),
+  z.object({ type: z.literal('heatmap'), payload: heatmapPayloadSchema }),
+]);
 
 export const batchSchema = z.array(z.record(z.unknown()));
 
@@ -82,12 +111,30 @@ export const createWebsiteSchema = z.object({
   id: z.string().uuid().nullable().optional(),
 });
 
+export const heatmapConfigSchema = z.object({
+  sampleRate: z.number().min(0).max(1).optional(),
+  enabled: z.boolean().optional(),
+  previewUrl: z.string().max(2000).optional(),
+});
+
+export const goalEntrySchema = z.object({
+  event: z.string().max(50),
+  target: z.coerce.number().int().min(1),
+  period: z.enum(['daily', 'weekly', 'monthly']).default('monthly'),
+});
+
+export const goalConfigSchema = z.object({
+  goals: z.array(goalEntrySchema).max(20).default([]),
+});
+
 export const updateWebsiteSchema = z.object({
   name: z.string().max(100).optional(),
   domain: z.string().max(500).optional(),
   resetAt: z.string().datetime().optional(),
   replayEnabled: z.boolean().optional(),
   replayConfig: z.record(z.unknown()).nullable().optional(),
+  heatmapConfig: heatmapConfigSchema.nullable().optional(),
+  goalConfig: goalConfigSchema.nullable().optional(),
 });
 
 export const updateProfileSchema = z.object({
@@ -123,8 +170,21 @@ export const compareQuerySchema = statsQuerySchema.extend({
 
 export const metricsQuerySchema = statsQuerySchema.extend({
   type: z
-    .enum(['path', 'url', 'referrer', 'browser', 'os', 'device', 'country', 'language', 'event'])
+    .enum([
+      'path',
+      'url',
+      'referrer',
+      'browser',
+      'os',
+      'device',
+      'country',
+      'region',
+      'city',
+      'language',
+      'event',
+    ])
     .optional(),
+  sortBy: z.enum(['views', 'visitors', 'time']).optional(),
   limit: z.coerce.number().int().min(1).max(500).optional(),
 });
 
@@ -259,6 +319,40 @@ export const updateSavedReplaySchema = z.object({
   name: z.string().max(100).optional(),
 });
 
+export const cohortConditionSchema = z.object({
+  field: z.enum(['event_name', 'url_path']),
+  operator: z.enum(['equals', 'contains']),
+  value: z.string().max(500),
+});
+
+export const cohortDefinitionSchema = z.object({
+  conditions: z.array(cohortConditionSchema).min(1).max(10),
+  windowStart: z.coerce.number().int().optional(),
+  windowEnd: z.coerce.number().int().optional(),
+});
+
+export const createCohortSchema = z.object({
+  name: z.string().max(100),
+  definition: cohortDefinitionSchema,
+});
+
+export const updateCohortSchema = z.object({
+  name: z.string().max(100).optional(),
+  definition: cohortDefinitionSchema.optional(),
+});
+
+export const emailReportSchema = z.object({
+  enabled: z.boolean(),
+  frequency: z.enum(['daily', 'weekly', 'monthly']),
+  recipientEmail: z.string().max(2000).optional(),
+  timezone: z.string().max(64).optional(),
+});
+
+export const importCsvSchema = z.object({
+  format: z.enum(['flareboard', 'ga4', 'plausible', 'matomo']).default('flareboard'),
+  csv: z.string().min(1).max(10_000_000),
+});
+
 export const funnelQuerySchema = z.object({
   websiteId: z.string().uuid(),
   steps: z.string().min(1),
@@ -266,6 +360,9 @@ export const funnelQuerySchema = z.object({
   endAt: z.coerce.number().optional(),
   segmentId: z.string().uuid().optional(),
 });
+
+export type CohortDefinition = z.infer<typeof cohortDefinitionSchema>;
+export type CohortCondition = z.infer<typeof cohortConditionSchema>;
 
 export type SendPayload = z.infer<typeof sendPayloadSchema>;
 export type SendBody = z.infer<typeof sendSchema>;
@@ -381,11 +478,27 @@ export interface QueueRevenueMessage {
   };
 }
 
+export interface QueueHeatmapMessage {
+  type: 'heatmap';
+  data: {
+    websiteId: string;
+    urlPath: string;
+    kind: 'click' | 'scroll';
+    normX: number;
+    normY: number;
+    deviceClass: string;
+    viewportW: number;
+    viewportH: number;
+    createdAt: number;
+  };
+}
+
 export type QueueMessage =
   | QueueSessionMessage
   | QueueEventMessage
   | QueueSessionDataMessage
-  | QueueRevenueMessage;
+  | QueueRevenueMessage
+  | QueueHeatmapMessage;
 
 export function flattenEventData(
   websiteId: string,

@@ -8,11 +8,13 @@ export function MetricsTable({
   rows,
   loading,
   embedded = false,
+  showPageStats = false,
 }: {
   title: string;
   rows: MetricRow[];
   loading?: boolean;
   embedded?: boolean;
+  showPageStats?: boolean;
 }) {
   const maxY = rows.length ? Math.max(...rows.map((r) => r.y), 1) : 1;
 
@@ -29,7 +31,13 @@ export function MetricsTable({
           <thead>
             <tr>
               <th>{t('metricName')}</th>
-              <th className="num">{t('views')}</th>
+              <th className="num">{showPageStats ? t('pagesSort_views') : t('views')}</th>
+              {showPageStats ? (
+                <>
+                  <th className="num">{t('pagesSort_visitors')}</th>
+                  <th className="num">{t('pagesSort_time')}</th>
+                </>
+              ) : null}
             </tr>
           </thead>
           <tbody>
@@ -47,6 +55,12 @@ export function MetricsTable({
                   </div>
                 </td>
                 <td className="num">{row.y.toLocaleString()}</td>
+                {showPageStats ? (
+                  <>
+                    <td className="num">{(row.visitors ?? 0).toLocaleString()}</td>
+                    <td className="num">{row.avgTime != null ? `${row.avgTime}s` : '—'}</td>
+                  </>
+                ) : null}
               </tr>
             ))}
           </tbody>

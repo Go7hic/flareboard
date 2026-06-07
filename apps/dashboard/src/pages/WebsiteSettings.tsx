@@ -2,23 +2,48 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { IngestSnippetPanel } from '../components/IngestSnippetPanel';
+import {
+  ReplayConfigWizard,
+  replayConfigFromJson,
+  replayConfigToJson,
+  type ReplayConfig,
+} from '../components/ReplayConfigWizard';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Panel } from '../components/ui/panel';
 import { Textarea } from '../components/ui/textarea';
-import { api, getToken, type Website } from '../lib/api';
+import { Panel } from '../components/ui/panel';
+import { api, authenticatedFetch, getToken, type Website } from '../lib/api';
 import { t } from '../lib/i18n';
+
+type HeatmapConfig = {
+  sampleRate?: number;
+  enabled?: boolean;
+  previewUrl?: string;
+};
 
 export default function WebsiteSettingsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [replayEnabled, setReplayEnabled] = useState(false);
-  const [replayConfigJson, setReplayConfigJson] = useState('{"sampleRate":1}');
+  const [replayConfig, setReplayConfig] = useState<ReplayConfig>({
+    sampleRate: 1,
+    maskInputs: true,
+    blockSelectors: '',
+  });
   const [resetAt, setResetAt] = useState('');
-  const [jsonError, setJsonError] = useState<string | null>(null);
+  const [emailEnabled, setEmailEnabled] = useState(false);
+  const [emailFrequency, setEmailFrequency] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
+  const [recipientEmail, setRecipientEmail] = useState('');
+  const [emailTimezone, setEmailTimezone] = useState('UTC');
+  const [heatmapConfigJson, setHeatmapConfigJson] = useState('{"sampleRate":0.1,"enabled":true}');
+  const [heatmapPreviewUrl, setHeatmapPreviewUrl] = useState('');
+  const [importFormat, setImportFormat] = useState<'flareboard' | 'ga4' | 'plausible' | 'matomo'>('ga4');
+  const [importCsv, setImportCsv] = useState('');
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
 
   useEffect(() => {
     if (!getToken()) navigate('/login');
@@ -33,45 +58,62 @@ export default function WebsiteSettingsPage() {
       ),
   });
 
+  const emailReportQuery = useQuery({
+    queryKey: ['email-report', websiteId],
+    enabled: Boolean(websiteId),
+    queryFn: () =>
+      api<{
+        enabled: boolean;
+        frequency: 'daily' | 'weekly' | 'monthly';
+        recipientEmail?: string;
+        timezone?: string;
+      }>(`/api/websites/${websiteId}/email-report`),
+  });
+
+  useEffect(() => {
+    const e = emailReportQuery.data;
+    if (!e) return;
+    setEmailEnabled(e.enabled);
+    setEmailFrequency(e.frequency);
+    setRecipientEmail(e.recipientEmail ?? '');
+    setEmailTimezone(e.timezone ?? 'UTC');
+  }, [emailReportQuery.data]);
+
   useEffect(() => {
     const w = websiteQuery.data;
     if (!w) return;
     setReplayEnabled(Boolean(w.replayEnabled));
-    if (w.replayConfig) setReplayConfigJson(JSON.stringify(w.replayConfig, null, 2));
+    if (w.replayConfig) setReplayConfig(replayConfigFromJson(w.replayConfig));
+    const heatmapConfig = (w as { heatmapConfig?: HeatmapConfig }).heatmapConfig;
+    if (heatmapConfig) {
+      setHeatmapConfigJson(JSON.stringify(heatmapConfig, null, 2));
+      setHeatmapPreviewUrl(heatmapConfig.previewUrl ?? '');
+    }
     if (w.resetAt) setResetAt(new Date(w.resetAt).toISOString().slice(0, 16));
   }, [websiteQuery.data]);
 
-  const jsonValid = useMemo(() => {
+  const heatmapJsonValid = useMemo(() => {
     try {
-      JSON.parse(replayConfigJson);
+      JSON.parse(heatmapConfigJson);
       return true;
     } catch {
       return false;
     }
-  }, [replayConfigJson]);
-
-  function validateJson(value: string) {
-    try {
-      JSON.parse(value);
-      setJsonError(null);
-      return true;
-    } catch {
-      setJsonError(t('invalidReplayJson'));
-      return false;
-    }
-  }
+  }, [heatmapConfigJson]);
 
   const saveMutation = useMutation({
     mutationFn: () => {
-      if (!validateJson(replayConfigJson)) {
-        throw new Error(t('invalidReplayJson'));
-      }
-      const replayConfig = JSON.parse(replayConfigJson) as Record<string, unknown>;
+      const heatmapParsed = JSON.parse(heatmapConfigJson) as HeatmapConfig;
+      const heatmapConfig: HeatmapConfig = {
+        ...heatmapParsed,
+        previewUrl: heatmapPreviewUrl.trim() || undefined,
+      };
       return api(`/api/websites/${websiteId}`, {
         method: 'PATCH',
         body: JSON.stringify({
           replayEnabled,
-          replayConfig,
+          replayConfig: replayConfigToJson(replayConfig),
+          heatmapConfig,
           resetAt: resetAt ? new Date(resetAt).toISOString() : undefined,
         }),
       });
@@ -80,6 +122,70 @@ export default function WebsiteSettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['website', websiteId] });
     },
   });
+
+  const emailReportMutation = useMutation({
+    mutationFn: () =>
+      api(`/api/websites/${websiteId}/email-report`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          enabled: emailEnabled,
+          frequency: emailFrequency,
+          recipientEmail: recipientEmail || undefined,
+          timezone: emailTimezone || 'UTC',
+        }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['email-report', websiteId] });
+    },
+  });
+
+  const importMutation = useMutation({
+    mutationFn: async (file?: File | null) => {
+      if (file) {
+        const form = new FormData();
+        form.append('format', importFormat);
+        form.append('file', file);
+        const res = await authenticatedFetch(`/api/websites/${websiteId}/import`, {
+          method: 'POST',
+          body: form,
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ message: res.statusText }));
+          throw new Error((err as { message?: string }).message || t('importFailed'));
+        }
+        return res.json() as Promise<{ imported: number; skipped: number; errors: string[]; batches?: number }>;
+      }
+      return api<{ imported: number; skipped: number; errors: string[]; batches?: number }>(
+        `/api/websites/${websiteId}/import`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ format: importFormat, csv: importCsv }),
+        },
+      );
+    },
+    onSuccess: (data) => {
+      const batchesNote =
+        data.batches != null
+          ? ` · ${t('importBatches').replace('{count}', String(data.batches))}`
+          : '';
+      setImportMessage(
+        t('importSuccess')
+          .replace('{count}', String(data.imported))
+          .replace('{skipped}', String(data.skipped ?? 0)) + batchesNote,
+      );
+      setImportErrors(data.errors ?? []);
+      setImportCsv('');
+    },
+    onError: (err) => {
+      setImportMessage(err instanceof Error ? err.message : t('importFailed'));
+      setImportErrors([]);
+    },
+  });
+
+  function onImportFile(file: File | null) {
+    if (!file) return;
+    importMutation.mutate(file);
+  }
 
   const deleteMutation = useMutation({
     mutationFn: () => api(`/api/websites/${websiteId}`, { method: 'DELETE' }),
@@ -98,10 +204,7 @@ export default function WebsiteSettingsPage() {
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!jsonValid) {
-      setJsonError(t('invalidReplayJson'));
-      return;
-    }
+    if (!heatmapJsonValid) return;
     saveMutation.mutate();
   }
 
@@ -136,20 +239,158 @@ export default function WebsiteSettingsPage() {
                   />
                   {t('enableSessionReplay')}
                 </label>
+                <ReplayConfigWizard
+                  enabled={replayEnabled}
+                  config={replayConfig}
+                  onChange={setReplayConfig}
+                />
+              </Panel>
+
+              <Panel variant="accent-rail">
+                <h2 className="section-title">{t('heatmapConfig')}</h2>
+                <p className="section-lead">{t('heatmapConfigLead')}</p>
                 <div className="field">
-                  <Label>{t('replayConfigJson')}</Label>
+                  <Label htmlFor="heatmap-preview-url">{t('heatmapPreviewUrl')}</Label>
+                  <Input
+                    id="heatmap-preview-url"
+                    value={heatmapPreviewUrl}
+                    onChange={(e) => setHeatmapPreviewUrl(e.target.value)}
+                    placeholder="https://yoursite.com/test-page"
+                  />
+                  <p className="text-muted" style={{ fontSize: '0.8125rem', marginTop: '0.25rem' }}>
+                    {t('heatmapPreviewUrlHint')}
+                  </p>
+                </div>
+                <div className="field">
+                  <Label>{t('heatmapConfig')}</Label>
                   <Textarea
                     className="textarea-mono"
-                    value={replayConfigJson}
-                    onChange={(e) => {
-                      setReplayConfigJson(e.target.value);
-                      validateJson(e.target.value);
-                    }}
-                    onBlur={(e) => validateJson(e.target.value)}
-                    aria-invalid={jsonError ? true : undefined}
+                    value={heatmapConfigJson}
+                    onChange={(e) => setHeatmapConfigJson(e.target.value)}
                   />
-                  {jsonError ? <p className="text-danger">{jsonError}</p> : null}
                 </div>
+              </Panel>
+
+              <Panel variant="accent-rail">
+                <h2 className="section-title">{t('emailReports')}</h2>
+                <p className="section-lead">{t('emailReportsLead')}</p>
+                <label className="field" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={emailEnabled}
+                    onChange={(e) => setEmailEnabled(e.target.checked)}
+                  />
+                  {t('enableEmailReports')}
+                </label>
+                <div className="field">
+                  <Label htmlFor="email-frequency">{t('emailFrequency')}</Label>
+                  <select
+                    id="email-frequency"
+                    className="select"
+                    value={emailFrequency}
+                    onChange={(e) =>
+                      setEmailFrequency(e.target.value as 'daily' | 'weekly' | 'monthly')
+                    }
+                  >
+                    <option value="daily">{t('emailDaily')}</option>
+                    <option value="weekly">{t('emailWeekly')}</option>
+                    <option value="monthly">{t('emailMonthly')}</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <Label htmlFor="email-timezone">{t('emailTimezone')}</Label>
+                  <Input
+                    id="email-timezone"
+                    value={emailTimezone}
+                    onChange={(e) => setEmailTimezone(e.target.value)}
+                    placeholder="UTC"
+                  />
+                </div>
+                <div className="field">
+                  <Label htmlFor="recipient-email">{t('recipientEmail')}</Label>
+                  <Input
+                    id="recipient-email"
+                    value={recipientEmail}
+                    onChange={(e) => setRecipientEmail(e.target.value)}
+                    placeholder="you@example.com, team@example.com"
+                  />
+                  <p className="text-muted" style={{ fontSize: '0.8125rem', marginTop: '0.25rem' }}>
+                    {t('recipientEmailHint')}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={emailReportMutation.isPending}
+                  onClick={() => emailReportMutation.mutate()}
+                >
+                  {t('saveSettings')}
+                </Button>
+              </Panel>
+
+              <Panel>
+                <h2 className="section-title">{t('dataImport')}</h2>
+                <p className="section-lead">{t('dataImportLead')}</p>
+                <p className="text-muted" style={{ fontSize: '0.8125rem' }}>{t('importFormatsDoc')}</p>
+                <p className="text-muted" style={{ fontSize: '0.8125rem' }}>{t('importMultipartHint')}</p>
+                <div className="field">
+                  <Label htmlFor="import-format">{t('importFormat')}</Label>
+                  <select
+                    id="import-format"
+                    className="select"
+                    value={importFormat}
+                    onChange={(e) =>
+                      setImportFormat(e.target.value as 'flareboard' | 'ga4' | 'plausible' | 'matomo')
+                    }
+                  >
+                    <option value="ga4">Google Analytics 4 CSV</option>
+                    <option value="plausible">Plausible CSV</option>
+                    <option value="matomo">Matomo CSV</option>
+                    <option value="flareboard">Flareboard CSV</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <Label htmlFor="import-file">{t('importUpload')}</Label>
+                  <input
+                    id="import-file"
+                    type="file"
+                    accept=".csv,.tsv,.txt"
+                    className="input"
+                    onChange={(e) => onImportFile(e.target.files?.[0] ?? null)}
+                  />
+                </div>
+                <div className="field">
+                  <Label htmlFor="import-csv">{t('importData')}</Label>
+                  <Textarea
+                    id="import-csv"
+                    className="textarea-mono"
+                    value={importCsv}
+                    onChange={(e) => setImportCsv(e.target.value)}
+                    placeholder={t('importCsvPlaceholder')}
+                    rows={8}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={!importCsv.trim() || importMutation.isPending}
+                  onClick={() => importMutation.mutate(null)}
+                >
+                  {t('importData')}
+                </Button>
+                {importMessage ? <p className="text-muted">{importMessage}</p> : null}
+                {importErrors.length > 0 ? (
+                  <div>
+                    <p className="text-muted">{t('importErrors')}:</p>
+                    <ul className="list-plain">
+                      {importErrors.slice(0, 10).map((err, i) => (
+                        <li key={i} className="text-muted" style={{ fontSize: '0.8125rem' }}>
+                          {err}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </Panel>
 
               <Panel variant="danger-zone">
@@ -167,7 +408,7 @@ export default function WebsiteSettingsPage() {
               </Panel>
 
               <div className="page-settings-form-actions">
-                <Button type="submit" variant="primary" disabled={saveMutation.isPending || !jsonValid}>
+                <Button type="submit" variant="primary" disabled={saveMutation.isPending || !heatmapJsonValid}>
                   {t('saveSettings')}
                 </Button>
                 {saveMutation.error ? (

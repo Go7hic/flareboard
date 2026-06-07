@@ -1,5 +1,6 @@
 import { EVENT_TYPE } from '@flareboard/shared';
 import type { Env } from '../env';
+import type { PageMetricRow } from './queries';
 import { buildSegmentSql, type SegmentParams } from './segment-filters';
 
 function statChange(current: number, previous: number) {
@@ -244,7 +245,11 @@ export async function getMetricsFiltered(
                 ? 's.device'
                 : type === 'country'
                   ? 's.country'
-                  : 'e.url_path';
+                  : type === 'region'
+                    ? 's.region'
+                    : type === 'city'
+                      ? 's.city'
+                      : 'e.url_path';
 
   const rows = await env.DB.prepare(
     `SELECT COALESCE(${col}, 'Unknown') as x, COUNT(*) as y
@@ -258,5 +263,65 @@ export async function getMetricsFiltered(
   return (rows.results ?? []).map((r) => ({
     x: type === 'referrer' && !r.x ? 'Direct' : r.x,
     y: r.y,
+  }));
+}
+
+export async function getPageMetricsFiltered(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  sortBy: 'views' | 'visitors' | 'time' = 'views',
+  limit = 10,
+  segment?: SegmentParams | null,
+): Promise<PageMetricRow[]> {
+  const seg = buildSegmentSql(segment);
+  const joins = ' INNER JOIN session s ON e.session_id = s.session_id';
+  const clauses = [
+    'e.website_id = ?',
+    'e.event_type = ?',
+    'e.created_at >= ?',
+    'e.created_at <= ?',
+    ...seg.eventClauses,
+    ...seg.sessionClauses,
+  ];
+  const binds: (string | number)[] = [
+    websiteId,
+    EVENT_TYPE.pageView,
+    startAt,
+    endAt,
+    ...seg.binds,
+  ];
+  const orderCol =
+    sortBy === 'visitors' ? 'visitors' : sortBy === 'time' ? 'avg_time_sec' : 'views';
+
+  const rows = await env.DB.prepare(
+    `WITH page_events AS (
+       SELECT e.url_path, e.session_id, e.visit_id, e.created_at,
+         LEAD(e.created_at) OVER (PARTITION BY e.visit_id ORDER BY e.created_at) as next_at
+       FROM website_event e${joins}
+       WHERE ${clauses.join(' AND ')}
+     ),
+     page_stats AS (
+       SELECT url_path,
+         COUNT(*) as views,
+         COUNT(DISTINCT session_id) as visitors,
+         ROUND(AVG(COALESCE(next_at - created_at, 0)) / 1000.0) as avg_time_sec
+       FROM page_events
+       GROUP BY url_path
+     )
+     SELECT url_path as path, views, visitors, avg_time_sec
+     FROM page_stats
+     ORDER BY ${orderCol} DESC
+     LIMIT ?`,
+  )
+    .bind(...binds, limit)
+    .all<{ path: string; views: number; visitors: number; avg_time_sec: number }>();
+
+  return (rows.results ?? []).map((r) => ({
+    x: r.path ?? '/',
+    y: r.views,
+    visitors: r.visitors,
+    avgTime: r.avg_time_sec ?? 0,
   }));
 }

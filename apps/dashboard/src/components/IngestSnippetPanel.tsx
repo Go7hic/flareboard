@@ -87,6 +87,10 @@ export function IngestSnippetPanel({
   const advancedSnippet = `<!-- ${t('trackEventComment')} -->
 <script>flareboard.track('event_name', { key: 'value' })</script>`;
 
+  const declarativeSnippet = `<!-- ${t('declarativeEvents')} -->
+<button data-flareboard-event="signup" data-flareboard-event-plan="pro">Sign up</button>
+<!-- Umami-compatible: data-umami-event="signup" data-umami-event-plan="pro" -->`;
+
   useEffect(() => {
     if (!setup) return;
     setOpen(true);
@@ -166,6 +170,11 @@ export function IngestSnippetPanel({
         <details className="snippet-advanced">
           <summary>{t('embedAdvanced')}</summary>
           <pre className="code-block snippet-code">{advancedSnippet}</pre>
+        </details>
+        <details className="snippet-advanced">
+          <summary>{t('declarativeEvents')}</summary>
+          <p className="section-lead snippet-replay-lead">{t('declarativeEventsLead')}</p>
+          <pre className="code-block snippet-code">{declarativeSnippet}</pre>
         </details>
 
         <Separator className="my-4" />

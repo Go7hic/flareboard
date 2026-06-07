@@ -20,6 +20,8 @@ const Sessions = lazy(() => import('./pages/Sessions'));
 const SessionDetail = lazy(() => import('./pages/SessionDetail'));
 const WebsiteSettings = lazy(() => import('./pages/WebsiteSettings'));
 const Replays = lazy(() => import('./pages/Replays'));
+const Heatmaps = lazy(() => import('./pages/Heatmaps'));
+const Revenue = lazy(() => import('./pages/Revenue'));
 const Billing = lazy(() => import('./pages/Billing'));
 
 function LazyPage({ children }: { children: React.ReactNode }) {
@@ -144,6 +146,22 @@ export default function App() {
             element={
               <LazyPage>
                 <Replays />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="/websites/:websiteId/heatmaps"
+            element={
+              <LazyPage>
+                <Heatmaps />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="/websites/:websiteId/revenue"
+            element={
+              <LazyPage>
+                <Revenue />
               </LazyPage>
             }
           />

@@ -144,5 +144,44 @@ wrangler d1 migrations apply flareboard-db --remote --env production --config ap
 - [ ] CORS allows dashboard → API
 - [ ] Test site receives `/api/send` responses
 - [ ] Login and `/api/dashboard` return 200
+- [ ] Email Sending configured (see below) if using verify/reset/password or scheduled reports
 
-If the dashboard shows *"API returned HTML instead of JSON"*, requests are hitting the dashboard SPA instead of the API — fix `VITE_API_URL` and redeploy.
+## 6. Email Sending (`EMAIL` binding)
+
+Flareboard uses Cloudflare **Email Sending** for transactional and scheduled mail. Without the binding, forgot-password, email verification, and scheduled digest workers **log messages only** — they do not deliver to inboxes.
+
+### Required for production mail
+
+1. Enable [Email Sending](https://developers.cloudflare.com/email-routing/email-workers/send-email/) on your zone and verify the sender domain (SPF/DKIM).
+2. Confirm `send_email` binding in `apps/api/wrangler.jsonc`:
+
+```jsonc
+"send_email": [{ "name": "EMAIL" }]
+```
+
+3. Set production vars (or secrets) on the **api-production** worker:
+
+| Variable | Example | Purpose |
+|----------|---------|---------|
+| `EMAIL_FROM` | `noreply@your-domain.com` | From address (must be authorized) |
+| `EMAIL_FROM_NAME` | `Flareboard` | Display name |
+| `DASHBOARD_URL` | `https://dashboard.your-domain.com` | Links in verify/reset/report emails |
+
+### Features that need `EMAIL`
+
+| Feature | Route / trigger | Notes |
+|---------|-----------------|-------|
+| Register verify | `POST /api/auth/register` | Verification link emailed |
+| Forgot password | `POST /api/auth/forgot-password` | Reset link emailed |
+| Scheduled reports | Cron `0 * * * *` on API worker | Sends when each site's `timezone` local hour is 08:00 |
+
+### Email reports checklist
+
+- [ ] `website_email_report` rows have valid recipient(s) and timezone
+- [ ] Cron runs hourly; per-site filter uses `localHour(tz) === 8`
+- [ ] Test send: enable report for one site, temporarily set timezone so local hour is 8, watch API worker logs
+- [ ] Confirm digests arrive (check spam); HTML includes PV, UV, bounce, top pages/referrers
+
+### Local development
+
+Wrangler dev includes a `send_email` binding stub. Messages may not leave Cloudflare; check worker logs for payload. Use a verified domain in staging before go-live.

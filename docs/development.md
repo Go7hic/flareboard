@@ -8,6 +8,12 @@
 ```bash
 pnpm install
 pnpm db:migrate
+pnpm seed:demo     # admin (admin/flareboard) + 2 demo sites + 30 days of analytics
+```
+
+Admin only (no sample traffic):
+
+```bash
 pnpm seed          # default local admin — override with --username / --password
 ```
 
@@ -29,7 +35,32 @@ VITE_INGEST_URL=http://localhost:8787
 
 Local API and ingest use `APP_SECRET` from `apps/api/.dev.vars` and `apps/ingest/.dev.vars` (copy from `.dev.vars.example`; never commit).
 
-Optional rollup backfill on local D1:
+## Demo data (local dashboard testing)
+
+`pnpm seed:demo` fills **local D1** with realistic analytics so you can exercise the dashboard without live ingest:
+
+| Created | Details |
+|---------|---------|
+| Admin | `admin` / `flareboard` |
+| Websites | **Demo Store** (`demo-store.example.com`), **Demo Docs** (`docs.example.com`) |
+| Analytics | ~30 days of sessions, pageviews, referrers, countries, browsers, custom events |
+| Extras | Heatmap clicks, cohorts, segments, goals, sample revenue, performance events |
+| Rollups | Runs `backfill:rollups` automatically |
+
+Options:
+
+```bash
+pnpm seed:demo                  # replace demo data (default)
+pnpm seed:demo -- --days 14     # shorter history window
+pnpm seed:demo -- --skip-admin  # keep existing admin password
+pnpm seed:demo -- --no-fresh    # skip if demo sites already exist
+```
+
+**Idempotency:** `--fresh` (default) deletes only the two fixed demo website IDs and their related rows, then recreates them. Your other websites and users are untouched.
+
+**Session replay:** demo seed writes replay **metadata** in D1 (list view works). Playback still needs rrweb chunks in local R2 (`wrangler r2 object put` or live ingest) — see smoke test below.
+
+Optional rollup backfill after manual imports:
 
 ```bash
 pnpm backfill:rollups
@@ -42,6 +73,7 @@ pnpm backfill:rollups
 | `pnpm typecheck` | Typecheck all packages |
 | `pnpm db:migrate` | Apply migrations to local D1 |
 | `pnpm db:migrate:remote` | Apply migrations to remote D1 |
+| `pnpm seed:demo` | Local admin + demo websites + 30 days analytics |
 | `pnpm seed:remote` | Create first production admin (password required) |
 | `pnpm backfill:rollups` | Backfill rollup tables (`-- --remote` for production) |
 | `pnpm validate:wrangler` | Check wrangler configs before deploy |

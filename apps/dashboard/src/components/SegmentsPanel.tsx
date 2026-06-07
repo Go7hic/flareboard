@@ -1,27 +1,102 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FormEvent, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 import { SectionDataSkeleton } from './ReportSection';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { api, type Segment } from '../lib/api';
 import { t } from '../lib/i18n';
+
+type SegmentField =
+  | 'country'
+  | 'region'
+  | 'city'
+  | 'browser'
+  | 'os'
+  | 'device'
+  | 'language'
+  | 'path'
+  | 'referrer'
+  | 'event_name'
+  | 'utmSource'
+  | 'utmMedium'
+  | 'utmCampaign'
+  | 'hostname'
+  | 'tag';
+
+type SegmentCondition = {
+  field: SegmentField;
+  operator: 'equals' | 'contains';
+  value: string;
+};
+
+const FIELD_OPTIONS: SegmentField[] = [
+  'path',
+  'referrer',
+  'browser',
+  'os',
+  'device',
+  'country',
+  'region',
+  'city',
+  'language',
+  'event_name',
+  'utmSource',
+  'utmMedium',
+  'utmCampaign',
+  'hostname',
+  'tag',
+];
+
+function conditionsToParams(conditions: SegmentCondition[]): Record<string, unknown> {
+  const params: Record<string, unknown> = {};
+  for (const c of conditions) {
+    if (!c.value.trim()) continue;
+    if (c.field === 'path' && c.operator === 'contains') {
+      params.pathContains = c.value.trim();
+    } else if (c.field === 'path') {
+      params.path = c.value.trim();
+    } else if (c.field === 'event_name') {
+      params.eventName = c.value.trim();
+    } else {
+      params[c.field] = c.value.trim();
+    }
+  }
+  return params;
+}
+
+function paramsToConditions(params: Record<string, unknown>): SegmentCondition[] {
+  const conditions: SegmentCondition[] = [];
+  for (const [key, raw] of Object.entries(params)) {
+    if (raw === undefined || raw === null || raw === '') continue;
+    const value = String(raw);
+    if (key === 'pathContains') {
+      conditions.push({ field: 'path', operator: 'contains', value });
+    } else if (key === 'path' || key === 'url') {
+      conditions.push({ field: 'path', operator: 'equals', value });
+    } else if (key === 'event' || key === 'eventName') {
+      conditions.push({ field: 'event_name', operator: 'equals', value });
+    } else if (FIELD_OPTIONS.includes(key as SegmentField)) {
+      conditions.push({ field: key as SegmentField, operator: 'equals', value });
+    }
+  }
+  return conditions.length
+    ? conditions
+    : [{ field: 'country', operator: 'equals', value: '' }];
+}
 
 export function SegmentsPanel({ websiteId }: { websiteId: string }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [type, setType] = useState('filter');
-  const [paramsJson, setParamsJson] = useState('{"country":"US"}');
+  const [showJson, setShowJson] = useState(false);
+  const [conditions, setConditions] = useState<SegmentCondition[]>([
+    { field: 'country', operator: 'equals', value: '' },
+  ]);
 
-  const presets: Array<{ label: string; params: Record<string, unknown> }> = [
-    { label: 'Country US', params: { country: 'US' } },
-    { label: 'Browser Chrome', params: { browser: 'Chrome' } },
-    { label: 'Path /', params: { path: '/' } },
-    { label: 'Path contains blog', params: { pathContains: '/blog' } },
-    { label: 'UTM google', params: { utmSource: 'google' } },
-    { label: 'Device mobile', params: { device: 'mobile' } },
-    { label: 'OS macOS', params: { os: 'macOS' } },
-  ];
+  const paramsPreview = useMemo(() => conditionsToParams(conditions), [conditions]);
+  const paramsJson = useMemo(() => JSON.stringify(paramsPreview, null, 2), [paramsPreview]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['segments', websiteId],
@@ -30,19 +105,17 @@ export function SegmentsPanel({ websiteId }: { websiteId: string }) {
 
   const createMutation = useMutation({
     mutationFn: () => {
-      let parameters: Record<string, unknown> = {};
-      try {
-        parameters = JSON.parse(paramsJson) as Record<string, unknown>;
-      } catch {
-        throw new Error(t('invalidSegmentJson'));
+      if (!Object.keys(paramsPreview).length) {
+        throw new Error(t('segmentNoConditions'));
       }
       return api<Segment>(`/api/websites/${websiteId}/segments`, {
         method: 'POST',
-        body: JSON.stringify({ name, type, parameters }),
+        body: JSON.stringify({ name, type, parameters: paramsPreview }),
       });
     },
     onSuccess: () => {
       setName('');
+      setConditions([{ field: 'country', operator: 'equals', value: '' }]);
       queryClient.invalidateQueries({ queryKey: ['segments', websiteId] });
     },
   });
@@ -62,20 +135,8 @@ export function SegmentsPanel({ websiteId }: { websiteId: string }) {
   return (
     <section className="panel section-gap-lg">
       <h2 className="section-title">{t('segments')}</h2>
-      <p className="section-lead">{t('segmentsLead')}</p>
-      <div className="segment-presets">
-        {presets.map((p) => (
-          <Button
-            key={p.label}
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => setParamsJson(JSON.stringify(p.params, null, 2))}
-          >
-            {p.label}
-          </Button>
-        ))}
-      </div>
+      <p className="section-lead">{t('segmentsBuilderLead')}</p>
+
       <form onSubmit={onSubmit}>
         <div className="field">
           <Input placeholder={t('name')} value={name} onChange={(e) => setName(e.target.value)} />
@@ -83,34 +144,123 @@ export function SegmentsPanel({ websiteId }: { websiteId: string }) {
         <div className="field">
           <Input placeholder={t('type')} value={type} onChange={(e) => setType(e.target.value)} />
         </div>
-        <div className="field">
-          <Textarea
-            className="textarea-mono"
-            value={paramsJson}
-            onChange={(e) => setParamsJson(e.target.value)}
-          />
-        </div>
-        <Button type="submit" variant="primary" disabled={createMutation.isPending}>
-          {t('addSegment')}
+
+        <p className="text-muted">{t('segmentConditions')}</p>
+        {conditions.map((cond, idx) => (
+          <div key={idx} className="stats-toolbar segment-condition-row">
+            <select
+              className="select"
+              value={cond.field}
+              onChange={(e) => {
+                const next = [...conditions];
+                next[idx] = { ...cond, field: e.target.value as SegmentField };
+                setConditions(next);
+              }}
+            >
+              {FIELD_OPTIONS.map((f) => (
+                <option key={f} value={f}>
+                  {t(`segmentField_${f}`)}
+                </option>
+              ))}
+            </select>
+            <select
+              className="select"
+              value={cond.operator}
+              onChange={(e) => {
+                const next = [...conditions];
+                next[idx] = { ...cond, operator: e.target.value as 'equals' | 'contains' };
+                setConditions(next);
+              }}
+              disabled={cond.field !== 'path'}
+            >
+              <option value="equals">{t('cohortEquals')}</option>
+              <option value="contains">{t('cohortContains')}</option>
+            </select>
+            <Input
+              value={cond.value}
+              onChange={(e) => {
+                const next = [...conditions];
+                next[idx] = { ...cond, value: e.target.value };
+                setConditions(next);
+              }}
+              placeholder={t('segmentValuePlaceholder')}
+            />
+            {conditions.length > 1 ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setConditions(conditions.filter((_, i) => i !== idx))}
+              >
+                {t('cohortRemoveCondition')}
+              </Button>
+            ) : null}
+          </div>
+        ))}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() =>
+            setConditions([...conditions, { field: 'country', operator: 'equals', value: '' }])
+          }
+        >
+          {t('cohortAddCondition')}
         </Button>
+
+        <div className="field" style={{ marginTop: '0.75rem' }}>
+          <Label>{t('segmentJsonPreview')}</Label>
+          <pre className="code-block" style={{ fontSize: '0.75rem' }}>
+            {paramsJson}
+          </pre>
+        </div>
+
+        <Button type="button" variant="secondary" size="sm" onClick={() => setShowJson(!showJson)}>
+          {showJson ? t('segmentHideAdvanced') : t('segmentShowAdvanced')}
+        </Button>
+        {showJson ? (
+          <div className="field">
+            <Textarea
+              className="textarea-mono"
+              value={paramsJson}
+              onChange={(e) => {
+                try {
+                  const parsed = JSON.parse(e.target.value) as Record<string, unknown>;
+                  setConditions(paramsToConditions(parsed));
+                } catch {
+                  /* ignore while typing */
+                }
+              }}
+            />
+          </div>
+        ) : null}
+
+        <div style={{ marginTop: '0.75rem' }}>
+          <Button type="submit" variant="primary" disabled={createMutation.isPending}>
+            {t('addSegment')}
+          </Button>
+        </div>
       </form>
-      {createMutation.error ? <p className="text-danger">{(createMutation.error as Error).message}</p> : null}
+
+      {createMutation.error ? (
+        <p className="text-danger">{(createMutation.error as Error).message}</p>
+      ) : null}
       {isLoading ? (
         <SectionDataSkeleton />
       ) : (
         <ul className="list-plain section-gap">
           {(data ?? []).map((s) => (
-          <li key={s.id} className="list-item" style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
-            <div style={{ flex: 1 }}>
-              <strong>{s.name}</strong> <span className="badge">{s.type}</span>
-              <pre className="code-block" style={{ marginTop: '0.5rem', fontSize: '0.75rem' }}>
-                {JSON.stringify(s.parameters, null, 2)}
-              </pre>
-            </div>
-            <Button type="button" variant="danger" size="sm" onClick={() => deleteMutation.mutate(s.id)}>
-              {t('delete')}
-            </Button>
-          </li>
+            <li key={s.id} className="list-item segment-list-item">
+              <div style={{ flex: 1 }}>
+                <strong>{s.name}</strong> <span className="badge">{s.type}</span>
+                <pre className="code-block" style={{ marginTop: '0.5rem', fontSize: '0.75rem' }}>
+                  {JSON.stringify(s.parameters, null, 2)}
+                </pre>
+              </div>
+              <Button type="button" variant="danger" size="sm" onClick={() => deleteMutation.mutate(s.id)}>
+                {t('delete')}
+              </Button>
+            </li>
           ))}
         </ul>
       )}

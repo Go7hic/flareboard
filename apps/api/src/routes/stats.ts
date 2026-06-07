@@ -2,9 +2,10 @@ import type { Context } from 'hono';
 import { compareQuerySchema, metricsQuerySchema, statsQuerySchema } from '@flareboard/shared';
 import type { Env } from '../env';
 import { canAccessWebsite } from '../lib/access';
-import { getMetrics, getPageviews, getSegmentById, getWebsiteById, getWebsiteStats } from '../lib/queries';
+import { getMetrics, getPageviews, getPageMetrics, getSegmentById, getWebsiteById, getWebsiteStats } from '../lib/queries';
 import {
   getMetricsFiltered,
+  getPageMetricsFiltered,
   getPageviewsFiltered,
   getWebsiteStatsFiltered,
 } from '../lib/segment-stats';
@@ -71,8 +72,25 @@ export async function handleMetrics(c: Ctx) {
   const query = metricsQuerySchema.safeParse(c.req.query());
   const type = query.success && query.data.type ? query.data.type : c.req.query('type') || 'path';
   const limit = query.success && query.data.limit ? query.data.limit : 10;
+  const sortBy = query.success && query.data.sortBy ? query.data.sortBy : undefined;
   const { startAt, endAt } = parseRange(c);
   const segment = await segmentParams(c, website.websiteId);
+
+  if ((type === 'path' || type === 'url') && sortBy) {
+    const data = segment
+      ? await getPageMetricsFiltered(
+          c.env,
+          website.websiteId,
+          startAt,
+          endAt,
+          sortBy,
+          limit,
+          segment,
+        )
+      : await getPageMetrics(c.env, website.websiteId, startAt, endAt, sortBy, limit);
+    return json(data);
+  }
+
   const data = segment
     ? await getMetricsFiltered(c.env, website.websiteId, startAt, endAt, type, limit, segment)
     : await getMetrics(c.env, website.websiteId, startAt, endAt, type, limit);
@@ -86,21 +104,47 @@ export async function handleOverview(c: Ctx) {
   const query = metricsQuerySchema.safeParse(c.req.query());
   const metricType = query.success && query.data.type ? query.data.type : c.req.query('metricType') || 'path';
   const limit = query.success && query.data.limit ? query.data.limit : 10;
+  const sortBy = query.success && query.data.sortBy ? query.data.sortBy : undefined;
   const segment = await segmentParams(c, website.websiteId);
 
   if (segment) {
+    const metricsPromise =
+      (metricType === 'path' || metricType === 'url') && sortBy
+        ? getPageMetricsFiltered(
+            c.env,
+            website.websiteId,
+            startAt,
+            endAt,
+            sortBy,
+            limit,
+            segment,
+          )
+        : getMetricsFiltered(
+            c.env,
+            website.websiteId,
+            startAt,
+            endAt,
+            metricType,
+            limit,
+            segment,
+          );
     const [stats, pageviews, metrics] = await Promise.all([
       getWebsiteStatsFiltered(c.env, website.websiteId, startAt, endAt, segment),
       getPageviewsFiltered(c.env, website.websiteId, startAt, endAt, unit, segment),
-      getMetricsFiltered(c.env, website.websiteId, startAt, endAt, metricType, limit, segment),
+      metricsPromise,
     ]);
     return json({ stats, pageviews, metrics });
   }
 
+  const metricsPromise =
+    (metricType === 'path' || metricType === 'url') && sortBy
+      ? getPageMetrics(c.env, website.websiteId, startAt, endAt, sortBy, limit)
+      : getMetrics(c.env, website.websiteId, startAt, endAt, metricType, limit);
+
   const [stats, pageviews, metrics] = await Promise.all([
     getWebsiteStats(c.env, website.websiteId, startAt, endAt),
     getPageviews(c.env, website.websiteId, startAt, endAt, unit),
-    getMetrics(c.env, website.websiteId, startAt, endAt, metricType, limit),
+    metricsPromise,
   ]);
 
   return json({ stats, pageviews, metrics });

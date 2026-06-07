@@ -16,6 +16,7 @@ const MESSAGE_ORDER: Record<QueueMessage['type'], number> = {
   session_data: 1,
   event: 2,
   revenue: 3,
+  heatmap: 4,
 };
 
 async function ensureSessionRow(
@@ -161,6 +162,36 @@ async function processSessionData(
     .onConflictDoNothing();
 }
 
+function dayKey(ms: number) {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+async function processHeatmap(d1: D1Database, msg: Extract<QueueMessage, { type: 'heatmap' }>) {
+  const d = msg.data;
+  const day = dayKey(d.createdAt);
+  await d1
+    .prepare(
+      `INSERT INTO heatmap_cell (website_id, url_path, day, kind, norm_x, norm_y, device_class, viewport_w, viewport_h, count)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 1)
+       ON CONFLICT(website_id, url_path, day, kind, norm_x, norm_y, device_class)
+       DO UPDATE SET count = count + 1,
+         viewport_w = MAX(viewport_w, excluded.viewport_w),
+         viewport_h = MAX(viewport_h, excluded.viewport_h)`,
+    )
+    .bind(
+      d.websiteId,
+      d.urlPath,
+      day,
+      d.kind,
+      d.normX,
+      d.normY,
+      d.deviceClass ?? '',
+      d.viewportW,
+      d.viewportH,
+    )
+    .run();
+}
+
 async function processRevenue(
   db: ReturnType<typeof createDb>,
   msg: Extract<QueueMessage, { type: 'revenue' }>,
@@ -197,6 +228,10 @@ async function processMessage(db: ReturnType<typeof createDb>, d1: D1Database, m
   }
   if (msg.type === 'revenue') {
     await processRevenue(db, msg);
+    return;
+  }
+  if (msg.type === 'heatmap') {
+    await processHeatmap(d1, msg);
   }
 }
 

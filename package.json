@@ -12,6 +12,7 @@
     "db:migrate": "pnpm --filter @flareboard/db migrate:local",
     "db:migrate:remote": "pnpm --filter @flareboard/db migrate:remote",
     "seed": "tsx scripts/seed.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts",
     "seed:remote": "tsx scripts/seed.ts --remote --password flareboard",
     "migrate:legacy": "tsx scripts/migrate-legacy-analytics.ts",
     "validate:migration": "tsx scripts/validate-migration.ts",
@@ -34,5 +35,5 @@
     "wrangler": "^4.19.0"
   },
   "packageManager": "pnpm@9.15.0",
-  "version": "1.0.0"
+  "version": "1.1.0"
 }

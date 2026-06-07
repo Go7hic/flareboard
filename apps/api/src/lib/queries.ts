@@ -266,7 +266,11 @@ export async function getMetrics(
           ? schema.session.device
           : type === 'country'
             ? schema.session.country
-            : schema.session.browser;
+            : type === 'region'
+              ? schema.session.region
+              : type === 'city'
+                ? schema.session.city
+                : schema.session.browser;
 
   const rows = await db
     .select({ x: column, y: count() })
@@ -719,6 +723,61 @@ export async function getGoalReport(
   endAt: number,
   eventName?: string,
 ) {
+  const website = await getWebsiteById(env, websiteId);
+  const goalConfig = (website?.goalConfig ?? { goals: [] }) as {
+    goals?: Array<{ event: string; target: number; period: string }>;
+  };
+  const goals = goalConfig.goals ?? [];
+
+  function goalPeriodWindow(period: string): { startAt: number; endAt: number; label: string } {
+    const now = Date.now();
+    const d = new Date(now);
+    if (period === 'daily') {
+      const start = new Date(d);
+      start.setUTCHours(0, 0, 0, 0);
+      return { startAt: start.getTime(), endAt: now, label: 'daily' };
+    }
+    if (period === 'weekly') {
+      const start = new Date(d);
+      const day = start.getUTCDay();
+      const diff = day === 0 ? 6 : day - 1;
+      start.setUTCDate(start.getUTCDate() - diff);
+      start.setUTCHours(0, 0, 0, 0);
+      return { startAt: start.getTime(), endAt: now, label: 'weekly' };
+    }
+    const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+    return { startAt: start.getTime(), endAt: now, label: 'monthly' };
+  }
+
+  async function countEvents(from: number, to: number, event: string) {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) as count FROM website_event
+       WHERE website_id = ?1 AND event_type = ?2 AND event_name = ?3
+         AND created_at >= ?4 AND created_at <= ?5`,
+    )
+      .bind(websiteId, EVENT_TYPE.customEvent, event, from, to)
+      .first<{ count: number }>();
+    return row?.count ?? 0;
+  }
+
+  const configured = await Promise.all(
+    goals.map(async (g) => {
+      const window = goalPeriodWindow(g.period || 'monthly');
+      const count = await countEvents(window.startAt, window.endAt, g.event);
+      const progress = g.target > 0 ? Math.min(100, Math.round((count / g.target) * 100)) : 0;
+      return {
+        event: g.event,
+        count,
+        target: g.target,
+        period: g.period,
+        periodStart: window.startAt,
+        periodEnd: window.endAt,
+        periodLabel: window.label,
+        progress,
+      };
+    }),
+  );
+
   const db = createDb(env.DB);
   const filter = and(
     eq(schema.websiteEvent.websiteId, websiteId),
@@ -733,7 +792,71 @@ export async function getGoalReport(
     .where(filter)
     .groupBy(schema.websiteEvent.eventName)
     .orderBy(desc(count()));
-  return rows.map((r) => ({ event: r.x ?? 'Unknown', count: r.y }));
+
+  const unconfigured = rows
+    .filter((r) => !goals.some((g) => g.event === r.x))
+    .map((r) => ({
+      event: r.x ?? 'Unknown',
+      count: r.y,
+      target: null as number | null,
+      period: null as string | null,
+      periodStart: startAt,
+      periodEnd: endAt,
+      periodLabel: null as string | null,
+      progress: null as number | null,
+    }));
+
+  return [...configured, ...unconfigured];
+}
+
+export type PageMetricRow = {
+  x: string;
+  y: number;
+  visitors: number;
+  avgTime: number;
+};
+
+export async function getPageMetrics(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  sortBy: 'views' | 'visitors' | 'time' = 'views',
+  limit = 10,
+): Promise<PageMetricRow[]> {
+  const orderCol =
+    sortBy === 'visitors' ? 'visitors' : sortBy === 'time' ? 'avg_time_sec' : 'views';
+
+  const rows = await env.DB.prepare(
+    `WITH page_events AS (
+       SELECT e.url_path, e.session_id, e.visit_id, e.created_at,
+         LEAD(e.created_at) OVER (PARTITION BY e.visit_id ORDER BY e.created_at) as next_at
+       FROM website_event e
+       WHERE e.website_id = ?1 AND e.event_type = ?2
+         AND e.created_at >= ?3 AND e.created_at <= ?4
+     ),
+     page_stats AS (
+       SELECT url_path,
+         COUNT(*) as views,
+         COUNT(DISTINCT session_id) as visitors,
+         ROUND(AVG(COALESCE(next_at - created_at, 0)) / 1000.0) as avg_time_sec
+       FROM page_events
+       GROUP BY url_path
+     )
+     SELECT url_path as path, views, visitors, avg_time_sec
+     FROM page_stats
+     ORDER BY ${orderCol} DESC
+     LIMIT ?5`,
+  )
+    .bind(websiteId, EVENT_TYPE.pageView, startAt, endAt, limit)
+    .all<{ path: string; views: number; visitors: number; avg_time_sec: number }>();
+
+  return (rows.results ?? []).map((r) => ({
+    x: r.path ?? '/',
+    y: r.views,
+    visitors: r.visitors,
+    avgTime: r.avg_time_sec ?? 0,
+  }));
 }
 
 export async function getWebsiteReplays(env: Env, websiteId: string, limit = 50) {

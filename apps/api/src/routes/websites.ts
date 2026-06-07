@@ -25,6 +25,8 @@ function serializeWebsite(website: Website) {
     resetAt: website.resetAt ?? undefined,
     replayEnabled: website.replayEnabled ?? false,
     replayConfig: website.replayConfig ?? undefined,
+    heatmapConfig: website.heatmapConfig ?? undefined,
+    goalConfig: website.goalConfig ?? undefined,
     createdAt: website.createdAt,
   };
 }
@@ -121,6 +123,10 @@ export async function handleUpdate(c: Ctx) {
         parsed.data.replayEnabled !== undefined ? parsed.data.replayEnabled : website.replayEnabled,
       replayConfig:
         parsed.data.replayConfig !== undefined ? parsed.data.replayConfig : website.replayConfig,
+      heatmapConfig:
+        parsed.data.heatmapConfig !== undefined ? parsed.data.heatmapConfig : website.heatmapConfig,
+      goalConfig:
+        parsed.data.goalConfig !== undefined ? parsed.data.goalConfig : website.goalConfig,
       updatedAt: new Date(),
     })
     .where(eq(schema.website.websiteId, website.websiteId));

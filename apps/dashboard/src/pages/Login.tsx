@@ -12,6 +12,7 @@ interface AppConfig {
   oauth?: string[];
   disableLogin?: boolean;
   registrationEnabled?: boolean;
+  environment?: string;
 }
 
 export default function Login() {
@@ -22,6 +23,7 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [oauthProviders, setOauthProviders] = useState<string[]>([]);
   const [registrationEnabled, setRegistrationEnabled] = useState(false);
+  const [environment, setEnvironment] = useState('development');
   const [mode, setMode] = useState<'login' | 'forgot' | 'reset'>('login');
   const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -32,6 +34,7 @@ export default function Login() {
       .then((cfg) => {
         setOauthProviders(cfg.oauth ?? []);
         setRegistrationEnabled(Boolean(cfg.registrationEnabled));
+        setEnvironment(cfg.environment ?? 'development');
       })
       .catch(() => {});
 
@@ -127,6 +130,8 @@ export default function Login() {
     window.location.href = `${API_URL}/api/auth/oauth/${provider}?returnTo=${encodeURIComponent('/websites')}`;
   }
 
+  const emailLoginUi = registrationEnabled && environment === 'production';
+
   return (
     <div className="login-page">
       <div className="login-layout">
@@ -149,14 +154,14 @@ export default function Login() {
             <>
               <form onSubmit={onSubmit}>
                 <div className="field">
-                  <Label htmlFor="username">{registrationEnabled ? t('email') : t('username')}</Label>
+                  <Label htmlFor="username">{emailLoginUi ? t('email') : t('username')}</Label>
                   <Input
                     id="username"
-                    type={registrationEnabled ? 'email' : 'text'}
+                    type={emailLoginUi ? 'email' : 'text'}
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder={registrationEnabled ? t('email') : t('username')}
-                    autoComplete={registrationEnabled ? 'email' : 'username'}
+                    placeholder={emailLoginUi ? t('email') : t('username')}
+                    autoComplete={emailLoginUi ? 'email' : 'username'}
                   />
                 </div>
                 <div className="field">

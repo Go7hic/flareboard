@@ -3,6 +3,7 @@ import { isbot } from 'isbot';
 import {
   COLLECTION_TYPE,
   EVENT_TYPE,
+  HEATMAP_NORM_SIZE,
   createCacheToken,
   flattenEventData,
   getSalt,
@@ -36,6 +37,30 @@ function isBot(userAgent: string) {
   return isbot(userAgent);
 }
 
+function heatmapNorm(kind: 'click' | 'scroll', payload: {
+  x?: number;
+  y?: number;
+  viewportWidth?: number;
+  viewportHeight?: number;
+  scrollDepth?: number;
+}) {
+  if (kind === 'scroll') {
+    const depth = payload.scrollDepth ?? 0;
+    const normY = Math.min(HEATMAP_NORM_SIZE - 1, Math.floor((depth / 100) * HEATMAP_NORM_SIZE));
+    return { normX: 0, normY, viewportW: 0, viewportH: 0 };
+  }
+  const vw = payload.viewportWidth ?? 1;
+  const vh = payload.viewportHeight ?? 1;
+  const normX = Math.min(HEATMAP_NORM_SIZE - 1, Math.floor(((payload.x ?? 0) / vw) * HEATMAP_NORM_SIZE));
+  const normY = Math.min(HEATMAP_NORM_SIZE - 1, Math.floor(((payload.y ?? 0) / vh) * HEATMAP_NORM_SIZE));
+  return { normX, normY, viewportW: vw, viewportH: vh };
+}
+
+function deviceClass(device: string): string {
+  if (device === 'mobile' || device === 'tablet' || device === 'desktop') return device;
+  return '';
+}
+
 async function processSend(
   env: Env,
   req: Request,
@@ -44,6 +69,53 @@ async function processSend(
 ): Promise<Response> {
   try {
     const { type, payload } = body;
+
+    if (type === COLLECTION_TYPE.heatmap) {
+      const websiteId = payload.website;
+      const trustedIp = getTrustedClientIp(req);
+      const rl = await checkRateLimit(env, websiteId, trustedIp);
+      if (!rl.allowed) {
+        return new Response(JSON.stringify({ message: 'Rate limit exceeded' }), {
+          status: 429,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      const quota = await assertEventAllowed(env, websiteId);
+      if (!quota.ok) {
+        return new Response(JSON.stringify({ message: quota.message }), {
+          status: 402,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      const client = getClientInfoFromRequest(req, {});
+      if (isBot(client.userAgent)) return json({ beep: 'boop' });
+
+      const createdAt = payload.timestamp ? new Date(payload.timestamp * 1000) : new Date();
+      const base = payload.hostname ? `https://${payload.hostname}` : 'https://localhost';
+      const currentUrl = new URL(payload.url || '/', base);
+      const urlPath =
+        currentUrl.pathname === '/undefined' ? '' : currentUrl.pathname + currentUrl.hash;
+      const { normX, normY, viewportW, viewportH } = heatmapNorm(payload.kind, payload);
+
+      const msg: QueueMessage = {
+        type: 'heatmap',
+        data: {
+          websiteId,
+          urlPath: safeDecodeURI(urlPath) ?? urlPath,
+          kind: payload.kind,
+          normX,
+          normY,
+          deviceClass: deviceClass(client.device),
+          viewportW,
+          viewportH,
+          createdAt: createdAt.getTime(),
+        },
+      };
+      await env.EVENT_QUEUE.send(msg);
+      if (quota.userId) await recordEventUsage(env, quota.userId, 1);
+      return json({ ok: true });
+    }
+
     const {
       website: websiteId,
       pixel: pixelId,
@@ -445,16 +517,44 @@ if(d.readyState==='complete')start();else w.addEventListener('load',start);
 
 export function handleScript(_c: Context<{ Bindings: Env }>) {
   const script = `(function(){'use strict';
-var t=window,d=document,l=location,s=sessionStorage,k='flareboard.cache',vitalsSent=false,me=d.currentScript;
+/*
+ * SPA pageviews: pushState/replaceState/popstate + hash routes (#/path).
+ * Declarative events (Umami-compatible):
+ *   data-flareboard-event="signup"  OR  data-umami-event="signup"
+ *   data-flareboard-event-{prop}="value"  → event property (any common prop name)
+ *   data-flareboard-event-tag="cta"  → optional tag
+ * Dynamic DOM: MutationObserver re-scans for new/changed data-* attributes.
+ * Heatmap: sample rate from data-heatmap-sample-rate or GET /api/tracker-config?website=…
+ *   (website heatmapConfig.sampleRate in dashboard). Normalized 0–1000 coords server-side.
+ */
+var t=window,d=document,l=location,s=sessionStorage,k='flareboard.cache',vitalsSent=false,me=d.currentScript,lastUrl='',hmRate=0.1,hmOn=true,maxScroll=0,scrollKey='flareboard.scroll';
 function scriptEl(){if(me)return me;return d.querySelector('script[data-website-id]')}
 function p(u,b){return fetch(u,{method:'POST',headers:{'Content-Type':'application/json','x-flareboard-cache':s.getItem(k)||''},body:JSON.stringify(b),keepalive:true})}
-function r(){return{width:t.innerWidth+'x'+t.innerHeight,language:navigator.language,screen:screen.width+'x'+screen.height,title:d.title,hostname:l.hostname,url:l.pathname+l.search,referrer:d.referrer}}
+function appPath(){var h=l.hash;if(h.length>2&&h.charAt(1)==='/'){var q=h.indexOf('?');return q>=0?h.slice(1,q+1)+h.slice(q+1):h.slice(1)}return l.pathname+l.search}
+function routeKey(){return l.pathname+l.search+l.hash}
+function r(){return{width:t.innerWidth+'x'+t.innerHeight,language:navigator.language,screen:screen.width+'x'+screen.height,title:d.title,hostname:l.hostname,url:appPath(),referrer:d.referrer}}
 function ingestOrigin(){var el=scriptEl();if(el&&el.src)try{return new URL(el.src).origin}catch(_){}return l.protocol+'//'+l.host}
 function websiteId(a){var el=a||scriptEl();return el&&el.getAttribute('data-website-id')}
 function send(type,payload){return p(ingestOrigin()+'/api/send',{type:type,payload:payload}).then(function(x){return x.json()}).then(function(x){x.cache&&s.setItem(k,x.cache);x.sessionId&&s.setItem('flareboard.sid',x.sessionId);x.visitId&&s.setItem('flareboard.vid',x.visitId);return x})}
-function trackEvent(a,extra){var w=websiteId(a);if(!w){console.warn('[flareboard] missing data-website-id on tracker script');return}var o=r();o.website=w;Object.assign(o,extra||{});return send('event',o)}
+function trackEvent(a,extra){var w=websiteId(a);if(!w){console.warn('[flareboard] missing data-website-id');return}var o=r();o.website=w;Object.assign(o,extra||{});return send('event',o)}
+function pageview(){trackEvent(scriptEl())}
+function onRoute(){var u=routeKey();if(u!==lastUrl){lastUrl=u;maxScroll=0;pageview()}}
+function setupSpa(){lastUrl=routeKey();var ps=history.pushState,rs=history.replaceState;history.pushState=function(){ps.apply(history,arguments);onRoute()};history.replaceState=function(){rs.apply(history,arguments);onRoute()};t.addEventListener('popstate',onRoute);t.addEventListener('hashchange',onRoute)}
+function eventProps(el){var data={},i,a,n;for(i=0;i<el.attributes.length;i++){a=el.attributes[i];n=a.name;if(n==='data-flareboard-event'||n==='data-umami-event'||n==='data-flareboard-event-tag'||n==='data-umami-event-tag')continue;var m=n.match(/^data-(?:flareboard|umami)-event-(.+)$/);if(m)data[m[1]]=a.value}return data}
+function fireDeclEvent(el){var ev=el.getAttribute('data-flareboard-event')||el.getAttribute('data-umami-event');if(!ev)return;var data=eventProps(el),tag=el.getAttribute('data-flareboard-event-tag')||el.getAttribute('data-umami-event-tag');trackEvent(scriptEl(),{name:ev,data:Object.keys(data).length?data:undefined,tag:tag||undefined})}
+function onDeclClick(e){var el=e.target;while(el&&el!==d){if(el.getAttribute('data-flareboard-event')||el.getAttribute('data-umami-event')){fireDeclEvent(el);break}el=el.parentElement}}
+function hasDeclAttr(el){return el&&el.getAttribute&&(el.getAttribute('data-flareboard-event')||el.getAttribute('data-umami-event'))}
+function scanDecl(root){if(!root||!root.querySelectorAll)return;var nodes=root.querySelectorAll?root.querySelectorAll('[data-flareboard-event],[data-umami-event]'):[];for(var i=0;i<nodes.length;i++){var n=nodes[i];if(n._fbDecl)return;n._fbDecl=1;n.addEventListener('click',function(e){fireDeclEvent(e.currentTarget)},true)}}
+function setupDeclObserver(){scanDecl(d);try{new MutationObserver(function(muts){for(var i=0;i<muts.length;i++){var m=muts[i];if(m.type==='attributes'&&hasDeclAttr(m.target))scanDecl(m.target.parentElement||d);if(m.addedNodes)for(var j=0;j<m.addedNodes.length;j++){var n=m.addedNodes[j];if(n.nodeType===1)scanDecl(n)}}}).observe(d.body,{childList:true,subtree:true,attributes:true,attributeFilter:['data-flareboard-event','data-umami-event','data-flareboard-event-tag','data-umami-event-tag']})}catch(_){}}
+function hmSample(){return hmOn&&Math.random()<hmRate}
+function sendHeatmap(payload){var w=websiteId();if(!w)return;var o=r();o.website=w;send('heatmap',Object.assign(o,payload))}
+function onHmClick(e){if(!hmSample())return;var vw=t.innerWidth,vh=t.innerHeight;if(!vw||!vh)return;sendHeatmap({kind:'click',x:Math.round(e.clientX),y:Math.round(e.clientY),viewportWidth:vw,viewportHeight:vh})}
+function scrollDepth(){var docH=Math.max(d.body.scrollHeight,d.documentElement.scrollHeight),vh=t.innerHeight,st=t.scrollY||d.documentElement.scrollTop;return docH<=vh?100:Math.min(100,Math.round((st+vh)/docH*100))}
+function onHmScroll(){var depth=scrollDepth(),path=appPath(),key=scrollKey+':'+path,prev=parseInt(s.getItem(key)||'0',10)||0;if(depth<=prev)return;maxScroll=depth;s.setItem(key,String(depth));if(!hmSample())return;sendHeatmap({kind:'scroll',scrollDepth:depth})}
+function setupHeatmap(){var scrollTimer;d.addEventListener('click',onHmClick,true);t.addEventListener('scroll',function(){clearTimeout(scrollTimer);scrollTimer=setTimeout(onHmScroll,400)},{passive:true})}
+function loadHmConfig(a){var el=a||scriptEl(),attr=el&&el.getAttribute('data-heatmap-sample-rate');if(attr!=null){var r=parseFloat(attr);if(!isNaN(r))hmRate=Math.min(1,Math.max(0,r))}var w=websiteId(el);if(!w)return;fetch(ingestOrigin()+'/api/tracker-config?website='+encodeURIComponent(w)).then(function(x){return x.json()}).then(function(cfg){if(cfg&&typeof cfg.heatmapSampleRate==='number')hmRate=cfg.heatmapSampleRate;if(cfg&&cfg.heatmapEnabled===false)hmOn=false}).catch(function(){})}
 function collectVitals(a){if(vitalsSent||!t.PerformanceObserver)return;var w=websiteId(a);if(!w)return;vitalsSent=true;try{var o=r();o.website=w;var m={};function obs(n,fn){try{new PerformanceObserver(function(list){var x=list.getEntries();if(x.length)m[n]=fn(x[x.length-1])}).observe({type:n,buffered:true})}catch(_){}}obs('largest-contentful-paint',function(x){return Math.round(x.startTime)});obs('first-contentful-paint',function(x){return Math.round(x.startTime)});try{new PerformanceObserver(function(list){var x=list.getEntries();if(x.length)m.inp=Math.round(x[x.length-1].duration)}).observe({type:'event',buffered:true,durationThreshold:40})}catch(_){}obs('layout-shift',function(x){return x.value});obs('navigation',function(x){return Math.round(x.responseStart)});setTimeout(function(){if(m.lcp||m.inp||m.cls||m.fcp||m.ttfb){o.lcp=m.lcp;o.inp=m.inp;o.cls=m.cls;o.fcp=m.fcp;o.ttfb=m.ttfb;send('performance',o)}},3000)}catch(_){}}
-function init(){var a=scriptEl();if(!websiteId(a))return;trackEvent(a);collectVitals(a);var api={track:function(n,data,tag){return trackEvent(scriptEl(),{name:n,data:data||undefined,tag:tag||undefined})},identify:function(id,data){var w=websiteId();if(!w)return;return send('identify',{website:w,id:id,data:data||{}})},revenue:function(amount,currency,extra){return trackEvent(scriptEl(),Object.assign({revenue:amount,currency:currency||'USD'},extra||{}))}};t.flareboard=api}
+function init(){var a=scriptEl();if(!websiteId(a))return;loadHmConfig(a);pageview();setupSpa();d.addEventListener('click',onDeclClick,true);setupDeclObserver();setupHeatmap();collectVitals(a);var api={track:function(n,data,tag){return trackEvent(scriptEl(),{name:n,data:data||undefined,tag:tag||undefined})},identify:function(id,data){var w=websiteId();if(!w)return;return send('identify',{website:w,id:id,data:data||{}})},revenue:function(amount,currency,extra){return trackEvent(scriptEl(),Object.assign({revenue:amount,currency:currency||'USD'},extra||{}))}};t.flareboard=api}
 if(d.readyState==='complete')init();else t.addEventListener('load',init);
 })();`;
 

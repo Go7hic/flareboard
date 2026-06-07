@@ -144,6 +144,7 @@ export interface Website {
   userId?: string;
   createdAt?: string | number;
   replayEnabled?: boolean;
+  goalConfig?: { goals: Array<{ event: string; target: number; period: string }> };
 }
 
 export interface StatValue {
@@ -168,6 +169,8 @@ export interface TrackingStatus {
 export interface MetricRow {
   x: string;
   y: number;
+  visitors?: number;
+  avgTime?: number;
 }
 
 export interface Team {

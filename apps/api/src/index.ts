@@ -26,6 +26,11 @@ import * as stats from './routes/stats';
 import * as tracking from './routes/tracking';
 import * as teams from './routes/teams';
 import * as websites from './routes/websites';
+import * as heatmaps from './routes/heatmaps';
+import * as cohorts from './routes/cohorts';
+import * as emailReports from './routes/email-reports';
+import * as dataImport from './routes/import';
+import { runScheduledEmailReports } from './lib/email-reports';
 import { json } from './lib/response';
 
 const app = new Hono<{ Bindings: Env; Variables: ApiVariables }>();
@@ -107,6 +112,16 @@ app.get('/api/websites/:websiteId/stats/overview', stats.handleOverview);
 app.get('/api/websites/:websiteId/pageviews', stats.handlePageviews);
 app.get('/api/websites/:websiteId/metrics', stats.handleMetrics);
 app.get('/api/websites/:websiteId/export', sessions.handleExport);
+app.get('/api/websites/:websiteId/heatmap', heatmaps.handleGet);
+app.get('/api/websites/:websiteId/heatmap/paths', heatmaps.handleGetPaths);
+app.get('/api/websites/:websiteId/cohorts', cohorts.handleList);
+app.post('/api/websites/:websiteId/cohorts', cohorts.handleCreate);
+app.get('/api/websites/:websiteId/cohorts/:cohortId', cohorts.handleGet);
+app.patch('/api/websites/:websiteId/cohorts/:cohortId', cohorts.handleUpdate);
+app.delete('/api/websites/:websiteId/cohorts/:cohortId', cohorts.handleDelete);
+app.get('/api/websites/:websiteId/email-report', emailReports.handleGet);
+app.patch('/api/websites/:websiteId/email-report', emailReports.handleUpdate);
+app.post('/api/websites/:websiteId/import', dataImport.handleImport);
 
 app.get('/api/websites/:websiteId/sessions', sessions.handleList);
 app.get('/api/websites/:websiteId/sessions/stats', sessions.handleStats);
@@ -177,6 +192,7 @@ app.get('/api/reports/journey', reports.handleJourney);
 app.get('/api/reports/attribution', reports.handleAttribution);
 app.get('/api/reports/breakdown', reports.handleBreakdown);
 app.get('/api/reports/performance', reports.handlePerformance);
+app.get('/api/reports/cohort', cohorts.handleReport);
 app.get('/api/reports/:reportId', reports.handleGet);
 app.patch('/api/reports/:reportId', reports.handleUpdate);
 app.delete('/api/reports/:reportId', reports.handleDelete);
@@ -193,4 +209,9 @@ app.post('/api/admin/teams', admin.handleCreateTeam);
 app.get('/api/admin/websites', admin.handleListWebsites);
 app.post('/api/admin/websites', admin.handleCreateWebsite);
 
-export default app;
+export default {
+  fetch: app.fetch,
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(runScheduledEmailReports(env, event.cron));
+  },
+};

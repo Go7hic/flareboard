@@ -1,7 +1,6 @@
 export const FLAREBOARD_GITHUB = 'https://github.com/Go7hic/flareboard';
 export const FLAREBOARD_README = `${FLAREBOARD_GITHUB}#readme`;
 export const FLAREBOARD_DEPLOY_DOCS = `${FLAREBOARD_GITHUB}/blob/main/docs/deployment.md`;
-export const FLAREBOARD_HOSTED_DOCS = `${FLAREBOARD_GITHUB}/blob/main/docs/hosted-saas.md`;
 export const FLAREBOARD_ENTERPRISE_EMAIL = 'hello@flareboard.dev';
 
 /** Display price for Cloud plan (USD). Stripe is source of truth at checkout. */

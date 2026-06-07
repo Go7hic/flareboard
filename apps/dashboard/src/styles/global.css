@@ -498,6 +498,7 @@ textarea {
   height: var(--brand-logo-size, 26px);
   max-width: var(--brand-logo-size, 26px);
   max-height: var(--brand-logo-size, 26px);
+  object-fit: contain;
 }
 
 .brand-logo-wordmark {

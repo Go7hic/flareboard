@@ -112,7 +112,14 @@ function LandingBarChart({
           axisLine={false}
         />
         <Tooltip contentStyle={chartTooltipStyle(chartColors)} formatter={(v) => [Number(v).toLocaleString(), 'Views']} />
-        <Bar dataKey="views" fill={barColor} radius={[0, 4, 4, 0]} barSize={10} />
+        <Bar
+          dataKey="views"
+          fill={barColor}
+          radius={[0, 4, 4, 0]}
+          barSize={10}
+          stroke="none"
+          activeBar={{ fill: barColor, stroke: 'none', strokeWidth: 0 }}
+        />
       </BarChart>
     </ResponsiveContainer>
   );

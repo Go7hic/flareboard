@@ -1,8 +1,6 @@
 # Flareboard
 
-**Version:** 1.2.0
-
-Privacy-first web analytics on [Cloudflare Workers](https://workers.cloudflare.com/) — pageviews, events, sessions, reports, session replay, teams, and share links. Self-hosted on D1, KV, R2, and Queues.
+Privacy-first web analytics on Cloudflare Workers — pageviews, events, sessions, reports, session replay, teams, and share links. Self-hosted on D1, KV, R2, and Queues.
 
 ## Features
 
@@ -63,13 +61,6 @@ Forkers: replace D1/KV IDs in each app's `wrangler.jsonc` with your own resource
 | [API reference](docs/api.md) | REST and ingest endpoints |
 | [Database](packages/db/README.md) | Schema and migrations |
 | [Security](SECURITY.md) | Vulnerability reporting |
-
-## Versioning
-
-Flareboard follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
-
-- The canonical release version lives in the root [`package.json`](package.json) `version` field (workspace packages are kept in sync).
-- When cutting a release, bump that version, update the **Version** line in this README, commit, and tag the release as `vMAJOR.MINOR.PATCH` (for example `v1.0.0`).
 
 ## License
 

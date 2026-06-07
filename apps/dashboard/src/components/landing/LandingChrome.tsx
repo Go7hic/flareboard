@@ -1,0 +1,186 @@
+import { type MouseEvent, type ReactNode, useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { BrandLogo } from '../BrandLogo';
+import { ThemeToggle } from '../ThemeToggle';
+import { Button } from '../ui/button';
+import { api, getToken } from '../../lib/api';
+import {
+  FLAREBOARD_DEPLOY_DOCS,
+  FLAREBOARD_GITHUB,
+  FLAREBOARD_README,
+} from '../../lib/landing-links';
+import { t } from '../../lib/i18n';
+
+type AppConfig = {
+  registrationEnabled?: boolean;
+};
+
+type LandingChromeProps = {
+  children: ReactNode;
+  activeNav?: 'home' | 'features';
+};
+
+type NavItem =
+  | { kind: 'hash'; hash: string; labelKey: string; active?: boolean }
+  | { kind: 'route'; href: string; labelKey: string; active?: boolean }
+  | { kind: 'external'; href: string; labelKey: string };
+
+function LandingNavLink({ item }: { item: NavItem }) {
+  const location = useLocation();
+  const active = 'active' in item && item.active;
+  const className = `shell-link${active ? ' active' : ''}`;
+
+  if (item.kind === 'external') {
+    return (
+      <a
+        href={item.href}
+        className="shell-link"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {t(item.labelKey)}
+      </a>
+    );
+  }
+
+  if (item.kind === 'hash') {
+    if (location.pathname === '/') {
+      return (
+        <a href={`#${item.hash}`} className={className}>
+          {t(item.labelKey)}
+        </a>
+      );
+    }
+
+    return (
+      <Link to="/" state={{ scrollTo: item.hash }} className={className}>
+        {t(item.labelKey)}
+      </Link>
+    );
+  }
+
+  return (
+    <Link to={item.href} className={className}>
+      {t(item.labelKey)}
+    </Link>
+  );
+}
+
+function scrollLandingToTop() {
+  requestAnimationFrame(() => {
+    const hero = document.querySelector('.landing-hero');
+    if (hero) {
+      hero.scrollIntoView();
+    } else {
+      window.scrollTo({ top: 0 });
+    }
+  });
+}
+
+function LandingBrandLink({ className }: { className?: string }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  function handleClick(e: MouseEvent<HTMLAnchorElement>) {
+    if (location.pathname !== '/') return;
+
+    e.preventDefault();
+    if (location.hash) {
+      navigate('/', { replace: true });
+    }
+    scrollLandingToTop();
+  }
+
+  return (
+    <Link to="/" className={className} onClick={handleClick}>
+      <BrandLogo />
+    </Link>
+  );
+}
+
+export function LandingChrome({ children, activeNav = 'home' }: LandingChromeProps) {
+  const [config, setConfig] = useState<AppConfig>({});
+  const isLoggedIn = Boolean(getToken());
+
+  useEffect(() => {
+    api<AppConfig>('/api/config')
+      .then((cfg) => setConfig(cfg))
+      .catch(() => {});
+  }, []);
+
+  const startHref = config.registrationEnabled ? '/register' : '/login';
+
+  const navItems: NavItem[] = [
+    { kind: 'hash', hash: 'product', labelKey: 'landingNavProduct' },
+    { kind: 'route', href: '/features', labelKey: 'landingNavFeatures', active: activeNav === 'features' },
+    { kind: 'hash', hash: 'pricing', labelKey: 'landingNavPricing' },
+    { kind: 'external', href: FLAREBOARD_README, labelKey: 'landingNavDocs' },
+  ];
+
+  return (
+    <div className="landing">
+      <header className="landing-nav">
+        <div className="landing-nav-inner">
+          <LandingBrandLink className="shell-brand landing-brand" />
+          <nav className="landing-nav-links shell-links" aria-label={t('landingNavAria')}>
+            {navItems.map((item) => (
+              <LandingNavLink key={item.labelKey} item={item} />
+            ))}
+          </nav>
+          <div className="landing-nav-actions shell-nav-end">
+            <ThemeToggle />
+            {isLoggedIn ? (
+              <Button asChild variant="primary" size="sm">
+                <Link to="/websites">{t('dashboard')}</Link>
+              </Button>
+            ) : (
+              <>
+                <Button asChild variant="ghost" size="sm">
+                  <Link to="/login">{t('signIn')}</Link>
+                </Button>
+                <Button asChild variant="primary" size="sm">
+                  <Link to={startHref}>{t('landingGetStarted')}</Link>
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {children}
+
+      <footer className="landing-footer">
+        <div className="landing-footer-inner">
+          <LandingBrandLink className="shell-brand" />
+          <nav className="landing-footer-links" aria-label={t('landingFooterAria')}>
+            <Link to="/features">{t('landingNavFeatures')}</Link>
+            <Link to="/login">{t('signIn')}</Link>
+            <Link to={startHref}>{t('landingGetStarted')}</Link>
+            <a href={FLAREBOARD_GITHUB} target="_blank" rel="noopener noreferrer">
+              GitHub
+            </a>
+            <a href={FLAREBOARD_README} target="_blank" rel="noopener noreferrer">
+              {t('landingNavDocs')}
+            </a>
+            <a href={FLAREBOARD_DEPLOY_DOCS} target="_blank" rel="noopener noreferrer">
+              {t('landingSelfHost')}
+            </a>
+          </nav>
+          <p className="landing-footer-copy">{t('landingFooterCopy')}</p>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+export function useLandingStartHref() {
+  const [startHref, setStartHref] = useState('/register');
+
+  useEffect(() => {
+    api<AppConfig>('/api/config')
+      .then((cfg) => setStartHref(cfg.registrationEnabled ? '/register' : '/login'))
+      .catch(() => {});
+  }, []);
+
+  return startHref;
+}

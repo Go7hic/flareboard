@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { BrandLogo } from '../components/BrandLogo';
+import { Link, useLocation } from 'react-router-dom';
 import { DataClaritySection, HeroDashboardPreview } from '../components/landing/LandingCharts';
-import { ThemeToggle } from '../components/ThemeToggle';
+import { LandingChrome } from '../components/landing/LandingChrome';
 import { Button } from '../components/ui/button';
-import { api, getToken } from '../lib/api';
+import { api } from '../lib/api';
+import { t } from '../lib/i18n';
 import {
   CLOUD_MONTHLY_USD,
   CLOUD_ORIGINAL_MONTHLY_USD,
@@ -23,13 +23,6 @@ type AppConfig = {
   registrationEnabled?: boolean;
   plans?: LandingPlan[];
 };
-
-const landingNav = [
-  { href: '#product', label: 'Product' },
-  { href: '#features', label: 'Features' },
-  { href: '#pricing', label: 'Pricing' },
-  { href: FLAREBOARD_README, label: 'Docs', external: true },
-] as const;
 
 const gaCompare = [
   {
@@ -258,13 +251,27 @@ function PlanCard({
 
 export default function Landing() {
   const [config, setConfig] = useState<AppConfig>({});
-  const isLoggedIn = Boolean(getToken());
+  const location = useLocation();
 
   useEffect(() => {
     api<AppConfig>('/api/config')
       .then((cfg) => setConfig(cfg))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const stateScroll = (location.state as { scrollTo?: string } | null)?.scrollTo;
+    const hashId = location.hash.replace(/^#/, '');
+    const targetId = stateScroll || hashId;
+    if (!targetId) return;
+
+    const el = document.getElementById(targetId);
+    if (!el) return;
+
+    requestAnimationFrame(() => {
+      el.scrollIntoView();
+    });
+  }, [location.hash, location.state]);
 
   const startHref = config.registrationEnabled ? '/register' : '/login';
   const plans = (config.plans?.length ? config.plans : LANDING_PLANS).filter(
@@ -273,51 +280,7 @@ export default function Landing() {
   const showCloudPaths = config.hosted !== false;
 
   return (
-    <div className="landing">
-      <header className="landing-nav">
-        <div className="landing-nav-inner">
-          <Link to="/" className="shell-brand landing-brand">
-            <BrandLogo />
-          </Link>
-          <nav className="landing-nav-links shell-links" aria-label="Page">
-            {landingNav.map((item) =>
-              'external' in item && item.external ? (
-                <a
-                  key={item.label}
-                  href={item.href}
-                  className="shell-link"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {item.label}
-                </a>
-              ) : (
-                <a key={item.label} href={item.href} className="shell-link">
-                  {item.label}
-                </a>
-              ),
-            )}
-          </nav>
-          <div className="landing-nav-actions shell-nav-end">
-            <ThemeToggle />
-            {isLoggedIn ? (
-              <Button asChild variant="primary" size="sm">
-                <Link to="/websites">Dashboard</Link>
-              </Button>
-            ) : (
-              <>
-                <Button asChild variant="ghost" size="sm">
-                  <Link to="/login">Sign in</Link>
-                </Button>
-                <Button asChild variant="primary" size="sm">
-                  <Link to={startHref}>Get started</Link>
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
-
+    <LandingChrome activeNav="home">
       <section className="landing-hero">
         <div className="landing-hero-copy landing-reveal">
           <p className="landing-hero-badge">
@@ -444,6 +407,11 @@ export default function Landing() {
             </article>
           ))}
         </div>
+        <div className="landing-features-cta">
+          <Button asChild variant="secondary">
+            <Link to="/features">{t('featuresViewAll')}</Link>
+          </Button>
+        </div>
       </section>
 
       <section
@@ -531,29 +499,6 @@ export default function Landing() {
         </div>
       </section>
 
-      <footer className="landing-footer">
-        <div className="landing-footer-inner">
-          <Link to="/" className="shell-brand">
-            <BrandLogo />
-          </Link>
-          <nav className="landing-footer-links" aria-label="Footer">
-            <Link to="/login">Sign in</Link>
-            <Link to={startHref}>Get started</Link>
-            <a href={FLAREBOARD_GITHUB} target="_blank" rel="noopener noreferrer">
-              GitHub
-            </a>
-            <a href={FLAREBOARD_README} target="_blank" rel="noopener noreferrer">
-              Documentation
-            </a>
-            <a href={FLAREBOARD_DEPLOY_DOCS} target="_blank" rel="noopener noreferrer">
-              Self-host
-            </a>
-          </nav>
-          <p className="landing-footer-copy">
-            Flareboard — privacy-first analytics on Cloudflare. Cloud hosting or self-deploy.
-          </p>
-        </div>
-      </footer>
-    </div>
+    </LandingChrome>
   );
 }

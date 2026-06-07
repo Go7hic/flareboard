@@ -3330,6 +3330,105 @@ code {
   grid-column: span 1;
 }
 
+.landing-features-cta {
+  display: flex;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
+/* ── Features page ── */
+.features-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.features-hero {
+  max-width: var(--container-max);
+  margin: 0 auto;
+  width: 100%;
+  padding: 2rem 1.5rem 1.5rem;
+}
+
+.features-hero-lead {
+  max-width: 60ch;
+}
+
+.features-jump {
+  position: sticky;
+  top: var(--nav-height);
+  z-index: 10;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.features-jump-list {
+  list-style: none;
+  margin: 0 auto;
+  padding: 0.65rem 1.5rem;
+  max-width: var(--container-max);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+}
+
+.features-jump-link {
+  display: inline-block;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-decoration: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.features-jump-link:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.features-body {
+  flex: 1;
+}
+
+.features-category {
+  padding-top: 2.5rem;
+  padding-bottom: 2.5rem;
+  scroll-margin-top: calc(var(--nav-height) + 3rem);
+}
+
+.features-category-title {
+  margin: 0 0 1.25rem;
+  padding-left: 0.85rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  border-left: 3px solid var(--accent);
+}
+
+.features-category-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.features-category-grid > li {
+  display: flex;
+}
+
+.features-category-grid .landing-feature-card {
+  flex: 1;
+  height: 100%;
+}
+
 .landing-paths {
   padding-top: 0;
 }
@@ -4055,15 +4154,16 @@ code {
   max-width: var(--container-max);
   margin: 0 auto;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1.25rem;
 }
 
 .landing-footer-links {
   display: flex;
-  gap: 1.25rem;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 0.75rem 1.25rem;
 }
 
 .landing-footer-links a {
@@ -4077,10 +4177,48 @@ code {
 }
 
 .landing-footer-copy {
-  width: 100%;
-  margin: 0.5rem 0 0;
+  margin: 0;
   font-size: 0.8125rem;
   color: var(--text-faint);
+  max-width: 28rem;
+}
+
+@media (min-width: 641px) {
+  .landing-footer-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 2.5rem;
+    row-gap: 0.75rem;
+    align-items: center;
+  }
+
+  .landing-footer-inner > .shell-brand {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+  }
+
+  .landing-footer-copy {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .landing-footer-links {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    justify-content: flex-end;
+    align-self: center;
+  }
+}
+
+.landing-hero-dash-chart-bar .recharts-bar-rectangle,
+.landing-data-chart .recharts-bar-rectangle {
+  stroke: none;
+}
+
+.landing-hero-dash-chart-bar .recharts-bar-rectangle:focus,
+.landing-data-chart .recharts-bar-rectangle:focus {
+  outline: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -4190,6 +4328,10 @@ code {
     grid-template-columns: 1fr 1fr;
   }
 
+  .features-category-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
   .landing-plans.landing-section {
     padding-bottom: 3.25rem;
   }
@@ -4259,6 +4401,14 @@ code {
 
   .landing-feature-grid-6 {
     grid-template-columns: 1fr;
+  }
+
+  .features-category-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .features-jump-list {
+    gap: 0.3rem;
   }
 
   .landing-feature-accent,
@@ -4344,10 +4494,6 @@ code {
     display: none;
   }
 
-  .landing-footer-inner {
-    flex-direction: column;
-    align-items: flex-start;
-  }
 }
 
 /* Retention heatmap + goals progress (P1) */

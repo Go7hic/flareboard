@@ -1,6 +1,6 @@
 # Flareboard
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 
 Privacy-first web analytics on [Cloudflare Workers](https://workers.cloudflare.com/) — pageviews, events, sessions, reports, session replay, teams, and share links. Self-hosted on D1, KV, R2, and Queues.
 

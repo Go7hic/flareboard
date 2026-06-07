@@ -1441,6 +1441,34 @@ code {
   gap: 0.35rem;
 }
 
+.path-sort-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.65rem;
+  margin-bottom: 0.75rem;
+}
+
+.path-sort-toolbar-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.path-sort-toolbar-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.path-sort-toolbar-pills .btn,
+.path-sort-toolbar-pills button {
+  width: auto;
+  flex: 0 0 auto;
+}
+
 .breakdown-map {
   margin-bottom: 1.25rem;
 }
@@ -2062,17 +2090,53 @@ code {
 }
 
 .dashboard-site-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
   padding: 1rem 1.15rem 1.1rem;
   text-decoration: none;
   color: inherit;
-  transition: border-color var(--transition), box-shadow var(--transition);
+  border-left: 3px solid transparent;
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition),
+    transform var(--transition);
 }
 
 .dashboard-site-card:hover {
   border-color: color-mix(in srgb, var(--accent) 25%, transparent);
+  border-left-color: var(--accent);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.dashboard-site-card .site-card-arrow {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  color: var(--text-faint);
+  transition: color var(--transition), transform var(--transition);
+}
+
+.dashboard-site-card:hover .site-card-arrow {
+  color: var(--accent);
+  transform: translateX(2px);
+}
+
+.dashboard-site-card-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  padding-right: 1.5rem;
+}
+
+.dashboard-site-kpi-primary {
+  padding-left: 0.65rem;
+  border-left: 2px solid var(--accent);
 }
 
 .dashboard-site-card-head {
@@ -2084,8 +2148,34 @@ code {
 }
 
 .dashboard-site-card-chart {
-  height: 5.5rem;
-  min-height: 5.5rem;
+  height: 6rem;
+  min-height: 6rem;
+  padding: 0.35rem 0.15rem 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.dashboard-site-card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+  padding-top: 0.15rem;
+  font-size: 0.75rem;
+}
+
+.dashboard-site-card-hint {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.dashboard-site-card-compare {
+  color: var(--text-faint);
+}
+
+.dashboard-site-card:hover .dashboard-site-card-hint {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .dashboard-site-card-chart .skeleton-block {
@@ -2545,6 +2635,10 @@ code {
   text-align: center;
 }
 
+.empty-state-cta {
+  margin-top: 1.25rem;
+}
+
 .board-card {
   margin-bottom: 0;
   display: flex;
@@ -2922,13 +3016,22 @@ code {
   flex-shrink: 0;
 }
 
+.landing-hero-subbadge {
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: -0.01em;
+}
+
 .landing-headline {
   margin: 0;
-  font-size: clamp(1.75rem, 3.8vw, 2.75rem);
+  font-size: clamp(2rem, 4.5vw, 3.125rem);
   font-weight: 600;
-  letter-spacing: -0.04em;
-  line-height: 1.1;
+  letter-spacing: -0.045em;
+  line-height: 1.08;
   text-wrap: balance;
+  max-width: 14ch;
 }
 
 .landing-lead {
@@ -2944,6 +3047,11 @@ code {
   flex-wrap: wrap;
   gap: 0.75rem;
   margin-top: 1.5rem;
+}
+
+.landing-hero-pipeline {
+  margin-top: 1.75rem;
+  max-width: 100%;
 }
 
 .landing-hero-visual {
@@ -3046,6 +3154,7 @@ code {
   letter-spacing: -0.03em;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-subtle);
+  border-left: 3px solid var(--cf-orange);
 }
 
 .landing-compare-grid {
@@ -3224,16 +3333,35 @@ code {
 }
 
 .landing-feature-grid-6 {
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: auto auto;
+  grid-template-columns: repeat(12, 1fr);
+  grid-template-rows: auto auto auto;
 }
 
 .landing-feature-grid-6 .landing-feature-accent {
-  grid-row: span 1;
+  grid-column: 1 / span 5;
+  grid-row: 1 / span 2;
+}
+
+.landing-feature-grid-6 .landing-feature-card:nth-child(2) {
+  grid-column: 6 / span 4;
+}
+
+.landing-feature-grid-6 .landing-feature-card:nth-child(3) {
+  grid-column: 10 / span 3;
+}
+
+.landing-feature-grid-6 .landing-feature-card:nth-child(4) {
+  grid-column: 6 / span 7;
 }
 
 .landing-feature-grid-6 .landing-feature-highlight {
-  grid-column: span 1;
+  grid-column: 1 / span 7;
+  grid-row: 3;
+}
+
+.landing-feature-grid-6 .landing-feature-card:nth-child(6) {
+  grid-column: 8 / span 5;
+  grid-row: 3;
 }
 
 .landing-paths {
@@ -3286,12 +3414,11 @@ code {
 
 .landing-plans-header {
   margin-bottom: 2.25rem;
-  text-align: center;
+  max-width: 58ch;
 }
 
 .landing-plans-lead {
-  max-width: 52ch;
-  margin-inline: auto;
+  max-width: 58ch;
 }
 
 .landing-plans-row {
@@ -3925,9 +4052,8 @@ code {
 }
 
 .landing-cta-inner {
-  max-width: var(--container-max);
-  margin: 0 auto;
-  text-align: center;
+  max-width: 52ch;
+  margin: 0;
 }
 
 .landing-cta-title {
@@ -4092,8 +4218,14 @@ code {
     width: 100%;
   }
 
-  .landing-feature-grid-6 {
-    grid-template-columns: 1fr 1fr;
+  .landing-feature-grid-6 .landing-feature-accent,
+  .landing-feature-grid-6 .landing-feature-card:nth-child(2),
+  .landing-feature-grid-6 .landing-feature-card:nth-child(3),
+  .landing-feature-grid-6 .landing-feature-card:nth-child(4),
+  .landing-feature-grid-6 .landing-feature-highlight,
+  .landing-feature-grid-6 .landing-feature-card:nth-child(6) {
+    grid-column: span 6;
+    grid-row: auto;
   }
 
   .landing-plans.landing-section {
@@ -4167,10 +4299,14 @@ code {
     grid-template-columns: 1fr;
   }
 
-  .landing-feature-accent,
-  .landing-feature-highlight {
-    grid-row: span 1;
+  .landing-feature-grid-6 .landing-feature-accent,
+  .landing-feature-grid-6 .landing-feature-card:nth-child(2),
+  .landing-feature-grid-6 .landing-feature-card:nth-child(3),
+  .landing-feature-grid-6 .landing-feature-card:nth-child(4),
+  .landing-feature-grid-6 .landing-feature-highlight,
+  .landing-feature-grid-6 .landing-feature-card:nth-child(6) {
     grid-column: span 1;
+    grid-row: auto;
   }
 
   .shell-links {
@@ -4362,6 +4498,3 @@ code {
   align-items: flex-start;
 }
 
-.path-sort-toolbar {
-  margin-bottom: 0.75rem;
-}

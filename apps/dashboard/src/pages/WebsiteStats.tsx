@@ -343,19 +343,21 @@ export default function WebsiteStatsPage() {
           </div>
         </div>
         {metricTab === 'path' ? (
-          <div className="path-sort-toolbar stats-toolbar">
-            <span className="text-muted">{t('pagesSortBy')}:</span>
-            {(['views', 'visitors', 'time'] as PathSortBy[]).map((sort) => (
-              <Button
-                key={sort}
-                type="button"
-                size="sm"
-                variant={pathSortBy === sort ? 'primary' : 'secondary'}
-                onClick={() => setPathSortBy(sort)}
-              >
-                {t(`pagesSort_${sort}`)}
-              </Button>
-            ))}
+          <div className="path-sort-toolbar" role="group" aria-label={t('pagesSortBy')}>
+            <span className="path-sort-toolbar-label">{t('pagesSortBy')}:</span>
+            <div className="path-sort-toolbar-pills">
+              {(['views', 'visitors', 'time'] as PathSortBy[]).map((sort) => (
+                <Button
+                  key={sort}
+                  type="button"
+                  size="sm"
+                  variant={pathSortBy === sort ? 'primary' : 'secondary'}
+                  onClick={() => setPathSortBy(sort)}
+                >
+                  {t(`pagesSort_${sort}`)}
+                </Button>
+              ))}
+            </div>
           </div>
         ) : null}
         {metricTab === 'country' ? (

@@ -9,6 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { t } from '../../lib/i18n';
 import { useChartColors } from '../../lib/useChartColors';
 
 export const DEMO_PAGEVIEWS = [
@@ -41,6 +42,13 @@ const HERO_STATS = [
   { label: 'Bounce rate', value: '38%', primary: false },
 ];
 
+const PIPELINE_STEPS = [
+  { key: 'landingPipelineIngest', sub: 'Worker' },
+  { key: 'landingPipelineQueue', sub: 'Buffer' },
+  { key: 'landingPipelineD1', sub: 'SQLite' },
+  { key: 'landingPipelineDashboard', sub: 'React' },
+] as const;
+
 function chartTooltipStyle(chartColors: ReturnType<typeof useChartColors>) {
   return {
     background: chartColors.panel,
@@ -63,7 +71,10 @@ function LandingLineChart({
   const chartColors = useChartColors();
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <LineChart data={data} margin={compact ? { top: 4, right: 4, left: -18, bottom: 0 } : { top: 8, right: 8, left: -8, bottom: 4 }}>
+      <LineChart
+        data={data}
+        margin={compact ? { top: 4, right: 4, left: -18, bottom: 0 } : { top: 8, right: 8, left: -8, bottom: 4 }}
+      >
         <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
         <XAxis
           dataKey="x"
@@ -81,7 +92,14 @@ function LandingLineChart({
           width={compact ? 28 : 36}
         />
         <Tooltip contentStyle={chartTooltipStyle(chartColors)} />
-        <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} activeDot={{ r: 3 }} />
+        <Line
+          type="monotone"
+          dataKey="y"
+          stroke={chartColors.accent}
+          strokeWidth={2}
+          dot={false}
+          activeDot={{ r: 3 }}
+        />
       </LineChart>
     </ResponsiveContainer>
   );
@@ -111,10 +129,34 @@ function LandingBarChart({
           tickLine={false}
           axisLine={false}
         />
-        <Tooltip contentStyle={chartTooltipStyle(chartColors)} formatter={(v) => [Number(v).toLocaleString(), 'Views']} />
+        <Tooltip
+          contentStyle={chartTooltipStyle(chartColors)}
+          formatter={(v) => [Number(v).toLocaleString(), 'Views']}
+        />
         <Bar dataKey="views" fill={barColor} radius={[0, 4, 4, 0]} barSize={10} />
       </BarChart>
     </ResponsiveContainer>
+  );
+}
+
+export function CloudflarePipeline() {
+  return (
+    <div className="landing-pipeline landing-hero-pipeline" aria-label="Cloudflare data pipeline">
+      <span className="landing-pipeline-rail" aria-hidden />
+      {PIPELINE_STEPS.map((step, i) => (
+        <div key={step.key} className="landing-pipeline-step">
+          <div className="landing-pipeline-node">
+            <span className="landing-pipeline-node-label">{t(step.key)}</span>
+            <span className="landing-pipeline-node-sub">{step.sub}</span>
+          </div>
+          {i < PIPELINE_STEPS.length - 1 ? (
+            <span className="landing-pipeline-arrow" aria-hidden>
+              →
+            </span>
+          ) : null}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -134,7 +176,10 @@ export function HeroDashboardPreview() {
       </div>
       <div className="landing-hero-dash-stats">
         {HERO_STATS.map((s) => (
-          <div key={s.label} className={`landing-hero-dash-stat${s.primary ? ' landing-hero-dash-stat-primary' : ''}`}>
+          <div
+            key={s.label}
+            className={`landing-hero-dash-stat${s.primary ? ' landing-hero-dash-stat-primary' : ''}`}
+          >
             <span className="landing-hero-dash-stat-label">{s.label}</span>
             <span className="landing-hero-dash-stat-value">{s.value}</span>
           </div>
@@ -155,13 +200,13 @@ export function HeroDashboardPreview() {
         </div>
       </div>
       <p className="landing-hero-dash-foot" aria-hidden>
-        <span>Ingest</span>
+        <span>{t('landingPipelineIngest')}</span>
         <span aria-hidden>→</span>
-        <span>Buffer</span>
+        <span>{t('landingPipelineQueue')}</span>
         <span aria-hidden>→</span>
-        <span>Store</span>
+        <span>{t('landingPipelineD1')}</span>
         <span aria-hidden>→</span>
-        <span className="landing-hero-dash-foot-accent">Dashboard</span>
+        <span className="landing-hero-dash-foot-accent">{t('landingPipelineDashboard')}</span>
       </p>
     </div>
   );
@@ -194,12 +239,9 @@ export function DataClaritySection() {
     >
       <div className="landing-data-intro">
         <h2 id="data-clarity-title" className="landing-section-title">
-          See your data clearly
+          {t('landingDataTitle')}
         </h2>
-        <p className="landing-section-lead">
-          Pageviews, referrers, and top paths in one operator view — the same charts you get after
-          sign-in, without a third-party analytics UI.
-        </p>
+        <p className="landing-section-lead">{t('landingDataLead')}</p>
       </div>
       <div className="landing-data-bento">
         <div className="landing-data-cell landing-data-cell-stat landing-data-cell-stat-wide">
@@ -216,7 +258,7 @@ export function DataClaritySection() {
           <span className="landing-data-stat-value">2m 14s</span>
         </div>
         <div className="landing-data-cell landing-data-cell-stat landing-data-cell-stat-cf">
-          <span className="landing-data-stat-label">Edge ingest</span>
+          <span className="landing-data-stat-label">{t('landingPipelineIngest')}</span>
           <span className="landing-data-stat-value landing-data-stat-mono">Active</span>
         </div>
 

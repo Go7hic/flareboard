@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BrandLogo } from '../components/BrandLogo';
-import { DataClaritySection, HeroDashboardPreview } from '../components/landing/LandingCharts';
+import {
+  CloudflarePipeline,
+  DataClaritySection,
+  HeroDashboardPreview,
+} from '../components/landing/LandingCharts';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { Button } from '../components/ui/button';
 import { api, getToken } from '../lib/api';
+import { t } from '../lib/i18n';
 import {
   CLOUD_MONTHLY_USD,
   CLOUD_ORIGINAL_MONTHLY_USD,
@@ -25,90 +30,34 @@ type AppConfig = {
 };
 
 const landingNav = [
-  { href: '#product', label: 'Product' },
-  { href: '#features', label: 'Features' },
-  { href: '#pricing', label: 'Pricing' },
-  { href: FLAREBOARD_README, label: 'Docs', external: true },
+  { href: '#product', labelKey: 'landingNavProduct' as const },
+  { href: '#features', labelKey: 'landingNavFeatures' as const },
+  { href: '#pricing', labelKey: 'landingNavPricing' as const },
+  { href: FLAREBOARD_README, labelKey: 'landingNavDocs' as const, external: true },
 ] as const;
 
 const gaCompare = [
-  {
-    title: 'Privacy by default',
-    body: 'No cross-site tracking graph. Events stay in your account.',
-  },
-  {
-    title: 'Skip cookie banners',
-    body: 'Cookieless measurement means fewer consent modals and cleaner UX.',
-  },
-  {
-    title: 'You own the data',
-    body: 'Export, audit, and delete on your terms — especially when you self-host.',
-  },
-  {
-    title: 'Edge speed',
-    body: 'Collection runs close to visitors worldwide for fast, reliable measurement.',
-  },
+  { titleKey: 'landingGaPrivacyTitle' as const, bodyKey: 'landingGaPrivacyBody' as const },
+  { titleKey: 'landingGaCookiesTitle' as const, bodyKey: 'landingGaCookiesBody' as const },
+  { titleKey: 'landingGaOwnTitle' as const, bodyKey: 'landingGaOwnBody' as const },
+  { titleKey: 'landingGaEdgeTitle' as const, bodyKey: 'landingGaEdgeBody' as const },
 ];
 
 const stack = [
-  {
-    name: 'Edge Workers',
-    slug: 'cloudflareworkers',
-    role: 'Ingest collects events at the edge; API serves the dashboard, reports, and realtime streams.',
-  },
-  {
-    name: 'Queues & aggregator',
-    slug: 'cloudflare',
-    role: 'Queues buffer spikes; the aggregator Worker batches writes into D1 and maintains rollups.',
-  },
-  {
-    name: 'D1 database',
-    slug: 'cloudflare',
-    role: 'Sessions, events, reports, and daily rollups — SQLite at the edge.',
-  },
-  {
-    name: 'R2 storage',
-    slug: 'cloudflare',
-    role: 'Session replay chunks in your bucket — not a third-party video stack.',
-  },
-  {
-    name: 'KV cache',
-    slug: 'cloudflare',
-    role: 'Live visitor counters, rate limits, and cached API responses.',
-  },
+  { nameKey: 'landingStackWorkers' as const, bodyKey: 'landingStackWorkersBody' as const, slug: 'cloudflareworkers' },
+  { nameKey: 'landingStackQueues' as const, bodyKey: 'landingStackQueuesBody' as const, slug: 'cloudflare' },
+  { nameKey: 'landingStackD1' as const, bodyKey: 'landingStackD1Body' as const, slug: 'cloudflare' },
+  { nameKey: 'landingStackR2' as const, bodyKey: 'landingStackR2Body' as const, slug: 'cloudflare' },
+  { nameKey: 'landingStackKv' as const, bodyKey: 'landingStackKvBody' as const, slug: 'cloudflare' },
 ];
 
 const features = [
-  {
-    title: 'Realtime dashboards',
-    body: 'Active visitors and live sessions — paths, referrers, and countries over SSE when traffic is flowing.',
-    variant: 'accent',
-  },
-  {
-    title: 'Advanced reports',
-    body: 'Funnel, retention, attribution, journeys, and web vitals without another BI tool.',
-    variant: 'default',
-  },
-  {
-    title: 'Session replay',
-    body: 'rrweb recordings in your R2 bucket. Watch flows without shipping video to a vendor.',
-    variant: 'default',
-  },
-  {
-    title: 'Teams & share links',
-    body: 'Collaborate on sites and publish read-only dashboards for stakeholders.',
-    variant: 'default',
-  },
-  {
-    title: 'Flareboard Cloud',
-    body: `Start free, then upgrade to Cloud ($${CLOUD_MONTHLY_USD}/mo) for replay and higher limits.`,
-    variant: 'highlight',
-  },
-  {
-    title: 'Self-host on Cloudflare',
-    body: 'Deploy ingest, API, aggregator, and dashboard on your account. Same product — you operate the data plane.',
-    variant: 'default',
-  },
+  { titleKey: 'landingFeatureRealtimeTitle' as const, bodyKey: 'landingFeatureRealtimeBody' as const, variant: 'accent' },
+  { titleKey: 'landingFeatureAdvancedTitle' as const, bodyKey: 'landingFeatureAdvancedBody' as const, variant: 'default' },
+  { titleKey: 'landingFeatureReplayTitle' as const, bodyKey: 'landingFeatureReplayBody' as const, variant: 'default' },
+  { titleKey: 'landingFeatureTeamsTitle' as const, bodyKey: 'landingFeatureTeamsBody' as const, variant: 'default' },
+  { titleKey: 'landingFeatureCloudTitle' as const, bodyKey: 'landingFeatureCloudBody' as const, variant: 'highlight' },
+  { titleKey: 'landingFeatureSelfHostTitle' as const, bodyKey: 'landingFeatureSelfHostBody' as const, variant: 'default' },
 ];
 
 function StackIcon({ slug }: { slug: string }) {
@@ -156,13 +105,7 @@ function EdgeMap() {
           className="landing-edge-path"
         />
         {nodes.map(([cx, cy], i) => (
-          <circle
-            key={i}
-            cx={cx}
-            cy={cy}
-            r={i % 3 === 0 ? 1.8 : 1.2}
-            className="landing-edge-node"
-          />
+          <circle key={i} cx={cx} cy={cy} r={i % 3 === 0 ? 1.8 : 1.2} className="landing-edge-node" />
         ))}
       </svg>
     </div>
@@ -187,8 +130,8 @@ function planFeatureLines(plan: LandingPlan): string[] {
   return [
     `${plan.maxWebsites} website${plan.maxWebsites > 1 ? 's' : ''}`,
     `${formatEventLimit(plan.maxEventsPerMonth)} events per month`,
-    plan.replayEnabled ? 'Session replay included' : 'Session replay not included',
-    'Reports, teams, and share links',
+    plan.replayEnabled ? t('landingPlanReplayIncluded') : t('landingPlanReplayExcluded'),
+    t('landingPlanFeaturesShared'),
   ];
 }
 
@@ -202,16 +145,16 @@ function PlanCard({
   startHref: string;
 }) {
   const priceUsd = plan.monthlyPriceUsd ?? (plan.id === 'cloud' ? CLOUD_MONTHLY_USD : 0);
-  const tagline =
-    plan.id === 'cloud'
-      ? 'For growing sites that need replay and higher volume.'
-      : 'Try Flareboard with real traffic at no cost.';
+  const tagline = plan.id === 'cloud' ? t('landingPlanCloudTagline') : t('landingPlanFreeTagline');
+  const ctaLabel = plan.id === 'free' ? t('landingPlanFreeCta') : t('landingPlanCloudCta');
 
   return (
     <article className={`landing-plan-card${featured ? ' landing-plan-card-featured' : ''}`}>
-      {featured ? <p className="landing-plan-badge">Recommended</p> : null}
+      {featured ? <p className="landing-plan-badge">{t('landingPlanRecommended')}</p> : null}
       <div className="landing-plan-card-top">
-        <p className="landing-plan-label">{plan.id === 'cloud' ? 'Paid plan' : 'Free tier'}</p>
+        <p className="landing-plan-label">
+          {plan.id === 'cloud' ? t('landingPlanPaidLabel') : t('landingPlanFreeLabel')}
+        </p>
         <h3 className="landing-plan-name">{plan.name}</h3>
         <p
           className="landing-plan-price"
@@ -229,13 +172,13 @@ function PlanCard({
                 </span>
                 <span className="landing-plan-price-value">${priceUsd}</span>
               </span>
-              <span className="landing-plan-price-period">per month</span>
+              <span className="landing-plan-price-period">{t('landingPlanPerMonth')}</span>
               <span className="promo-price-label">{CLOUD_PROMO_LABEL}</span>
             </>
           ) : (
             <>
               <span className="landing-plan-price-value">$0</span>
-              <span className="landing-plan-price-period">per month</span>
+              <span className="landing-plan-price-period">{t('landingPlanPerMonth')}</span>
             </>
           )}
         </p>
@@ -250,7 +193,7 @@ function PlanCard({
         ))}
       </ul>
       <Button asChild variant={featured ? 'primary' : 'secondary'} className="landing-plan-cta">
-        <Link to={startHref}>{plan.id === 'free' ? 'Start free' : 'Create account'}</Link>
+        <Link to={startHref}>{ctaLabel}</Link>
       </Button>
     </article>
   );
@@ -283,17 +226,17 @@ export default function Landing() {
             {landingNav.map((item) =>
               'external' in item && item.external ? (
                 <a
-                  key={item.label}
+                  key={item.labelKey}
                   href={item.href}
                   className="shell-link"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  {item.label}
+                  {t(item.labelKey)}
                 </a>
               ) : (
-                <a key={item.label} href={item.href} className="shell-link">
-                  {item.label}
+                <a key={item.labelKey} href={item.href} className="shell-link">
+                  {t(item.labelKey)}
                 </a>
               ),
             )}
@@ -302,15 +245,15 @@ export default function Landing() {
             <ThemeToggle />
             {isLoggedIn ? (
               <Button asChild variant="primary" size="sm">
-                <Link to="/websites">Dashboard</Link>
+                <Link to="/websites">{t('dashboard')}</Link>
               </Button>
             ) : (
               <>
                 <Button asChild variant="ghost" size="sm">
-                  <Link to="/login">Sign in</Link>
+                  <Link to="/login">{t('landingSignIn')}</Link>
                 </Button>
                 <Button asChild variant="primary" size="sm">
-                  <Link to={startHref}>Get started</Link>
+                  <Link to={startHref}>{t('landingGetStarted')}</Link>
                 </Button>
               </>
             )}
@@ -322,25 +265,22 @@ export default function Landing() {
         <div className="landing-hero-copy landing-reveal">
           <p className="landing-hero-badge">
             <span className="landing-hero-badge-dot" aria-hidden />
-            Cloudflare-native · Cloud or self-host
+            {t('landingBadge')}
           </p>
-          <h1 className="landing-headline">
-            Privacy-first analytics on the edge
-          </h1>
-          <p className="landing-lead">
-            The Google Analytics alternative on Workers, D1, KV, R2, and Queues.
-            Run Flareboard Cloud or deploy on your own Cloudflare account.
-          </p>
+          <p className="landing-hero-subbadge">{t('landingHeroBadge')}</p>
+          <h1 className="landing-headline">{t('landingHeadline')}</h1>
+          <p className="landing-lead">{t('landingLead')}</p>
           <div className="landing-cta-row">
             <Button asChild variant="primary">
-              <Link to={startHref}>Create free account</Link>
+              <Link to={startHref}>{t('landingGetStarted')}</Link>
             </Button>
             <Button asChild variant="secondary">
               <a href={FLAREBOARD_GITHUB} target="_blank" rel="noopener noreferrer">
-                View on GitHub
+                {t('landingViewGithub')}
               </a>
             </Button>
           </div>
+          <CloudflarePipeline />
         </div>
         <div className="landing-hero-visual landing-reveal landing-reveal-delay">
           <HeroDashboardPreview />
@@ -350,13 +290,13 @@ export default function Landing() {
       <section className="landing-compare landing-section landing-reveal-section" aria-labelledby="compare-title">
         <div className="landing-compare-inner">
           <h2 id="compare-title" className="landing-compare-title">
-            Why not Google Analytics?
+            {t('landingCompareTitle')}
           </h2>
           <ul className="landing-compare-grid">
             {gaCompare.map((item) => (
-              <li key={item.title} className="landing-compare-item">
-                <h3 className="landing-compare-item-title">{item.title}</h3>
-                <p className="landing-compare-item-body">{item.body}</p>
+              <li key={item.titleKey} className="landing-compare-item">
+                <h3 className="landing-compare-item-title">{t(item.titleKey)}</h3>
+                <p className="landing-compare-item-body">{t(item.bodyKey)}</p>
               </li>
             ))}
           </ul>
@@ -369,30 +309,24 @@ export default function Landing() {
         <section className="landing-paths landing-section landing-reveal-section" aria-labelledby="paths-title">
           <div className="landing-section-intro">
             <h2 id="paths-title" className="landing-section-title">
-              Cloud or self-host
+              {t('landingPathsTitle')}
             </h2>
-            <p className="landing-section-lead">
-              Use Flareboard Cloud for the fastest start, or deploy the same codebase on your Cloudflare account.
-            </p>
+            <p className="landing-section-lead">{t('landingPathsLead')}</p>
           </div>
           <div className="landing-path-grid">
             <article className="landing-path-card landing-path-cloud">
-              <h3 className="landing-path-title">Flareboard Cloud</h3>
-              <p className="landing-path-body">
-                Register with email, add a website, paste the tracking snippet. Billing and limits are built in.
-              </p>
+              <h3 className="landing-path-title">{t('landingPathCloudTitle')}</h3>
+              <p className="landing-path-body">{t('landingPathCloudBody')}</p>
               <Button asChild variant="primary">
-                <Link to={startHref}>Create account</Link>
+                <Link to={startHref}>{t('landingGetStarted')}</Link>
               </Button>
             </article>
             <article className="landing-path-card">
-              <h3 className="landing-path-title">Self-host</h3>
-              <p className="landing-path-body">
-                Clone the repo, wire D1/KV/R2/Queues, and deploy four Workers. No subscription required.
-              </p>
+              <h3 className="landing-path-title">{t('landingPathSelfTitle')}</h3>
+              <p className="landing-path-body">{t('landingPathSelfBody')}</p>
               <Button asChild variant="secondary">
                 <a href={FLAREBOARD_DEPLOY_DOCS} target="_blank" rel="noopener noreferrer">
-                  Deployment guide
+                  {t('landingPathDeployGuide')}
                 </a>
               </Button>
             </article>
@@ -407,19 +341,17 @@ export default function Landing() {
       >
         <div className="landing-stack-header">
           <h2 id="stack-title" className="landing-section-title">
-            How Flareboard works
+            {t('landingStackTitle')}
           </h2>
-          <p className="landing-section-lead">
-            Not a bolt-on script to someone else&apos;s cloud. Every layer runs on Cloudflare products you can operate.
-          </p>
+          <p className="landing-section-lead">{t('landingStackLead')}</p>
         </div>
         <ul className="landing-stack-grid">
           {stack.map((item) => (
-            <li key={item.name} className="landing-stack-card">
+            <li key={item.nameKey} className="landing-stack-card">
               <StackIcon slug={item.slug} />
               <div className="landing-stack-card-copy">
-                <h3 className="landing-stack-card-title">{item.name}</h3>
-                <p className="landing-stack-card-body">{item.role}</p>
+                <h3 className="landing-stack-card-title">{t(item.nameKey)}</h3>
+                <p className="landing-stack-card-body">{t(item.bodyKey)}</p>
               </div>
             </li>
           ))}
@@ -433,14 +365,18 @@ export default function Landing() {
       >
         <div className="landing-section-intro">
           <h2 id="features-title" className="landing-section-title">
-            Analytics without vendor lock-in
+            {t('landingFeaturesTitle')}
           </h2>
         </div>
         <div className="landing-feature-grid landing-feature-grid-6">
           {features.map((f) => (
-            <article key={f.title} className={`landing-feature-card landing-feature-${f.variant}`}>
-              <h3 className="landing-feature-title">{f.title}</h3>
-              <p className="landing-feature-body">{f.body}</p>
+            <article key={f.titleKey} className={`landing-feature-card landing-feature-${f.variant}`}>
+              <h3 className="landing-feature-title">{t(f.titleKey)}</h3>
+              <p className="landing-feature-body">
+                {f.titleKey === 'landingFeatureCloudTitle'
+                  ? `${t(f.bodyKey)} ($${CLOUD_MONTHLY_USD}/mo).`
+                  : t(f.bodyKey)}
+              </p>
             </article>
           ))}
         </div>
@@ -453,13 +389,12 @@ export default function Landing() {
       >
         <div className="landing-plans-header">
           <h2 id="pricing-title" className="landing-section-title">
-            Pricing
+            {t('landingPricingTitle')}
           </h2>
           <p className="landing-section-lead landing-plans-lead">
-            Start free on Flareboard Cloud. Upgrade when you need session replay and more volume.
-            Self-host for noncommercial use anytime —{' '}
+            {t('landingPricingLead')}{' '}
             <a href={FLAREBOARD_DEPLOY_DOCS} target="_blank" rel="noopener noreferrer">
-              deployment guide
+              {t('landingPathDeployGuide')}
             </a>
             .
           </p>
@@ -467,29 +402,21 @@ export default function Landing() {
 
         <div className="landing-plans-row">
           {plans.map((plan) => (
-            <PlanCard
-              key={plan.id}
-              plan={plan}
-              featured={plan.id === 'cloud'}
-              startHref={startHref}
-            />
+            <PlanCard key={plan.id} plan={plan} featured={plan.id === 'cloud'} startHref={startHref} />
           ))}
         </div>
 
         <aside className="landing-plans-enterprise" aria-labelledby="enterprise-title">
           <div className="landing-plans-enterprise-copy">
-            <p className="landing-plan-label">Enterprise</p>
+            <p className="landing-plan-label">{t('landingEnterpriseLabel')}</p>
             <h3 id="enterprise-title" className="landing-plans-enterprise-title">
-              Dedicated deploy on your Cloudflare account
+              {t('landingEnterpriseTitle')}
             </h3>
-            <p className="landing-plans-enterprise-body">
-              We set up Workers, D1, KV, R2, and Queues in your org, migrate from existing analytics,
-              and optionally stay on for support. Your data never leaves your account.
-            </p>
+            <p className="landing-plans-enterprise-body">{t('landingEnterpriseBody')}</p>
           </div>
           <Button asChild variant="secondary" className="landing-plans-enterprise-cta">
             <a href={`mailto:${FLAREBOARD_ENTERPRISE_EMAIL}?subject=Flareboard%20enterprise%20deploy`}>
-              Contact us
+              {t('landingEnterpriseCta')}
             </a>
           </Button>
         </aside>
@@ -499,11 +426,9 @@ export default function Landing() {
         <div className="landing-network-inner">
           <div className="landing-network-copy">
             <h2 id="network-title" className="landing-section-title">
-              Runs on a global edge network
+              {t('landingNetworkTitle')}
             </h2>
-            <p className="landing-section-lead">
-              Ingest and API traffic hit the edge first. Your visitors get fast responses; your data stays on Cloudflare.
-            </p>
+            <p className="landing-section-lead">{t('landingNetworkLead')}</p>
             <div className="landing-network-logos" aria-label="Global network">
               <img
                 src="https://cdn.simpleicons.org/cloudflare/F38020"
@@ -521,12 +446,10 @@ export default function Landing() {
 
       <section className="landing-cta-band landing-reveal-section">
         <div className="landing-cta-inner">
-          <h2 className="landing-cta-title">Get started in minutes</h2>
-          <p className="landing-cta-lead">
-            Create an account, add a site, paste one script tag. Your dashboard lights up as events arrive.
-          </p>
+          <h2 className="landing-cta-title">{t('landingCtaTitle')}</h2>
+          <p className="landing-cta-lead">{t('landingCtaLead')}</p>
           <Button asChild variant="primary" size="lg" className="landing-cta-deploy">
-            <Link to={startHref}>Create free account</Link>
+            <Link to={startHref}>{t('landingCtaDeploy')}</Link>
           </Button>
         </div>
       </section>
@@ -537,21 +460,19 @@ export default function Landing() {
             <BrandLogo />
           </Link>
           <nav className="landing-footer-links" aria-label="Footer">
-            <Link to="/login">Sign in</Link>
-            <Link to={startHref}>Get started</Link>
+            <Link to="/login">{t('landingSignIn')}</Link>
+            <Link to={startHref}>{t('landingGetStarted')}</Link>
             <a href={FLAREBOARD_GITHUB} target="_blank" rel="noopener noreferrer">
-              GitHub
+              {t('github')}
             </a>
             <a href={FLAREBOARD_README} target="_blank" rel="noopener noreferrer">
-              Documentation
+              {t('landingCloudflareDocs')}
             </a>
             <a href={FLAREBOARD_DEPLOY_DOCS} target="_blank" rel="noopener noreferrer">
-              Self-host
+              {t('landingPathDeployGuide')}
             </a>
           </nav>
-          <p className="landing-footer-copy">
-            Flareboard — privacy-first analytics on Cloudflare. Cloud hosting or self-deploy.
-          </p>
+          <p className="landing-footer-copy">{t('landingFooterCopy')}</p>
         </div>
       </footer>
     </div>

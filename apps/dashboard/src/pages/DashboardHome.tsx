@@ -2,15 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
+  Area,
+  AreaChart,
   CartesianGrid,
-  Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
-import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
@@ -81,13 +80,16 @@ export default function DashboardHome() {
             }));
             return (
               <Link key={w.id} to={`/websites/${w.id}`} className="panel dashboard-site-card">
+                <span className="site-card-arrow" aria-hidden>
+                  →
+                </span>
                 <div className="dashboard-site-card-head">
-                  <div>
+                  <div className="dashboard-site-card-identity">
                     <span className="site-card-name">{w.name}</span>
                     {w.domain ? <span className="site-card-domain">{w.domain}</span> : null}
                   </div>
                   <div className="dashboard-site-row-kpis">
-                    <div className="dashboard-site-kpi">
+                    <div className="dashboard-site-kpi dashboard-site-kpi-primary">
                       <span className="dashboard-site-kpi-label">{t('pageviews')}</span>
                       <span className="dashboard-site-kpi-value is-primary">
                         {w.pageviews.toLocaleString()}
@@ -95,16 +97,20 @@ export default function DashboardHome() {
                     </div>
                     <div className="dashboard-site-kpi">
                       <span className="dashboard-site-kpi-label">{t('visitors')}</span>
-                      <span className="dashboard-site-kpi-value">
-                        {w.visitors.toLocaleString()}
-                      </span>
+                      <span className="dashboard-site-kpi-value">{w.visitors.toLocaleString()}</span>
                     </div>
+                    {w.visits != null ? (
+                      <div className="dashboard-site-kpi">
+                        <span className="dashboard-site-kpi-label">{t('visits')}</span>
+                        <span className="dashboard-site-kpi-value">{w.visits.toLocaleString()}</span>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 <div className="dashboard-site-card-chart" aria-hidden={chartData.length === 0}>
                   {chartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                      <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                         <CartesianGrid
                           strokeDasharray="3 3"
                           stroke={chartColors.border}
@@ -115,13 +121,10 @@ export default function DashboardHome() {
                           tick={{ fontSize: 10, fill: chartColors.muted }}
                           stroke={chartColors.border}
                           interval="preserveStartEnd"
+                          tickLine={false}
+                          axisLine={false}
                         />
-                        <YAxis
-                          allowDecimals={false}
-                          width={32}
-                          tick={{ fontSize: 10, fill: chartColors.muted }}
-                          stroke={chartColors.border}
-                        />
+                        <YAxis hide allowDecimals={false} />
                         <Tooltip
                           contentStyle={{
                             background: chartColors.panel,
@@ -131,19 +134,26 @@ export default function DashboardHome() {
                             color: chartColors.text,
                           }}
                         />
-                        <Line
+                        <Area
                           type="monotone"
                           dataKey="y"
+                          name={t('pageviews')}
                           stroke={chartColors.accent}
                           strokeWidth={2}
+                          fill={chartColors.accent}
+                          fillOpacity={0.12}
                           dot={false}
                           activeDot={{ r: 3 }}
                         />
-                      </LineChart>
+                      </AreaChart>
                     </ResponsiveContainer>
                   ) : (
                     <p className="text-muted dashboard-site-card-empty">{t('noDataInPeriod')}</p>
                   )}
+                </div>
+                <div className="dashboard-site-card-foot">
+                  <span className="dashboard-site-card-hint">{t('dashboardViewSite')}</span>
+                  <span className="dashboard-site-card-compare">{t('dashboardCompareHint')}</span>
                 </div>
               </Link>
             );
@@ -153,11 +163,16 @@ export default function DashboardHome() {
 
       {!overviewQuery.isLoading && !sites.length ? (
         <div className="panel empty-state-rich section-gap">
-          <EmptyState title={t('noWebsitesDashboard')}>
-            <Button asChild variant="primary">
-              <Link to="/websites">{t('addWebsiteCta')}</Link>
-            </Button>
-          </EmptyState>
+          <h3>{t('noWebsitesDashboard')}</h3>
+          <p className="text-muted">{t('noWebsitesHint')}</p>
+          <ol className="empty-state-steps">
+            <li data-step="1">{t('emptyStep1')}</li>
+            <li data-step="2">{t('emptyStep2')}</li>
+            <li data-step="3">{t('emptyStep3')}</li>
+          </ol>
+          <Button asChild variant="primary" className="empty-state-cta">
+            <Link to="/websites">{t('addWebsiteCta')}</Link>
+          </Button>
         </div>
       ) : null}
     </div>

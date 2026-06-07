@@ -64,8 +64,6 @@ Forkers: replace D1/KV IDs in each app's `wrangler.jsonc` with your own resource
 | [Database](packages/db/README.md) | Schema and migrations |
 | [Security](SECURITY.md) | Vulnerability reporting |
 
-
-
 ## Versioning
 
 Flareboard follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).

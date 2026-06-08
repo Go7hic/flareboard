@@ -181,7 +181,6 @@ const enUS: Record<string, string> = {
   dashboardSubtitle7d: 'Last 7 days across your websites — pageviews trend per site.',
   dashboardAllSitesLead: 'Combined traffic across all sites you can access.',
   dashboardTotalTraffic: 'Total traffic',
-  dashboardSitesSection: 'Sites',
   dashboardPageviewsVisitors: 'Pageviews / visitors',
   dashboardRankingTop: 'Top sites',
   dashboardRankingShowMore: 'Show {count} more',
@@ -747,8 +746,6 @@ const enUS: Record<string, string> = {
   performance: 'Performance',
   performancePageLead: 'Average Core Web Vitals (LCP, INP, CLS, FCP, TTFB) from tracked page loads.',
   performanceEvents: 'Performance events',
-  performancePartialHint:
-    'Some metrics are missing in this period. Older tracker versions only recorded INP reliably; redeploy the ingest worker and wait for new visits. Each metric is averaged only over events where that value was captured.',
   revenueEvent: 'Event',
   revenueCurrency: 'Currency',
   revenueTotal: 'Total',
@@ -957,7 +954,6 @@ const zhCN: Partial<Record<string, string>> = {
   dashboardSubtitle7d: '所有网站过去 7 天汇总，每张卡片展示浏览量趋势。',
   dashboardAllSitesLead: '汇总您可访问的全部站点访问表现。',
   dashboardTotalTraffic: '总访问量',
-  dashboardSitesSection: '各站点',
   dashboardPageviewsVisitors: '浏览量 / 访客',
   dashboardRankingTop: '流量排行',
   dashboardRankingShowMore: '展开其余 {count} 个',
@@ -1473,8 +1469,6 @@ const zhCN: Partial<Record<string, string>> = {
   performance: '性能',
   performancePageLead: '追踪页面加载的平均核心 Web 指标（LCP、INP、CLS、FCP、TTFB）。',
   performanceEvents: '性能事件数',
-  performancePartialHint:
-    '部分指标在本时段内暂无数据。旧版 tracker 仅可靠采集 INP；请重新部署 ingest worker 并等待新访问进入。各指标仅在对应字段有值的事件上单独求平均。',
   revenueEvent: '事件',
   revenueCurrency: '货币',
   revenueTotal: '合计',

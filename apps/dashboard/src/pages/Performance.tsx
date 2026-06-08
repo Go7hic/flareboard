@@ -85,16 +85,6 @@ export default function PerformancePage() {
   const data = performanceQuery.data;
   const hasData = Boolean(data && data.samples > 0);
   const loading = performanceQuery.isLoading;
-  const hasPartialData =
-    hasData &&
-    Boolean(
-      data &&
-        (data.lcp == null ||
-          data.inp == null ||
-          data.cls == null ||
-          data.fcp == null ||
-          data.ttfb == null),
-    );
 
   return (
     <div className="page page-performance">
@@ -147,10 +137,6 @@ export default function PerformancePage() {
             loading={loading}
           />
         </div>
-
-        {!loading && hasPartialData ? (
-          <p className="section-lead text-muted">{t('performancePartialHint')}</p>
-        ) : null}
 
         {!loading && !hasData ? (
           <div className="panel empty-state-rich">

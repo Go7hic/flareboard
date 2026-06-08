@@ -362,7 +362,6 @@ export default function ReportsPage() {
         subtitle={t('reportsSubtitle')}
         backTo="/websites"
         backLabel={t('websites')}
-        toolbar={<DateRangePicker value={range} onChange={setRange} />}
       />
 
       {noWebsite ? (
@@ -375,6 +374,10 @@ export default function ReportsPage() {
           <aside className="reports-sidebar">
             <section className="panel reports-sidebar-panel">
               <h2 className="section-title">{t('reportConfig')}</h2>
+              <div className="field">
+                <Label>{t('dateRange')}</Label>
+                <DateRangePicker value={range} onChange={setRange} popover />
+              </div>
               <div className="field">
                 <Label htmlFor="report-website">{t('website')}</Label>
                 <select

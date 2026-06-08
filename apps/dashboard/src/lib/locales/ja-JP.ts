@@ -160,7 +160,6 @@ export const jaJPLocale: Record<string, string> = {
   dashboardSubtitle7d: "全サイトの過去 7 日 — サイトごとのページビュー推移。",
   dashboardAllSitesLead: "アクセス可能な全サイトの合計トラフィック。",
   dashboardTotalTraffic: "総アクセス数",
-  dashboardSitesSection: "サイト",
   dashboardPageviewsVisitors: "ページビュー / 訪問者",
   dashboardRankingTop: "トップサイト",
   dashboardRankingShowMore: "残り {count} 件を表示",
@@ -670,8 +669,6 @@ export const jaJPLocale: Record<string, string> = {
   performance: "パフォーマンス",
   performancePageLead: "トラッキングされたページ読み込みの Core Web Vitals 平均（LCP、INP、CLS、FCP、TTFB）。",
   performanceEvents: "パフォーマンスイベント",
-  performancePartialHint:
-    "この期間は一部の指標がありません。旧トラッカーは INP のみ確実に記録していました。ingest worker を再デプロイし、新しい訪問をお待ちください。各指標は値が記録されたイベントのみで平均します。",
   revenueEvent: "イベント",
   revenueCurrency: "通貨",
   revenueTotal: "合計",

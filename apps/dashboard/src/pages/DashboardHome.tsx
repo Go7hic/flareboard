@@ -5,8 +5,6 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
-  ComposedChart,
-  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -136,7 +134,7 @@ export default function DashboardHome() {
     () => ({
       pageviews: chartColors.accent,
       visitors: cssVar('--cf-orange') || chartColors.muted,
-      visits: chartColors.muted,
+      visits: cssVar('--chart-axis') || chartColors.muted,
     }),
     [chartColors],
   );
@@ -202,10 +200,10 @@ export default function DashboardHome() {
                 <>
                   <div className="dashboard-aggregate-chart-plot">
                     <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart
+                      <AreaChart
                         data={aggregateChart}
                         margin={{ top: 8, right: 8, left: 0, bottom: 4 }}
-                        className="dashboard-aggregate-composed-chart"
+                        className="dashboard-aggregate-area-chart"
                       >
                         <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
                         <XAxis
@@ -245,28 +243,31 @@ export default function DashboardHome() {
                           dot={false}
                           activeDot={{ r: 4, strokeWidth: 0 }}
                         />
-                        <Line
+                        <Area
                           type="monotone"
                           dataKey="visitors"
                           name={t('visitors')}
                           hide={!visibleMetrics.visitors}
                           stroke={metricColors.visitors}
-                          strokeWidth={2.5}
+                          strokeWidth={2}
+                          fill={metricColors.visitors}
+                          fillOpacity={0.14}
                           dot={false}
                           activeDot={{ r: 4, strokeWidth: 0 }}
                         />
-                        <Line
+                        <Area
                           type="monotone"
                           dataKey="visits"
                           name={t('visits')}
                           hide={!visibleMetrics.visits}
                           stroke={metricColors.visits}
                           strokeWidth={2}
-                          strokeDasharray="6 4"
+                          fill={metricColors.visits}
+                          fillOpacity={0.14}
                           dot={false}
                           activeDot={{ r: 4, strokeWidth: 0 }}
                         />
-                      </ComposedChart>
+                      </AreaChart>
                     </ResponsiveContainer>
                   </div>
                   <div className="dashboard-aggregate-legend" role="group" aria-label={t('dashboardTotalTraffic')}>
@@ -299,9 +300,8 @@ export default function DashboardHome() {
 
       {!overviewQuery.isLoading && hasWebsites ? (
         <>
-          <div className="dashboard-sites-section-head">
-            <h2 className="section-title dashboard-sites-heading">{t('dashboardSitesSection')}</h2>
-            {cardsTruncated ? (
+          {cardsTruncated ? (
+            <div className="dashboard-sites-section-head">
               <p className="text-muted dashboard-sites-truncated">
                 {t('dashboardSitesTruncated')
                   .replace('{shown}', String(sites.length))
@@ -309,8 +309,8 @@ export default function DashboardHome() {
                 {' '}
                 <Link to="/websites">{t('dashboardViewAllSites').replace('{count}', String(siteCount))}</Link>
               </p>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
           <div className="dashboard-site-list section-gap">
             {sites.map((w) => {
               const chartData = w.series.map((p) => ({

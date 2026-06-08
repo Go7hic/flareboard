@@ -160,7 +160,6 @@ export const deDELocale: Record<string, string> = {
   dashboardSubtitle7d: "Letzte 7 Tage — Seitenaufruf-Trend pro Site.",
   dashboardAllSitesLead: "Kombinierter Traffic aller Sites, auf die Sie Zugriff haben.",
   dashboardTotalTraffic: "Gesamttraffic",
-  dashboardSitesSection: "Websites",
   dashboardPageviewsVisitors: "Seitenaufrufe / Besucher",
   dashboardRankingTop: "Top-Sites",
   dashboardRankingShowMore: "{count} weitere anzeigen",
@@ -670,8 +669,6 @@ export const deDELocale: Record<string, string> = {
   performance: "Performance",
   performancePageLead: "Durchschnittliche Core Web Vitals (LCP, INP, CLS, FCP, TTFB) aus getrackten Seitenaufrufen.",
   performanceEvents: "Performance-Ereignisse",
-  performancePartialHint:
-    "Einige Metriken fehlen in diesem Zeitraum. Ältere Tracker-Versionen erfassten zuverlässig nur INP; ingest worker neu deployen und auf neue Besuche warten. Jede Metrik wird nur über Ereignisse mit gesetztem Wert gemittelt.",
   revenueEvent: "Ereignis",
   revenueCurrency: "Währung",
   revenueTotal: "Summe",

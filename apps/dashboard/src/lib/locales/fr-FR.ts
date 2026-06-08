@@ -160,7 +160,6 @@ export const frFRLocale: Record<string, string> = {
   dashboardSubtitle7d: "7 derniers jours — tendance des pages vues par site.",
   dashboardAllSitesLead: "Trafic combiné de tous les sites auxquels vous avez accès.",
   dashboardTotalTraffic: "Trafic total",
-  dashboardSitesSection: "Sites",
   dashboardPageviewsVisitors: "Pages vues / visiteurs",
   dashboardRankingTop: "Sites les plus actifs",
   dashboardRankingShowMore: "Afficher {count} de plus",
@@ -670,8 +669,6 @@ export const frFRLocale: Record<string, string> = {
   performance: "Performance",
   performancePageLead: "Moyennes des Core Web Vitals (LCP, INP, CLS, FCP, TTFB) des chargements suivis.",
   performanceEvents: "Événements performance",
-  performancePartialHint:
-    "Certaines métriques manquent sur cette période. Les anciennes versions du tracker n'enregistraient que l'INP de façon fiable ; redéployez le worker ingest et attendez de nouvelles visites. Chaque métrique est moyennée uniquement sur les événements où elle a été capturée.",
   revenueEvent: "Événement",
   revenueCurrency: "Devise",
   revenueTotal: "Total",

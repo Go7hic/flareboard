@@ -279,6 +279,155 @@ export async function getBreakdownReport(
   return { dimension, rows: rows.results ?? [] };
 }
 
+export type VitalDistribution = {
+  good: number;
+  needsImprovement: number;
+  poor: number;
+  total: number;
+};
+
+export type PerformanceBreakdownRow = {
+  dimension: string;
+  samples: number;
+  lcp: number | null;
+  inp: number | null;
+  cls: number | null;
+  lcpDistribution: VitalDistribution;
+  inpDistribution: VitalDistribution;
+  clsDistribution: VitalDistribution;
+};
+
+export type PerformanceTrendPoint = {
+  x: string;
+  lcp: number | null;
+  inp: number | null;
+  cls: number | null;
+  fcp: number | null;
+  ttfb: number | null;
+  samples: number;
+};
+
+const PERF_EVENT_FILTER = `e.event_type = ${EVENT_TYPE.performance}
+       AND (e.lcp IS NOT NULL OR e.inp IS NOT NULL OR e.cls IS NOT NULL
+            OR e.fcp IS NOT NULL OR e.ttfb IS NOT NULL)`;
+
+const DISTRIBUTION_SELECT = `
+      SUM(CASE WHEN e.lcp IS NOT NULL AND e.lcp <= 2500 THEN 1 ELSE 0 END) as lcp_good,
+      SUM(CASE WHEN e.lcp IS NOT NULL AND e.lcp > 2500 AND e.lcp <= 4000 THEN 1 ELSE 0 END) as lcp_ni,
+      SUM(CASE WHEN e.lcp IS NOT NULL AND e.lcp > 4000 THEN 1 ELSE 0 END) as lcp_poor,
+      COUNT(e.lcp) as lcp_total,
+      SUM(CASE WHEN e.inp IS NOT NULL AND e.inp <= 200 THEN 1 ELSE 0 END) as inp_good,
+      SUM(CASE WHEN e.inp IS NOT NULL AND e.inp > 200 AND e.inp <= 500 THEN 1 ELSE 0 END) as inp_ni,
+      SUM(CASE WHEN e.inp IS NOT NULL AND e.inp > 500 THEN 1 ELSE 0 END) as inp_poor,
+      COUNT(e.inp) as inp_total,
+      SUM(CASE WHEN e.cls IS NOT NULL AND e.cls <= 0.1 THEN 1 ELSE 0 END) as cls_good,
+      SUM(CASE WHEN e.cls IS NOT NULL AND e.cls > 0.1 AND e.cls <= 0.25 THEN 1 ELSE 0 END) as cls_ni,
+      SUM(CASE WHEN e.cls IS NOT NULL AND e.cls > 0.25 THEN 1 ELSE 0 END) as cls_poor,
+      COUNT(e.cls) as cls_total,
+      SUM(CASE WHEN e.fcp IS NOT NULL AND e.fcp <= 1800 THEN 1 ELSE 0 END) as fcp_good,
+      SUM(CASE WHEN e.fcp IS NOT NULL AND e.fcp > 1800 AND e.fcp <= 3000 THEN 1 ELSE 0 END) as fcp_ni,
+      SUM(CASE WHEN e.fcp IS NOT NULL AND e.fcp > 3000 THEN 1 ELSE 0 END) as fcp_poor,
+      COUNT(e.fcp) as fcp_total,
+      SUM(CASE WHEN e.ttfb IS NOT NULL AND e.ttfb <= 800 THEN 1 ELSE 0 END) as ttfb_good,
+      SUM(CASE WHEN e.ttfb IS NOT NULL AND e.ttfb > 800 AND e.ttfb <= 1800 THEN 1 ELSE 0 END) as ttfb_ni,
+      SUM(CASE WHEN e.ttfb IS NOT NULL AND e.ttfb > 1800 THEN 1 ELSE 0 END) as ttfb_poor,
+      COUNT(e.ttfb) as ttfb_total`;
+
+type DistributionRow = {
+  lcp_good: number;
+  lcp_ni: number;
+  lcp_poor: number;
+  lcp_total: number;
+  inp_good: number;
+  inp_ni: number;
+  inp_poor: number;
+  inp_total: number;
+  cls_good: number;
+  cls_ni: number;
+  cls_poor: number;
+  cls_total: number;
+  fcp_good: number;
+  fcp_ni: number;
+  fcp_poor: number;
+  fcp_total: number;
+  ttfb_good: number;
+  ttfb_ni: number;
+  ttfb_poor: number;
+  ttfb_total: number;
+};
+
+function mapDistribution(
+  row: DistributionRow,
+  prefix: 'lcp' | 'inp' | 'cls' | 'fcp' | 'ttfb',
+): VitalDistribution {
+  return {
+    good: row[`${prefix}_good`] ?? 0,
+    needsImprovement: row[`${prefix}_ni`] ?? 0,
+    poor: row[`${prefix}_poor`] ?? 0,
+    total: row[`${prefix}_total`] ?? 0,
+  };
+}
+
+function performanceTrendUnit(startAt: number, endAt: number) {
+  const rangeMs = endAt - startAt;
+  return rangeMs <= 48 * 60 * 60 * 1000 ? 'hour' : 'day';
+}
+
+async function getPerformanceBreakdown(
+  env: Env,
+  joins: string,
+  where: string,
+  binds: (string | number)[],
+  groupExpr: string,
+  limit = 10,
+): Promise<PerformanceBreakdownRow[]> {
+  const rows = await env.DB.prepare(
+    `SELECT ${groupExpr} as dimension,
+      COUNT(*) as samples,
+      ROUND(AVG(e.lcp), 2) as lcp,
+      ROUND(AVG(e.inp), 2) as inp,
+      ROUND(AVG(e.cls), 4) as cls,
+      SUM(CASE WHEN e.lcp IS NOT NULL AND e.lcp <= 2500 THEN 1 ELSE 0 END) as lcp_good,
+      SUM(CASE WHEN e.lcp IS NOT NULL AND e.lcp > 2500 AND e.lcp <= 4000 THEN 1 ELSE 0 END) as lcp_ni,
+      SUM(CASE WHEN e.lcp IS NOT NULL AND e.lcp > 4000 THEN 1 ELSE 0 END) as lcp_poor,
+      COUNT(e.lcp) as lcp_total,
+      SUM(CASE WHEN e.inp IS NOT NULL AND e.inp <= 200 THEN 1 ELSE 0 END) as inp_good,
+      SUM(CASE WHEN e.inp IS NOT NULL AND e.inp > 200 AND e.inp <= 500 THEN 1 ELSE 0 END) as inp_ni,
+      SUM(CASE WHEN e.inp IS NOT NULL AND e.inp > 500 THEN 1 ELSE 0 END) as inp_poor,
+      COUNT(e.inp) as inp_total,
+      SUM(CASE WHEN e.cls IS NOT NULL AND e.cls <= 0.1 THEN 1 ELSE 0 END) as cls_good,
+      SUM(CASE WHEN e.cls IS NOT NULL AND e.cls > 0.1 AND e.cls <= 0.25 THEN 1 ELSE 0 END) as cls_ni,
+      SUM(CASE WHEN e.cls IS NOT NULL AND e.cls > 0.25 THEN 1 ELSE 0 END) as cls_poor,
+      COUNT(e.cls) as cls_total
+     FROM website_event e${joins}
+     WHERE ${where} AND ${PERF_EVENT_FILTER}
+     GROUP BY dimension
+     ORDER BY samples DESC
+     LIMIT ?`,
+  )
+    .bind(...binds, limit)
+    .all<
+      DistributionRow & {
+        dimension: string;
+        samples: number;
+        lcp: number | null;
+        inp: number | null;
+        cls: number | null;
+      }
+    >();
+
+  return (rows.results ?? []).map((row) => ({
+    dimension: row.dimension || 'Unknown',
+    samples: row.samples,
+    lcp: row.lcp,
+    inp: row.inp,
+    cls: row.cls,
+    lcpDistribution: mapDistribution(row, 'lcp'),
+    inpDistribution: mapDistribution(row, 'inp'),
+    clsDistribution: mapDistribution(row, 'cls'),
+  }));
+}
+
 export async function getPerformanceReport(
   env: Env,
   websiteId: string,
@@ -287,7 +436,9 @@ export async function getPerformanceReport(
   segment?: SegmentParams | null,
 ) {
   const { joins, where, binds } = segmentEventFilter(websiteId, startAt, endAt, segment);
-  const sql = `SELECT
+  const perfWhere = `${where} AND ${PERF_EVENT_FILTER}`;
+
+  const summarySql = `SELECT
       ROUND(AVG(e.lcp), 2) as lcp,
       ROUND(AVG(e.inp), 2) as inp,
       ROUND(AVG(e.cls), 4) as cls,
@@ -298,27 +449,58 @@ export async function getPerformanceReport(
       COUNT(e.inp) as inp_samples,
       COUNT(e.cls) as cls_samples,
       COUNT(e.fcp) as fcp_samples,
-      COUNT(e.ttfb) as ttfb_samples
+      COUNT(e.ttfb) as ttfb_samples,
+      ${DISTRIBUTION_SELECT}
      FROM website_event e${joins}
-     WHERE ${where} AND e.event_type = ${EVENT_TYPE.performance}
-       AND (e.lcp IS NOT NULL OR e.inp IS NOT NULL OR e.cls IS NOT NULL
-            OR e.fcp IS NOT NULL OR e.ttfb IS NOT NULL)`;
+     WHERE ${perfWhere}`;
 
-  const row = await env.DB.prepare(sql)
+  const row = await env.DB.prepare(summarySql)
     .bind(...binds)
-    .first<{
-      lcp: number | null;
-      inp: number | null;
-      cls: number | null;
-      fcp: number | null;
-      ttfb: number | null;
-      samples: number;
-      lcp_samples: number;
-      inp_samples: number;
-      cls_samples: number;
-      fcp_samples: number;
-      ttfb_samples: number;
-    }>();
+    .first<
+      DistributionRow & {
+        lcp: number | null;
+        inp: number | null;
+        cls: number | null;
+        fcp: number | null;
+        ttfb: number | null;
+        samples: number;
+        lcp_samples: number;
+        inp_samples: number;
+        cls_samples: number;
+        fcp_samples: number;
+        ttfb_samples: number;
+      }
+    >();
+
+  const unit = performanceTrendUnit(startAt, endAt);
+  const trendFormat = unit === 'hour' ? '%Y-%m-%d %H:00' : '%Y-%m-%d';
+  const trendRows = await env.DB.prepare(
+    `SELECT strftime('${trendFormat}', datetime(e.created_at / 1000, 'unixepoch')) as x,
+      ROUND(AVG(e.lcp), 2) as lcp,
+      ROUND(AVG(e.inp), 2) as inp,
+      ROUND(AVG(e.cls), 4) as cls,
+      ROUND(AVG(e.fcp), 2) as fcp,
+      ROUND(AVG(e.ttfb), 2) as ttfb,
+      COUNT(*) as samples
+     FROM website_event e${joins}
+     WHERE ${perfWhere}
+     GROUP BY x
+     ORDER BY x ASC`,
+  )
+    .bind(...binds)
+    .all<PerformanceTrendPoint>();
+
+  const sessionJoins = joins.includes('session s')
+    ? joins
+    : `${joins} INNER JOIN session s ON e.session_id = s.session_id`;
+
+  const [byUrl, byBrowser, byCountry] = await Promise.all([
+    getPerformanceBreakdown(env, joins, where, binds, 'e.url_path'),
+    getPerformanceBreakdown(env, sessionJoins, where, binds, "COALESCE(s.browser, 'Unknown')"),
+    getPerformanceBreakdown(env, sessionJoins, where, binds, "COALESCE(s.country, 'Unknown')"),
+  ]);
+
+  const distRow = row ?? ({} as DistributionRow);
 
   return {
     lcp: row?.lcp ?? null,
@@ -332,5 +514,21 @@ export async function getPerformanceReport(
     clsSamples: row?.cls_samples ?? 0,
     fcpSamples: row?.fcp_samples ?? 0,
     ttfbSamples: row?.ttfb_samples ?? 0,
+    distributions: {
+      lcp: mapDistribution(distRow, 'lcp'),
+      inp: mapDistribution(distRow, 'inp'),
+      cls: mapDistribution(distRow, 'cls'),
+      fcp: mapDistribution(distRow, 'fcp'),
+      ttfb: mapDistribution(distRow, 'ttfb'),
+    },
+    trends: {
+      unit,
+      points: trendRows.results ?? [],
+    },
+    breakdown: {
+      url: byUrl,
+      browser: byBrowser,
+      country: byCountry,
+    },
   };
 }

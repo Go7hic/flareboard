@@ -1294,19 +1294,54 @@ code {
 
 .date-range-picker-custom {
   display: inline-flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   min-width: 0;
+}
+
+/* Inline mode: label + input on one row, shell-control height */
+.date-range-picker-custom .date-range-picker-field {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.date-range-picker-custom .date-range-picker-field-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.date-range-picker-custom .date-range-picker-field .date-range-picker-input {
+  box-sizing: border-box;
+  height: var(--shell-control-height);
+  min-height: var(--shell-control-height);
+  padding: 0 0.55rem;
+  padding-right: 2.5rem;
+  font-size: 0.8125rem;
+  line-height: 1;
+  min-width: 10.5rem;
+  width: auto;
+  flex: 0 1 11rem;
+}
+
+.date-range-picker-custom .date-range-picker-apply {
+  height: var(--shell-control-height);
+  min-height: var(--shell-control-height);
+  padding-top: 0;
+  padding-bottom: 0;
+  align-self: center;
+  flex-shrink: 0;
 }
 
 .date-range-picker-input {
   width: auto;
   min-width: 12.5rem;
   flex: 0 1 12.5rem;
-  min-height: 2.125rem;
-  padding-top: 0.45rem;
-  padding-bottom: 0.45rem;
   padding-right: 2.5rem;
 }
 
@@ -1542,13 +1577,14 @@ code {
   min-width: 0;
 }
 
-.date-range-picker-field {
+/* Popover mode: stacked label + full-width inputs */
+.date-range-picker-popover-custom .date-range-picker-field {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
 }
 
-.date-range-picker-field-label {
+.date-range-picker-popover-custom .date-range-picker-field-label {
   font-size: 0.6875rem;
   font-weight: 600;
   color: var(--text-muted);
@@ -2135,9 +2171,20 @@ code {
     width: 100%;
   }
 
-  .date-range-picker-input {
+  .date-range-picker-custom .date-range-picker-field {
+    flex: 1 1 calc(50% - 0.5rem);
+    min-width: 9rem;
+  }
+
+  .date-range-picker-custom .date-range-picker-field .date-range-picker-input {
     min-width: 0;
-    flex: 1 1 100%;
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .date-range-picker-custom .date-range-picker-apply {
+    width: 100%;
+    justify-content: center;
   }
 
   .date-range-picker-popover-body {

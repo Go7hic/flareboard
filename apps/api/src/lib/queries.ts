@@ -2,6 +2,7 @@ import { eq, and, isNull, sql, gte, lte, count, countDistinct, inArray, desc, as
 import { createDb, schema } from '@flareboard/db';
 import { EVENT_TYPE } from '@flareboard/shared';
 import type { Env } from '../env';
+import { cachedRead } from './cache';
 
 export async function getUserByUsername(env: Env, username: string) {
   const db = createDb(env.DB);
@@ -206,6 +207,86 @@ export async function getPageviews(
     .groupBy(bucket)
     .orderBy(asc(bucket));
   return { pageviews: rows.map((r) => ({ x: r.x, y: r.y })) };
+}
+
+export type DashboardSiteMetric = {
+  websiteId: string;
+  pageviews: number;
+  visitors: number;
+  visits: number;
+};
+
+function sqlInPlaceholders(count: number, startIndex = 1) {
+  return Array.from({ length: count }, (_, i) => `?${startIndex + i}`).join(', ');
+}
+
+/** Per-site totals for dashboard ranking — one query for all sites. */
+export async function getDashboardMetricsByWebsite(
+  env: Env,
+  websiteIds: string[],
+  startAt: number,
+  endAt: number,
+): Promise<DashboardSiteMetric[]> {
+  if (!websiteIds.length) return [];
+
+  const inClause = sqlInPlaceholders(websiteIds.length, 4);
+  const { results } = await env.DB.prepare(
+    `SELECT website_id as websiteId,
+            SUM(CASE WHEN event_type = ?1 THEN 1 ELSE 0 END) as pageviews,
+            COUNT(DISTINCT session_id) as visitors,
+            COUNT(DISTINCT visit_id) as visits
+     FROM website_event
+     WHERE website_id IN (${inClause})
+       AND created_at >= ?2 AND created_at <= ?3
+     GROUP BY website_id
+     ORDER BY pageviews DESC`,
+  )
+    .bind(EVENT_TYPE.pageView, startAt, endAt, ...websiteIds)
+    .all<DashboardSiteMetric>();
+
+  return results ?? [];
+}
+
+export type AggregateMetricsSeries = {
+  pageviews: { x: string; y: number }[];
+  visitors: { x: string; y: number }[];
+  visits: { x: string; y: number }[];
+};
+
+/** Combined pageview / visitor / visit series across many sites — one query. */
+export async function getAggregateMetricsForWebsites(
+  env: Env,
+  websiteIds: string[],
+  startAt: number,
+  endAt: number,
+  unit: string,
+): Promise<AggregateMetricsSeries> {
+  const empty = { pageviews: [], visitors: [], visits: [] };
+  if (!websiteIds.length) return empty;
+
+  const format =
+    unit === 'hour' ? '%Y-%m-%d %H:00' : unit === 'month' ? '%Y-%m' : '%Y-%m-%d';
+  const inClause = sqlInPlaceholders(websiteIds.length, 4);
+  const { results } = await env.DB.prepare(
+    `SELECT strftime('${format}', datetime(created_at / 1000, 'unixepoch')) as x,
+            SUM(CASE WHEN event_type = ?1 THEN 1 ELSE 0 END) as pageviews,
+            COUNT(DISTINCT session_id) as visitors,
+            COUNT(DISTINCT visit_id) as visits
+     FROM website_event
+     WHERE website_id IN (${inClause})
+       AND created_at >= ?2 AND created_at <= ?3
+     GROUP BY x
+     ORDER BY x`,
+  )
+    .bind(EVENT_TYPE.pageView, startAt, endAt, ...websiteIds)
+    .all<{ x: string; pageviews: number; visitors: number; visits: number }>();
+
+  const rows = results ?? [];
+  return {
+    pageviews: rows.map((r) => ({ x: r.x, y: r.pageviews })),
+    visitors: rows.map((r) => ({ x: r.x, y: r.visitors })),
+    visits: rows.map((r) => ({ x: r.x, y: r.visits })),
+  };
 }
 
 export async function getMetrics(
@@ -478,14 +559,40 @@ async function getRealtimeFromKv(
 
 export async function getRealtime(env: Env, websiteId: string) {
   const since = Date.now() - REALTIME_WINDOW_MS;
+  const endAt = Date.now();
+  const start30 = endAt - 30 * 60 * 1000;
 
-  const kv = await getRealtimeFromKv(env, websiteId, since);
+  const [kv, window30] = await Promise.all([
+    getRealtimeFromKv(env, websiteId, since),
+    cachedRead(env, `realtime-30m:${websiteId}`, 30, async () => {
+      const row = await env.DB.prepare(
+        `SELECT
+           SUM(CASE WHEN event_type = ?4 THEN 1 ELSE 0 END) as pageviews,
+           COUNT(DISTINCT session_id) as visitors,
+           COUNT(DISTINCT visit_id) as visits
+         FROM website_event
+         WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3`,
+      )
+        .bind(websiteId, start30, endAt, EVENT_TYPE.pageView)
+        .first<{ pageviews: number; visitors: number; visits: number }>();
+      return {
+        visitors: row?.visitors ?? 0,
+        pageviews: row?.pageviews ?? 0,
+        visits: row?.visits ?? 0,
+      };
+    }),
+  ]);
+
   if (kv) {
-    return { visitors: kv.visitors, sessions: kv.sessions, pageviews: [] };
+    return {
+      visitors: kv.visitors,
+      sessions: kv.sessions,
+      pageviews: [],
+      window30,
+    };
   }
 
-  // Avoid expensive D1 scans when KV is empty — realtime is best-effort without live counters.
-  return { visitors: 0, sessions: [], pageviews: [] };
+  return { visitors: 0, sessions: [], pageviews: [], window30 };
 }
 
 export async function getLinkStats(

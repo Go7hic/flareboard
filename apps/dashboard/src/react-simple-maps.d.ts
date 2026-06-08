@@ -8,7 +8,11 @@ declare module 'react-simple-maps' {
   }
 
   export interface ComposableMapProps {
-    projectionConfig?: Record<string, number>;
+    projectionConfig?: {
+      scale?: number;
+      center?: [number, number];
+      rotate?: [number, number, number];
+    };
     width?: number;
     height?: number;
     style?: CSSProperties;
@@ -28,7 +32,16 @@ declare module 'react-simple-maps' {
     style?: Record<string, { outline?: string; fill?: string; opacity?: number }>;
   }
 
+  export interface MarkerProps {
+    coordinates: [number, number];
+    children?: ReactNode;
+  }
+
   export function ComposableMap(props: ComposableMapProps): JSX.Element;
   export function Geographies(props: GeographiesProps): JSX.Element;
   export function Geography(props: GeographyProps): JSX.Element;
+  export function Marker(props: MarkerProps): JSX.Element;
+  export function useMapContext(): {
+    projection?: (coords: [number, number]) => [number, number] | null;
+  };
 }

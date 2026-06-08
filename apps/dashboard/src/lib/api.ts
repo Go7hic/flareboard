@@ -197,10 +197,17 @@ export interface RealtimeSession {
   createdAt: number;
 }
 
+export interface RealtimeWindow30 {
+  visitors: number;
+  pageviews: number;
+  visits: number;
+}
+
 export interface RealtimeData {
   visitors: number;
   sessions: RealtimeSession[];
   pageviews: Array<{ id: string; sessionId: string; urlPath: string; createdAt: number }>;
+  window30?: RealtimeWindow30;
 }
 
 export interface LinkStats {

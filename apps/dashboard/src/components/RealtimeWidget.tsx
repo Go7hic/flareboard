@@ -5,9 +5,10 @@ import { api, type RealtimeData } from '../lib/api';
 import { subscribeRealtimeStream } from '../lib/realtime-stream';
 import { t } from '../lib/i18n';
 import { Button } from './ui/button';
+import { RealtimeGeoMap } from './RealtimeGeoMap';
 
 /** Fallback poll when SSE is unavailable. */
-const REALTIME_POLL_MS = 3_000;
+const REALTIME_POLL_MS = 2_000;
 
 type ActivityRow = { urlPath: string; eventName: string | null; createdAt: number };
 
@@ -58,50 +59,86 @@ export function RealtimeWidget({ websiteId }: { websiteId: string }) {
 
   const sessions = data?.sessions?.length ? data.sessions : [];
   const selected = sessions.find((s) => s.sessionId === selectedSessionId);
+  const window30 = data?.window30;
 
   return (
     <section className="panel realtime-panel section-gap">
-      <h2 className="section-title">
-        <span className="live-dot" aria-hidden="true" />
-        {t('realtime')}
-        <span className="text-muted realtime-window-label">{t('realtimeWindow')}</span>
-      </h2>
-      {isLoading ? <div className="skeleton skeleton-block skeleton-inline" aria-hidden /> : null}
+      <header className="realtime-panel-head">
+        <div>
+          <h2 className="section-title realtime-panel-title">
+            <span className="live-dot" aria-hidden="true" />
+            {t('realtime')}
+          </h2>
+          <p className="text-muted realtime-panel-lead">{t('realtimeLead30m')}</p>
+        </div>
+        <p className="realtime-connection" aria-live="polite">
+          <span
+            className={`live-dot${sseConnected ? '' : ' live-dot--muted'}`}
+            aria-hidden="true"
+          />
+          <span className="text-muted">{sseConnected ? t('realtimeConnected') : t('realtimePolling')}</span>
+        </p>
+      </header>
+
+      {isLoading ? <div className="skeleton skeleton-block realtime-map-skeleton" aria-hidden /> : null}
+
       {data ? (
         <>
-          <p className="realtime-value">
-            {data.visitors}
-            <span className="realtime-value-unit">{t('activeVisitors')}</span>
-          </p>
-          <ul className="list-plain realtime-feed">
-            {sessions.slice(0, 25).map((s) => (
-              <li key={s.sessionId} className="list-item realtime-feed-item">
-                <button
-                  type="button"
-                  className="realtime-session-btn"
-                  onClick={() =>
-                    setSelectedSessionId(selectedSessionId === s.sessionId ? null : s.sessionId)
-                  }
-                >
-                  <div className="list-row">
-                    <span>
-                      <span className="text-muted">{new Date(s.createdAt).toLocaleTimeString()}</span>{' '}
-                      <span className="realtime-path-mono">{s.urlPath || '/'}</span>
-                      {s.referrerDomain ? (
-                        <span className="text-muted realtime-referrer">← {s.referrerDomain}</span>
+          <RealtimeGeoMap sessions={sessions} />
+
+          <div className="realtime-metrics" role="group" aria-label={t('realtime')}>
+            <div className="realtime-metric">
+              <span className="realtime-metric-label">{t('realtimeOnline')}</span>
+              <span className="realtime-metric-value">{data.visitors}</span>
+            </div>
+            <span className="realtime-metric-sep" aria-hidden="true">
+              /
+            </span>
+            <div className="realtime-metric">
+              <span className="realtime-metric-label">{t('realtimeVisitors30m')}</span>
+              <span className="realtime-metric-value">{window30?.visitors ?? '—'}</span>
+            </div>
+            <span className="realtime-metric-sep" aria-hidden="true">
+              /
+            </span>
+            <div className="realtime-metric">
+              <span className="realtime-metric-label">{t('realtimeViews30m')}</span>
+              <span className="realtime-metric-value">{window30?.pageviews ?? '—'}</span>
+            </div>
+          </div>
+
+          <div className="realtime-sessions">
+            <h3 className="realtime-sessions-title">{t('realtimeRecentSessions')}</h3>
+            <ul className="list-plain realtime-feed">
+              {sessions.slice(0, 25).map((s) => (
+                <li key={s.sessionId} className="list-item realtime-feed-item">
+                  <button
+                    type="button"
+                    className="realtime-session-btn"
+                    onClick={() =>
+                      setSelectedSessionId(selectedSessionId === s.sessionId ? null : s.sessionId)
+                    }
+                  >
+                    <div className="list-row">
+                      <span>
+                        <span className="text-muted">{new Date(s.createdAt).toLocaleTimeString()}</span>{' '}
+                        <span className="realtime-path-mono">{s.urlPath || '/'}</span>
+                        {s.referrerDomain ? (
+                          <span className="text-muted realtime-referrer">← {s.referrerDomain}</span>
+                        ) : null}
+                      </span>
+                      {s.country ? (
+                        <span className="list-row-value text-muted">{s.country}</span>
                       ) : null}
-                    </span>
-                    {s.country ? (
-                      <span className="list-row-value text-muted">{s.country}</span>
-                    ) : null}
-                  </div>
-                </button>
-              </li>
-            ))}
-            {!sessions.length ? (
-              <li className="text-muted list-item realtime-feed-item">{t('noActiveSessions')}</li>
-            ) : null}
-          </ul>
+                    </div>
+                  </button>
+                </li>
+              ))}
+              {!sessions.length ? (
+                <li className="text-muted list-item realtime-feed-item">{t('noActiveSessions')}</li>
+              ) : null}
+            </ul>
+          </div>
         </>
       ) : null}
 

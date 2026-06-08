@@ -1,15 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { DateRangePicker } from '../components/DateRangePicker';
+import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Panel } from '../components/ui/panel';
 import { api, getToken, type Website } from '../lib/api';
-import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/dateRange';
 import { t } from '../lib/i18n';
+import { useWebsiteRange } from '../lib/useWebsiteRange';
 
 type HeatmapCell = { normX: number; normY: number; count: number };
 
@@ -48,10 +48,7 @@ export default function HeatmapsPage() {
   const [urlPath, setUrlPath] = useState('/');
   const [kind, setKind] = useState<'click' | 'scroll'>('click');
   const [deviceClass, setDeviceClass] = useState('');
-  const [range, setRange] = useState({
-    preset: '30d' as DateRangePreset,
-    ...presetToRange('30d'),
-  });
+  const { range, setRange, rangeQs } = useWebsiteRange(websiteId, '24h');
 
   useEffect(() => {
     if (!getToken()) navigate('/login');
@@ -75,7 +72,6 @@ export default function HeatmapsPage() {
     queryFn: () => api<Website>(`/api/websites/${websiteId}`),
   });
 
-  const rangeQs = rangeQueryString(range.startAt, range.endAt);
   const pathsQuery = useQuery({
     queryKey: ['heatmap-paths', websiteId, range.startAt, range.endAt],
     enabled: Boolean(websiteId) && heatmapsAllowed,
@@ -177,7 +173,12 @@ export default function HeatmapsPage() {
 
   return (
     <div className="page">
-      <WebsitePageShell websiteId={websiteId} />
+      <WebsitePageShell
+        websiteId={websiteId}
+        pageActions={
+          <WebsiteDateExportControls range={range} onRangeChange={setRange} />
+        }
+      />
 
       <Panel>
         <h2 className="section-title">{t('heatmaps')}</h2>
@@ -197,7 +198,6 @@ export default function HeatmapsPage() {
           style={{ border: 'none', margin: 0, padding: 0, opacity: heatmapsAllowed ? 1 : 0.6 }}
         >
         <div className="stats-toolbar" style={{ marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-          <DateRangePicker value={range} onChange={setRange} />
           <div className="field" style={{ minWidth: '12rem' }}>
             <Label htmlFor="heatmap-path">{t('heatmapPagePath')}</Label>
             {(pathsQuery.data ?? []).length > 0 ? (

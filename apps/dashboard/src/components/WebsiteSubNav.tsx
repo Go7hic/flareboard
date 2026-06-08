@@ -35,6 +35,12 @@ export function WebsiteSubNav() {
         {t('heatmaps')}
       </NavLink>
       <NavLink
+        to={`${base}/performance`}
+        className={({ isActive }) => `website-sub-nav-link${isActive ? ' active' : ''}`}
+      >
+        {t('performance')}
+      </NavLink>
+      <NavLink
         to={`${base}/revenue`}
         className={({ isActive }) => `website-sub-nav-link${isActive ? ' active' : ''}`}
       >

@@ -7,7 +7,7 @@ import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
 
-const DATA_INTERVAL_MS = 2_000;
+const DATA_INTERVAL_MS = 1_000;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
 export async function handleGet(c: Ctx) {
@@ -17,7 +17,7 @@ export async function handleGet(c: Ctx) {
   return json(data);
 }
 
-/** SSE stream: JSON `data:` events every ~2s, `: ping` heartbeat every 30s. */
+/** SSE stream: JSON `data:` events every ~1s, `: ping` heartbeat every 30s. */
 export async function handleStream(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
@@ -53,13 +53,18 @@ export async function handleStream(c: Ctx) {
         }
       };
 
+      let pushInFlight = false;
+
       const push = async () => {
-        if (closed) return;
+        if (closed || pushInFlight) return;
+        pushInFlight = true;
         try {
           const data = await getRealtime(env, websiteId);
           enqueue(`data: ${JSON.stringify(data)}\n\n`);
         } catch {
           close();
+        } finally {
+          pushInFlight = false;
         }
       };
 

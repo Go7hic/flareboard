@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Bar,
@@ -10,29 +10,25 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { DateRangePicker } from '../components/DateRangePicker';
 import { EmptyState } from '../components/EmptyState';
+import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Panel } from '../components/ui/panel';
 import { api, getToken } from '../lib/api';
-import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/dateRange';
 import { t } from '../lib/i18n';
+import { useWebsiteRange } from '../lib/useWebsiteRange';
 import { useChartColors } from '../lib/useChartColors';
 
 export default function RevenuePage() {
   const chartColors = useChartColors();
   const { websiteId } = useParams<{ websiteId: string }>();
   const navigate = useNavigate();
-  const [range, setRange] = useState({
-    preset: '30d' as DateRangePreset,
-    ...presetToRange('30d'),
-  });
+  const { range, setRange, rangeQs } = useWebsiteRange(websiteId, '24h');
 
   useEffect(() => {
     if (!getToken()) navigate('/login');
   }, [navigate]);
 
-  const rangeQs = rangeQueryString(range.startAt, range.endAt);
   const revenueQuery = useQuery({
     queryKey: ['revenue-page', websiteId, range.startAt, range.endAt],
     enabled: Boolean(websiteId),
@@ -58,7 +54,9 @@ export default function RevenuePage() {
     <div className="page">
       <WebsitePageShell
         websiteId={websiteId}
-        toolbar={<DateRangePicker value={range} onChange={setRange} />}
+        pageActions={
+          <WebsiteDateExportControls range={range} onRangeChange={setRange} />
+        }
       />
 
       <Panel>

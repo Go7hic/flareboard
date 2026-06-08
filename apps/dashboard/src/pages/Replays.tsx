@@ -1,12 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState } from '../components/EmptyState';
+import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { api, getToken, type Website } from '../lib/api';
 import { t } from '../lib/i18n';
+import { useWebsiteRange } from '../lib/useWebsiteRange';
 
 interface ReplayRow {
   visitId: string;
@@ -26,6 +28,7 @@ interface ReplayDetail {
 export default function ReplaysPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
   const navigate = useNavigate();
+  const { range, setRange } = useWebsiteRange(websiteId, '24h');
   const [selectedVisit, setSelectedVisit] = useState<string | null>(null);
   const playerRef = useRef<HTMLDivElement>(null);
   const playerInstance = useRef<unknown>(null);
@@ -89,11 +92,22 @@ export default function ReplaysPage() {
   }, [detailQuery.data]);
 
   const replayEnabled = Boolean(websiteQuery.data?.replayEnabled);
-  const visits = listQuery.data ?? [];
+  const visits = useMemo(
+    () =>
+      (listQuery.data ?? []).filter(
+        (row) => row.startedAt >= range.startAt && row.startedAt <= range.endAt,
+      ),
+    [listQuery.data, range.startAt, range.endAt],
+  );
 
   return (
     <div className="page page-replays">
-      <WebsitePageShell websiteId={websiteId} />
+      <WebsitePageShell
+        websiteId={websiteId}
+        pageActions={
+          <WebsiteDateExportControls range={range} onRangeChange={setRange} />
+        }
+      />
 
       <h2 className="section-title website-page-heading">{t('sessionReplays')}</h2>
 

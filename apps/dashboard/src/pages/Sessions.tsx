@@ -1,13 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { DateRangePicker } from '../components/DateRangePicker';
 import { EmptyState } from '../components/EmptyState';
+import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { api, getToken } from '../lib/api';
-import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/dateRange';
 import { t } from '../lib/i18n';
-import { defaultRange, loadWebsiteRange, saveWebsiteRange } from '../lib/websiteRangeStorage';
+import { useWebsiteRange } from '../lib/useWebsiteRange';
 
 interface SessionRow {
   id: string;
@@ -25,37 +24,18 @@ const PAGE_SIZE = 50;
 export default function SessionsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
   const navigate = useNavigate();
-  const [range, setRange] = useState(() => {
-    if (websiteId) {
-      const stored = loadWebsiteRange(websiteId);
-      if (stored) return stored;
-    }
-    return defaultRange('7d');
-  });
+  const { range, setRange, rangeQs } = useWebsiteRange(websiteId, '24h');
 
   useEffect(() => {
     if (!getToken()) navigate('/login');
   }, [navigate]);
 
-  useEffect(() => {
-    if (!websiteId) return;
-    const stored = loadWebsiteRange(websiteId);
-    if (stored) setRange(stored);
-    else setRange(defaultRange('7d'));
-  }, [websiteId]);
-
-  function onRangeChange(next: { preset: DateRangePreset; startAt: number; endAt: number }) {
-    setRange(next);
-    if (websiteId) saveWebsiteRange(websiteId, next);
-  }
-
-  const qs = rangeQueryString(range.startAt, range.endAt);
   const sessionsQuery = useQuery({
     queryKey: ['sessions', websiteId, range],
     enabled: Boolean(websiteId),
     queryFn: () =>
       api<{ data: SessionRow[]; count: number }>(
-        `/api/websites/${websiteId}/sessions?${qs}&pageSize=${PAGE_SIZE}`,
+        `/api/websites/${websiteId}/sessions?${rangeQs}&pageSize=${PAGE_SIZE}`,
       ),
   });
 
@@ -66,10 +46,8 @@ export default function SessionsPage() {
     <div className="page page-sessions">
       <WebsitePageShell
         websiteId={websiteId}
-        toolbar={
-          <div className="website-toolbar-date">
-            <DateRangePicker value={range} onChange={onRangeChange} compact />
-          </div>
+        pageActions={
+          <WebsiteDateExportControls range={range} onRangeChange={setRange} />
         }
       />
 

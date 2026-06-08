@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   CartesianGrid,
@@ -15,7 +15,7 @@ import { EmptyState } from '../components/EmptyState';
 import { EventDataPanel } from '../components/EventDataPanel';
 import { MetricsTable } from '../components/MetricsTable';
 import { RealtimeWidget } from '../components/RealtimeWidget';
-import { StatsToolbar } from '../components/StatsToolbar';
+import { WebsiteStatsControls } from '../components/WebsiteStatsControls';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { SegmentsPanel } from '../components/SegmentsPanel';
 import { ShareManage } from '../components/ShareManage';
@@ -23,7 +23,6 @@ import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import {
   api,
-  authenticatedFetch,
   type MetricRow,
   type RevenueSummary,
   type Segment,
@@ -31,10 +30,10 @@ import {
   type Website,
   type WebsiteStats,
 } from '../lib/api';
-import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/dateRange';
 import { t } from '../lib/i18n';
+import { useWebsiteExport } from '../lib/useWebsiteExport';
+import { useWebsiteRange } from '../lib/useWebsiteRange';
 import { useChartColors } from '../lib/useChartColors';
-import { defaultRange, loadWebsiteRange, saveWebsiteRange } from '../lib/websiteRangeStorage';
 
 const METRIC_TABS = ['path', 'referrer', 'country', 'region', 'city', 'browser', 'os', 'device', 'language'] as const;
 type PathSortBy = 'views' | 'visitors' | 'time';
@@ -87,27 +86,8 @@ export default function WebsiteStatsPage() {
   const [metricTab, setMetricTab] = useState<(typeof METRIC_TABS)[number]>('path');
   const [pathSortBy, setPathSortBy] = useState<PathSortBy>('views');
   const [compareEnabled, setCompareEnabled] = useState(false);
-  const [range, setRange] = useState(() => {
-    if (websiteId) {
-      const stored = loadWebsiteRange(websiteId);
-      if (stored) return stored;
-    }
-    return defaultRange('24h');
-  });
-
-  useEffect(() => {
-    if (!websiteId) return;
-    const stored = loadWebsiteRange(websiteId);
-    if (stored) setRange(stored);
-    else setRange(defaultRange('24h'));
-  }, [websiteId]);
-
-  function onRangeChange(next: { preset: DateRangePreset; startAt: number; endAt: number }) {
-    setRange(next);
-    if (websiteId) saveWebsiteRange(websiteId, next);
-  }
-
-  const rangeQs = rangeQueryString(range.startAt, range.endAt);
+  const { range, setRange, rangeQs } = useWebsiteRange(websiteId, '24h');
+  const exportCsv = useWebsiteExport(websiteId, rangeQs);
   const segmentQs = segmentId ? `&segmentId=${encodeURIComponent(segmentId)}` : '';
   const qs = `${rangeQs}${segmentQs}`;
 
@@ -197,18 +177,6 @@ export default function WebsiteStatsPage() {
     },
   });
 
-  function exportCsv(type: 'events' | 'pageviews') {
-    const path = `/api/websites/${websiteId}/export?type=${type}&${rangeQs}`;
-    authenticatedFetch(path)
-      .then((r) => r.blob())
-      .then((blob) => {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `${websiteId}-${type}.csv`;
-        a.click();
-      });
-  }
-
   const stats = useSegmentFilter ? statsQuery.data : overviewQuery.data?.stats;
   const chartData = useSegmentFilter
     ? (pageviewsQuery.data?.pageviews ?? [])
@@ -223,17 +191,16 @@ export default function WebsiteStatsPage() {
     <div className="page page-stats">
       <WebsitePageShell
         websiteId={websiteId}
-        toolbar={
-          <StatsToolbar
+        pageActions={
+          <WebsiteStatsControls
             range={range}
-            onRangeChange={onRangeChange}
+            onRangeChange={setRange}
+            onExport={exportCsv}
             segmentId={segmentId}
             onSegmentChange={setSegmentId}
             segments={segmentsQuery.data ?? []}
             compareEnabled={compareEnabled}
             onCompareChange={setCompareEnabled}
-            onExportPageviews={() => exportCsv('pageviews')}
-            onExportEvents={() => exportCsv('events')}
           />
         }
       />

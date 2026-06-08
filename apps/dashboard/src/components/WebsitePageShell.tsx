@@ -8,9 +8,14 @@ import { t } from '../lib/i18n';
 export function WebsitePageShell({
   websiteId,
   toolbar,
+  headerActions,
+  pageActions,
 }: {
   websiteId?: string;
   toolbar?: ReactNode;
+  headerActions?: ReactNode;
+  /** Top-right controls beside website sub-nav (stats filter, date range, export). */
+  pageActions?: ReactNode;
 }) {
   const websiteQuery = useQuery({
     queryKey: ['website', websiteId],
@@ -27,10 +32,14 @@ export function WebsitePageShell({
         subtitle={site?.domain ?? undefined}
         backTo="/websites"
         backLabel={t('websites')}
+        actions={headerActions}
       />
       {websiteId ? (
         <div className="website-page-chrome">
-          <WebsiteSubNav />
+          <div className="website-page-chrome-top">
+            <WebsiteSubNav />
+            {pageActions ? <div className="website-page-actions">{pageActions}</div> : null}
+          </div>
           {toolbar ? <div className="website-toolbar">{toolbar}</div> : null}
         </div>
       ) : null}

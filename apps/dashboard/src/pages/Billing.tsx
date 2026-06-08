@@ -16,6 +16,8 @@ type Plan = {
   maxEventsPerMonth: number;
   replayEnabled: boolean;
   emailReportsEnabled: boolean;
+  heatmapsEnabled: boolean;
+  teamsEnabled: boolean;
   monthlyPriceUsd?: number | null;
 };
 
@@ -92,7 +94,9 @@ export default function Billing() {
           <p className="stat-value">{plan.name}</p>
           <p className="text-muted">
             {t('websiteLimit')}: {plan.maxWebsites} · {t('replay')}: {plan.replayEnabled ? t('yes') : t('no')} ·{' '}
-            {t('emailReports')}: {plan.emailReportsEnabled ? t('yes') : t('no')}
+            {t('emailReports')}: {plan.emailReportsEnabled ? t('yes') : t('no')} · {t('heatmaps')}:{' '}
+            {plan.heatmapsEnabled ? t('yes') : t('no')} · {t('teams')}:{' '}
+            {plan.teamsEnabled ? t('yes') : t('no')}
             {plan.monthlyPriceUsd != null && plan.monthlyPriceUsd > 0
               ? ` · $${plan.monthlyPriceUsd}/mo`
               : plan.id === 'free'

@@ -112,6 +112,17 @@ export async function handleUpdate(c: Ctx) {
     }
   }
 
+  if (parsed.data.heatmapConfig?.enabled === true) {
+    const { getUserSubscription, isHostedMode } = await import('../lib/billing');
+    const { getPlan } = await import('@flareboard/shared');
+    if (isHostedMode(c.env)) {
+      const sub = await getUserSubscription(c.env, c.get('user').userId);
+      if (!getPlan(sub.planId).heatmapsEnabled) {
+        return json({ message: 'Heatmaps require a paid plan.' }, 403);
+      }
+    }
+  }
+
   const db = createDb(c.env.DB);
   await db
     .update(schema.website)

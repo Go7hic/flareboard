@@ -5,6 +5,7 @@ import {
   ROLES,
   createTeamSchema,
   createTeamWebsiteSchema,
+  getPlan,
   joinTeamSchema,
   updateTeamSchema,
   updateTeamUserSchema,
@@ -12,12 +13,22 @@ import {
 } from '@flareboard/shared';
 import type { Env } from '../env';
 import { canMutateTeam, userHasTeamAccess } from '../lib/access';
+import { getUserSubscription, isHostedMode } from '../lib/billing';
 import { getTeamByAccessCode, getTeamById, getTeamWebsites, getUserTeams } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
 import { checkIpRateLimit, getTrustedClientIp } from '../lib/rate-limit';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
+
+async function requireTeamsPlan(c: Ctx): Promise<Response | null> {
+  if (!isHostedMode(c.env)) return null;
+  const sub = await getUserSubscription(c.env, c.get('user').userId);
+  if (!getPlan(sub.planId).teamsEnabled) {
+    return json({ message: 'Teams require a paid plan.' }, 403);
+  }
+  return null;
+}
 
 function randomAccessCode() {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 8);
@@ -40,6 +51,9 @@ export async function handleList(c: Ctx) {
 }
 
 export async function handleCreate(c: Ctx) {
+  const planDenied = await requireTeamsPlan(c);
+  if (planDenied) return planDenied;
+
   const body = await c.req.json().catch(() => null);
   const parsed = createTeamSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
@@ -145,6 +159,9 @@ export async function handleDelete(c: Ctx) {
 }
 
 export async function handleJoin(c: Ctx) {
+  const planDenied = await requireTeamsPlan(c);
+  if (planDenied) return planDenied;
+
   const ip = getTrustedClientIp(c.req.raw);
   const rl = await checkIpRateLimit(c.env, 'team-join', ip, 10, 60);
   if (!rl.allowed) {
@@ -179,6 +196,9 @@ export async function handleJoin(c: Ctx) {
 }
 
 export async function handleCreateWebsite(c: Ctx) {
+  const planDenied = await requireTeamsPlan(c);
+  if (planDenied) return planDenied;
+
   const teamId = c.req.param('teamId');
   if (!teamId) return notFound();
 

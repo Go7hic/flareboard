@@ -46,6 +46,8 @@ export async function handleGetSubscription(c: Ctx) {
       maxEventsPerMonth: plan.maxEventsPerMonth,
       replayEnabled: plan.replayEnabled,
       emailReportsEnabled: plan.emailReportsEnabled,
+      heatmapsEnabled: plan.heatmapsEnabled,
+      teamsEnabled: plan.teamsEnabled,
     },
     status: sub.status,
     currentPeriodEnd: sub.currentPeriodEnd ?? null,

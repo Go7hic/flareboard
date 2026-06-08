@@ -63,12 +63,15 @@ export default function WebsiteSettingsPage() {
     queryFn: () =>
       api<{
         hosted: boolean;
-        plan?: { emailReportsEnabled?: boolean };
+        plan?: { emailReportsEnabled?: boolean; heatmapsEnabled?: boolean };
       }>('/api/billing/subscription'),
   });
 
   const emailReportsAllowed =
     !billingQuery.data?.hosted || Boolean(billingQuery.data?.plan?.emailReportsEnabled);
+
+  const heatmapsAllowed =
+    !billingQuery.data?.hosted || Boolean(billingQuery.data?.plan?.heatmapsEnabled);
 
   const emailReportQuery = useQuery({
     queryKey: ['email-report', websiteId],
@@ -261,26 +264,39 @@ export default function WebsiteSettingsPage() {
               <Panel variant="accent-rail">
                 <h2 className="section-title">{t('heatmapConfig')}</h2>
                 <p className="section-lead">{t('heatmapConfigLead')}</p>
-                <div className="field">
-                  <Label htmlFor="heatmap-preview-url">{t('heatmapPreviewUrl')}</Label>
-                  <Input
-                    id="heatmap-preview-url"
-                    value={heatmapPreviewUrl}
-                    onChange={(e) => setHeatmapPreviewUrl(e.target.value)}
-                    placeholder="https://yoursite.com/test-page"
-                  />
-                  <p className="text-muted" style={{ fontSize: '0.8125rem', marginTop: '0.25rem' }}>
-                    {t('heatmapPreviewUrlHint')}
+                {!heatmapsAllowed ? (
+                  <p className="text-muted" style={{ fontSize: '0.875rem', marginBottom: '1rem' }}>
+                    {t('heatmapsRequiresUpgrade')}{' '}
+                    <Link to="/billing" className="shell-link">
+                      {t('upgradeTo')} Cloud
+                    </Link>
                   </p>
-                </div>
-                <div className="field">
-                  <Label>{t('heatmapConfig')}</Label>
-                  <Textarea
-                    className="textarea-mono"
-                    value={heatmapConfigJson}
-                    onChange={(e) => setHeatmapConfigJson(e.target.value)}
-                  />
-                </div>
+                ) : null}
+                <fieldset
+                  disabled={!heatmapsAllowed}
+                  style={{ border: 'none', margin: 0, padding: 0, opacity: heatmapsAllowed ? 1 : 0.6 }}
+                >
+                  <div className="field">
+                    <Label htmlFor="heatmap-preview-url">{t('heatmapPreviewUrl')}</Label>
+                    <Input
+                      id="heatmap-preview-url"
+                      value={heatmapPreviewUrl}
+                      onChange={(e) => setHeatmapPreviewUrl(e.target.value)}
+                      placeholder="https://yoursite.com/test-page"
+                    />
+                    <p className="text-muted" style={{ fontSize: '0.8125rem', marginTop: '0.25rem' }}>
+                      {t('heatmapPreviewUrlHint')}
+                    </p>
+                  </div>
+                  <div className="field">
+                    <Label>{t('heatmapConfig')}</Label>
+                    <Textarea
+                      className="textarea-mono"
+                      value={heatmapConfigJson}
+                      onChange={(e) => setHeatmapConfigJson(e.target.value)}
+                    />
+                  </div>
+                </fieldset>
               </Panel>
 
               <Panel variant="accent-rail">

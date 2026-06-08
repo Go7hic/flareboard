@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
@@ -57,6 +57,18 @@ export default function HeatmapsPage() {
     if (!getToken()) navigate('/login');
   }, [navigate]);
 
+  const billingQuery = useQuery({
+    queryKey: ['billing-subscription'],
+    queryFn: () =>
+      api<{
+        hosted: boolean;
+        plan?: { heatmapsEnabled?: boolean };
+      }>('/api/billing/subscription'),
+  });
+
+  const heatmapsAllowed =
+    !billingQuery.data?.hosted || Boolean(billingQuery.data?.plan?.heatmapsEnabled);
+
   const websiteQuery = useQuery({
     queryKey: ['website', websiteId],
     enabled: Boolean(websiteId),
@@ -66,7 +78,7 @@ export default function HeatmapsPage() {
   const rangeQs = rangeQueryString(range.startAt, range.endAt);
   const pathsQuery = useQuery({
     queryKey: ['heatmap-paths', websiteId, range.startAt, range.endAt],
-    enabled: Boolean(websiteId),
+    enabled: Boolean(websiteId) && heatmapsAllowed,
     queryFn: () =>
       api<HeatmapPath[]>(`/api/websites/${websiteId}/heatmap/paths?${rangeQs}`),
   });
@@ -81,7 +93,7 @@ export default function HeatmapsPage() {
   const deviceQs = deviceClass ? `&deviceClass=${deviceClass}` : '';
   const heatmapQuery = useQuery({
     queryKey: ['heatmap', websiteId, urlPath, kind, deviceClass, range.startAt, range.endAt],
-    enabled: Boolean(websiteId),
+    enabled: Boolean(websiteId) && heatmapsAllowed,
     queryFn: () =>
       api<HeatmapResponse>(
         `/api/websites/${websiteId}/heatmap?urlPath=${encodeURIComponent(urlPath)}&kind=${kind}&${rangeQs}${deviceQs}`,
@@ -171,6 +183,19 @@ export default function HeatmapsPage() {
         <h2 className="section-title">{t('heatmaps')}</h2>
         <p className="section-lead">{t('heatmapsLead')}</p>
 
+        {!heatmapsAllowed && billingQuery.data ? (
+          <p className="text-muted" style={{ fontSize: '0.875rem', marginBottom: '1rem' }}>
+            {t('heatmapsRequiresUpgrade')}{' '}
+            <Link to="/billing" className="shell-link">
+              {t('upgradeTo')} Cloud
+            </Link>
+          </p>
+        ) : null}
+
+        <fieldset
+          disabled={!heatmapsAllowed}
+          style={{ border: 'none', margin: 0, padding: 0, opacity: heatmapsAllowed ? 1 : 0.6 }}
+        >
         <div className="stats-toolbar" style={{ marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
           <DateRangePicker value={range} onChange={setRange} />
           <div className="field" style={{ minWidth: '12rem' }}>
@@ -335,6 +360,7 @@ export default function HeatmapsPage() {
             </p>
           </>
         )}
+        </fieldset>
       </Panel>
     </div>
   );

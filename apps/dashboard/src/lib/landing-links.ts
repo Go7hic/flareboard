@@ -16,6 +16,8 @@ export type LandingPlan = {
   maxEventsPerMonth: number;
   replayEnabled: boolean;
   emailReportsEnabled: boolean;
+  heatmapsEnabled: boolean;
+  teamsEnabled: boolean;
   monthlyPriceUsd?: number | null;
 };
 
@@ -27,6 +29,8 @@ export const LANDING_PLANS: LandingPlan[] = [
     maxEventsPerMonth: 100_000,
     replayEnabled: false,
     emailReportsEnabled: false,
+    heatmapsEnabled: false,
+    teamsEnabled: false,
     monthlyPriceUsd: 0,
   },
   {
@@ -36,6 +40,8 @@ export const LANDING_PLANS: LandingPlan[] = [
     maxEventsPerMonth: 1_000_000,
     replayEnabled: true,
     emailReportsEnabled: true,
+    heatmapsEnabled: true,
+    teamsEnabled: true,
     monthlyPriceUsd: CLOUD_MONTHLY_USD,
   },
 ];

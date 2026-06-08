@@ -53,6 +53,17 @@ export default function Teams() {
     queryFn: () => api<Team[]>('/api/teams'),
   });
 
+  const billingQuery = useQuery({
+    queryKey: ['billing-subscription'],
+    queryFn: () =>
+      api<{
+        hosted: boolean;
+        plan?: { teamsEnabled?: boolean };
+      }>('/api/billing/subscription'),
+  });
+
+  const teamsAllowed = !billingQuery.data?.hosted || Boolean(billingQuery.data?.plan?.teamsEnabled);
+
   const teamDetailQuery = useQuery({
     queryKey: ['team', selectedTeamId],
     enabled: Boolean(selectedTeamId),
@@ -165,6 +176,17 @@ export default function Teams() {
     <div className="page page-teams">
       <PageHeader title={t('teams')} subtitle={t('teamsSubtitle')} />
 
+      {!teamsAllowed && billingQuery.data ? (
+        <div className="panel section-gap">
+          <p className="text-muted" style={{ fontSize: '0.875rem' }}>
+            {t('teamsRequiresUpgrade')}{' '}
+            <Link to="/billing" className="shell-link">
+              {t('upgradeTo')} Cloud
+            </Link>
+          </p>
+        </div>
+      ) : null}
+
       <div className="grid-2 section-gap">
         <section className="panel">
           <h2 className="section-title">{t('createTeam')}</h2>
@@ -176,9 +198,10 @@ export default function Teams() {
                 placeholder={t('teamName')}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                disabled={!teamsAllowed}
               />
             </div>
-            <Button variant="primary" type="submit" disabled={createMutation.isPending}>
+            <Button variant="primary" type="submit" disabled={createMutation.isPending || !teamsAllowed}>
               {t('create')}
             </Button>
           </form>
@@ -194,9 +217,10 @@ export default function Teams() {
                 placeholder={t('accessCode')}
                 value={accessCode}
                 onChange={(e) => setAccessCode(e.target.value)}
+                disabled={!teamsAllowed}
               />
             </div>
-            <Button variant="primary" type="submit" disabled={joinMutation.isPending}>
+            <Button variant="primary" type="submit" disabled={joinMutation.isPending || !teamsAllowed}>
               {t('joinTeam')}
             </Button>
           </form>
@@ -341,6 +365,7 @@ export default function Teams() {
                             placeholder={t('name')}
                             value={siteName}
                             onChange={(e) => setSiteName(e.target.value)}
+                            disabled={!teamsAllowed}
                           />
                         </div>
                         <div className="field">
@@ -350,12 +375,13 @@ export default function Teams() {
                             placeholder="example.com"
                             value={siteDomain}
                             onChange={(e) => setSiteDomain(e.target.value)}
+                            disabled={!teamsAllowed}
                           />
                         </div>
                         <Button
                           variant="primary"
                           type="submit"
-                          disabled={createWebsiteMutation.isPending}
+                          disabled={createWebsiteMutation.isPending || !teamsAllowed}
                         >
                           {t('createWebsite')}
                         </Button>

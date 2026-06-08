@@ -12,6 +12,8 @@ export type PlanDefinition = {
   maxEventsPerMonth: number;
   replayEnabled: boolean;
   emailReportsEnabled: boolean;
+  heatmapsEnabled: boolean;
+  teamsEnabled: boolean;
   /** Display price on marketing / billing UI (USD). Null = free. */
   monthlyPriceUsd: number | null;
   /** Env var name for Stripe Price ID (hosted checkout). */
@@ -26,6 +28,8 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     maxEventsPerMonth: 100_000,
     replayEnabled: false,
     emailReportsEnabled: false,
+    heatmapsEnabled: false,
+    teamsEnabled: false,
     monthlyPriceUsd: 0,
     stripePriceEnvKey: null,
   },
@@ -36,6 +40,8 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     maxEventsPerMonth: 1_000_000,
     replayEnabled: true,
     emailReportsEnabled: true,
+    heatmapsEnabled: true,
+    teamsEnabled: true,
     monthlyPriceUsd: 12,
     stripePriceEnvKey: 'STRIPE_PRICE_CLOUD',
   },
@@ -65,6 +71,8 @@ export function planForPublic(plan: PlanDefinition) {
     maxEventsPerMonth: plan.maxEventsPerMonth,
     replayEnabled: plan.replayEnabled,
     emailReportsEnabled: plan.emailReportsEnabled,
+    heatmapsEnabled: plan.heatmapsEnabled,
+    teamsEnabled: plan.teamsEnabled,
     monthlyPriceUsd: plan.monthlyPriceUsd,
   };
 }

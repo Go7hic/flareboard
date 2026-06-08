@@ -1,7 +1,8 @@
 import type { Context } from 'hono';
-import { statsQuerySchema } from '@flareboard/shared';
+import { statsQuerySchema, getPlan } from '@flareboard/shared';
 import type { Env } from '../env';
 import { canAccessWebsite } from '../lib/access';
+import { getUserSubscription, isHostedMode } from '../lib/billing';
 import { getHeatmapData, getHeatmapPaths } from '../lib/heatmaps';
 import { getWebsiteById } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
@@ -9,7 +10,19 @@ import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
 
+async function requireHeatmapsPlan(c: Ctx): Promise<Response | null> {
+  if (!isHostedMode(c.env)) return null;
+  const sub = await getUserSubscription(c.env, c.get('user').userId);
+  if (!getPlan(sub.planId).heatmapsEnabled) {
+    return json({ message: 'Heatmaps require a paid plan.' }, 403);
+  }
+  return null;
+}
+
 export async function handleGetPaths(c: Ctx) {
+  const planDenied = await requireHeatmapsPlan(c);
+  if (planDenied) return planDenied;
+
   const websiteId = c.req.param('websiteId');
   if (!websiteId) return notFound();
   const website = await getWebsiteById(c.env, websiteId);
@@ -26,6 +39,9 @@ export async function handleGetPaths(c: Ctx) {
 }
 
 export async function handleGet(c: Ctx) {
+  const planDenied = await requireHeatmapsPlan(c);
+  if (planDenied) return planDenied;
+
   const websiteId = c.req.param('websiteId');
   if (!websiteId) return notFound();
   const website = await getWebsiteById(c.env, websiteId);

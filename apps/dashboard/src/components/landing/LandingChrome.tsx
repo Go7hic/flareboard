@@ -18,16 +18,17 @@ type AppConfig = {
 
 type LandingChromeProps = {
   children: ReactNode;
-  activeNav?: 'home' | 'features';
+  activeNav?: 'home' | 'features' | 'pricing';
 };
 
 type NavItem =
-  | { kind: 'hash'; hash: string; labelKey: string; active?: boolean }
+  | { kind: 'home'; labelKey: string; active?: boolean }
   | { kind: 'route'; href: string; labelKey: string; active?: boolean }
   | { kind: 'external'; href: string; labelKey: string };
 
 function LandingNavLink({ item }: { item: NavItem }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const active = 'active' in item && item.active;
   const className = `shell-link${active ? ' active' : ''}`;
 
@@ -44,17 +45,19 @@ function LandingNavLink({ item }: { item: NavItem }) {
     );
   }
 
-  if (item.kind === 'hash') {
-    if (location.pathname === '/') {
-      return (
-        <a href={`#${item.hash}`} className={className}>
-          {t(item.labelKey)}
-        </a>
-      );
+  if (item.kind === 'home') {
+    function handleClick(e: MouseEvent<HTMLAnchorElement>) {
+      if (location.pathname !== '/') return;
+
+      e.preventDefault();
+      if (location.hash) {
+        navigate('/', { replace: true });
+      }
+      scrollLandingToTop();
     }
 
     return (
-      <Link to="/" state={{ scrollTo: item.hash }} className={className}>
+      <Link to="/" className={className} onClick={handleClick}>
         {t(item.labelKey)}
       </Link>
     );
@@ -112,9 +115,9 @@ export function LandingChrome({ children, activeNav = 'home' }: LandingChromePro
   const startHref = config.registrationEnabled ? '/register' : '/login';
 
   const navItems: NavItem[] = [
-    { kind: 'hash', hash: 'product', labelKey: 'landingNavProduct' },
+    { kind: 'home', labelKey: 'landingNavHome', active: activeNav === 'home' },
     { kind: 'route', href: '/features', labelKey: 'landingNavFeatures', active: activeNav === 'features' },
-    { kind: 'hash', hash: 'pricing', labelKey: 'landingNavPricing' },
+    { kind: 'route', href: '/pricing', labelKey: 'landingNavPricing', active: activeNav === 'pricing' },
     { kind: 'external', href: FLAREBOARD_README, labelKey: 'landingNavDocs' },
   ];
 
@@ -156,6 +159,7 @@ export function LandingChrome({ children, activeNav = 'home' }: LandingChromePro
           <LandingBrandLink className="shell-brand" />
           <nav className="landing-footer-links" aria-label={t('landingFooterAria')}>
             <Link to="/features">{t('landingNavFeatures')}</Link>
+            <Link to="/pricing">{t('landingNavPricing')}</Link>
             <Link to="/login">{t('signIn')}</Link>
             <Link to={startHref}>{t('landingGetStarted')}</Link>
             <a href={FLAREBOARD_GITHUB} target="_blank" rel="noopener noreferrer">

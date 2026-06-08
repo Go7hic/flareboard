@@ -3354,6 +3354,164 @@ code {
   max-width: 60ch;
 }
 
+/* ── Pricing page ── */
+.pricing-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.pricing-hero {
+  max-width: var(--container-max);
+  margin: 0 auto;
+  width: 100%;
+  padding: 2rem 1.5rem 1.5rem;
+  text-align: center;
+}
+
+.pricing-hero-lead {
+  max-width: 60ch;
+  margin-inline: auto;
+}
+
+.pricing-hero-lead a {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.pricing-hero-lead a:hover {
+  text-decoration: underline;
+}
+
+.pricing-plans {
+  max-width: var(--container-max);
+  margin: 0 auto;
+  width: 100%;
+  padding: 0 1.5rem 2.5rem;
+}
+
+.pricing-compare {
+  padding-top: 2.5rem;
+  padding-bottom: 3rem;
+}
+
+.pricing-compare-title {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.pricing-compare-wrap {
+  max-width: 56rem;
+  margin: 0 auto;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-sm);
+}
+
+.pricing-compare-table {
+  width: 100%;
+  min-width: 28rem;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+.pricing-compare-table th,
+.pricing-compare-table td {
+  padding: 0.85rem 1.15rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pricing-compare-table thead th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+}
+
+.pricing-compare-table thead th:not(:first-child),
+.pricing-compare-table tbody td {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.pricing-compare-table tbody th {
+  font-weight: 500;
+  color: var(--text);
+  min-width: 9rem;
+}
+
+.pricing-compare-table tbody tr.pricing-compare-section th {
+  padding-top: 1.1rem;
+  padding-bottom: 0.55rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.pricing-compare-table tbody tr.pricing-compare-section:first-child th {
+  padding-top: 0.85rem;
+}
+
+.pricing-compare-table tbody tr.pricing-compare-section + tr th,
+.pricing-compare-table tbody tr.pricing-compare-section + tr td {
+  border-top: none;
+}
+
+.pricing-compare-table tbody tr:last-child th,
+.pricing-compare-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.pricing-compare-table thead th:nth-child(3) {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.pricing-compare-table tbody td.pricing-compare-plan {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.pricing-compare-table tbody td.pricing-compare-cloud-exclusive {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.pricing-self-host-note {
+  max-width: 60ch;
+  margin: 1.25rem auto 0;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.pricing-self-host-note a {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.pricing-self-host-note a:hover {
+  text-decoration: underline;
+}
+
+.landing-plans-cta {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
 .features-jump {
   position: sticky;
   top: var(--nav-height);
@@ -4132,7 +4290,7 @@ code {
 
 .landing-cta-lead {
   margin: 0.6rem auto 1.35rem;
-  max-width: 44ch;
+  max-width: 52ch;
   color: var(--text-muted);
   line-height: 1.55;
 }

@@ -1,17 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { DataClaritySection, HeroDashboardPreview } from '../components/landing/LandingCharts';
+import { LandingPlanCard } from '../components/landing/LandingPlanCards';
 import { LandingChrome } from '../components/landing/LandingChrome';
 import { Button } from '../components/ui/button';
 import { api } from '../lib/api';
 import { t } from '../lib/i18n';
 import {
   CLOUD_MONTHLY_USD,
-  CLOUD_ORIGINAL_MONTHLY_USD,
   FLAREBOARD_DEPLOY_DOCS,
   FLAREBOARD_ENTERPRISE_EMAIL,
   FLAREBOARD_GITHUB,
-  formatEventLimit,
   LANDING_PLANS,
   type LandingPlan,
 } from '../lib/landing-links';
@@ -101,102 +100,6 @@ function EdgeMap() {
         ))}
       </svg>
     </div>
-  );
-}
-
-function PlanCheckIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-      <path
-        d="M3.5 8.5 6.5 11.5 12.5 4.5"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function planFeatureLines(plan: LandingPlan): string[] {
-  const websiteLine =
-    plan.maxWebsites > 1
-      ? t('landingPlanWebsites').replace('{count}', String(plan.maxWebsites))
-      : t('landingPlanWebsite').replace('{count}', String(plan.maxWebsites));
-
-  return [
-    websiteLine,
-    t('landingPlanEventsPerMonth').replace('{limit}', formatEventLimit(plan.maxEventsPerMonth)),
-    plan.replayEnabled ? t('landingPlanReplayIncluded') : t('landingPlanReplayExcluded'),
-    plan.emailReportsEnabled
-      ? t('landingPlanEmailReportsIncluded')
-      : t('landingPlanEmailReportsExcluded'),
-    t('landingPlanFeaturesShared'),
-  ];
-}
-
-function PlanCard({
-  plan,
-  featured,
-  startHref,
-}: {
-  plan: LandingPlan;
-  featured?: boolean;
-  startHref: string;
-}) {
-  const priceUsd = plan.monthlyPriceUsd ?? (plan.id === 'cloud' ? CLOUD_MONTHLY_USD : 0);
-  const tagline =
-    plan.id === 'cloud' ? t('landingPlanCloudTagline') : t('landingPlanFreeTagline');
-  const priceAria =
-    plan.id === 'cloud'
-      ? t('landingPlanPriceAriaCloud')
-          .replace('{price}', String(priceUsd))
-          .replace('{original}', String(CLOUD_ORIGINAL_MONTHLY_USD))
-      : t('landingPlanPriceAriaFree').replace('{price}', String(priceUsd));
-
-  return (
-    <article className={`landing-plan-card${featured ? ' landing-plan-card-featured' : ''}`}>
-      {featured ? <p className="landing-plan-badge">{t('landingPlanRecommended')}</p> : null}
-      <div className="landing-plan-card-top">
-        <p className="landing-plan-label">
-          {plan.id === 'cloud' ? t('landingPlanPaidLabel') : t('landingPlanFreeLabel')}
-        </p>
-        <h3 className="landing-plan-name">{plan.name}</h3>
-        <p className="landing-plan-price" aria-label={priceAria}>
-          {plan.id === 'cloud' ? (
-            <>
-              <span className="promo-price">
-                <span className="promo-price-original" aria-hidden="true">
-                  ${CLOUD_ORIGINAL_MONTHLY_USD}
-                </span>
-                <span className="landing-plan-price-value">${priceUsd}</span>
-              </span>
-              <span className="landing-plan-price-period">{t('landingPlanPerMonth')}</span>
-              <span className="promo-price-label">{t('landingPromoLabel')}</span>
-            </>
-          ) : (
-            <>
-              <span className="landing-plan-price-value">$0</span>
-              <span className="landing-plan-price-period">{t('landingPlanPerMonth')}</span>
-            </>
-          )}
-        </p>
-      </div>
-      <p className="landing-plan-tagline">{tagline}</p>
-      <ul className="landing-plan-features">
-        {planFeatureLines(plan).map((line) => (
-          <li key={line}>
-            <PlanCheckIcon />
-            <span>{line}</span>
-          </li>
-        ))}
-      </ul>
-      <Button asChild variant={featured ? 'primary' : 'secondary'} className="landing-plan-cta">
-        <Link to={startHref}>
-          {plan.id === 'free' ? t('landingPlanFreeCta') : t('landingPlanCloudCta')}
-        </Link>
-      </Button>
-    </article>
   );
 }
 
@@ -376,13 +279,19 @@ export default function Landing() {
 
         <div className="landing-plans-row">
           {plans.map((plan) => (
-            <PlanCard
+            <LandingPlanCard
               key={plan.id}
               plan={plan}
               featured={plan.id === 'cloud'}
               startHref={startHref}
             />
           ))}
+        </div>
+
+        <div className="landing-plans-cta">
+          <Button asChild variant="secondary">
+            <Link to="/pricing">{t('pricingViewAll')}</Link>
+          </Button>
         </div>
 
         <aside className="landing-plans-enterprise" aria-labelledby="enterprise-title">
@@ -394,7 +303,7 @@ export default function Landing() {
             <p className="landing-plans-enterprise-body">{t('landingEnterpriseBody')}</p>
           </div>
           <Button asChild variant="secondary" className="landing-plans-enterprise-cta">
-            <a href={`mailto:${FLAREBOARD_ENTERPRISE_EMAIL}?subject=Flareboard%20enterprise%20deploy`}>
+            <a href={`mailto:${FLAREBOARD_ENTERPRISE_EMAIL}?subject=Flareboard%20commercial%20license`}>
               {t('landingEnterpriseCta')}
             </a>
           </Button>

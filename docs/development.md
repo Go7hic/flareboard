@@ -118,9 +118,30 @@ curl -X POST http://localhost:8787/api/record \
   -d '{"type":"record","payload":{"website":"<uuid>","sessionId":"s1","visitId":"v1","chunkIndex":0,"events":[{"type":4}],"startedAt":'$(date +%s000)',"endedAt":'$(date +%s000)'}}'
 ```
 
+## Tests
+
+Automated tests use [Vitest](https://vitest.dev/) with [`@cloudflare/vitest-pool-workers`](https://developers.cloudflare.com/workers/testing/vitest-integration/) for the API worker (Miniflare + local D1/KV bindings from `apps/api/wrangler.jsonc`). Shared package helpers use plain Vitest (no Workers runtime).
+
+```bash
+pnpm test              # all packages that define a test script
+pnpm test:api          # API worker only (runs wrangler types via pretest)
+pnpm --filter @flareboard/shared test
+```
+
+Watch mode:
+
+```bash
+pnpm --filter @flareboard/api test:watch
+```
+
+**Covered today:** `GET /api/heartbeat`, auth `401` on protected routes, `report-range` / `segment-filters` SQL builders, and shared JWT/password/billing/crypto helpers.
+
+**Future work:** ingest bot filtering (`/api/send`), D1-backed route tests with seeded fixtures, billing webhooks, queue consumers.
+
 ## Build verification
 
 ```bash
 pnpm typecheck
+pnpm test
 pnpm --filter @flareboard/dashboard build
 ```

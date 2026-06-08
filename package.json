@@ -9,6 +9,8 @@
     "dev:aggregator": "pnpm --filter @flareboard/aggregator dev",
     "dev": "pnpm run dev:api",
     "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:api": "pnpm --filter @flareboard/api test",
     "db:migrate": "pnpm --filter @flareboard/db migrate:local",
     "db:migrate:remote": "pnpm --filter @flareboard/db migrate:remote",
     "seed": "tsx scripts/seed.ts",

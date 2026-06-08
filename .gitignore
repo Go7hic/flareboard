@@ -13,6 +13,7 @@ coverage/
 .dev.vars
 .dev.vars.*
 .mf/
+worker-configuration.d.ts
 
 # Miniflare local state (also under .wrangler/)
 *.sqlite

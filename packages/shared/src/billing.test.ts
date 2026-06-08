@@ -1,0 +1,35 @@
+import { describe, expect, it } from 'vitest';
+import { currentMonthKey, getPlan, normalizePlanId, planForPublic } from './billing';
+
+describe('billing helpers', () => {
+  it('normalizes legacy plan ids to cloud', () => {
+    expect(normalizePlanId('hobby')).toBe('cloud');
+    expect(normalizePlanId('pro')).toBe('cloud');
+    expect(normalizePlanId('free')).toBe('free');
+    expect(normalizePlanId(undefined)).toBe('free');
+  });
+
+  it('returns plan definitions', () => {
+    const cloud = getPlan('cloud');
+    expect(cloud.maxWebsites).toBe(10);
+    expect(cloud.replayEnabled).toBe(true);
+  });
+
+  it('formats current month key in UTC', () => {
+    expect(currentMonthKey(new Date('2026-03-05T12:00:00Z'))).toBe('2026-03');
+    expect(currentMonthKey(new Date('2025-12-31T23:59:59Z'))).toBe('2025-12');
+  });
+
+  it('strips stripe env keys from public plan shape', () => {
+    const pub = planForPublic(getPlan('cloud'));
+    expect(pub).toEqual({
+      id: 'cloud',
+      name: 'Cloud',
+      maxWebsites: 10,
+      maxEventsPerMonth: 1_000_000,
+      replayEnabled: true,
+      monthlyPriceUsd: 12,
+    });
+    expect('stripePriceEnvKey' in pub).toBe(false);
+  });
+});

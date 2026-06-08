@@ -221,6 +221,9 @@ export const deDELocale: Record<string, string> = {
   revenue: "Umsatz",
   goals: "Ziele (Custom Events)",
   overallConversion: "Gesamtconversion",
+  clickToLoadReport: "Klicken, um diesen Bericht zu laden.",
+  funnelNoDataHint:
+    "Trichterschritte müssen den per track() gesendeten Custom-Event-Namen entsprechen. Schritte in der Seitenleiste anpassen oder unter Website-Statistiken die Custom Events prüfen.",
   source: "Quelle",
   medium: "Medium",
   campaign: "Kampagne",

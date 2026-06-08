@@ -92,7 +92,7 @@ export default function ReportsPage() {
           <button type="button" className="section-title reports-section-toggle" onClick={() => setSectionOpen(id, true)}>
             {title}
           </button>
-          <p className="text-muted">Click to load this report.</p>
+          <p className="text-muted">{t('clickToLoadReport')}</p>
         </section>
       );
     }
@@ -348,6 +348,11 @@ export default function ReportsPage() {
     [funnelQuery.data?.steps],
   );
 
+  const funnelHasData = useMemo(
+    () => (funnelQuery.data?.steps ?? []).some((s) => s.count > 0),
+    [funnelQuery.data?.steps],
+  );
+
   const noWebsite = !websitesQuery.isLoading && !(websitesQuery.data ?? []).length;
 
   return (
@@ -466,11 +471,13 @@ export default function ReportsPage() {
                 )}
               </div>
 
-              <h3 className="reports-sidebar-subtitle">{t('funnel')}</h3>
+              <h3 id="funnel-steps-heading" className="reports-sidebar-subtitle">
+                {t('funnel')}
+              </h3>
               <div className="field">
-                <Label htmlFor="funnel-steps">{t('funnel')}</Label>
                 <Input
                   id="funnel-steps"
+                  aria-labelledby="funnel-steps-heading"
                   value={funnelSteps}
                   onChange={(e) => setFunnelSteps(e.target.value)}
                   placeholder={t('funnelStepsPlaceholder')}
@@ -483,8 +490,11 @@ export default function ReportsPage() {
             <ReportSection title={t('funnel')} variant="flat" skeletonPlacement="none">
               {funnelQuery.isLoading ? (
                 <SectionDataSkeleton busy />
-              ) : funnelChartData.length === 0 ? (
-                <EmptyState title={t('noDataInPeriod')} description={t('noDataInPeriodHint')} />
+              ) : funnelChartData.length === 0 || !funnelHasData ? (
+                <EmptyState
+                  title={t('noDataInPeriod')}
+                  description={funnelChartData.length > 0 ? t('funnelNoDataHint') : t('noDataInPeriodHint')}
+                />
               ) : (
                 <>
                   <div className="chart-wrap chart-wrap-compact">

@@ -66,7 +66,8 @@ export async function getFunnelReport(
       .bind(...stepBinds)
       .first<{ count: number }>();
     const count = row?.count ?? 0;
-    const rate = i === 0 ? 100 : prevCount > 0 ? Math.round((count / prevCount) * 100) : 0;
+    const rate =
+      count === 0 ? 0 : i === 0 ? 100 : prevCount > 0 ? Math.round((count / prevCount) * 100) : 0;
     results.push({ step: steps[i], count, rate });
     prevCount = count;
   }

@@ -242,6 +242,9 @@ const enUS: Record<string, string> = {
   revenue: 'Revenue',
   goals: 'Goals (custom events)',
   overallConversion: 'Overall conversion',
+  clickToLoadReport: 'Click to load this report.',
+  funnelNoDataHint:
+    'Funnel steps must match custom event names sent via track(). Edit steps in the sidebar, or check Custom events on the website stats page.',
   source: 'Source',
   medium: 'Medium',
   campaign: 'Campaign',
@@ -1012,6 +1015,9 @@ const zhCN: Partial<Record<string, string>> = {
   revenue: '收入',
   goals: '目标（自定义事件）',
   overallConversion: '总转化率',
+  clickToLoadReport: '点击加载此报告。',
+  funnelNoDataHint:
+    '漏斗步骤须与 track() 发送的自定义事件名称一致。可在侧栏修改步骤，或在网站统计页查看「自定义事件」。',
   source: '来源',
   medium: '媒介',
   campaign: '活动',

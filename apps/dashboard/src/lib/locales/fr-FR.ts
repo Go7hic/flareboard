@@ -221,6 +221,9 @@ export const frFRLocale: Record<string, string> = {
   revenue: "Revenus",
   goals: "Objectifs (événements personnalisés)",
   overallConversion: "Conversion globale",
+  clickToLoadReport: "Cliquez pour charger ce rapport.",
+  funnelNoDataHint:
+    "Les étapes du tunnel doivent correspondre aux noms d'événements personnalisés envoyés via track(). Modifiez les étapes dans la barre latérale ou consultez les événements personnalisés sur la page statistiques du site.",
   source: "Source",
   medium: "Medium",
   campaign: "Campagne",

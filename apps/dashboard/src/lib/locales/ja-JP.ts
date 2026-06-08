@@ -221,6 +221,9 @@ export const jaJPLocale: Record<string, string> = {
   revenue: "収益",
   goals: "ゴール（カスタムイベント）",
   overallConversion: "全体コンバージョン",
+  clickToLoadReport: "クリックしてこのレポートを読み込む。",
+  funnelNoDataHint:
+    "ファネルの各ステップは track() で送信するカスタムイベント名と一致させる必要があります。サイドバーでステップを編集するか、サイト統計のカスタムイベントを確認してください。",
   source: "ソース",
   medium: "メディアム",
   campaign: "キャンペーン",

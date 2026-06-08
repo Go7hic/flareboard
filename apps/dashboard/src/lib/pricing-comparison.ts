@@ -34,7 +34,7 @@ type CompareEntry =
       cloud: CompareCellSpec;
     };
 
-/** Row definitions for the pricing comparison table (Umami-style, grouped by category). */
+/** Row definitions for the pricing comparison table. */
 export const PRICING_COMPARE_ENTRIES: CompareEntry[] = [
   { kind: 'section', labelKey: 'pricingCompareSectionData' },
   { kind: 'feature', labelKey: 'pricingComparePrice', free: { type: 'price' }, cloud: { type: 'price' } },

@@ -10,9 +10,12 @@ describe('billing helpers', () => {
   });
 
   it('returns plan definitions', () => {
+    const free = getPlan('free');
     const cloud = getPlan('cloud');
+    expect(free.emailReportsEnabled).toBe(false);
     expect(cloud.maxWebsites).toBe(10);
     expect(cloud.replayEnabled).toBe(true);
+    expect(cloud.emailReportsEnabled).toBe(true);
   });
 
   it('formats current month key in UTC', () => {
@@ -28,6 +31,7 @@ describe('billing helpers', () => {
       maxWebsites: 10,
       maxEventsPerMonth: 1_000_000,
       replayEnabled: true,
+      emailReportsEnabled: true,
       monthlyPriceUsd: 12,
     });
     expect('stripePriceEnvKey' in pub).toBe(false);

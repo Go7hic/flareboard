@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { IngestSnippetPanel } from '../components/IngestSnippetPanel';
 import {
   ReplayConfigWizard,
@@ -57,6 +57,18 @@ export default function WebsiteSettingsPage() {
         `/api/websites/${websiteId}`,
       ),
   });
+
+  const billingQuery = useQuery({
+    queryKey: ['billing-subscription'],
+    queryFn: () =>
+      api<{
+        hosted: boolean;
+        plan?: { emailReportsEnabled?: boolean };
+      }>('/api/billing/subscription'),
+  });
+
+  const emailReportsAllowed =
+    !billingQuery.data?.hosted || Boolean(billingQuery.data?.plan?.emailReportsEnabled);
 
   const emailReportQuery = useQuery({
     queryKey: ['email-report', websiteId],
@@ -274,58 +286,71 @@ export default function WebsiteSettingsPage() {
               <Panel variant="accent-rail">
                 <h2 className="section-title">{t('emailReports')}</h2>
                 <p className="section-lead">{t('emailReportsLead')}</p>
-                <label className="field" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                  <input
-                    type="checkbox"
-                    checked={emailEnabled}
-                    onChange={(e) => setEmailEnabled(e.target.checked)}
-                  />
-                  {t('enableEmailReports')}
-                </label>
-                <div className="field">
-                  <Label htmlFor="email-frequency">{t('emailFrequency')}</Label>
-                  <select
-                    id="email-frequency"
-                    className="select"
-                    value={emailFrequency}
-                    onChange={(e) =>
-                      setEmailFrequency(e.target.value as 'daily' | 'weekly' | 'monthly')
-                    }
-                  >
-                    <option value="daily">{t('emailDaily')}</option>
-                    <option value="weekly">{t('emailWeekly')}</option>
-                    <option value="monthly">{t('emailMonthly')}</option>
-                  </select>
-                </div>
-                <div className="field">
-                  <Label htmlFor="email-timezone">{t('emailTimezone')}</Label>
-                  <Input
-                    id="email-timezone"
-                    value={emailTimezone}
-                    onChange={(e) => setEmailTimezone(e.target.value)}
-                    placeholder="UTC"
-                  />
-                </div>
-                <div className="field">
-                  <Label htmlFor="recipient-email">{t('recipientEmail')}</Label>
-                  <Input
-                    id="recipient-email"
-                    value={recipientEmail}
-                    onChange={(e) => setRecipientEmail(e.target.value)}
-                    placeholder="you@example.com, team@example.com"
-                  />
-                  <p className="text-muted" style={{ fontSize: '0.8125rem', marginTop: '0.25rem' }}>
-                    {t('recipientEmailHint')}
+                {!emailReportsAllowed ? (
+                  <p className="text-muted" style={{ fontSize: '0.875rem', marginBottom: '1rem' }}>
+                    {t('emailReportsRequiresUpgrade')}{' '}
+                    <Link to="/billing" className="shell-link">
+                      {t('upgradeTo')} Cloud
+                    </Link>
                   </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={emailReportMutation.isPending}
-                  onClick={() => emailReportMutation.mutate()}
+                ) : null}
+                <fieldset
+                  disabled={!emailReportsAllowed}
+                  style={{ border: 'none', margin: 0, padding: 0, opacity: emailReportsAllowed ? 1 : 0.6 }}
                 >
-                  {t('saveSettings')}
-                </Button>
+                  <label className="field" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={emailEnabled}
+                      onChange={(e) => setEmailEnabled(e.target.checked)}
+                    />
+                    {t('enableEmailReports')}
+                  </label>
+                  <div className="field">
+                    <Label htmlFor="email-frequency">{t('emailFrequency')}</Label>
+                    <select
+                      id="email-frequency"
+                      className="select"
+                      value={emailFrequency}
+                      onChange={(e) =>
+                        setEmailFrequency(e.target.value as 'daily' | 'weekly' | 'monthly')
+                      }
+                    >
+                      <option value="daily">{t('emailDaily')}</option>
+                      <option value="weekly">{t('emailWeekly')}</option>
+                      <option value="monthly">{t('emailMonthly')}</option>
+                    </select>
+                  </div>
+                  <div className="field">
+                    <Label htmlFor="email-timezone">{t('emailTimezone')}</Label>
+                    <Input
+                      id="email-timezone"
+                      value={emailTimezone}
+                      onChange={(e) => setEmailTimezone(e.target.value)}
+                      placeholder="UTC"
+                    />
+                  </div>
+                  <div className="field">
+                    <Label htmlFor="recipient-email">{t('recipientEmail')}</Label>
+                    <Input
+                      id="recipient-email"
+                      value={recipientEmail}
+                      onChange={(e) => setRecipientEmail(e.target.value)}
+                      placeholder="you@example.com, team@example.com"
+                    />
+                    <p className="text-muted" style={{ fontSize: '0.8125rem', marginTop: '0.25rem' }}>
+                      {t('recipientEmailHint')}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={emailReportMutation.isPending || !emailReportsAllowed}
+                    onClick={() => emailReportMutation.mutate()}
+                  >
+                    {t('saveSettings')}
+                  </Button>
+                </fieldset>
               </Panel>
 
               <Panel>

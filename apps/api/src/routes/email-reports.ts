@@ -1,9 +1,10 @@
 import type { Context } from 'hono';
 import { eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
-import { emailReportSchema } from '@flareboard/shared';
+import { emailReportSchema, getPlan } from '@flareboard/shared';
 import type { Env } from '../env';
 import { canAccessWebsite, canMutateWebsite } from '../lib/access';
+import { getUserSubscription, isHostedMode } from '../lib/billing';
 import { getWebsiteById } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
@@ -48,6 +49,15 @@ export async function handleUpdate(c: Ctx) {
   const body = await c.req.json().catch(() => null);
   const parsed = emailReportSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
+
+  if (isHostedMode(c.env)) {
+    const sub = await getUserSubscription(c.env, c.get('user').userId);
+    const plan = getPlan(sub.planId);
+    const disabling = parsed.data.enabled === false;
+    if (!plan.emailReportsEnabled && !disabling) {
+      return json({ message: 'Email reports require a paid plan.' }, 403);
+    }
+  }
 
   const now = new Date();
   const db = createDb(c.env.DB);

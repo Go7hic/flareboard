@@ -15,6 +15,7 @@ type Plan = {
   maxWebsites: number;
   maxEventsPerMonth: number;
   replayEnabled: boolean;
+  emailReportsEnabled: boolean;
   monthlyPriceUsd?: number | null;
 };
 
@@ -90,7 +91,8 @@ export default function Billing() {
           <h2 className="section-title">{t('currentPlan')}</h2>
           <p className="stat-value">{plan.name}</p>
           <p className="text-muted">
-            {t('websiteLimit')}: {plan.maxWebsites} · {t('replay')}: {plan.replayEnabled ? t('yes') : t('no')}
+            {t('websiteLimit')}: {plan.maxWebsites} · {t('replay')}: {plan.replayEnabled ? t('yes') : t('no')} ·{' '}
+            {t('emailReports')}: {plan.emailReportsEnabled ? t('yes') : t('no')}
             {plan.monthlyPriceUsd != null && plan.monthlyPriceUsd > 0
               ? ` · $${plan.monthlyPriceUsd}/mo`
               : plan.id === 'free'

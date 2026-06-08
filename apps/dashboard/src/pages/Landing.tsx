@@ -128,6 +128,9 @@ function planFeatureLines(plan: LandingPlan): string[] {
     websiteLine,
     t('landingPlanEventsPerMonth').replace('{limit}', formatEventLimit(plan.maxEventsPerMonth)),
     plan.replayEnabled ? t('landingPlanReplayIncluded') : t('landingPlanReplayExcluded'),
+    plan.emailReportsEnabled
+      ? t('landingPlanEmailReportsIncluded')
+      : t('landingPlanEmailReportsExcluded'),
     t('landingPlanFeaturesShared'),
   ];
 }

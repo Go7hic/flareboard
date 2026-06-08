@@ -1,10 +1,13 @@
-import { EVENT_TYPE } from '@flareboard/shared';
+import { EVENT_TYPE, getPlan } from '@flareboard/shared';
 import type { Env } from '../env';
+import { isHostedMode } from './billing';
 import { sendEmail } from './email';
 
 type ReportRow = {
   websiteId: string;
   websiteName: string;
+  userId: string;
+  planId: string | null;
   frequency: string;
   recipientEmail: string;
   timezone: string;
@@ -223,13 +226,15 @@ function shouldSend(row: ReportRow) {
 
 export async function runScheduledEmailReports(env: Env, cron: string) {
   const rows = await env.DB.prepare(
-    `SELECT r.website_id as websiteId, w.name as websiteName, r.frequency,
+    `SELECT r.website_id as websiteId, w.name as websiteName, w.user_id as userId,
+            s.plan_id as planId, r.frequency,
             COALESCE(r.recipient_email, u.email) as recipientEmail,
             COALESCE(r.timezone, 'UTC') as timezone,
             r.last_sent_at as lastSentAt
      FROM website_email_report r
      INNER JOIN website w ON w.website_id = r.website_id
      LEFT JOIN user u ON u.user_id = w.user_id
+     LEFT JOIN user_subscription s ON s.user_id = w.user_id
      WHERE r.enabled = 1 AND w.deleted_at IS NULL`,
   ).all<ReportRow>();
 
@@ -248,6 +253,14 @@ export async function runScheduledEmailReports(env: Env, cron: string) {
   );
 
   for (const row of all) {
+    if (isHostedMode(env) && !getPlan(row.planId).emailReportsEnabled) {
+      skipped++;
+      console.log(
+        JSON.stringify({ event: 'email_report_skipped_free_plan', websiteId: row.websiteId }),
+      );
+      continue;
+    }
+
     if (!shouldSend(row)) {
       notDue++;
       continue;

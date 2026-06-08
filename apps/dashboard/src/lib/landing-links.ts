@@ -15,6 +15,7 @@ export type LandingPlan = {
   maxWebsites: number;
   maxEventsPerMonth: number;
   replayEnabled: boolean;
+  emailReportsEnabled: boolean;
   monthlyPriceUsd?: number | null;
 };
 
@@ -25,6 +26,7 @@ export const LANDING_PLANS: LandingPlan[] = [
     maxWebsites: 3,
     maxEventsPerMonth: 100_000,
     replayEnabled: false,
+    emailReportsEnabled: false,
     monthlyPriceUsd: 0,
   },
   {
@@ -33,6 +35,7 @@ export const LANDING_PLANS: LandingPlan[] = [
     maxWebsites: 10,
     maxEventsPerMonth: 1_000_000,
     replayEnabled: true,
+    emailReportsEnabled: true,
     monthlyPriceUsd: CLOUD_MONTHLY_USD,
   },
 ];

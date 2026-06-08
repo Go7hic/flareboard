@@ -2,6 +2,49 @@ import { z } from 'zod';
 
 export const urlOrPathParam = z.string().max(500);
 
+const vitalMetric = (max: number) => z.coerce.number().nonnegative().max(max).optional();
+
+export type WebVitals = {
+  lcp: number | null;
+  inp: number | null;
+  cls: number | null;
+  fcp: number | null;
+  ttfb: number | null;
+};
+
+type VitalKey = keyof WebVitals;
+
+function parseVitalValue(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+/** Resolve Core Web Vitals from top-level payload fields with `data` fallback. */
+export function extractWebVitals(payload: {
+  lcp?: number;
+  inp?: number;
+  cls?: number;
+  fcp?: number;
+  ttfb?: number;
+  data?: Record<string, unknown>;
+}): WebVitals {
+  const fromData = (key: VitalKey) => parseVitalValue(payload.data?.[key]);
+
+  const pick = (key: VitalKey) => parseVitalValue(payload[key]) ?? fromData(key) ?? null;
+
+  return {
+    lcp: pick('lcp'),
+    inp: pick('inp'),
+    cls: pick('cls'),
+    fcp: pick('fcp'),
+    ttfb: pick('ttfb'),
+  };
+}
+
 export const sendPayloadSchema = z
   .object({
     website: z.string().uuid().optional(),
@@ -12,6 +55,7 @@ export const sendPayloadSchema = z
     language: z.string().max(35).optional(),
     referrer: urlOrPathParam.optional(),
     screen: z.string().max(11).optional(),
+    width: z.string().max(20).optional(),
     title: z.string().optional(),
     url: urlOrPathParam.optional(),
     name: z.string().max(50).optional(),
@@ -23,11 +67,11 @@ export const sendPayloadSchema = z
     browser: z.string().optional(),
     os: z.string().optional(),
     device: z.string().optional(),
-    lcp: z.number().nonnegative().max(60000).optional(),
-    inp: z.number().nonnegative().max(60000).optional(),
-    cls: z.number().nonnegative().max(100).optional(),
-    fcp: z.number().nonnegative().max(60000).optional(),
-    ttfb: z.number().nonnegative().max(60000).optional(),
+    lcp: vitalMetric(60000),
+    inp: vitalMetric(60000),
+    cls: vitalMetric(100),
+    fcp: vitalMetric(60000),
+    ttfb: vitalMetric(60000),
     revenue: z.coerce.number().optional(),
     currency: z.string().max(10).optional(),
     heatmapType: z.enum(['click', 'scroll']).optional(),

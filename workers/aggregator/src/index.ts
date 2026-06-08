@@ -107,11 +107,11 @@ async function processEvent(
       eventName: d.eventName,
       tag: d.tag,
       hostname: d.hostname,
-      lcp: d.lcp,
-      inp: d.inp,
-      cls: d.cls,
-      fcp: d.fcp,
-      ttfb: d.ttfb,
+      lcp: d.lcp ?? null,
+      inp: d.inp ?? null,
+      cls: d.cls ?? null,
+      fcp: d.fcp ?? null,
+      ttfb: d.ttfb ?? null,
     })
     .onConflictDoNothing();
 

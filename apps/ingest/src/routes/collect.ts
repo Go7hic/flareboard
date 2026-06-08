@@ -5,6 +5,7 @@ import {
   EVENT_TYPE,
   HEATMAP_NORM_SIZE,
   createCacheToken,
+  extractWebVitals,
   flattenEventData,
   getSalt,
   getSecret,
@@ -133,11 +134,6 @@ async function processSend(
       id,
       revenue,
       currency,
-      lcp,
-      inp,
-      cls,
-      fcp,
-      ttfb,
     } = payload;
 
     const sourceId = websiteId || pixelId || linkId!;
@@ -346,6 +342,7 @@ async function processSend(
       const base = hostname ? `https://${hostname}` : 'https://localhost';
       const currentUrl = new URL(url || '/', base);
       const urlPath = currentUrl.pathname === '/undefined' ? '' : currentUrl.pathname;
+      const vitals = extractWebVitals(payload);
 
       messages.push({
         type: 'event',
@@ -358,11 +355,11 @@ async function processSend(
           urlPath,
           pageTitle: safeDecodeURIComponent(title) ?? null,
           eventType: EVENT_TYPE.performance,
-          lcp: lcp ?? null,
-          inp: inp ?? null,
-          cls: cls ?? null,
-          fcp: fcp ?? null,
-          ttfb: ttfb ?? null,
+          lcp: vitals.lcp,
+          inp: vitals.inp,
+          cls: vitals.cls,
+          fcp: vitals.fcp,
+          ttfb: vitals.ttfb,
         },
       });
     }

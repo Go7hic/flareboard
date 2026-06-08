@@ -669,6 +669,9 @@ export const deDELocale: Record<string, string> = {
   revenuePageLead: "Umsatz nach Tag und Ereignis aus Kauf-Events.",
   performance: "Performance",
   performancePageLead: "Durchschnittliche Core Web Vitals (LCP, INP, CLS, FCP, TTFB) aus getrackten Seitenaufrufen.",
+  performanceEvents: "Performance-Ereignisse",
+  performancePartialHint:
+    "Einige Metriken fehlen in diesem Zeitraum. Ältere Tracker-Versionen erfassten zuverlässig nur INP; ingest worker neu deployen und auf neue Besuche warten. Jede Metrik wird nur über Ereignisse mit gesetztem Wert gemittelt.",
   revenueEvent: "Ereignis",
   revenueCurrency: "Währung",
   revenueTotal: "Summe",

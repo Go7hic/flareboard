@@ -669,6 +669,9 @@ export const jaJPLocale: Record<string, string> = {
   revenuePageLead: "購入イベントからの日次・イベント別収益。",
   performance: "パフォーマンス",
   performancePageLead: "トラッキングされたページ読み込みの Core Web Vitals 平均（LCP、INP、CLS、FCP、TTFB）。",
+  performanceEvents: "パフォーマンスイベント",
+  performancePartialHint:
+    "この期間は一部の指標がありません。旧トラッカーは INP のみ確実に記録していました。ingest worker を再デプロイし、新しい訪問をお待ちください。各指標は値が記録されたイベントのみで平均します。",
   revenueEvent: "イベント",
   revenueCurrency: "通貨",
   revenueTotal: "合計",

@@ -293,10 +293,16 @@ export async function getPerformanceReport(
       ROUND(AVG(e.cls), 4) as cls,
       ROUND(AVG(e.fcp), 2) as fcp,
       ROUND(AVG(e.ttfb), 2) as ttfb,
-      COUNT(*) as samples
+      COUNT(*) as samples,
+      COUNT(e.lcp) as lcp_samples,
+      COUNT(e.inp) as inp_samples,
+      COUNT(e.cls) as cls_samples,
+      COUNT(e.fcp) as fcp_samples,
+      COUNT(e.ttfb) as ttfb_samples
      FROM website_event e${joins}
      WHERE ${where} AND e.event_type = ${EVENT_TYPE.performance}
-       AND (e.lcp IS NOT NULL OR e.inp IS NOT NULL OR e.cls IS NOT NULL)`;
+       AND (e.lcp IS NOT NULL OR e.inp IS NOT NULL OR e.cls IS NOT NULL
+            OR e.fcp IS NOT NULL OR e.ttfb IS NOT NULL)`;
 
   const row = await env.DB.prepare(sql)
     .bind(...binds)
@@ -307,6 +313,11 @@ export async function getPerformanceReport(
       fcp: number | null;
       ttfb: number | null;
       samples: number;
+      lcp_samples: number;
+      inp_samples: number;
+      cls_samples: number;
+      fcp_samples: number;
+      ttfb_samples: number;
     }>();
 
   return {
@@ -316,5 +327,10 @@ export async function getPerformanceReport(
     fcp: row?.fcp ?? null,
     ttfb: row?.ttfb ?? null,
     samples: row?.samples ?? 0,
+    lcpSamples: row?.lcp_samples ?? 0,
+    inpSamples: row?.inp_samples ?? 0,
+    clsSamples: row?.cls_samples ?? 0,
+    fcpSamples: row?.fcp_samples ?? 0,
+    ttfbSamples: row?.ttfb_samples ?? 0,
   };
 }

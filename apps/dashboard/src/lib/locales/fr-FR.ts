@@ -669,6 +669,9 @@ export const frFRLocale: Record<string, string> = {
   revenuePageLead: "Revenus par jour et par événement depuis les achats trackés.",
   performance: "Performance",
   performancePageLead: "Moyennes des Core Web Vitals (LCP, INP, CLS, FCP, TTFB) des chargements suivis.",
+  performanceEvents: "Événements performance",
+  performancePartialHint:
+    "Certaines métriques manquent sur cette période. Les anciennes versions du tracker n'enregistraient que l'INP de façon fiable ; redéployez le worker ingest et attendez de nouvelles visites. Chaque métrique est moyennée uniquement sur les événements où elle a été capturée.",
   revenueEvent: "Événement",
   revenueCurrency: "Devise",
   revenueTotal: "Total",

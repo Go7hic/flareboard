@@ -746,6 +746,9 @@ const enUS: Record<string, string> = {
   revenuePageLead: 'Revenue by day and by event from tracked purchase events.',
   performance: 'Performance',
   performancePageLead: 'Average Core Web Vitals (LCP, INP, CLS, FCP, TTFB) from tracked page loads.',
+  performanceEvents: 'Performance events',
+  performancePartialHint:
+    'Some metrics are missing in this period. Older tracker versions only recorded INP reliably; redeploy the ingest worker and wait for new visits. Each metric is averaged only over events where that value was captured.',
   revenueEvent: 'Event',
   revenueCurrency: 'Currency',
   revenueTotal: 'Total',
@@ -1469,6 +1472,9 @@ const zhCN: Partial<Record<string, string>> = {
   revenuePageLead: '按日与按事件统计追踪到的收入事件。',
   performance: '性能',
   performancePageLead: '追踪页面加载的平均核心 Web 指标（LCP、INP、CLS、FCP、TTFB）。',
+  performanceEvents: '性能事件数',
+  performancePartialHint:
+    '部分指标在本时段内暂无数据。旧版 tracker 仅可靠采集 INP；请重新部署 ingest worker 并等待新访问进入。各指标仅在对应字段有值的事件上单独求平均。',
   revenueEvent: '事件',
   revenueCurrency: '货币',
   revenueTotal: '合计',

@@ -17,6 +17,11 @@ interface PerformanceReport {
   fcp: number | null;
   ttfb: number | null;
   samples: number;
+  lcpSamples?: number;
+  inpSamples?: number;
+  clsSamples?: number;
+  fcpSamples?: number;
+  ttfbSamples?: number;
 }
 
 function formatMs(value: number | null | undefined) {
@@ -32,17 +37,24 @@ function formatCls(value: number | null | undefined) {
 function VitalCard({
   label,
   value,
+  samples,
   loading,
   primary,
 }: {
   label: string;
   value: string;
+  samples?: number;
   loading?: boolean;
   primary?: boolean;
 }) {
   return (
     <div className={`stat-card${primary ? ' stat-card-primary' : ''}`}>
-      <div className="stat-label">{label}</div>
+      <div className="stat-label">
+        {label}
+        {samples != null && !loading ? (
+          <span className="text-muted text-[0.78rem] font-normal"> ({samples})</span>
+        ) : null}
+      </div>
       {loading ? (
         <Skeleton className="mt-[0.65rem] h-7 w-full" />
       ) : (
@@ -73,6 +85,16 @@ export default function PerformancePage() {
   const data = performanceQuery.data;
   const hasData = Boolean(data && data.samples > 0);
   const loading = performanceQuery.isLoading;
+  const hasPartialData =
+    hasData &&
+    Boolean(
+      data &&
+        (data.lcp == null ||
+          data.inp == null ||
+          data.cls == null ||
+          data.fcp == null ||
+          data.ttfb == null),
+    );
 
   return (
     <div className="page page-performance">
@@ -91,19 +113,44 @@ export default function PerformancePage() {
           <VitalCard
             label="LCP"
             value={formatMs(data?.lcp)}
+            samples={data?.lcpSamples}
             loading={loading}
             primary
           />
-          <VitalCard label="INP" value={formatMs(data?.inp)} loading={loading} />
-          <VitalCard label="CLS" value={formatCls(data?.cls)} loading={loading} />
-          <VitalCard label="FCP" value={formatMs(data?.fcp)} loading={loading} />
-          <VitalCard label="TTFB" value={formatMs(data?.ttfb)} loading={loading} />
           <VitalCard
-            label={t('samples')}
+            label="INP"
+            value={formatMs(data?.inp)}
+            samples={data?.inpSamples}
+            loading={loading}
+          />
+          <VitalCard
+            label="CLS"
+            value={formatCls(data?.cls)}
+            samples={data?.clsSamples}
+            loading={loading}
+          />
+          <VitalCard
+            label="FCP"
+            value={formatMs(data?.fcp)}
+            samples={data?.fcpSamples}
+            loading={loading}
+          />
+          <VitalCard
+            label="TTFB"
+            value={formatMs(data?.ttfb)}
+            samples={data?.ttfbSamples}
+            loading={loading}
+          />
+          <VitalCard
+            label={t('performanceEvents')}
             value={loading ? '—' : String(data?.samples ?? 0)}
             loading={loading}
           />
         </div>
+
+        {!loading && hasPartialData ? (
+          <p className="section-lead text-muted">{t('performancePartialHint')}</p>
+        ) : null}
 
         {!loading && !hasData ? (
           <div className="panel empty-state-rich">

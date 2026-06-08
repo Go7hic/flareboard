@@ -1,6 +1,7 @@
 import { type MouseEvent, type ReactNode, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { BrandLogo } from '../BrandLogo';
+import { LanguageSelector } from '../LanguageSelector';
 import { ThemeToggle } from '../ThemeToggle';
 import { Button } from '../ui/button';
 import { api, getToken } from '../../lib/api';
@@ -128,6 +129,7 @@ export function LandingChrome({ children, activeNav = 'home' }: LandingChromePro
             ))}
           </nav>
           <div className="landing-nav-actions shell-nav-end">
+            <LanguageSelector />
             <ThemeToggle />
             {isLoggedIn ? (
               <Button asChild variant="primary" size="sm">
@@ -157,7 +159,7 @@ export function LandingChrome({ children, activeNav = 'home' }: LandingChromePro
             <Link to="/login">{t('signIn')}</Link>
             <Link to={startHref}>{t('landingGetStarted')}</Link>
             <a href={FLAREBOARD_GITHUB} target="_blank" rel="noopener noreferrer">
-              GitHub
+              {t('landingFooterGithub')}
             </a>
             <a href={FLAREBOARD_README} target="_blank" rel="noopener noreferrer">
               {t('landingNavDocs')}

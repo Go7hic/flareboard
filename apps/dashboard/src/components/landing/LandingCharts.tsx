@@ -9,6 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { t } from '../../lib/i18n';
 import { useChartColors } from '../../lib/useChartColors';
 
 export const DEMO_PAGEVIEWS = [
@@ -33,12 +34,6 @@ export const DEMO_REFERRERS = [
   { name: 'news.ycombinator.com', pct: 18 },
   { name: 'github.com', pct: 14 },
   { name: 'Direct', pct: 26 },
-];
-
-const HERO_STATS = [
-  { label: 'Pageviews', value: '12,506', primary: true },
-  { label: 'Visitors', value: '3,842', primary: false },
-  { label: 'Bounce rate', value: '38%', primary: false },
 ];
 
 function chartTooltipStyle(chartColors: ReturnType<typeof useChartColors>) {
@@ -97,6 +92,7 @@ function LandingBarChart({
   barColor: string;
 }) {
   const chartColors = useChartColors();
+  const viewsLabel = t('landingChartTooltipViews');
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} layout="vertical" margin={{ top: 0, right: 8, left: 4, bottom: 0 }}>
@@ -111,7 +107,7 @@ function LandingBarChart({
           tickLine={false}
           axisLine={false}
         />
-        <Tooltip contentStyle={chartTooltipStyle(chartColors)} formatter={(v) => [Number(v).toLocaleString(), 'Views']} />
+        <Tooltip contentStyle={chartTooltipStyle(chartColors)} formatter={(v) => [Number(v).toLocaleString(), viewsLabel]} />
         <Bar
           dataKey="views"
           fill={barColor}
@@ -127,9 +123,14 @@ function LandingBarChart({
 
 export function HeroDashboardPreview() {
   const chartColors = useChartColors();
+  const heroStats = [
+    { labelKey: 'pageviews', value: '12,506', primary: true },
+    { labelKey: 'visitors', value: '3,842', primary: false },
+    { labelKey: 'bounceRate', value: '38%', primary: false },
+  ];
 
   return (
-    <div className="landing-hero-dash" aria-label="Preview of Flareboard analytics dashboard">
+    <div className="landing-hero-dash" aria-label={t('landingHeroDashPreview')}>
       <div className="landing-hero-dash-chrome">
         <span className="landing-hero-dash-traffic" aria-hidden>
           <span className="landing-hero-dash-dot" />
@@ -137,38 +138,38 @@ export function HeroDashboardPreview() {
           <span className="landing-hero-dash-dot" />
         </span>
         <span className="landing-hero-dash-domain">docs.example.com</span>
-        <span className="badge badge-accent landing-hero-dash-live">Live</span>
+        <span className="badge badge-accent landing-hero-dash-live">{t('landingHeroLive')}</span>
       </div>
       <div className="landing-hero-dash-stats">
-        {HERO_STATS.map((s) => (
-          <div key={s.label} className={`landing-hero-dash-stat${s.primary ? ' landing-hero-dash-stat-primary' : ''}`}>
-            <span className="landing-hero-dash-stat-label">{s.label}</span>
+        {heroStats.map((s) => (
+          <div key={s.labelKey} className={`landing-hero-dash-stat${s.primary ? ' landing-hero-dash-stat-primary' : ''}`}>
+            <span className="landing-hero-dash-stat-label">{t(s.labelKey)}</span>
             <span className="landing-hero-dash-stat-value">{s.value}</span>
           </div>
         ))}
       </div>
       <div className="landing-hero-dash-charts">
         <div className="landing-hero-dash-panel">
-          <p className="landing-hero-dash-panel-title">Pageviews · 7 days</p>
+          <p className="landing-hero-dash-panel-title">{t('landingHeroPageviews7d')}</p>
           <div className="landing-hero-dash-chart">
             <LandingLineChart data={DEMO_PAGEVIEWS} height={108} compact />
           </div>
         </div>
         <div className="landing-hero-dash-panel">
-          <p className="landing-hero-dash-panel-title">Top pages</p>
+          <p className="landing-hero-dash-panel-title">{t('landingHeroTopPages')}</p>
           <div className="landing-hero-dash-chart landing-hero-dash-chart-bar">
             <LandingBarChart data={DEMO_TOP_PAGES} height={108} barColor={chartColors.accent} />
           </div>
         </div>
       </div>
       <p className="landing-hero-dash-foot" aria-hidden>
-        <span>Ingest</span>
+        <span>{t('landingPipelineIngest')}</span>
         <span aria-hidden>→</span>
-        <span>Buffer</span>
+        <span>{t('landingPipelineBuffer')}</span>
         <span aria-hidden>→</span>
-        <span>Store</span>
+        <span>{t('landingPipelineStore')}</span>
         <span aria-hidden>→</span>
-        <span className="landing-hero-dash-foot-accent">Dashboard</span>
+        <span className="landing-hero-dash-foot-accent">{t('landingPipelineDashboard')}</span>
       </p>
     </div>
   );
@@ -201,58 +202,55 @@ export function DataClaritySection() {
     >
       <div className="landing-data-intro">
         <h2 id="data-clarity-title" className="landing-section-title">
-          See your data clearly
+          {t('landingDataTitle')}
         </h2>
-        <p className="landing-section-lead">
-          Pageviews, referrers, and top paths in one operator view — the same charts you get after
-          sign-in, without a third-party analytics UI.
-        </p>
+        <p className="landing-section-lead">{t('landingDataLead')}</p>
       </div>
       <div className="landing-data-bento">
         <div className="landing-data-cell landing-data-cell-stat landing-data-cell-stat-wide">
-          <span className="landing-data-stat-label">Pageviews (7d)</span>
+          <span className="landing-data-stat-label">{t('landingDataStatPageviews7d')}</span>
           <span className="landing-data-stat-value">12,506</span>
-          <span className="landing-data-stat-delta landing-data-stat-up">+18% vs prior week</span>
+          <span className="landing-data-stat-delta landing-data-stat-up">{t('landingDataStatDelta')}</span>
         </div>
         <div className="landing-data-cell landing-data-cell-stat">
-          <span className="landing-data-stat-label">Visitors</span>
+          <span className="landing-data-stat-label">{t('visitors')}</span>
           <span className="landing-data-stat-value">3,842</span>
         </div>
         <div className="landing-data-cell landing-data-cell-stat">
-          <span className="landing-data-stat-label">Avg. session</span>
+          <span className="landing-data-stat-label">{t('landingDataStatAvgSession')}</span>
           <span className="landing-data-stat-value">2m 14s</span>
         </div>
         <div className="landing-data-cell landing-data-cell-stat landing-data-cell-stat-cf">
-          <span className="landing-data-stat-label">Edge ingest</span>
-          <span className="landing-data-stat-value landing-data-stat-mono">Active</span>
+          <span className="landing-data-stat-label">{t('landingPipelineIngest')}</span>
+          <span className="landing-data-stat-value landing-data-stat-mono">{t('landingDataStatActive')}</span>
         </div>
 
         <article className="landing-data-cell landing-data-cell-line panel">
-          <h3 className="landing-data-panel-title">Pageviews over time</h3>
+          <h3 className="landing-data-panel-title">{t('pageviewsOverTime')}</h3>
           <div className="landing-data-chart landing-data-chart-tall">
             <LandingLineChart data={DEMO_PAGEVIEWS} height={220} />
           </div>
         </article>
 
         <article className="landing-data-cell landing-data-cell-bar panel">
-          <h3 className="landing-data-panel-title">Top pages</h3>
+          <h3 className="landing-data-panel-title">{t('landingHeroTopPages')}</h3>
           <div className="landing-data-chart landing-data-chart-tall">
             <LandingBarChart data={DEMO_TOP_PAGES} height={220} barColor={chartColors.accent} />
           </div>
         </article>
 
         <article className="landing-data-cell landing-data-cell-referrers panel">
-          <h3 className="landing-data-panel-title">Top referrers</h3>
+          <h3 className="landing-data-panel-title">{t('landingDataReferrers')}</h3>
           <ReferrerBars />
         </article>
 
         <article className="landing-data-cell landing-data-cell-pages panel">
-          <h3 className="landing-data-panel-title">Traffic by path</h3>
+          <h3 className="landing-data-panel-title">{t('landingDataTrafficByPath')}</h3>
           <table className="landing-data-table">
             <thead>
               <tr>
-                <th scope="col">Path</th>
-                <th scope="col">Views</th>
+                <th scope="col">{t('landingDataTablePath')}</th>
+                <th scope="col">{t('landingDataTableViews')}</th>
               </tr>
             </thead>
             <tbody>

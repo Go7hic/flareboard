@@ -98,6 +98,10 @@
   --chart-line: #0d9488;
   --chart-tooltip-bg: #ffffff;
 
+  --map-tooltip-bg: #1a1f2b;
+  --map-tooltip-text: #f8fafc;
+  --map-tooltip-border: rgba(255, 255, 255, 0.1);
+
   --cf-orange: #e85d04;
   --cf-orange-muted: rgba(232, 93, 4, 0.12);
 
@@ -2611,12 +2615,38 @@ code {
   opacity: 0.65;
 }
 
-.realtime-map-wrap {
+.realtime-map-wrap,
+.country-map-wrap {
   position: relative;
   width: 100%;
+}
+
+.realtime-map-wrap {
   background: var(--bg-subtle);
   border-top: 1px solid var(--border-subtle);
   border-bottom: 1px solid var(--border-subtle);
+}
+
+.map-marker-hit {
+  cursor: pointer;
+}
+
+.map-tooltip {
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 8px));
+  padding: 0.35rem 0.55rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  color: var(--map-tooltip-text);
+  background: var(--map-tooltip-bg);
+  border: 1px solid var(--map-tooltip-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 .realtime-map-skeleton {

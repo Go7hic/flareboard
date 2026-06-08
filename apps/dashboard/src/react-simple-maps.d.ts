@@ -29,7 +29,10 @@ declare module 'react-simple-maps' {
     fill?: string;
     stroke?: string;
     strokeWidth?: number;
-    style?: Record<string, { outline?: string; fill?: string; opacity?: number }>;
+    style?: Record<string, { outline?: string; fill?: string; opacity?: number; cursor?: string }>;
+    onMouseEnter?: (event: React.MouseEvent<SVGPathElement>) => void;
+    onMouseMove?: (event: React.MouseEvent<SVGPathElement>) => void;
+    onMouseLeave?: (event: React.MouseEvent<SVGPathElement>) => void;
   }
 
   export interface MarkerProps {

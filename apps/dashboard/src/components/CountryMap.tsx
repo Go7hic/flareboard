@@ -1,4 +1,7 @@
+import { useRef, useState } from 'react';
 import { ComposableMap, Geographies, Geography } from 'react-simple-maps';
+import { getCountryLabel } from '../lib/map-format';
+import { MapTooltip } from './MapTooltip';
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
@@ -68,13 +71,26 @@ export interface CountryMapProps {
   accent?: string;
 }
 
+type TooltipState = {
+  label: string;
+  value: number;
+  x: number;
+  y: number;
+};
+
 export function CountryMap({ rows, accent = '#6366f1' }: CountryMapProps) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+
   const max = Math.max(1, ...rows.map((r) => r.y));
   const byGeoId = new Map<string, number>();
+  const codeByGeoId = new Map<string, string>();
 
   for (const row of rows) {
     const geoId = countryCodeToGeoId(row.x);
-    if (geoId) byGeoId.set(geoId, row.y);
+    if (!geoId) continue;
+    byGeoId.set(geoId, row.y);
+    codeByGeoId.set(geoId, row.x.toUpperCase());
   }
 
   function fillForGeoId(geoId: string) {
@@ -84,13 +100,34 @@ export function CountryMap({ rows, accent = '#6366f1' }: CountryMapProps) {
     return `color-mix(in srgb, ${accent} ${Math.round(intensity * 100)}%, transparent)`;
   }
 
+  function setTooltipFromEvent(label: string, value: number, clientX: number, clientY: number) {
+    const rect = wrapRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setTooltip({
+      label,
+      value,
+      x: clientX - rect.left,
+      y: clientY - rect.top,
+    });
+  }
+
+  function clearTooltip() {
+    setTooltip(null);
+  }
+
   return (
-    <div className="country-map-wrap">
+    <div ref={wrapRef} className="country-map-wrap" onMouseLeave={clearTooltip}>
       <ComposableMap projectionConfig={{ scale: 140 }} width={800} height={400} style={{ width: '100%', height: 'auto' }}>
         <Geographies geography={GEO_URL}>
           {({ geographies }) =>
             geographies.map((geo) => {
               const geoId = String(geo.id);
+              const count = byGeoId.get(geoId);
+              const code = codeByGeoId.get(geoId);
+              const name = code
+                ? getCountryLabel(code)
+                : ((geo.properties as { name?: string } | undefined)?.name ?? geoId);
+
               return (
                 <Geography
                   key={geo.rsmKey}
@@ -100,15 +137,34 @@ export function CountryMap({ rows, accent = '#6366f1' }: CountryMapProps) {
                   strokeWidth={0.4}
                   style={{
                     default: { outline: 'none' },
-                    hover: { outline: 'none', fill: accent, opacity: 0.85 },
+                    hover: {
+                      outline: 'none',
+                      fill: count ? accent : fillForGeoId(geoId),
+                      opacity: count ? 0.85 : 1,
+                      cursor: count ? 'pointer' : 'default',
+                    },
                     pressed: { outline: 'none' },
                   }}
+                  onMouseEnter={
+                    count
+                      ? (e) => setTooltipFromEvent(name, count, e.clientX, e.clientY)
+                      : undefined
+                  }
+                  onMouseMove={
+                    count
+                      ? (e) => setTooltipFromEvent(name, count, e.clientX, e.clientY)
+                      : undefined
+                  }
+                  onMouseLeave={count ? clearTooltip : undefined}
                 />
               );
             })
           }
         </Geographies>
       </ComposableMap>
+      {tooltip ? (
+        <MapTooltip label={tooltip.label} value={tooltip.value} x={tooltip.x} y={tooltip.y} />
+      ) : null}
     </div>
   );
 }

@@ -1,13 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Pencil } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CollapsibleSection } from '../components/CollapsibleSection';
 import { PageHeader } from '../components/PageHeader';
+import { WebsiteFormDialog } from '../components/WebsiteFormDialog';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { api, type Website } from '../lib/api';
 import { t } from '../lib/i18n';
+
+function formatCreatedAt(value?: string | number) {
+  if (value == null) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
 
 function AddWebsiteForm({
   onSuccess,
@@ -68,6 +77,7 @@ function AddWebsiteForm({
 export default function Websites() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [editingSite, setEditingSite] = useState<Website | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['websites'],
@@ -120,17 +130,45 @@ export default function Websites() {
         <ul className="list-plain site-grid">
           {sites.map((site) => (
             <li key={site.id}>
-              <Link to={`/websites/${site.id}`} className="panel list-item-interactive site-card">
-                <span className="site-card-arrow" aria-hidden>
-                  →
-                </span>
-                <span className="site-card-name">{site.name}</span>
-                {site.domain ? <span className="site-card-domain">{site.domain}</span> : null}
-              </Link>
+              <article className="panel site-card">
+                <div className="site-card-header">
+                  <Link to={`/websites/${site.id}`} className="site-card-link">
+                    <span className="site-card-name">{site.name}</span>
+                    {site.domain ? <span className="site-card-domain">{site.domain}</span> : null}
+                  </Link>
+                  <div className="site-card-actions">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="site-card-edit"
+                      onClick={() => setEditingSite(site)}
+                      aria-label={t('editWebsite')}
+                      title={t('editWebsite')}
+                    >
+                      <Pencil size={14} strokeWidth={2} aria-hidden />
+                    </Button>
+                    <Link to={`/websites/${site.id}`} className="site-card-open" aria-hidden>
+                      →
+                    </Link>
+                  </div>
+                </div>
+                {site.createdAt != null ? (
+                  <p className="site-card-meta text-muted">
+                    {t('segmentCreated')}: {formatCreatedAt(site.createdAt)}
+                  </p>
+                ) : null}
+              </article>
             </li>
           ))}
         </ul>
       </section>
+
+      <WebsiteFormDialog
+        open={editingSite != null}
+        website={editingSite}
+        onClose={() => setEditingSite(null)}
+      />
     </div>
   );
 }

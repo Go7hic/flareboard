@@ -2,6 +2,7 @@ import { WebsitePageShell } from '../components/WebsitePageShell';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';
 import { GoalsPanel } from '../components/GoalsPanel';
 import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
+import { t } from '../lib/i18n';
 
 export default function WebsiteGoalsPage() {
   const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl } =
@@ -12,13 +13,16 @@ export default function WebsiteGoalsPage() {
       <WebsitePageShell
         websiteId={websiteId}
         pageActions={
-          <WebsiteReportControls
-            range={range}
-            onRangeChange={setRange}
-            segmentId={segmentId}
-            onSegmentChange={setSegmentId}
-            segments={segments}
-          />
+          <div className="journey-page-bar">
+            <p className="journey-page-hint">{t('goalLead')}</p>
+            <WebsiteReportControls
+              range={range}
+              onRangeChange={setRange}
+              segmentId={segmentId}
+              onSegmentChange={setSegmentId}
+              segments={segments}
+            />
+          </div>
         }
       />
 

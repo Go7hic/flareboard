@@ -43,15 +43,7 @@ export function AppSidebar({
         aria-label={isWebsiteContext ? t('websiteNav') : 'Main'}
       >
         {isWebsiteContext ? (
-          <>
-            <Link to="/websites" className="sidebar-back" onClick={onNavigate}>
-              <span className="sidebar-back-icon" aria-hidden>
-                ←
-              </span>
-              {t('back')}
-            </Link>
-            <WebsiteSidebar onNavigate={onNavigate} />
-          </>
+          <WebsiteSidebar onNavigate={onNavigate} />
         ) : (
           items.map(({ to, labelKey, icon, ...rest }) => (
             <NavLink

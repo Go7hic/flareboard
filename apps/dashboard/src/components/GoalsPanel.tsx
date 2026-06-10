@@ -166,8 +166,6 @@ export function GoalsPanel({
 
   return (
     <div className="goals-layout">
-      <p className="section-lead goals-page-lead">{t('goalLead')}</p>
-
       <section className="analytics-hero-stats goals-stats-grid section-gap">
         {loading ? (
           <>

@@ -194,7 +194,8 @@ export function RealtimeBreakdown({
     { id: 'events', label: t('realtimeFilterEvents') },
   ];
 
-  const hasChartData = chartData.some((b) => b.visitors > 0 || b.pageviews > 0);
+  const visitorBarColor = chartColors.accent;
+  const pageviewBarColor = `color-mix(in srgb, ${chartColors.accent} 50%, white)`;
 
   return (
     <div className="realtime-breakdown section-gap">
@@ -221,65 +222,60 @@ export function RealtimeBreakdown({
         <header className="realtime-rank-head">
           <h3 className="realtime-rank-title">{t('realtimeTrend30m')}</h3>
         </header>
-        {hasChartData ? (
-          <div className="realtime-chart-wrap">
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  tick={{ fill: chartColors.muted, fontSize: 11 }}
-                  tickLine={false}
-                  axisLine={{ stroke: chartColors.border }}
-                  interval="preserveStartEnd"
-                  minTickGap={24}
-                />
-                <YAxis
-                  allowDecimals={false}
-                  tick={{ fill: chartColors.muted, fontSize: 11 }}
-                  tickLine={false}
-                  axisLine={false}
-                  width={32}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: chartColors.panel,
-                    border: `1px solid ${chartColors.border}`,
-                    borderRadius: 'var(--radius-sm)',
-                    fontSize: '0.8125rem',
-                  }}
-                  labelStyle={{ color: chartColors.text }}
-                />
-                <Legend
-                  verticalAlign="bottom"
-                  height={28}
-                  iconType="circle"
-                  iconSize={8}
-                  wrapperStyle={{ fontSize: '0.8125rem', color: chartColors.muted }}
-                />
-                <Bar
-                  dataKey="visitors"
-                  name={t('realtimeChartLegendVisitors')}
-                  stackId="traffic"
-                  fill={chartColors.accent}
-                  radius={[0, 0, 0, 0]}
-                  maxBarSize={28}
-                />
-                <Bar
-                  dataKey="pageviews"
-                  name={t('realtimeChartLegendViews')}
-                  stackId="traffic"
-                  fill={chartColors.accent}
-                  fillOpacity={0.35}
-                  radius={[2, 2, 0, 0]}
-                  maxBarSize={28}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        ) : (
-          <p className="text-muted realtime-chart-empty">{t('realtimeNoActivity')}</p>
-        )}
+        <div className="realtime-chart-wrap">
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" vertical={false} />
+              <XAxis
+                dataKey="label"
+                tick={{ fill: chartColors.muted, fontSize: 11 }}
+                tickLine={false}
+                axisLine={{ stroke: chartColors.border }}
+                interval="preserveStartEnd"
+                minTickGap={24}
+              />
+              <YAxis
+                allowDecimals={false}
+                tick={{ fill: chartColors.muted, fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+                width={32}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: chartColors.panel,
+                  border: `1px solid ${chartColors.border}`,
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '0.8125rem',
+                }}
+                labelStyle={{ color: chartColors.text }}
+              />
+              <Legend
+                verticalAlign="bottom"
+                height={28}
+                iconType="circle"
+                iconSize={8}
+                wrapperStyle={{ fontSize: '0.8125rem', color: chartColors.muted }}
+              />
+              <Bar
+                dataKey="visitors"
+                name={t('realtimeChartLegendVisitors')}
+                stackId="traffic"
+                fill={visitorBarColor}
+                radius={[0, 0, 0, 0]}
+                maxBarSize={28}
+              />
+              <Bar
+                dataKey="pageviews"
+                name={t('realtimeChartLegendViews')}
+                stackId="traffic"
+                fill={pageviewBarColor}
+                radius={[2, 2, 0, 0]}
+                maxBarSize={28}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </section>
 
       <section className="panel realtime-activity-panel">

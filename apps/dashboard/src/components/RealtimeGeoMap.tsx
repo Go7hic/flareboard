@@ -1,33 +1,41 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Globe, { type GlobeRef } from 'react-globe.gl';
+import { geoCentroid } from 'd3-geo';
 import { AmbientLight, DirectionalLight } from 'three';
+import type { Feature, Geometry } from 'geojson';
 import { ComposableMap, Geographies, Geography, Marker } from 'react-simple-maps';
 import type { RealtimeSession } from '../lib/api';
 import { RealtimeGlobeOverlay } from './RealtimeGlobeOverlay';
 import { getCountryCentroid, jitterCoords } from '../lib/country-centroids';
-import { GLOBE_CITY_LABELS, GLOBE_COUNTRY_CODES } from '../lib/globe-map-labels';
-import { getCountryLabel, getCountryLabelEn } from '../lib/map-format';
+import { buildGlobeLabels } from '../lib/globe-labels';
+import { loadAdminRegions, type AdminRegionLabel } from '../lib/globe-admin-regions';
+import {
+  enableGlobePan,
+  showAdminBoundaries,
+  zoomTierFromAltitude,
+  angularDistanceDeg,
+  maxLabelSpreadDeg,
+  type GlobePov,
+  type GlobeZoomTier,
+} from '../lib/globe-zoom-levels';
+import {
+  GLOBE_ATMOSPHERE_ALTITUDE,
+  GLOBE_ATMOSPHERE_COLOR,
+  GLOBE_CANVAS_BG,
+  GLOBE_CITY_LABEL_COLOR,
+  GLOBE_COUNTRY_LABEL_COLOR,
+  GLOBE_STARFIELD_URL,
+  useCartographicEarthTexture,
+  useGlobeLabelFont,
+} from '../lib/globe-visual-config';
+import { getCountryLabel } from '../lib/map-format';
 import { t } from '../lib/i18n';
 import { MapTooltip } from './MapTooltip';
+import { isMapLibreGlobeEnabled } from '../lib/maplibre-config';
+import { RealtimeMapLibreMap } from './RealtimeMapLibreMap';
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
-/** Light daytime earth + subtle starfield (three-globe examples, no API key). */
-const EARTH_TEXTURE_URL =
-  'https://unpkg.com/three-globe@2.38.0/example/img/earth-day.jpg';
-const GLOBE_STARFIELD_URL =
-  'https://unpkg.com/three-globe@2.38.0/example/img/night-sky.png';
-
-const COUNTRY_BORDERS_URL =
-  'https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_110m_admin_0_countries.geojson';
-
-/** Dark canvas behind globe — bright cartographic surface pops on space-like bg. */
-const GLOBE_CANVAS_BG = '#0a0d12';
-
-/** White labels read on the day earth texture; dark gray was ~2px and invisible at default zoom. */
-const GLOBE_CITY_LABEL_COLOR = 'rgba(255, 255, 255, 0.95)';
-const GLOBE_COUNTRY_LABEL_COLOR = 'rgba(255, 255, 255, 0.78)';
-const GLOBE_COUNTRY_LABEL_SIZE = 0.95;
 /** Camera distance in globe-radius units — lower = closer / larger globe. */
 const GLOBE_CAMERA_ALTITUDE = 1.32;
 
@@ -58,14 +66,23 @@ type GlobeLabel = {
   includeDot: boolean;
 };
 
-type CountryFeature = {
-  type: string;
-  geometry: {
-    type: string;
-    coordinates: number[] | number[][] | number[][][];
-  };
-  properties?: Record<string, unknown>;
-};
+const GLOBE_ADMIN_STROKE = 'rgba(190, 88, 72, 0.42)';
+const INITIAL_POV: GlobePov = { lat: 25, lng: 10, altitude: GLOBE_CAMERA_ALTITUDE };
+
+function adminFeaturesInView(
+  features: Feature<Geometry>[],
+  pov: GlobePov,
+  spreadDeg: number,
+): Feature<Geometry>[] {
+  return features.filter((feature) => {
+    try {
+      const [lng, lat] = geoCentroid(feature);
+      return angularDistanceDeg(lat, lng, pov.lat, pov.lng) <= spreadDeg;
+    } catch {
+      return false;
+    }
+  });
+}
 
 type TooltipState = {
   country: string;
@@ -256,10 +273,12 @@ function tuneGlobeMaterial(scene: { traverse: (cb: (obj: unknown) => void) => vo
     material.bumpScale = 0;
     if ('roughness' in material) material.roughness = 1;
     if ('metalness' in material) material.metalness = 0;
+    const color = material.color as { set?: (hex: string) => void } | undefined;
+    if (color?.set) color.set('#ffffff');
     const emissive = material.emissive as { set?: (hex: string) => void } | undefined;
     if (emissive?.set) {
-      emissive.set('#1a2030');
-      material.emissiveIntensity = 0.08;
+      emissive.set('#000000');
+      material.emissiveIntensity = 0;
     }
   });
 }
@@ -270,12 +289,23 @@ function RealtimeGlobe({ sessions, visitors, siteName }: RealtimeGeoMapProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const globeRef = useRef<GlobeRef | null>(null);
   const [size, setSize] = useState({ width: 800, height: 480 });
-  const [countryBorders, setCountryBorders] = useState<CountryFeature[]>([]);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [autoRotating, setAutoRotating] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const mouseRef = useRef({ x: 0, y: 0 });
   const theme = useGlobeTheme();
+  const labelFont = useGlobeLabelFont();
+  const earthTexture = useCartographicEarthTexture();
+  const [pov, setPov] = useState<GlobePov>(INITIAL_POV);
+  const [zoomTier, setZoomTier] = useState<GlobeZoomTier>(() =>
+    zoomTierFromAltitude(GLOBE_CAMERA_ALTITUDE),
+  );
+  const [adminRegions, setAdminRegions] = useState<{
+    features: Feature<Geometry>[];
+    labels: AdminRegionLabel[];
+  } | null>(null);
+  const zoomTierRef = useRef(zoomTier);
+  zoomTierRef.current = zoomTier;
 
   useEffect(() => {
     function onFsChange() {
@@ -323,47 +353,25 @@ function RealtimeGlobe({ sessions, visitors, siteName }: RealtimeGeoMapProps) {
     return counts;
   }, [points]);
 
-  const mapLabels = useMemo<GlobeLabel[]>(() => {
-    const countryLabels: GlobeLabel[] = [];
-    for (const code of GLOBE_COUNTRY_CODES) {
-      const centroid = getCountryCentroid(code);
-      if (!centroid) continue;
-      countryLabels.push({
-        lat: centroid[1],
-        lng: centroid[0],
-        text: getCountryLabelEn(code),
-        size: GLOBE_COUNTRY_LABEL_SIZE,
-        includeDot: false,
-      });
-    }
+  const mapLabels = useMemo(
+    () => buildGlobeLabels(zoomTier, pov, adminRegions?.labels ?? []),
+    [zoomTier, pov, adminRegions?.labels],
+  );
 
-    const cityLabels: GlobeLabel[] = GLOBE_CITY_LABELS.map((city) => ({
-      lat: city.lat,
-      lng: city.lng,
-      text: city.text,
-      size: city.size,
-      includeDot: true,
-    }));
-
-    return [...countryLabels, ...cityLabels];
-  }, []);
+  const adminPolygons = useMemo(() => {
+    if (!adminRegions || !showAdminBoundaries(zoomTier)) return [];
+    const spread = maxLabelSpreadDeg(zoomTier) * 1.1;
+    return adminFeaturesInView(adminRegions.features, pov, spread);
+  }, [adminRegions, zoomTier, pov]);
 
   useEffect(() => {
-    let cancelled = false;
-    fetch(COUNTRY_BORDERS_URL)
-      .then((res) => res.json())
-      .then((geojson: { features?: CountryFeature[] }) => {
-        if (!cancelled && geojson.features) {
-          setCountryBorders(geojson.features);
-        }
-      })
+    if (!showAdminBoundaries(zoomTier) || adminRegions) return;
+    loadAdminRegions()
+      .then(setAdminRegions)
       .catch(() => {
-        /* borders are decorative; globe still works without them */
+        /* province layer optional */
       });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [zoomTier, adminRegions]);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -385,12 +393,12 @@ function RealtimeGlobe({ sessions, visitors, siteName }: RealtimeGeoMapProps) {
     return () => observer.disconnect();
   }, []);
 
-  const applyGlobeControls = useCallback((rotating: boolean) => {
+  const applyGlobeControls = useCallback((rotating: boolean, tier: GlobeZoomTier = zoomTierRef.current) => {
     const controls = globeRef.current?.controls?.();
     if (!controls) return;
     controls.autoRotate = rotating;
     controls.autoRotateSpeed = rotating ? GLOBE_AUTO_ROTATE_SPEED : 0;
-    controls.enablePan = false;
+    controls.enablePan = enableGlobePan(tier);
     controls.enableZoom = true;
   }, []);
 
@@ -398,13 +406,13 @@ function RealtimeGlobe({ sessions, visitors, siteName }: RealtimeGeoMapProps) {
     const globe = globeRef.current;
     if (!globe) return;
 
-    globe.pointOfView({ lat: 25, lng: 10, altitude: GLOBE_CAMERA_ALTITUDE }, 0);
-    applyGlobeControls(autoRotating);
+    globe.pointOfView({ lat: INITIAL_POV.lat, lng: INITIAL_POV.lng, altitude: INITIAL_POV.altitude }, 0);
+    applyGlobeControls(autoRotating, zoomTierRef.current);
 
-    const ambient = new AmbientLight(0xffffff, 1.45);
-    const key = new DirectionalLight(0xffffff, 0.38);
+    const ambient = new AmbientLight(0xffffff, 1.85);
+    const key = new DirectionalLight(0xffffff, 0.12);
     key.position.set(2.2, 1.1, 2.4);
-    const fill = new DirectionalLight(0xffffff, 0.32);
+    const fill = new DirectionalLight(0xffffff, 0.08);
     fill.position.set(-2.4, 0.4, -1.6);
 
     const globeApi = globe as GlobeRef & {
@@ -424,10 +432,17 @@ function RealtimeGlobe({ sessions, visitors, siteName }: RealtimeGeoMapProps) {
     configureGlobeScene();
   }, [configureGlobeScene]);
 
+  const onGlobeZoom = useCallback((nextPov: GlobePov) => {
+    setPov(nextPov);
+    const tier = zoomTierFromAltitude(nextPov.altitude);
+    setZoomTier(tier);
+    applyGlobeControls(autoRotating, tier);
+  }, [applyGlobeControls, autoRotating]);
+
   const toggleRotate = useCallback(() => {
     setAutoRotating((prev) => {
       const next = !prev;
-      applyGlobeControls(next);
+      applyGlobeControls(next, zoomTierRef.current);
       return next;
     });
   }, [applyGlobeControls]);
@@ -479,34 +494,36 @@ function RealtimeGlobe({ sessions, visitors, siteName }: RealtimeGeoMapProps) {
           onToggleFullscreen: toggleFullscreen,
         }}
       />
+      {earthTexture ? (
       <Globe
         ref={globeRef}
         width={size.width}
         height={size.height}
         backgroundColor={GLOBE_CANVAS_BG}
         backgroundImageUrl={GLOBE_STARFIELD_URL}
-        globeImageUrl={EARTH_TEXTURE_URL}
+        globeImageUrl={earthTexture}
         bumpImageUrl={null}
         globeCurvatureResolution={6}
         showAtmosphere
-        atmosphereColor="#5ecfff"
-        atmosphereAltitude={0.22}
+        atmosphereColor={GLOBE_ATMOSPHERE_COLOR}
+        atmosphereAltitude={GLOBE_ATMOSPHERE_ALTITUDE}
         showGraticules={false}
-        polygonsData={countryBorders}
+        polygonsData={adminPolygons}
         polygonGeoJsonGeometry="geometry"
         polygonCapColor={() => 'rgba(0, 0, 0, 0)'}
-        polygonStrokeColor={() => 'rgba(58, 68, 82, 0.62)'}
-        polygonAltitude={0.002}
+        polygonStrokeColor={() => GLOBE_ADMIN_STROKE}
+        polygonAltitude={0.001}
         labelsData={mapLabels}
         labelLat="lat"
         labelLng="lng"
         labelText="text"
         labelSize="size"
+        labelTypeFace={labelFont}
         labelColor={(label) =>
           (label as GlobeLabel).includeDot ? GLOBE_CITY_LABEL_COLOR : GLOBE_COUNTRY_LABEL_COLOR
         }
-        labelAltitude={0.018}
-        labelResolution={3}
+        labelAltitude={0.022}
+        labelResolution={4}
         labelIncludeDot={(label) => (label as GlobeLabel).includeDot}
         labelDotRadius={(label) => ((label as GlobeLabel).size / 12) * 0.35}
         labelsTransitionDuration={0}
@@ -526,6 +543,7 @@ function RealtimeGlobe({ sessions, visitors, siteName }: RealtimeGeoMapProps) {
         ringPropagationSpeed={0}
         ringRepeatPeriod={0}
         onGlobeReady={onGlobeReady}
+        onZoom={onGlobeZoom}
         onPointHover={(point: object | null) => {
           if (point) {
             const { country } = point as CountryGlobePoint;
@@ -535,13 +553,7 @@ function RealtimeGlobe({ sessions, visitors, siteName }: RealtimeGeoMapProps) {
           }
         }}
       />
-      <p className="realtime-globe-caption">
-        <span>{t('realtimeMapCountryLevel')}</span>
-        <span className="realtime-globe-caption-sep" aria-hidden>
-          ·
-        </span>
-        <span className="realtime-globe-caption-hint">{t('realtimeGlobeDragHint')}</span>
-      </p>
+      ) : null}
       {tooltip && tooltipCount > 0 ? (
         <MapTooltip
           label={getCountryLabel(tooltip.country)}
@@ -554,7 +566,7 @@ function RealtimeGlobe({ sessions, visitors, siteName }: RealtimeGeoMapProps) {
   );
 }
 
-export function RealtimeGeoMap({ sessions, visitors, siteName }: RealtimeGeoMapProps) {
+function RealtimeGeoMapFallback({ sessions, visitors, siteName }: RealtimeGeoMapProps) {
   const [webglOk] = useState(isWebGLAvailable);
   if (webglOk) {
     return (
@@ -567,6 +579,26 @@ export function RealtimeGeoMap({ sessions, visitors, siteName }: RealtimeGeoMapP
   }
   return (
     <RealtimeMap2D
+      sessions={sessions}
+      visitors={visitors}
+      siteName={siteName}
+    />
+  );
+}
+
+export function RealtimeGeoMap({ sessions, visitors, siteName }: RealtimeGeoMapProps) {
+  if (isMapLibreGlobeEnabled()) {
+    return (
+      <RealtimeMapLibreMap
+        sessions={sessions}
+        visitors={visitors}
+        siteName={siteName}
+      />
+    );
+  }
+
+  return (
+    <RealtimeGeoMapFallback
       sessions={sessions}
       visitors={visitors}
       siteName={siteName}

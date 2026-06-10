@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { PlanUpgradeBanner } from '../components/PlanUpgradeBanner';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
@@ -177,14 +178,7 @@ export default function Teams() {
       <PageHeader title={t('teams')} subtitle={t('teamsSubtitle')} />
 
       {!teamsAllowed && billingQuery.data ? (
-        <div className="panel section-gap">
-          <p className="text-muted" style={{ fontSize: '0.875rem' }}>
-            {t('teamsRequiresUpgrade')}{' '}
-            <Link to="/billing" className="shell-link">
-              {t('upgradeTo')} Cloud
-            </Link>
-          </p>
-        </div>
+        <PlanUpgradeBanner message={t('teamsRequiresUpgrade')} className="section-gap" />
       ) : null}
 
       <div className="grid-2 section-gap">

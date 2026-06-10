@@ -5,6 +5,8 @@
   // VITE_API_URL / VITE_INGEST_URL are NOT wrangler [vars] — set them in Cloudflare Workers
   // Builds → Environment variables for this worker (baked in at `vite build`). Example:
   // VITE_API_URL=https://api.flareboard.dev  VITE_INGEST_URL=https://t.flareboard.dev
+  // VITE_MAP_STYLE_URL=https://...  (optional — MapLibre style; defaults to CARTO Voyager)
+  // VITE_DISABLE_MAPLIBRE_GLOBE=true  (optional — force legacy globe.gl instead of MapLibre)
   // If unset, production infers API as https://api.<dashboard-host> (see src/lib/api-url.ts).
   "assets": {
     "directory": "./dist",

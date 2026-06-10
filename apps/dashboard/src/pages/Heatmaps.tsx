@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { PlanUpgradeBanner } from '../components/PlanUpgradeBanner';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { SegmentTabs } from '../components/SegmentTabs';
@@ -185,12 +186,7 @@ export default function HeatmapsPage() {
         <p className="section-lead">{t('heatmapsLead')}</p>
 
         {!heatmapsAllowed && billingQuery.data ? (
-          <p className="text-muted" style={{ fontSize: '0.875rem', marginBottom: '1rem' }}>
-            {t('heatmapsRequiresUpgrade')}{' '}
-            <Link to="/billing" className="shell-link">
-              {t('upgradeTo')} Cloud
-            </Link>
-          </p>
+          <PlanUpgradeBanner message={t('heatmapsRequiresUpgrade')} />
         ) : null}
 
         <fieldset

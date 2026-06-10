@@ -54,10 +54,12 @@ declare module 'react-globe.gl' {
     labelResolution?: number;
     labelIncludeDot?: boolean | ((obj: object) => boolean);
     labelDotRadius?: number | ((obj: object) => number);
+    labelTypeFace?: object;
     labelsTransitionDuration?: number;
     polygonsData?: object[];
     polygonGeoJsonGeometry?: string | ((obj: object) => GeoJsonGeometry);
     polygonCapColor?: string | ((obj: object) => string);
+    polygonSideColor?: string | ((obj: object) => string);
     polygonStrokeColor?: string | boolean | null | ((obj: object) => string);
     polygonAltitude?: number | ((obj: object) => number);
     pointsData?: object[];
@@ -77,6 +79,7 @@ declare module 'react-globe.gl' {
     ringRepeatPeriod?: number;
     onGlobeReady?: () => void;
     onPointHover?: (point: object | null, prevPoint: object | null) => void;
+    onZoom?: (pov: { lat: number; lng: number; altitude: number }) => void;
   };
 
   export default function Globe(props: GlobeProps): import('react').JSX.Element;

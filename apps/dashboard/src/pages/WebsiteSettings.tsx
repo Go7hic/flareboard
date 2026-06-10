@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { IngestSnippetPanel } from '../components/IngestSnippetPanel';
+import { PlanUpgradeBanner } from '../components/PlanUpgradeBanner';
 import {
   ReplayConfigWizard,
   replayConfigFromJson,
@@ -261,12 +262,7 @@ export default function WebsiteSettingsPage() {
                 <h2 className="section-title">{t('heatmapConfig')}</h2>
                 <p className="section-lead">{t('heatmapConfigLead')}</p>
                 {!heatmapsAllowed ? (
-                  <p className="text-muted" style={{ fontSize: '0.875rem', marginBottom: '1rem' }}>
-                    {t('heatmapsRequiresUpgrade')}{' '}
-                    <Link to="/billing" className="shell-link">
-                      {t('upgradeTo')} Cloud
-                    </Link>
-                  </p>
+                  <PlanUpgradeBanner message={t('heatmapsRequiresUpgrade')} />
                 ) : null}
                 <fieldset
                   disabled={!heatmapsAllowed}
@@ -299,12 +295,7 @@ export default function WebsiteSettingsPage() {
                 <h2 className="section-title">{t('emailReports')}</h2>
                 <p className="section-lead">{t('emailReportsLead')}</p>
                 {!emailReportsAllowed ? (
-                  <p className="text-muted" style={{ fontSize: '0.875rem', marginBottom: '1rem' }}>
-                    {t('emailReportsRequiresUpgrade')}{' '}
-                    <Link to="/billing" className="shell-link">
-                      {t('upgradeTo')} Cloud
-                    </Link>
-                  </p>
+                  <PlanUpgradeBanner message={t('emailReportsRequiresUpgrade')} />
                 ) : null}
                 <fieldset
                   disabled={!emailReportsAllowed}

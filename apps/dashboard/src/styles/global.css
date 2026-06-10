@@ -4358,17 +4358,63 @@ code {
 .realtime-globe-wrap {
   position: relative;
   width: 100%;
-  min-height: 480px;
-  /* Bright cartographic globe reads best on a dark space-like canvas in all themes. */
-  background: #0a0d12;
+  min-height: 580px;
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
-.realtime-globe-wrap canvas {
+/* globe.gl only — MapLibre needs a fixed-height canvas */
+.realtime-globe-wrap:not(.realtime-vector-map-wrap) {
+  background: #0a0a0a;
+}
+
+.realtime-globe-wrap:not(.realtime-vector-map-wrap) canvas {
   display: block;
   width: 100% !important;
   height: auto !important;
+}
+
+.realtime-vector-map-wrap {
+  height: min(72vh, 680px);
+  min-height: 580px;
+  background-color: #050810;
+}
+
+.realtime-vector-map-starfield {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--globe-starfield);
+  background-position: center;
+  background-size: cover;
+}
+
+.realtime-vector-map {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
+
+.realtime-vector-map .maplibregl-map,
+.realtime-vector-map .maplibregl-canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.realtime-vector-map .maplibregl-ctrl-bottom-right {
+  bottom: 0.75rem;
+  z-index: 4;
+}
+
+.realtime-vector-map-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  opacity: 0.35;
+  pointer-events: none;
 }
 
 /* Light card on dark globe canvas — fixed palette regardless of app theme */
@@ -4577,25 +4623,6 @@ code {
   height: 100% !important;
 }
 
-.realtime-globe-caption {
-  margin: 0;
-  padding: 0.55rem 1.35rem 0.8rem;
-  font-size: 0.8125rem;
-  line-height: 1.4;
-  text-align: center;
-  color: var(--text-muted);
-  background: var(--bg-elevated);
-}
-
-.realtime-globe-caption-sep {
-  margin: 0 0.35rem;
-  color: var(--text-faint);
-}
-
-.realtime-globe-caption-hint {
-  color: var(--text);
-}
-
 .map-marker-hit {
   cursor: pointer;
 }
@@ -4619,7 +4646,7 @@ code {
 }
 
 .realtime-map-skeleton {
-  min-height: 480px;
+  min-height: 580px;
   border-radius: var(--radius-md);
 }
 
@@ -5289,6 +5316,34 @@ code {
   font-size: 0.75rem;
   color: var(--text-muted);
   margin-top: 0.2rem;
+}
+
+/* Plan upgrade callout */
+.plan-upgrade-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-left: 3px solid var(--accent);
+  background: var(--accent-muted);
+}
+
+.plan-upgrade-banner-text {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--text);
+  flex: 1;
+  min-width: 12rem;
+}
+
+.plan-upgrade-banner-cta {
+  flex-shrink: 0;
 }
 
 /* Panel accent rail */

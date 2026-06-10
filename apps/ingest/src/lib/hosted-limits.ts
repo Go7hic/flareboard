@@ -1,8 +1,14 @@
 import { currentMonthKey, getPlan, normalizePlanId, type PlanId } from '@flareboard/shared';
 import type { Env } from '../env';
 
+const USAGE_KV_TTL_SEC = 60 * 60 * 24 * 40;
+
 function isHostedMode(env: Env): boolean {
   return env.HOSTED_MODE === 'true';
+}
+
+function usageKey(userId: string, monthKey: string): string {
+  return `usage:${userId}:${monthKey}`;
 }
 
 async function getWebsiteOwnerId(env: Env, websiteId: string): Promise<string | null> {
@@ -38,14 +44,17 @@ async function getPlanIdForUser(env: Env, userId: string): Promise<PlanId> {
 
 async function getMonthlyUsage(env: Env, userId: string): Promise<number> {
   const monthKey = currentMonthKey();
-  const kv = await env.CACHE.get(`usage:${userId}:${monthKey}`);
-  if (kv !== null) return parseInt(kv, 10) || 0;
-  const row = await env.DB.prepare(
-    `SELECT events_count as c FROM usage_monthly WHERE user_id = ? AND month_key = ?`,
-  )
-    .bind(userId, monthKey)
-    .first<{ c: number }>();
-  return row?.c ?? 0;
+  const [kv, row] = await Promise.all([
+    env.CACHE.get(usageKey(userId, monthKey)),
+    env.DB.prepare(
+      `SELECT events_count as c FROM usage_monthly WHERE user_id = ? AND month_key = ?`,
+    )
+      .bind(userId, monthKey)
+      .first<{ c: number }>(),
+  ]);
+  const kvCount = kv !== null ? parseInt(kv, 10) || 0 : 0;
+  const d1Count = row?.c ?? 0;
+  return Math.max(kvCount, d1Count);
 }
 
 export async function assertEventAllowed(
@@ -62,19 +71,21 @@ export async function assertEventAllowed(
   if (used >= plan.maxEventsPerMonth) {
     return { ok: false, message: 'Monthly event limit exceeded.' };
   }
+
   return { ok: true, userId };
 }
 
-export async function recordEventUsage(env: Env, userId: string, delta = 1): Promise<void> {
+/** KV counter on the ingest hot path; D1 persistence runs in the aggregator. */
+export async function recordEventUsageKv(env: Env, userId: string, delta = 1): Promise<void> {
   if (!isHostedMode(env) || !userId) return;
   const monthKey = currentMonthKey();
-  const kvKey = `usage:${userId}:${monthKey}`;
-  const used = await getMonthlyUsage(env, userId);
-  await env.CACHE.put(kvKey, String(used + delta), { expirationTtl: 60 * 60 * 24 * 40 });
-  await env.DB.prepare(
-    `INSERT INTO usage_monthly (user_id, month_key, events_count) VALUES (?, ?, ?)
-     ON CONFLICT(user_id, month_key) DO UPDATE SET events_count = events_count + excluded.events_count`,
-  )
-    .bind(userId, monthKey, delta)
-    .run();
+  const key = usageKey(userId, monthKey);
+  const current = await env.CACHE.get(key);
+  const count = current !== null ? parseInt(current, 10) || 0 : await getMonthlyUsage(env, userId);
+  await env.CACHE.put(key, String(count + delta), { expirationTtl: USAGE_KV_TTL_SEC });
+}
+
+/** @deprecated Use recordEventUsageKv on ingest; D1 writes belong in the aggregator. */
+export async function recordEventUsage(env: Env, userId: string, delta = 1): Promise<void> {
+  return recordEventUsageKv(env, userId, delta);
 }

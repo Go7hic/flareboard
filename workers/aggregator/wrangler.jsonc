@@ -33,6 +33,9 @@
   },
   "env": {
     "production": {
+      "vars": {
+        "HOSTED_MODE": "true"
+      },
       "d1_databases": [
         {
           "binding": "DB",

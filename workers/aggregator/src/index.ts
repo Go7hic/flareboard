@@ -1,11 +1,13 @@
 import { eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
-import type { QueueMessage } from '@flareboard/shared';
+import { currentMonthKey, type QueueMessage } from '@flareboard/shared';
 import { maintainRollupsForEvent } from './rollups';
 
 export interface Env {
   DB: D1Database;
   DLQ?: Queue;
+  /** When "true", billable queue messages update usage_monthly (matches ingest HOSTED_MODE). */
+  HOSTED_MODE?: string;
 }
 
 const MAX_RETRIES = 5;
@@ -213,6 +215,50 @@ async function processRevenue(
     .onConflictDoNothing();
 }
 
+async function getWebsiteOwners(
+  d1: D1Database,
+  websiteIds: string[],
+): Promise<Map<string, string>> {
+  const owners = new Map<string, string>();
+  if (!websiteIds.length) return owners;
+
+  const unique = [...new Set(websiteIds)];
+  const placeholders = unique.map(() => '?').join(',');
+  const { results } = await d1
+    .prepare(
+      `SELECT website_id, user_id FROM website WHERE website_id IN (${placeholders}) AND deleted_at IS NULL`,
+    )
+    .bind(...unique)
+    .all<{ website_id: string; user_id: string | null }>();
+
+  for (const row of results ?? []) {
+    if (row.user_id) owners.set(row.website_id, row.user_id);
+  }
+  return owners;
+}
+
+async function flushUsageToD1(d1: D1Database, usageByUser: Map<string, number>) {
+  if (!usageByUser.size) return;
+  const monthKey = currentMonthKey();
+  for (const [userId, delta] of usageByUser) {
+    if (delta <= 0) continue;
+    await d1
+      .prepare(
+        `INSERT INTO usage_monthly (user_id, month_key, events_count) VALUES (?1, ?2, ?3)
+         ON CONFLICT(user_id, month_key) DO UPDATE SET events_count = events_count + excluded.events_count`,
+      )
+      .bind(userId, monthKey, delta)
+      .run();
+  }
+}
+
+function billableWebsiteId(msg: QueueMessage): string | null {
+  if (msg.type === 'event' || msg.type === 'revenue' || msg.type === 'heatmap') {
+    return msg.data.websiteId;
+  }
+  return null;
+}
+
 async function processMessage(db: ReturnType<typeof createDb>, d1: D1Database, msg: QueueMessage) {
   if (msg.type === 'session') {
     await processSession(db, msg);
@@ -243,10 +289,29 @@ export default {
       (a, b) => MESSAGE_ORDER[a.body.type] - MESSAGE_ORDER[b.body.type],
     );
 
+    const hostedBilling = env.HOSTED_MODE === 'true';
+    const usageByUser = new Map<string, number>();
+    let owners = new Map<string, string>();
+
+    if (hostedBilling) {
+      const billableWebsiteIds = messages
+        .map((m) => billableWebsiteId(m.body))
+        .filter((id): id is string => id !== null);
+      owners = await getWebsiteOwners(env.DB, billableWebsiteIds);
+    }
+
     for (const message of messages) {
       try {
         await processMessage(db, env.DB, message.body);
         message.ack();
+
+        if (hostedBilling) {
+          const websiteId = billableWebsiteId(message.body);
+          if (websiteId) {
+            const userId = owners.get(websiteId);
+            if (userId) usageByUser.set(userId, (usageByUser.get(userId) ?? 0) + 1);
+          }
+        }
       } catch (error) {
         const attempts = message.attempts ?? 1;
         if (attempts >= MAX_RETRIES) {
@@ -274,6 +339,10 @@ export default {
           message.retry();
         }
       }
+    }
+
+    if (hostedBilling && usageByUser.size) {
+      await flushUsageToD1(env.DB, usageByUser);
     }
   },
 };

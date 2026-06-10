@@ -10,7 +10,14 @@ import { json } from './lib/response';
 
 const app = new Hono<{ Bindings: Env }>();
 
-app.use('*', cors({ origin: '*', allowHeaders: ['Content-Type', 'Authorization', 'x-flareboard-cache'] }));
+app.use(
+  '*',
+  cors({
+    origin: '*',
+    allowHeaders: ['Content-Type', 'Authorization', 'x-flareboard-cache'],
+    maxAge: 86400,
+  }),
+);
 
 app.get('/', (c) => json({ name: 'flareboard-ingest', version: '0.0.1' }));
 

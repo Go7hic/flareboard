@@ -21,7 +21,6 @@ import {
 import type { Env } from '../env';
 import {
   badRequest,
-  getClientInfo,
   getSecret as envSecret,
   json,
   safeDecodeURI,
@@ -30,8 +29,10 @@ import {
 } from '../lib/response';
 import { getWebsiteById } from '../lib/queries';
 import { bumpRealtimeVisitor } from '../lib/realtime-kv';
-import { assertEventAllowed, recordEventUsage } from '../lib/hosted-limits';
+import { assertEventAllowed, recordEventUsageKv } from '../lib/hosted-limits';
 import { checkIpRateLimit, checkRateLimit, getTrustedClientIp } from '../lib/rate-limit';
+
+const SEND_BODY_MAX_BYTES = 65_536;
 
 function isBot(userAgent: string) {
   if (!userAgent) return false;
@@ -62,34 +63,118 @@ function deviceClass(device: string): string {
   return '';
 }
 
+type ProcessSendOpts = {
+  cacheToken?: string;
+  waitUntil: (promise: Promise<void>) => void;
+};
+
+function deferWrite(waitUntil: ProcessSendOpts['waitUntil'], fn: () => Promise<void>) {
+  waitUntil(fn().catch((e) => console.error('waitUntil task failed', e)));
+}
+
+function parseSendRequest(
+  raw: unknown,
+): { body: SendBody; cacheToken?: string } | { error: string } {
+  if (!raw || typeof raw !== 'object') return { error: 'Expected JSON object' };
+  const obj = raw as Record<string, unknown>;
+  const cacheToken = typeof obj.cache === 'string' ? obj.cache : undefined;
+  const { cache: _cache, ...rest } = obj;
+  const parsed = sendSchema.safeParse(rest);
+  if (!parsed.success) {
+    return { error: parsed.error.issues.map((i) => i.message).join('; ') };
+  }
+  return { body: parsed.data, cacheToken };
+}
+
+async function parseCacheToken(
+  req: Request,
+  secret: string,
+  cacheToken?: string,
+): Promise<CacheToken | null> {
+  const token = cacheToken || req.headers.get('x-flareboard-cache');
+  if (!token) return null;
+  const result = await parseToken(token, secret);
+  return result ? (result as unknown as CacheToken) : null;
+}
+
+function applyCacheToken(
+  cache: CacheToken | null,
+  sourceId: string,
+  sessionId: string,
+): CacheToken | null {
+  if (!cache) return null;
+  if (cache.websiteId !== sourceId) {
+    console.warn(
+      JSON.stringify({
+        event: 'invalid_cache_token',
+        reason: 'website_mismatch',
+        expected: sourceId,
+        got: cache.websiteId,
+      }),
+    );
+    return null;
+  }
+  if (cache.sessionId !== sessionId) {
+    console.warn(
+      JSON.stringify({
+        event: 'invalid_cache_token',
+        reason: 'session_mismatch',
+        expected: sessionId,
+        got: cache.sessionId,
+      }),
+    );
+    return null;
+  }
+  return cache;
+}
+
+function resolveUserAgent(
+  req: Request,
+  payload: { userAgent?: string },
+): string {
+  return payload.userAgent?.trim() || req.headers.get('user-agent') || '';
+}
+
 async function processSend(
   env: Env,
   req: Request,
   body: SendBody,
   appSecret: string,
+  opts: ProcessSendOpts,
 ): Promise<Response> {
   try {
     const { type, payload } = body;
+    const userAgent =
+      type === COLLECTION_TYPE.heatmap
+        ? req.headers.get('user-agent') ?? ''
+        : resolveUserAgent(req, payload);
+    if (isBot(userAgent)) return json({ beep: 'boop' });
+
+    const defer = (fn: () => Promise<void>) => deferWrite(opts.waitUntil, fn);
 
     if (type === COLLECTION_TYPE.heatmap) {
       const websiteId = payload.website;
       const trustedIp = getTrustedClientIp(req);
-      const rl = await checkRateLimit(env, websiteId, trustedIp);
+      const [rl, quota] = await Promise.all([
+        checkRateLimit(env, websiteId, trustedIp, defer),
+        assertEventAllowed(env, websiteId),
+      ]);
       if (!rl.allowed) {
         return new Response(JSON.stringify({ message: 'Rate limit exceeded' }), {
           status: 429,
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      const quota = await assertEventAllowed(env, websiteId);
       if (!quota.ok) {
+        console.warn(
+          JSON.stringify({ event: 'quota_denied', websiteId, message: quota.message }),
+        );
         return new Response(JSON.stringify({ message: quota.message }), {
           status: 402,
           headers: { 'Content-Type': 'application/json' },
         });
       }
       const client = getClientInfoFromRequest(req, {});
-      if (isBot(client.userAgent)) return json({ beep: 'boop' });
 
       const createdAt = payload.timestamp ? new Date(payload.timestamp * 1000) : new Date();
       const base = payload.hostname ? `https://${payload.hostname}` : 'https://localhost';
@@ -113,7 +198,7 @@ async function processSend(
         },
       };
       await env.EVENT_QUEUE.send(msg);
-      if (quota.userId) await recordEventUsage(env, quota.userId, 1);
+      if (quota.userId) defer(() => recordEventUsageKv(env, quota.userId, 1));
       return json({ ok: true });
     }
 
@@ -144,19 +229,29 @@ async function processSend(
     let cache: CacheToken | null = null;
     let billingUserId = '';
     if (websiteId) {
-      const rl = await checkRateLimit(env, websiteId, trustedIp);
+      const [rl, quota, parsedCache] = await Promise.all([
+        checkRateLimit(env, websiteId, trustedIp, defer),
+        assertEventAllowed(env, websiteId),
+        parseCacheToken(req, secret, opts.cacheToken),
+      ]);
       if (!rl.allowed) {
         return new Response(JSON.stringify({ message: 'Rate limit exceeded' }), {
           status: 429,
           headers: { 'Content-Type': 'application/json' },
         });
       }
-
-      const cacheHeader = req.headers.get('x-flareboard-cache');
-      if (cacheHeader) {
-        const result = await parseToken(cacheHeader, secret);
-        if (result) cache = result as unknown as CacheToken;
+      if (!quota.ok) {
+        console.warn(
+          JSON.stringify({ event: 'quota_denied', websiteId, message: quota.message }),
+        );
+        return new Response(JSON.stringify({ message: quota.message }), {
+          status: 402,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
+      billingUserId = quota.userId;
+      cache = parsedCache;
+
       if (!cache?.websiteId) {
         const cached = await env.CACHE.get(`website:${websiteId}`);
         if (!cached) {
@@ -165,19 +260,8 @@ async function processSend(
           await env.CACHE.put(`website:${websiteId}`, '1', { expirationTtl: 3600 });
         }
       }
-
-      const quota = await assertEventAllowed(env, websiteId);
-      if (!quota.ok) {
-        return new Response(JSON.stringify({ message: quota.message }), {
-          status: 402,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      billingUserId = quota.userId;
-    }
-
-    if (isBot(client.userAgent)) {
-      return json({ beep: 'boop' });
+    } else {
+      cache = await parseCacheToken(req, secret, opts.cacheToken);
     }
 
     const createdAt = timestamp ? new Date(timestamp * 1000) : new Date();
@@ -188,6 +272,8 @@ async function processSend(
     const sessionId = id
       ? uuid(sourceId, id)
       : uuid(sourceId, client.ip, client.userAgent, sessionSalt);
+
+    cache = applyCacheToken(cache, sourceId, sessionId);
 
     let visitId = cache?.visitId || uuid(sessionId, vSalt);
     let iat = cache?.iat || now;
@@ -365,26 +451,39 @@ async function processSend(
     }
 
     if (websiteId) {
-      await bumpRealtimeVisitor(env, websiteId, sessionId, realtimeMeta);
+      defer(() => bumpRealtimeVisitor(env, websiteId, sessionId, realtimeMeta));
     }
 
-    if (messages.length === 1) {
-      await env.EVENT_QUEUE.send(messages[0]!);
-    } else if (messages.length > 1) {
-      await env.EVENT_QUEUE.sendBatch(messages.map((body) => ({ body })));
-    }
+    const queuePromise =
+      messages.length === 1
+        ? env.EVENT_QUEUE.send(messages[0]!)
+        : messages.length > 1
+          ? env.EVENT_QUEUE.sendBatch(messages.map((body) => ({ body })))
+          : Promise.resolve();
 
-    if (billingUserId && messages.length) {
-      const billable = messages.filter((m) => m.type === 'event' || m.type === 'revenue').length;
-      if (billable) await recordEventUsage(env, billingUserId, billable);
-    }
-
-    const token = await createCacheToken(
+    const tokenPromise = createCacheToken(
       { websiteId: sourceId, sessionId, visitId, iat },
       getSecret(appSecret),
     );
 
-    return json({ cache: token, sessionId, visitId });
+    if (billingUserId && messages.length) {
+      const billable = messages.filter((m) => m.type === 'event' || m.type === 'revenue').length;
+      if (billable) defer(() => recordEventUsageKv(env, billingUserId, billable));
+    }
+
+    try {
+      const [token] = await Promise.all([tokenPromise, queuePromise]);
+      return json({ cache: token, sessionId, visitId });
+    } catch (e) {
+      console.error(
+        JSON.stringify({
+          event: 'queue_send_failed',
+          websiteId: sourceId,
+          error: e instanceof Error ? e.message : String(e),
+        }),
+      );
+      throw e;
+    }
   } catch (e) {
     return serverError(e);
   }
@@ -431,10 +530,36 @@ function parseDevice(ua: string): string {
 }
 
 export async function handleSend(c: Context<{ Bindings: Env }>) {
-  const body = await c.req.json().catch(() => null);
-  const parsed = sendSchema.safeParse(body);
-  if (!parsed.success) return badRequest(parsed.error.message);
-  return processSend(c.env, c.req.raw, parsed.data, envSecret(c));
+  const contentLength = c.req.header('content-length');
+  if (contentLength && parseInt(contentLength, 10) > SEND_BODY_MAX_BYTES) {
+    return badRequest('Payload too large');
+  }
+
+  const contentType = c.req.header('content-type') ?? '';
+  let raw: unknown;
+  if (contentType.includes('application/json')) {
+    raw = await c.req.json().catch(() => null);
+  } else {
+    const text = await c.req.text().catch(() => '');
+    if (text.length > SEND_BODY_MAX_BYTES) return badRequest('Payload too large');
+    try {
+      raw = text ? JSON.parse(text) : null;
+    } catch {
+      return badRequest('Invalid JSON');
+    }
+  }
+
+  const parsed = parseSendRequest(raw);
+  if ('error' in parsed) return badRequest(parsed.error);
+
+  const waitUntil = (promise: Promise<void>) => {
+    c.executionCtx.waitUntil(promise);
+  };
+
+  return processSend(c.env, c.req.raw, parsed.body, envSecret(c), {
+    cacheToken: parsed.cacheToken,
+    waitUntil,
+  });
 }
 
 export async function handleBatch(c: Context<{ Bindings: Env }>) {
@@ -465,7 +590,10 @@ export async function handleBatch(c: Context<{ Bindings: Env }>) {
       headers.delete('content-length');
 
       const req = new Request(c.req.url, { method: 'POST', headers, body: JSON.stringify(data) });
-      const res = await processSend(c.env, req, parsed.data, envSecret(c));
+      const waitUntil = (promise: Promise<void>) => {
+        c.executionCtx.waitUntil(promise);
+      };
+      const res = await processSend(c.env, req, parsed.data, envSecret(c), { waitUntil });
       const resJson = await res.json();
       if (!res.ok) {
         errors.push({ index, response: resJson });
@@ -516,44 +644,42 @@ export function handleScript(_c: Context<{ Bindings: Env }>) {
   const script = `(function(){'use strict';
 /*
  * SPA pageviews: pushState/replaceState/popstate + hash routes (#/path).
- * Declarative events (Umami-compatible):
- *   data-flareboard-event="signup"  OR  data-umami-event="signup"
- *   data-flareboard-event-{prop}="value"  → event property (any common prop name)
- *   data-flareboard-event-tag="cta"  → optional tag
- * Dynamic DOM: MutationObserver re-scans for new/changed data-* attributes.
- * Heatmap: sample rate from data-heatmap-sample-rate or GET /api/tracker-config?website=…
- *   (website heatmapConfig.sampleRate in dashboard). Normalized 0–1000 coords server-side.
+ * Declarative events (Umami-compatible): data-flareboard-event / data-umami-event (event delegation).
+ * Heatmap: sample rate from data-heatmap-sample-rate or GET /api/tracker-config (cached per session).
+ * Sends use text/plain + cache token in body to avoid CORS preflight.
  */
-var t=window,d=document,l=location,s=sessionStorage,k='flareboard.cache',me=d.currentScript,lastUrl='',hmRate=0.1,hmOn=true,maxScroll=0,scrollKey='flareboard.scroll';
+var t=window,d=document,l=location,s=sessionStorage,k='flareboard.cache',me=d.currentScript,lastUrl='',hmRate=0.1,hmOn=true,scrollKey='flareboard.scroll',cacheReady=null,vitalsStarted=0;
 function scriptEl(){if(me)return me;return d.querySelector('script[data-website-id]')}
-function p(u,b){return fetch(u,{method:'POST',headers:{'Content-Type':'application/json','x-flareboard-cache':s.getItem(k)||''},body:JSON.stringify(b),keepalive:true})}
+function postBody(type,payload){var o={type:type,payload:payload},c=s.getItem(k);if(c)o.cache=c;return JSON.stringify(o)}
+function p(u,type,payload){return fetch(u,{method:'POST',headers:{'Content-Type':'text/plain'},body:postBody(type,payload),keepalive:true})}
 function appPath(){var h=l.hash;if(h.length>2&&h.charAt(1)==='/'){var q=h.indexOf('?');return q>=0?h.slice(1,q+1)+h.slice(q+1):h.slice(1)}return l.pathname+l.search}
 function routeKey(){return l.pathname+l.search+l.hash}
 function r(){return{width:t.innerWidth+'x'+t.innerHeight,language:navigator.language,screen:screen.width+'x'+screen.height,title:d.title,hostname:l.hostname,url:appPath(),referrer:d.referrer}}
 function ingestOrigin(){var el=scriptEl();if(el&&el.src)try{return new URL(el.src).origin}catch(_){}return l.protocol+'//'+l.host}
 function websiteId(a){var el=a||scriptEl();return el&&el.getAttribute('data-website-id')}
-function send(type,payload){return p(ingestOrigin()+'/api/send',{type:type,payload:payload}).then(function(x){return x.json()}).then(function(x){x.cache&&s.setItem(k,x.cache);x.sessionId&&s.setItem('flareboard.sid',x.sessionId);x.visitId&&s.setItem('flareboard.vid',x.visitId);return x})}
+function hmCfgKey(w){return 'flareboard.hmCfg:'+w}
+function hasCache(){return!!s.getItem(k)}
+function parseResp(res){if(!res.ok)return res.text().then(function(){throw new Error('send '+res.status)});return res.json()}
+function sendSafe(pr){return pr.catch(function(e){console.warn('[flareboard] send failed',e)})}
+function applySendResp(x){x.cache&&s.setItem(k,x.cache);x.sessionId&&s.setItem('flareboard.sid',x.sessionId);x.visitId&&s.setItem('flareboard.vid',x.visitId);return x}
+function send(type,payload){var go=function(){return p(ingestOrigin()+'/api/send',type,payload).then(parseResp).then(applySendResp)};if(hasCache())return sendSafe(go());if(!cacheReady){cacheReady=go().then(function(x){return x},function(e){cacheReady=null;throw e});return sendSafe(cacheReady)}return sendSafe(cacheReady.catch(function(){}).then(function(){return hasCache()?go():cacheReady}))}
 function trackEvent(a,extra){var w=websiteId(a);if(!w){console.warn('[flareboard] missing data-website-id');return}var o=r();o.website=w;Object.assign(o,extra||{});return send('event',o)}
 function pageview(){trackEvent(scriptEl())}
-function onRoute(){var u=routeKey();if(u!==lastUrl){lastUrl=u;maxScroll=0;pageview();collectVitals(scriptEl())}}
+function onRoute(){var u=routeKey();if(u!==lastUrl){lastUrl=u;pageview()}}
 function setupSpa(){lastUrl=routeKey();var ps=history.pushState,rs=history.replaceState;history.pushState=function(){ps.apply(history,arguments);onRoute()};history.replaceState=function(){rs.apply(history,arguments);onRoute()};t.addEventListener('popstate',onRoute);t.addEventListener('hashchange',onRoute)}
 function eventProps(el){var data={},i,a,n;for(i=0;i<el.attributes.length;i++){a=el.attributes[i];n=a.name;if(n==='data-flareboard-event'||n==='data-umami-event'||n==='data-flareboard-event-tag'||n==='data-umami-event-tag')continue;var m=n.match(/^data-(?:flareboard|umami)-event-(.+)$/);if(m)data[m[1]]=a.value}return data}
 function fireDeclEvent(el){var ev=el.getAttribute('data-flareboard-event')||el.getAttribute('data-umami-event');if(!ev)return;var data=eventProps(el),tag=el.getAttribute('data-flareboard-event-tag')||el.getAttribute('data-umami-event-tag');trackEvent(scriptEl(),{name:ev,data:Object.keys(data).length?data:undefined,tag:tag||undefined})}
 function onDeclClick(e){var el=e.target;while(el&&el!==d){if(el.getAttribute('data-flareboard-event')||el.getAttribute('data-umami-event')){fireDeclEvent(el);break}el=el.parentElement}}
-function hasDeclAttr(el){return el&&el.getAttribute&&(el.getAttribute('data-flareboard-event')||el.getAttribute('data-umami-event'))}
-function scanDecl(root){if(!root||!root.querySelectorAll)return;var nodes=root.querySelectorAll?root.querySelectorAll('[data-flareboard-event],[data-umami-event]'):[];for(var i=0;i<nodes.length;i++){var n=nodes[i];if(n._fbDecl)return;n._fbDecl=1;n.addEventListener('click',function(e){fireDeclEvent(e.currentTarget)},true)}}
-function setupDeclObserver(){scanDecl(d);try{new MutationObserver(function(muts){for(var i=0;i<muts.length;i++){var m=muts[i];if(m.type==='attributes'&&hasDeclAttr(m.target))scanDecl(m.target.parentElement||d);if(m.addedNodes)for(var j=0;j<m.addedNodes.length;j++){var n=m.addedNodes[j];if(n.nodeType===1)scanDecl(n)}}}).observe(d.body,{childList:true,subtree:true,attributes:true,attributeFilter:['data-flareboard-event','data-umami-event','data-flareboard-event-tag','data-umami-event-tag']})}catch(_){}}
 function hmSample(){return hmOn&&Math.random()<hmRate}
 function sendHeatmap(payload){var w=websiteId();if(!w)return;var o=r();o.website=w;send('heatmap',Object.assign(o,payload))}
 function onHmClick(e){if(!hmSample())return;var vw=t.innerWidth,vh=t.innerHeight;if(!vw||!vh)return;sendHeatmap({kind:'click',x:Math.round(e.clientX),y:Math.round(e.clientY),viewportWidth:vw,viewportHeight:vh})}
 function scrollDepth(){var docH=Math.max(d.body.scrollHeight,d.documentElement.scrollHeight),vh=t.innerHeight,st=t.scrollY||d.documentElement.scrollTop;return docH<=vh?100:Math.min(100,Math.round((st+vh)/docH*100))}
-function onHmScroll(){var depth=scrollDepth(),path=appPath(),key=scrollKey+':'+path,prev=parseInt(s.getItem(key)||'0',10)||0;if(depth<=prev)return;maxScroll=depth;s.setItem(key,String(depth));if(!hmSample())return;sendHeatmap({kind:'scroll',scrollDepth:depth})}
+function onHmScroll(){var depth=scrollDepth(),path=appPath(),key=scrollKey+':'+path,prev=parseInt(s.getItem(key)||'0',10)||0;if(depth<=prev)return;s.setItem(key,String(depth));if(!hmSample())return;sendHeatmap({kind:'scroll',scrollDepth:depth})}
 function setupHeatmap(){var scrollTimer;d.addEventListener('click',onHmClick,true);t.addEventListener('scroll',function(){clearTimeout(scrollTimer);scrollTimer=setTimeout(onHmScroll,400)},{passive:true})}
-function loadHmConfig(a){var el=a||scriptEl(),attr=el&&el.getAttribute('data-heatmap-sample-rate');if(attr!=null){var r=parseFloat(attr);if(!isNaN(r))hmRate=Math.min(1,Math.max(0,r))}var w=websiteId(el);if(!w)return;fetch(ingestOrigin()+'/api/tracker-config?website='+encodeURIComponent(w)).then(function(x){return x.json()}).then(function(cfg){if(cfg&&typeof cfg.heatmapSampleRate==='number')hmRate=cfg.heatmapSampleRate;if(cfg&&cfg.heatmapEnabled===false)hmOn=false}).catch(function(){})}
-function collectVitals(a){if(!t.PerformanceObserver)return;var w=websiteId(a);if(!w)return;try{var o=r();o.website=w;var m={},sent=0,clsV=0;function readTtfb(){try{var n=t.performance.getEntriesByType('navigation')[0];if(n){var s=n.activationStart||0,v=n.responseStart-s;if(v>=0&&v<6e4)return Math.round(v)}}catch(_){}}function readFcp(){try{var p=t.performance.getEntriesByType('paint'),i;for(i=0;i<p.length;i++)if(p[i].name==='first-contentful-paint')return Math.round(p[i].startTime)}catch(_){}}function readLcp(){try{var e=t.performance.getEntriesByType('largest-contentful-paint');if(e.length)return Math.round(e[e.length-1].startTime)}catch(_){}}function has(){return m.lcp!=null||m.inp!=null||m.cls!=null||m.fcp!=null||m.ttfb!=null}function flush(){if(sent)return;if(m.ttfb==null)m.ttfb=readTtfb();if(m.fcp==null)m.fcp=readFcp();if(m.lcp==null)m.lcp=readLcp();if(!has())return;sent=1;if(m.lcp!=null)o.lcp=m.lcp;if(m.inp!=null)o.inp=m.inp;if(m.cls!=null)o.cls=m.cls;if(m.fcp!=null)o.fcp=m.fcp;if(m.ttfb!=null)o.ttfb=m.ttfb;send('performance',o)}try{new PerformanceObserver(function(l){var e=l.getEntries();if(e.length)m.lcp=Math.round(e[e.length-1].startTime)}).observe({type:'largest-contentful-paint',buffered:true})}catch(_){}try{new PerformanceObserver(function(l){var e=l.getEntries(),i;for(i=0;i<e.length;i++)if(e[i].name==='first-contentful-paint')m.fcp=Math.round(e[i].startTime)}).observe({type:'paint',buffered:true})}catch(_){}try{new PerformanceObserver(function(l){var e=l.getEntries();if(e.length)m.inp=Math.round(e[e.length-1].duration)}).observe({type:'event',buffered:true,durationThreshold:40})}catch(_){}try{new PerformanceObserver(function(l){var e=l.getEntries(),i;for(i=0;i<e.length;i++){if(!e[i].hadRecentInput)clsV+=e[i].value}m.cls=Math.round(clsV*1e4)/1e4}).observe({type:'layout-shift',buffered:true})}catch(_){}m.ttfb=readTtfb();m.fcp=readFcp();setTimeout(flush,1e4);function onLeave(){flush()}d.addEventListener('visibilitychange',function(){if(d.visibilityState==='hidden')onLeave()});t.addEventListener('pagehide',onLeave)}catch(_){}}
-function init(){var a=scriptEl();if(!websiteId(a))return;loadHmConfig(a);pageview();setupSpa();d.addEventListener('click',onDeclClick,true);setupDeclObserver();setupHeatmap();var api={track:function(n,data,tag){return trackEvent(scriptEl(),{name:n,data:data||undefined,tag:tag||undefined})},identify:function(id,data){var w=websiteId();if(!w)return;return send('identify',{website:w,id:id,data:data||{}})},revenue:function(amount,currency,extra){return trackEvent(scriptEl(),Object.assign({revenue:amount,currency:currency||'USD'},extra||{}))}};t.flareboard=api}
-(function(){var a=scriptEl();if(websiteId(a))collectVitals(a)})();
-if(d.readyState==='complete')init();else t.addEventListener('load',init);
+function loadHmConfig(a){var el=a||scriptEl(),attr=el&&el.getAttribute('data-heatmap-sample-rate');if(attr!=null){var rv=parseFloat(attr);if(!isNaN(rv))hmRate=Math.min(1,Math.max(0,rv))}var w=websiteId(el);if(!w)return;var cfgKey=hmCfgKey(w),raw=s.getItem(cfgKey);if(raw){try{var c=JSON.parse(raw);if(c.exp>Date.now()){hmRate=c.rate;hmOn=c.on;return}}catch(_){}}fetch(ingestOrigin()+'/api/tracker-config?website='+encodeURIComponent(w)).then(function(x){return x.json()}).then(function(cfg){if(cfg&&typeof cfg.heatmapSampleRate==='number')hmRate=cfg.heatmapSampleRate;if(cfg&&cfg.heatmapEnabled===false)hmOn=false;s.setItem(cfgKey,JSON.stringify({rate:hmRate,on:hmOn,exp:Date.now()+36e5}))}).catch(function(){})}
+function collectVitals(a){if(vitalsStarted||!t.PerformanceObserver)return;vitalsStarted=1;var w=websiteId(a);if(!w)return;try{var o=r();o.website=w;var m={},sent=0,clsV=0,obs=[];function readTtfb(){try{var n=t.performance.getEntriesByType('navigation')[0];if(n){var st=n.activationStart||0,v=n.responseStart-st;if(v>=0&&v<6e4)return Math.round(v)}}catch(_){}}function readFcp(){try{var p=t.performance.getEntriesByType('paint'),i;for(i=0;i<p.length;i++)if(p[i].name==='first-contentful-paint')return Math.round(p[i].startTime)}catch(_){}}function readLcp(){try{var e=t.performance.getEntriesByType('largest-contentful-paint');if(e.length)return Math.round(e[e.length-1].startTime)}catch(_){}}function has(){return m.lcp!=null||m.inp!=null||m.cls!=null||m.fcp!=null||m.ttfb!=null}function cleanup(){for(var i=0;i<obs.length;i++)try{obs[i].disconnect()}catch(_){}obs=[];d.removeEventListener('visibilitychange',onVis);t.removeEventListener('pagehide',onLeave)}function flush(){if(sent)return;if(m.ttfb==null)m.ttfb=readTtfb();if(m.fcp==null)m.fcp=readFcp();if(m.lcp==null)m.lcp=readLcp();if(!has())return;sent=1;if(m.lcp!=null)o.lcp=m.lcp;if(m.inp!=null)o.inp=m.inp;if(m.cls!=null)o.cls=m.cls;if(m.fcp!=null)o.fcp=m.fcp;if(m.ttfb!=null)o.ttfb=m.ttfb;send('performance',o);cleanup()}function onVis(){if(d.visibilityState==='hidden')flush()}function onLeave(){flush()}function addObs(ob){try{obs.push(ob)}catch(_){}}try{addObs(new PerformanceObserver(function(l){var e=l.getEntries();if(e.length)m.lcp=Math.round(e[e.length-1].startTime)}));obs[obs.length-1].observe({type:'largest-contentful-paint',buffered:true})}catch(_){}try{addObs(new PerformanceObserver(function(l){var e=l.getEntries(),i;for(i=0;i<e.length;i++)if(e[i].name==='first-contentful-paint')m.fcp=Math.round(e[i].startTime)}));obs[obs.length-1].observe({type:'paint',buffered:true})}catch(_){}try{addObs(new PerformanceObserver(function(l){var e=l.getEntries();if(e.length)m.inp=Math.round(e[e.length-1].duration)}));obs[obs.length-1].observe({type:'event',buffered:true,durationThreshold:40})}catch(_){}try{addObs(new PerformanceObserver(function(l){var e=l.getEntries(),i;for(i=0;i<e.length;i++){if(!e[i].hadRecentInput)clsV+=e[i].value}m.cls=Math.round(clsV*1e4)/1e4}));obs[obs.length-1].observe({type:'layout-shift',buffered:true})}catch(_){}m.ttfb=readTtfb();m.fcp=readFcp();setTimeout(flush,1e4);d.addEventListener('visibilitychange',onVis);t.addEventListener('pagehide',onLeave)}catch(_){}}
+function init(){var a=scriptEl();if(!websiteId(a))return;loadHmConfig(a);pageview();setupSpa();d.addEventListener('click',onDeclClick,true);setupHeatmap();collectVitals(a);var api={track:function(n,data,tag){return trackEvent(scriptEl(),{name:n,data:data||undefined,tag:tag||undefined})},identify:function(id,data){var w=websiteId();if(!w)return;return send('identify',{website:w,id:id,data:data||{}})},revenue:function(amount,currency,extra){return trackEvent(scriptEl(),Object.assign({revenue:amount,currency:currency||'USD'},extra||{}))}};t.flareboard=api}
+init();
 })();`;
 
   return new Response(script, {

@@ -237,7 +237,7 @@ export async function handleOAuthCallback(c: Ctx) {
     { userId: result.user.userId, role: result.user.role },
     getAppSecret(c),
   );
-  const dest = result.returnTo ?? '/websites';
+  const dest = result.returnTo ?? '/dashboard';
   return c.redirect(
     `${dashboardBase(c)}/login?token=${encodeURIComponent(jwt)}&next=${encodeURIComponent(dest)}`,
     302,

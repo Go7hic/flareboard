@@ -8,6 +8,8 @@ import { Label } from '../components/ui/label';
 import { api, API_URL, setToken, type LoginResponse } from '../lib/api';
 import { t } from '../lib/i18n';
 
+const POST_LOGIN_PATH = '/dashboard';
+
 interface AppConfig {
   oauth?: string[];
   disableLogin?: boolean;
@@ -48,7 +50,7 @@ export default function Login() {
           });
           setToken(res.token);
           setSearchParams({}, { replace: true });
-          navigate('/websites', { replace: true });
+          navigate(POST_LOGIN_PATH, { replace: true });
         } catch (err) {
           setError(err instanceof Error ? err.message : t('requestFailed'));
           setSearchParams({}, { replace: true });
@@ -58,7 +60,7 @@ export default function Login() {
     }
 
     const token = searchParams.get('token');
-    const next = searchParams.get('next') ?? '/websites';
+    const next = searchParams.get('next') ?? POST_LOGIN_PATH;
     if (token) {
       setToken(token);
       window.flareboard?.track('login_success');
@@ -90,7 +92,7 @@ export default function Login() {
       });
       setToken(res.token);
       window.flareboard?.track('login_success');
-      navigate('/websites');
+      navigate(POST_LOGIN_PATH);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('loginFailed'));
     }
@@ -127,7 +129,7 @@ export default function Login() {
   }
 
   function oauthStart(provider: string) {
-    window.location.href = `${API_URL}/api/auth/oauth/${provider}?returnTo=${encodeURIComponent('/websites')}`;
+    window.location.href = `${API_URL}/api/auth/oauth/${provider}?returnTo=${encodeURIComponent(POST_LOGIN_PATH)}`;
   }
 
   const emailLoginUi = registrationEnabled && environment === 'production';

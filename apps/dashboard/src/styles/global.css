@@ -1023,20 +1023,36 @@ textarea {
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.website-content-back {
+.website-content-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-shrink: 0;
+}
+
+.website-content-nav-link {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  flex-shrink: 0;
+  padding: 0.15rem 0.1rem;
+  border: none;
+  background: transparent;
+  font: inherit;
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--text-muted);
   text-decoration: none;
+  cursor: pointer;
   transition: color var(--transition);
 }
 
-.website-content-back:hover {
+.website-content-nav-link:hover {
   color: var(--accent);
+}
+
+.website-content-nav-link .sidebar-link-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .website-switcher {

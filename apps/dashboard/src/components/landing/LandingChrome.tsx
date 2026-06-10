@@ -136,7 +136,7 @@ export function LandingChrome({ children, activeNav = 'home' }: LandingChromePro
             <ThemeToggle />
             {isLoggedIn ? (
               <Button asChild variant="primary" size="sm">
-                <Link to="/websites">{t('dashboard')}</Link>
+                <Link to="/dashboard">{t('dashboard')}</Link>
               </Button>
             ) : (
               <>

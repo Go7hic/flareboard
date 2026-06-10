@@ -8,6 +8,7 @@ import {
   Gauge,
   Globe,
   Grid3x3,
+  Home,
   LayoutDashboard,
   LayoutGrid,
   Layers,
@@ -27,7 +28,7 @@ import {
 } from 'lucide-react';
 
 export const sidebarNavIcons = {
-  dashboard: LayoutDashboard,
+  dashboard: Home,
   websites: Globe,
   teams: Users,
   links: Link2,

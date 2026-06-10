@@ -4128,7 +4128,7 @@ code {
 .realtime-chart-empty,
 .realtime-rank-empty {
   margin: 0;
-  padding: 1.25rem 0.5rem;
+  padding: 1.25rem 1.1rem;
   font-size: 0.875rem;
   text-align: center;
 }
@@ -4262,6 +4262,7 @@ code {
 }
 
 .realtime-rank-table td {
+  padding: 0.55rem 1.1rem;
   vertical-align: middle;
 }
 
@@ -4393,17 +4394,19 @@ code {
 .realtime-vector-map-wrap {
   height: min(72vh, 680px);
   min-height: 580px;
-  background-color: #050810;
+  background-color: #c8e3f2;
 }
 
-.realtime-vector-map-starfield {
+.realtime-vector-map-sky {
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background-image: var(--globe-starfield);
-  background-position: center;
-  background-size: cover;
+  background: linear-gradient(180deg, #d4ebf7 0%, #c8e3f2 45%, #b8ddf0 100%);
+}
+
+.realtime-vector-map-sky.is-hidden {
+  opacity: 0;
 }
 
 .realtime-vector-map {

@@ -80,6 +80,7 @@ app.patch('/api/teams/:teamId/users/:userId', teams.handleUpdateUser);
 app.delete('/api/teams/:teamId/users/:userId', teams.handleDeleteUser);
 app.post('/api/teams/:teamId/websites', teams.handleCreateWebsite);
 
+app.use('/api/share/*', jwtAuth);
 app.use('/api/share', jwtAuth);
 app.get('/api/share', share.handleList);
 app.post('/api/share', share.handleCreate);

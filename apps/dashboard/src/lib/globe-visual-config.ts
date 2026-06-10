@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 import { getCartographicEarthTextureUrl } from './globe-cartographic-texture';
 
-/** DataFast-style cartographic palette on a dark starfield canvas. */
+/** Soft sky palette — matches Voyager globe land/water tones (not dark starfield). */
+export const MAPLIBRE_GLOBE_BG = '#c8e3f2';
+export const MAPLIBRE_GLOBE_HORIZON = '#89cff0';
+export const MAPLIBRE_GLOBE_FOG = '#b8ddf0';
+
+/** DataFast-style cartographic palette on a dark starfield canvas (globe.gl fallback). */
 export const GLOBE_CANVAS_BG = '#0a0a0a';
 export const GLOBE_STARFIELD_URL =
   'https://unpkg.com/three-globe@2.38.0/example/img/night-sky.png';

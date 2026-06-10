@@ -11,6 +11,7 @@ import {
   YAxis,
 } from 'recharts';
 import { CompareReportControls } from '../components/CompareReportControls';
+import { StatChangeDelta } from '../components/StatChangeDelta';
 import { EmptyState } from '../components/EmptyState';
 import { MetricsTable } from '../components/MetricsTable';
 import { WebsitePageShell } from '../components/WebsitePageShell';
@@ -60,26 +61,11 @@ function CompareKpiCard({
   change: number;
   invertDelta?: boolean;
 }) {
-  const deltaClass =
-    change === 0
-      ? 'neutral'
-      : invertDelta
-        ? change > 0
-          ? 'negative'
-          : 'positive'
-        : change > 0
-          ? 'positive'
-          : 'negative';
-  const arrow = change > 0 ? '↑' : change < 0 ? '↓' : '';
   return (
     <div className="stat-card">
       <div className="stat-label">{label}</div>
       <div className="stat-value">{value}</div>
-      <div className={`stat-delta ${deltaClass}`}>
-        {arrow ? `${arrow} ` : ''}
-        {change > 0 ? '+' : ''}
-        {change}% {t('compareDeltaVsPrevious')}
-      </div>
+      <StatChangeDelta change={change} invertColors={invertDelta} />
     </div>
   );
 }

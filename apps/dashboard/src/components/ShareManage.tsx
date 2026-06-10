@@ -19,6 +19,11 @@ export function ShareManage({ websiteId }: { websiteId: string }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shares'] }),
   });
 
+  const revokingId =
+    deleteMutation.isPending && typeof deleteMutation.variables === 'string'
+      ? deleteMutation.variables
+      : null;
+
   return (
     <section className="section-gap-lg">
       <h3 className="section-title">{t('shareLinks')}</h3>
@@ -42,15 +47,18 @@ export function ShareManage({ websiteId }: { websiteId: string }) {
                 type="button"
                 variant="danger"
                 size="sm"
-                disabled={deleteMutation.isPending}
+                disabled={revokingId === s.id}
                 onClick={() => deleteMutation.mutate(s.id)}
               >
-                Revoke
+                {revokingId === s.id ? t('revokingShareLink') : t('revokeShareLink')}
               </Button>
             </li>
           ))}
         </ul>
       )}
+      {deleteMutation.error ? (
+        <p className="text-danger">{(deleteMutation.error as Error).message}</p>
+      ) : null}
     </section>
   );
 }

@@ -1,5 +1,4 @@
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap, type MapMouseEvent } from 'maplibre-gl';
-import { MaplibreStarfieldLayer } from '@geoql/maplibre-gl-starfield';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FeatureCollection, Point } from 'geojson';
@@ -7,7 +6,10 @@ import type { RealtimeSession } from '../lib/api';
 import { getCountryCentroid, jitterCoords } from '../lib/country-centroids';
 import { getCountryLabel } from '../lib/map-format';
 import { getMapStyleUrl } from '../lib/maplibre-config';
-import { GLOBE_STARFIELD_URL } from '../lib/globe-visual-config';
+import {
+  MAPLIBRE_GLOBE_BG,
+  MAPLIBRE_GLOBE_FOG,
+} from '../lib/globe-visual-config';
 import { t } from '../lib/i18n';
 import { MapTooltip } from './MapTooltip';
 import { RealtimeGlobeOverlay } from './RealtimeGlobeOverlay';
@@ -29,7 +31,7 @@ const VISITOR_GLOW_LAYER = 'flareboard-visitors-glow';
 const VISITOR_DOT_LAYER = 'flareboard-visitors-dot';
 const AUTO_ROTATE_DEG_PER_FRAME = 0.04;
 /** Higher zoom = larger globe on screen (MapLibre globe projection). */
-const DEFAULT_GLOBE_ZOOM = 2.45;
+const DEFAULT_GLOBE_ZOOM = 2.9;
 
 function sessionsToGeoJson(sessions: RealtimeSession[]): FeatureCollection<Point> {
   const perCountry = new Map<string, number>();
@@ -62,25 +64,17 @@ function collapseMapAttribution(container: HTMLElement | null) {
 
 function applyGlobeAtmosphere(map: MapLibreMap) {
   map.setProjection({ type: 'globe' });
+  // atmosphere-blend > 0 draws a bright rim at high zoom — disable on our light sky.
   map.setSky({
-    'horizon-color': '#89cff0',
-    'fog-ground-blend': 0.12,
-    'horizon-fog-blend': 0.05,
-    'sky-horizon-blend': 0.5,
-    'atmosphere-blend': 0.78,
+    'sky-color': MAPLIBRE_GLOBE_BG,
+    'horizon-color': MAPLIBRE_GLOBE_BG,
+    'fog-color': MAPLIBRE_GLOBE_FOG,
+    'fog-ground-blend': 0,
+    'horizon-fog-blend': 0,
+    'sky-horizon-blend': 0,
+    'atmosphere-blend': 0,
   });
-  map.setPadding({ top: 8, bottom: 36, left: 8, right: 8 });
-}
-
-function addStarfieldLayer(map: MapLibreMap) {
-  const starfield = new MaplibreStarfieldLayer({
-    galaxyTextureUrl: GLOBE_STARFIELD_URL,
-    galaxyBrightness: 0.42,
-    starCount: 3500,
-    starSize: 1.8,
-  });
-  const firstLayerId = map.getStyle().layers?.[0]?.id;
-  map.addLayer(starfield, firstLayerId);
+  map.setPadding({ top: 0, bottom: 12, left: 0, right: 0 });
 }
 
 function addVisitorLayers(map: MapLibreMap, data: FeatureCollection<Point>) {
@@ -183,7 +177,6 @@ export function RealtimeMapLibreMap({ sessions, visitors, siteName }: RealtimeMa
 
     map.on('load', () => {
       applyGlobeAtmosphere(map);
-      addStarfieldLayer(map);
       addVisitorLayers(map, sessionsToGeoJson(sessionsRef.current));
       collapseMapAttribution(mapContainerRef.current);
       setMapReady(true);
@@ -278,10 +271,9 @@ export function RealtimeMapLibreMap({ sessions, visitors, siteName }: RealtimeMa
     <div
       ref={wrapRef}
       className="realtime-globe-wrap realtime-vector-map-wrap"
-      style={{ ['--globe-starfield' as string]: `url(${GLOBE_STARFIELD_URL})` }}
       onMouseLeave={() => setTooltip(null)}
     >
-      <div className={`realtime-vector-map-starfield${mapReady ? ' is-hidden' : ''}`} aria-hidden />
+      <div className={`realtime-vector-map-sky${mapReady ? ' is-hidden' : ''}`} aria-hidden />
       <RealtimeGlobeOverlay
         visitors={visitors}
         siteName={siteName}

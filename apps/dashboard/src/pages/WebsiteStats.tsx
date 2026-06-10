@@ -11,6 +11,7 @@ import {
   YAxis,
 } from 'recharts';
 import { EmptyState } from '../components/EmptyState';
+import { StatChangeDelta } from '../components/StatChangeDelta';
 import { MetricsTable } from '../components/MetricsTable';
 import { OverviewDimensions } from '../components/OverviewDimensions';
 import { OverviewMapHeatmapPanel } from '../components/OverviewMapHeatmapPanel';
@@ -39,18 +40,11 @@ function StatCard({
   primary?: boolean;
 }) {
   if (!stat) return null;
-  const change = stat.change ?? 0;
-  const deltaClass = change > 0 ? 'positive' : change < 0 ? 'negative' : 'neutral';
   return (
     <div className={`stat-card${primary ? ' stat-card-primary' : ''}`}>
       <div className="stat-label">{label}</div>
       <div className="stat-value">{stat.value.toLocaleString()}</div>
-      {stat.change !== undefined ? (
-        <div className={`stat-delta ${deltaClass}`}>
-          {change > 0 ? '+' : ''}
-          {change}% vs prev period
-        </div>
-      ) : null}
+      {stat.change !== undefined ? <StatChangeDelta change={stat.change} /> : null}
     </div>
   );
 }

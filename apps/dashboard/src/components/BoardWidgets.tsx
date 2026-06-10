@@ -142,7 +142,7 @@ function BoardWidget({ widget, publicMode }: { widget: Widget; publicMode?: bool
           <div className="board-stat-widget-chart">
             {chartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <LineChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                   <CartesianGrid
                     strokeDasharray="3 3"
                     stroke={chartColors.border}
@@ -153,12 +153,16 @@ function BoardWidget({ widget, publicMode }: { widget: Widget; publicMode?: bool
                     tick={{ fontSize: 10, fill: chartColors.muted }}
                     stroke={chartColors.border}
                     interval="preserveStartEnd"
+                    tickLine={false}
+                    axisLine={false}
                   />
                   <YAxis
                     allowDecimals={false}
-                    width={32}
+                    width={40}
                     tick={{ fontSize: 10, fill: chartColors.muted }}
                     stroke={chartColors.border}
+                    tickLine={false}
+                    axisLine={false}
                   />
                   <Tooltip
                     contentStyle={{

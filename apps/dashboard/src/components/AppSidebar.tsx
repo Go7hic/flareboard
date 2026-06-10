@@ -34,7 +34,7 @@ export function AppSidebar({
       aria-label={isWebsiteContext ? t('websiteNav') : t('dashboard')}
     >
       <div className="app-sidebar-header">
-        <Link to="/websites" className="shell-brand" onClick={onNavigate}>
+        <Link to="/dashboard" className="shell-brand" onClick={onNavigate}>
           <BrandLogo />
         </Link>
       </div>

@@ -1327,7 +1327,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 1.35rem;
-  padding: 0 1.35rem 1.35rem;
+  padding: 1.35rem;
 }
 
 .page-settings-form-actions {

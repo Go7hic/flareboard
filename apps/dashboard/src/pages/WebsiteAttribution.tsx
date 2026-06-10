@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { AttributionConversionResponse } from '@flareboard/shared';
+import type { AttributionConversionResponse } from '@flareboard/shared/client';
 import { EmptyState } from '../components/EmptyState';
 import { MetricsTable } from '../components/MetricsTable';
 import { SegmentTabs } from '../components/SegmentTabs';

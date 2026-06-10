@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AttributionConversionResponse, UtmReportResponse } from '@flareboard/shared';
+import type { AttributionConversionResponse, UtmReportResponse } from '@flareboard/shared/client';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { UtmReportResponse } from '@flareboard/shared';
+import type { UtmReportResponse } from '@flareboard/shared/client';
 import { MetricsTable } from '../components/MetricsTable';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';

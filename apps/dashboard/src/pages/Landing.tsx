@@ -254,6 +254,9 @@ export default function Landing() {
         </div>
         <div className="landing-features-cta">
           <Button asChild variant="secondary">
+            <Link to="/compare">{t('compareViewAll')}</Link>
+          </Button>
+          <Button asChild variant="secondary">
             <Link to="/features">{t('featuresViewAll')}</Link>
           </Button>
         </div>

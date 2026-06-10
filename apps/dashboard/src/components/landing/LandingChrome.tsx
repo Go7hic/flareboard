@@ -18,7 +18,7 @@ type AppConfig = {
 
 type LandingChromeProps = {
   children: ReactNode;
-  activeNav?: 'home' | 'features' | 'pricing';
+  activeNav?: 'home' | 'features' | 'compare' | 'pricing';
 };
 
 type NavItem =
@@ -117,6 +117,7 @@ export function LandingChrome({ children, activeNav = 'home' }: LandingChromePro
   const navItems: NavItem[] = [
     { kind: 'home', labelKey: 'landingNavHome', active: activeNav === 'home' },
     { kind: 'route', href: '/features', labelKey: 'landingNavFeatures', active: activeNav === 'features' },
+    { kind: 'route', href: '/compare', labelKey: 'landingNavCompare', active: activeNav === 'compare' },
     { kind: 'route', href: '/pricing', labelKey: 'landingNavPricing', active: activeNav === 'pricing' },
     { kind: 'external', href: FLAREBOARD_README, labelKey: 'landingNavDocs' },
   ];
@@ -159,6 +160,7 @@ export function LandingChrome({ children, activeNav = 'home' }: LandingChromePro
           <LandingBrandLink className="shell-brand" />
           <nav className="landing-footer-links" aria-label={t('landingFooterAria')}>
             <Link to="/features">{t('landingNavFeatures')}</Link>
+            <Link to="/compare">{t('landingNavCompare')}</Link>
             <Link to="/pricing">{t('landingNavPricing')}</Link>
             <Link to="/login">{t('signIn')}</Link>
             <Link to={startHref}>{t('landingGetStarted')}</Link>

@@ -4,6 +4,7 @@ import { AppShell } from './components/AppShell';
 import { WebsiteShell } from './components/WebsiteShell';
 import { LazyRouteFallback } from './components/LazyRouteFallback';
 import Features from './pages/Features';
+import Compare from './pages/Compare';
 import Landing from './pages/Landing';
 import Pricing from './pages/Pricing';
 import Login from './pages/Login';
@@ -51,6 +52,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/features" element={<Features />} />
+        <Route path="/compare" element={<Compare />} />
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />

@@ -47,9 +47,12 @@ export const FEATURE_CATEGORIES: FeatureCategory[] = [
       { titleKey: 'featFunnelTitle', bodyKey: 'featFunnelBody' },
       { titleKey: 'featRetentionTitle', bodyKey: 'featRetentionBody' },
       { titleKey: 'featAttributionTitle', bodyKey: 'featAttributionBody' },
+      { titleKey: 'featUtmTitle', bodyKey: 'featUtmBody' },
+      { titleKey: 'featBreakdownTitle', bodyKey: 'featBreakdownBody' },
       { titleKey: 'featWebVitalsTitle', bodyKey: 'featWebVitalsBody' },
       { titleKey: 'featGoalsTitle', bodyKey: 'featGoalsBody' },
       { titleKey: 'featCohortsTitle', bodyKey: 'featCohortsBody' },
+      { titleKey: 'featJourneysTitle', bodyKey: 'featJourneysBody' },
     ],
   },
   {

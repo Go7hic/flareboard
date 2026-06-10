@@ -94,9 +94,12 @@ export const PRICING_COMPARE_ENTRIES: CompareEntry[] = [
   { kind: 'feature', labelKey: 'featFunnelTitle', free: { type: 'included' }, cloud: { type: 'included' } },
   { kind: 'feature', labelKey: 'featRetentionTitle', free: { type: 'included' }, cloud: { type: 'included' } },
   { kind: 'feature', labelKey: 'featAttributionTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featUtmTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featBreakdownTitle', free: { type: 'included' }, cloud: { type: 'included' } },
   { kind: 'feature', labelKey: 'featWebVitalsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
   { kind: 'feature', labelKey: 'featGoalsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
   { kind: 'feature', labelKey: 'featCohortsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featJourneysTitle', free: { type: 'included' }, cloud: { type: 'included' } },
 
   { kind: 'section', labelKey: 'pricingCompareSectionSessions' },
   { kind: 'feature', labelKey: 'featHeatmapsTitle', free: { type: 'yesNo', field: 'heatmapsEnabled' }, cloud: { type: 'yesNo', field: 'heatmapsEnabled' } },
@@ -133,7 +136,20 @@ export const PRICING_COMPARE_ENTRIES: CompareEntry[] = [
     cloud: { type: 'yesNo', field: 'emailReportsEnabled' },
   },
   { kind: 'feature', labelKey: 'featRevenueTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featAdminTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  {
+    kind: 'feature',
+    labelKey: 'featAdminTitle',
+    free: {
+      type: 'text',
+      freeKey: 'pricingCompareValueAdminRole',
+      cloudKey: 'pricingCompareValueAdminRole',
+    },
+    cloud: {
+      type: 'text',
+      freeKey: 'pricingCompareValueAdminRole',
+      cloudKey: 'pricingCompareValueAdminRole',
+    },
+  },
 
   { kind: 'section', labelKey: 'pricingCompareSectionHosting' },
   {

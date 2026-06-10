@@ -37,7 +37,7 @@ export function planFeatureLines(plan: LandingPlan): string[] {
       : t('landingPlanEmailReportsExcluded'),
     plan.heatmapsEnabled ? t('landingPlanHeatmapsIncluded') : t('landingPlanHeatmapsExcluded'),
     plan.teamsEnabled ? t('landingPlanTeamsIncluded') : t('landingPlanTeamsExcluded'),
-    t('landingPlanFeaturesShared'),
+    plan.teamsEnabled ? t('landingPlanFeaturesCloudShared') : t('landingPlanFeaturesFreeShared'),
   ];
 }
 

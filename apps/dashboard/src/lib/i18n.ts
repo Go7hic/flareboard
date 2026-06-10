@@ -570,7 +570,7 @@ const enUS: Record<string, string> = {
   landingFeatureTeamsBody: 'Collaborate on sites and publish read-only dashboards for stakeholders.',
   landingFeatureCloudTitle: 'Flareboard Cloud',
   landingFeatureCloudBody:
-    'Start free, then upgrade to Cloud ({price}/mo) for replay, email reports, and higher limits.',
+    'Start free, then upgrade to Cloud ({price}/mo) for replay, heatmaps, teams, email reports, and higher limits.',
   landingFeatureSelfHostTitle: 'Self-host on Cloudflare',
   landingFeatureSelfHostBody:
     'Deploy ingest, API, aggregator, and dashboard on your account. Same product — you operate the data plane.',
@@ -600,7 +600,8 @@ const enUS: Record<string, string> = {
   landingPlanHeatmapsExcluded: 'Heatmaps not included',
   landingPlanTeamsIncluded: 'Teams included',
   landingPlanTeamsExcluded: 'Teams not included',
-  landingPlanFeaturesShared: 'Reports, teams, and share links',
+  landingPlanFeaturesFreeShared: 'Reports and share links',
+  landingPlanFeaturesCloudShared: 'Reports, teams, and share links',
   landingEnterpriseLabel: 'Enterprise',
   landingEnterpriseTitle: 'Commercial licensing & services',
   landingEnterpriseBody:
@@ -630,7 +631,7 @@ const enUS: Record<string, string> = {
   landingFeaturesTitle: 'Analytics without vendor lock-in',
   landingFeatureRealtimeTitle: 'Realtime dashboards',
   landingFeatureRealtimeBody:
-    'Active visitors and live sessions — paths, referrers, and countries over SSE when traffic is flowing.',
+    'Active visitors and live sessions — paths, referrers, and countries on an interactive globe over SSE when traffic is flowing.',
   landingFeatureReplayTitle: 'Session replay',
   landingFeatureReplayBody: 'rrweb recordings in your R2 bucket. Watch flows without shipping video to a vendor.',
   landingFeatureShareTitle: 'Share links',
@@ -684,7 +685,7 @@ const enUS: Record<string, string> = {
   pricingCompareValueSupportCommunity: 'Community',
   pricingCompareValueSupportEmail: 'Email',
   pricingCompareSupport: 'Support level',
-  pricingCompareSharedFeatures: 'Reports, teams, and share links',
+  pricingCompareValueAdminRole: 'Admin role only',
   pricingSelfHostNote:
     'Self-host the full product on your Cloudflare account at no subscription cost for noncommercial use —',
   pricingCtaTitle: 'Get started in minutes',
@@ -734,7 +735,7 @@ const enUS: Record<string, string> = {
     'Pageviews, visitors, referrers, countries, devices, and top paths with date ranges and period comparison.',
   featRealtimeTitle: 'Realtime dashboards',
   featRealtimeBody:
-    'Active visitors and live sessions over SSE — paths, referrers, and countries while traffic is flowing.',
+    'Active visitors and live sessions over SSE — paths, referrers, and countries on an interactive globe while traffic is flowing.',
   featSegmentsTitle: 'Segments & filters',
   featSegmentsBody:
     'Slice stats by country, browser, path, UTM tags, or custom JSON rules. Build filters visually or edit JSON.',
@@ -753,6 +754,12 @@ const enUS: Record<string, string> = {
   featAttributionTitle: 'Attribution',
   featAttributionBody:
     'Understand which referrers, campaigns, and UTM sources drive conversions and revenue events.',
+  featUtmTitle: 'UTM campaign reports',
+  featUtmBody:
+    'Break down pageviews by utm_source, utm_medium, utm_campaign, content, and term — see which campaigns drive traffic.',
+  featBreakdownTitle: 'Metrics breakdown',
+  featBreakdownBody:
+    'Explore pageviews and visitors by path, country, browser, device, OS, and referrer from a searchable dimension explorer.',
   featWebVitalsTitle: 'Web vitals',
   featWebVitalsBody:
     'Monitor LCP, FID, CLS, and other Core Web Vitals collected from real user sessions.',
@@ -762,6 +769,9 @@ const enUS: Record<string, string> = {
   featCohortsTitle: 'Cohorts',
   featCohortsBody:
     'Define visitor cohorts by event or path conditions and compare active users over time.',
+  featJourneysTitle: 'User journeys',
+  featJourneysBody:
+    'Explore multi-step paths through your site — click entry pages and follow drop-off between steps with a visual flow chart.',
   featReplayTitle: 'Session replay',
   featReplayBody:
     'rrweb recordings stored in your R2 bucket. Watch user flows with sampling, masking, and block rules.',
@@ -797,10 +807,10 @@ const enUS: Record<string, string> = {
     'Track purchase events with currency and totals. Revenue breakdowns by day and event name.',
   featAdminTitle: 'Admin console',
   featAdminBody:
-    'Operator controls for users, websites, audit logs, and data exports on hosted and self-hosted installs.',
+    'Operator console for platform admins — users, websites, audit logs, and exports on hosted installs. Requires an admin role, not a paid plan.',
   featCloudBillingTitle: 'Flareboard Cloud billing',
   featCloudBillingBody:
-    'Free tier to start; upgrade for session replay, email reports, and higher event limits. Stripe-powered subscriptions.',
+    'Free tier to start; upgrade for session replay, heatmaps, teams, email reports, and higher event limits. Stripe-powered subscriptions.',
   featOAuthTitle: 'OAuth sign-in',
   featOAuthBody:
     'Optional Google and GitHub login on hosted installs — alongside email and password accounts.',
@@ -1539,7 +1549,7 @@ const zhCN: Partial<Record<string, string>> = {
   landingFeatureTeamsTitle: '团队与分享链接',
   landingFeatureTeamsBody: '协作管理站点，为干系人发布只读控制台。',
   landingFeatureCloudTitle: 'Flareboard Cloud',
-  landingFeatureCloudBody: '免费起步，升级 Cloud（{price}/月）获得回放、邮件报告与更高限额。',
+  landingFeatureCloudBody: '免费起步，升级 Cloud（{price}/月）获得回放、热力图、团队、邮件报告与更高限额。',
   landingFeatureSelfHostTitle: '在 Cloudflare 自托管',
   landingFeatureSelfHostBody: '在你的账户部署采集、API、聚合器与控制台。同一产品 — 你运营数据面。',
   landingPricingTitle: '定价',
@@ -1566,7 +1576,8 @@ const zhCN: Partial<Record<string, string>> = {
   landingPlanHeatmapsExcluded: '不含热力图',
   landingPlanTeamsIncluded: '含团队',
   landingPlanTeamsExcluded: '不含团队',
-  landingPlanFeaturesShared: '报表、团队与分享链接',
+  landingPlanFeaturesFreeShared: '报表与分享链接',
+  landingPlanFeaturesCloudShared: '报表、团队与分享链接',
   landingEnterpriseLabel: '企业版',
   landingEnterpriseTitle: '商业许可与服务',
   landingEnterpriseBody:
@@ -1594,7 +1605,7 @@ const zhCN: Partial<Record<string, string>> = {
   landingStackLead: '不是挂到别人云上的脚本，每一层都是你可运营的 Cloudflare 产品。',
   landingFeaturesTitle: '分析能力，无厂商锁定',
   landingFeatureRealtimeTitle: '实时控制台',
-  landingFeatureRealtimeBody: '活跃访客与实时会话 — 流量流动时通过 SSE 展示路径、来源与国家。',
+  landingFeatureRealtimeBody: '活跃访客与实时会话 — 在交互式地球上通过 SSE 展示路径、来源与国家。',
   landingFeatureReplayTitle: '会话回放',
   landingFeatureReplayBody: 'rrweb 录制保存在你的 R2 桶中，无需把视频交给第三方。',
   landingFeatureShareTitle: '分享链接',
@@ -1646,7 +1657,7 @@ const zhCN: Partial<Record<string, string>> = {
   pricingCompareValueSupportCommunity: '社区',
   pricingCompareValueSupportEmail: '邮件',
   pricingCompareSupport: '支持级别',
-  pricingCompareSharedFeatures: '报表、团队与分享链接',
+  pricingCompareValueAdminRole: '仅管理员角色',
   pricingSelfHostNote: '可在你的 Cloudflare 账户自托管完整产品，非商业用途无需订阅 —',
   pricingCtaTitle: '几分钟即可开始',
   pricingCtaLead: '创建账户、添加站点、粘贴一行 script，事件到达后控制台即可亮起来。',
@@ -1684,7 +1695,7 @@ const zhCN: Partial<Record<string, string>> = {
   featWebsiteStatsTitle: '网站统计',
   featWebsiteStatsBody: '页面浏览、访客、来源、国家、设备与热门路径，支持日期范围与同期对比。',
   featRealtimeTitle: '实时仪表盘',
-  featRealtimeBody: '通过 SSE 查看活跃访客与会话 — 路径、来源与国家，流量进行时即时更新。',
+  featRealtimeBody: '通过 SSE 查看活跃访客与会话 — 在交互式地球上展示路径、来源与国家，流量进行时即时更新。',
   featSegmentsTitle: '细分与筛选',
   featSegmentsBody: '按国家、浏览器、路径、UTM 或自定义 JSON 规则切片。可视化构建或编辑 JSON。',
   featCustomEventsTitle: '自定义事件',
@@ -1697,12 +1708,18 @@ const zhCN: Partial<Record<string, string>> = {
   featRetentionBody: '队列留存热力图展示用户首次访问后每周回访频率。',
   featAttributionTitle: '归因分析',
   featAttributionBody: '了解哪些来源、活动与 UTM 带来转化与收入事件。',
+  featUtmTitle: 'UTM 活动报表',
+  featUtmBody: '按 utm_source、utm_medium、utm_campaign、content 与 term 拆分页面浏览量，看清各活动带来的流量。',
+  featBreakdownTitle: '维度拆分',
+  featBreakdownBody: '在可搜索的维度探索器中，按路径、国家、浏览器、设备、系统与来源查看页面浏览与访客。',
   featWebVitalsTitle: 'Web Vitals',
   featWebVitalsBody: '监控来自真实用户会话的 LCP、FID、CLS 等核心 Web 指标。',
   featGoalsTitle: '目标',
   featGoalsBody: '设置基于事件的目标，按日、周或月跟踪仪表盘进度。',
   featCohortsTitle: '队列',
   featCohortsBody: '按事件或路径条件定义访客队列，对比活跃用户数随时间变化。',
+  featJourneysTitle: '用户路径',
+  featJourneysBody: '探索访客在站点中的多步路径 — 点击入口页面，用可视化流向图跟踪步骤间流失。',
   featReplayTitle: '会话回放',
   featReplayBody: 'rrweb 录制存入你的 R2 桶。支持采样、遮罩与屏蔽规则，观看用户流程。',
   featHeatmapsTitle: '热力图',
@@ -1726,9 +1743,9 @@ const zhCN: Partial<Record<string, string>> = {
   featRevenueTitle: '收入追踪',
   featRevenueBody: '追踪带货币与总额的购买事件。按日与事件名查看收入明细。',
   featAdminTitle: '管理控制台',
-  featAdminBody: '托管与自托管安装的用户、网站、审计日志与数据导出运维控制。',
+  featAdminBody: '平台管理员运维控制台 — 用户、网站、审计日志与导出（托管环境）。需管理员角色，非付费套餐功能。',
   featCloudBillingTitle: 'Flareboard Cloud 计费',
-  featCloudBillingBody: '免费层起步；升级获得会话回放、邮件报告与更高事件上限。Stripe 订阅。',
+  featCloudBillingBody: '免费层起步；升级获得会话回放、热力图、团队、邮件报告与更高事件上限。Stripe 订阅。',
   featOAuthTitle: 'OAuth 登录',
   featOAuthBody: '托管安装可选 Google 与 GitHub 登录 — 与邮箱密码账户并存。',
   featEnterpriseTitle: '商业许可',

@@ -190,7 +190,7 @@ export function JourneyFlowColumns({
     });
 
     setNodeRects(next);
-    setDimensions({ width: containerBox.width, height: containerBox.height });
+    setDimensions({ width: container.scrollWidth, height: container.offsetHeight });
   }, []);
 
   useLayoutEffect(() => {
@@ -218,37 +218,39 @@ export function JourneyFlowColumns({
 
   return (
     <div className="journey-flow-columns" aria-label={t('journeyFlowLabel')}>
-      <div ref={containerRef} className="journey-flow-columns-inner">
-        <FlowConnectors
-          edges={edges}
-          nodeRects={nodeRects}
-          maxCount={maxEdgeCount}
-          dimensions={dimensions}
-        />
+      <div className="journey-flow-columns-inner">
         <div className="journey-flow-columns-scroll">
-          {visibleColumns.map((column, idx) => {
-            const prevVisitorCount =
-              idx > 0 ? (visibleColumns[idx - 1]?.visitorCount ?? 0) : column.visitorCount;
+          <div ref={containerRef} className="journey-flow-columns-content">
+            <FlowConnectors
+              edges={edges}
+              nodeRects={nodeRects}
+              maxCount={maxEdgeCount}
+              dimensions={dimensions}
+            />
+            {visibleColumns.map((column, idx) => {
+              const prevVisitorCount =
+                idx > 0 ? (visibleColumns[idx - 1]?.visitorCount ?? 0) : column.visitorCount;
 
-            return (
-              <div key={column.columnIndex} className="journey-flow-column">
-                <ColumnHeader column={column} stepNumber={column.columnIndex + 1} />
-                <div className="journey-flow-column-nodes">
-                  {column.nodes.map((node) => (
-                    <FlowNode
-                      key={journeyNodeKey(node.columnIndex, node.name)}
-                      name={node.name}
-                      count={node.count}
-                      columnIndex={node.columnIndex}
-                      state={node.state}
-                      previousVisitorCount={prevVisitorCount}
-                      onClick={() => handleNodeClick(node.columnIndex, node.name)}
-                    />
-                  ))}
+              return (
+                <div key={column.columnIndex} className="journey-flow-column">
+                  <ColumnHeader column={column} stepNumber={column.columnIndex + 1} />
+                  <div className="journey-flow-column-nodes">
+                    {column.nodes.map((node) => (
+                      <FlowNode
+                        key={journeyNodeKey(node.columnIndex, node.name)}
+                        name={node.name}
+                        count={node.count}
+                        columnIndex={node.columnIndex}
+                        state={node.state}
+                        previousVisitorCount={prevVisitorCount}
+                        onClick={() => handleNodeClick(node.columnIndex, node.name)}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

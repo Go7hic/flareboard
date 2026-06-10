@@ -7996,9 +7996,13 @@ code {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 0.75rem 1rem;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.journey-flow-toolbar .journey-flow-hint {
+  margin: 0;
 }
 
 .journey-breadcrumb {
@@ -8214,7 +8218,6 @@ code {
 }
 
 .journey-flow-columns-inner {
-  position: relative;
   width: 100%;
 }
 
@@ -8237,19 +8240,25 @@ code {
 }
 
 .journey-flow-columns-scroll {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  gap: 4.5rem;
   overflow-x: auto;
   padding: 0.5rem 0.75rem 0.75rem;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
 }
 
+.journey-flow-columns-content {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 4.5rem;
+  width: fit-content;
+  min-width: 100%;
+}
+
 .journey-flow-column {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -8433,8 +8442,8 @@ code {
   }
 
   .journey-flow-toolbar {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
   }
 
   .journey-flow-controls {

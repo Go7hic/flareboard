@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { EmptyState } from './EmptyState';
 import { JourneyFlowColumns } from './JourneyFlowColumns';
 import {
-  emptyJourneySelection,
   hasJourneySelection,
   journeyMatchingVisits,
   type JourneyColumnSelection,
@@ -39,16 +38,13 @@ export function JourneyFlowPanel({
     <div className="journey-flow">
       {hasSelection ? (
         <div className="journey-flow-toolbar">
+          <p className="journey-flow-hint">
+            {`${matchingVisits.toLocaleString()} ${t('journeyMatchingVisits')}`}
+          </p>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClear}>
             {t('journeyClearSelection')}
           </button>
         </div>
-      ) : null}
-
-      {hasSelection ? (
-        <p className="journey-flow-hint">
-          {`${matchingVisits.toLocaleString()} ${t('journeyMatchingVisits')}`}
-        </p>
       ) : null}
 
       <section className="panel journey-flow-viz">

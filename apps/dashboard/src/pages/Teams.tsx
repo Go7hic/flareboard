@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { PlanUpgradeBanner } from '../components/PlanUpgradeBanner';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
@@ -337,7 +338,9 @@ export default function Teams() {
                     <ul className="list-plain">
                       {teamWebsites.map((w) => (
                         <li key={w.id} className="list-item list-row">
-                          <Link to={`/websites/${w.id}`}>{w.name}</Link>
+                          <Link to={`/websites/${w.id}`}>
+                            <WebsiteNameLabel name={w.name} domain={w.domain} faviconSize={16} />
+                          </Link>
                           {w.domain ? <span className="text-muted list-row-value">{w.domain}</span> : null}
                         </li>
                       ))}

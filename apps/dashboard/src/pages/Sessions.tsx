@@ -6,6 +6,7 @@ import { WebsiteDateExportControls } from '../components/WebsiteDateExportContro
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { api, getToken } from '../lib/api';
 import { t } from '../lib/i18n';
+import { SessionAvatar } from '../components/SessionAvatar';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 
 interface SessionRow {
@@ -56,6 +57,7 @@ export default function SessionsPage() {
       {!sessionsQuery.isLoading && rows.length > 0 ? (
         <section className="panel sessions-panel section-gap">
           <div className="sessions-table-head" aria-hidden>
+            <span />
             <span>{t('location')}</span>
             <span>{t('device')}</span>
             <span>{t('when')}</span>
@@ -66,6 +68,7 @@ export default function SessionsPage() {
               to={`/websites/${websiteId}/sessions/${s.id}`}
               className="sessions-table-row"
             >
+              <SessionAvatar seed={s.id} size={32} className="sessions-table-avatar" />
               <span>
                 <strong>{s.country ?? t('unknown')}</strong>
                 {s.city ? ` · ${s.city}` : null}

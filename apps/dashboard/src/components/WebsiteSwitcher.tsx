@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { WebsiteFavicon } from './WebsiteFavicon';
+import { WebsiteNameLabel } from './WebsiteNameLabel';
 import { api, type Website } from '../lib/api';
 import { t } from '../lib/i18n';
 
@@ -53,6 +55,8 @@ export function WebsiteSwitcher() {
 
   if (!websiteId || !current) return null;
 
+  const currentDomain = 'domain' in current ? current.domain : undefined;
+
   return (
     <div className={`website-switcher${open ? ' is-open' : ''}`} ref={rootRef}>
       <button
@@ -64,19 +68,23 @@ export function WebsiteSwitcher() {
         aria-haspopup="listbox"
         aria-controls={listId}
       >
-        <svg
-          className="website-switcher-icon"
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          aria-hidden
-        >
-          <circle cx="12" cy="12" r="10" />
-          <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-        </svg>
+        {currentDomain ? (
+          <WebsiteFavicon domain={currentDomain} size={14} className="website-switcher-icon" />
+        ) : (
+          <svg
+            className="website-switcher-icon"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+          >
+            <circle cx="12" cy="12" r="10" />
+            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+          </svg>
+        )}
         <span className="website-switcher-name">{current.name}</span>
         <svg
           className="website-switcher-chevron"
@@ -113,7 +121,12 @@ export function WebsiteSwitcher() {
                 className={`website-switcher-option${site.id === websiteId ? ' is-active' : ''}`}
                 onClick={() => switchTo(site.id)}
               >
-                <span className="website-switcher-option-name">{site.name}</span>
+                <WebsiteNameLabel
+                  name={site.name}
+                  domain={site.domain}
+                  className="website-switcher-option-name"
+                  faviconSize={16}
+                />
                 {site.domain ? (
                   <span className="website-switcher-option-domain">{site.domain}</span>
                 ) : null}

@@ -438,6 +438,8 @@ const enUS: Record<string, string> = {
   realtimeGlobeCountries: 'Countries',
   realtimeGlobeDevices: 'Devices',
   realtimeGlobeDirect: 'Direct',
+  realtimeGlobeLocationUnknown:
+    'Location not shown — country is detected from the visitor IP on Cloudflare. Local or proxied traffic may have no marker on the globe.',
   realtimeVisits30m: '30m visits',
   realtimeCountries30m: 'Countries',
   realtimeActivityLog: 'Activity log',
@@ -1413,6 +1415,8 @@ const zhCN: Partial<Record<string, string>> = {
   realtimeGlobeCountries: '国家/地区',
   realtimeGlobeDevices: '设备',
   realtimeGlobeDirect: '直接访问',
+  realtimeGlobeLocationUnknown:
+    '无法在地球上标注位置 — 国家/地区由 Cloudflare 根据访客 IP 识别。本地或代理访问可能没有标记。',
   realtimeVisits30m: '30 分钟访问次数',
   realtimeCountries30m: '国家/地区',
   realtimeActivityLog: '活动日志',

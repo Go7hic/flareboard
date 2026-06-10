@@ -17,14 +17,24 @@ export async function bumpRealtimeVisitor(
   meta?: Omit<RealtimeSessionMeta, 'updatedAt'>,
 ) {
   const sessionKey = `rt:${websiteId}:s:${sessionId}`;
+  const existing = await env.CACHE.get(sessionKey);
+  let previous: RealtimeSessionMeta | null = null;
+  if (existing) {
+    try {
+      previous = JSON.parse(existing) as RealtimeSessionMeta;
+    } catch {
+      previous = null;
+    }
+  }
+
   const payload: RealtimeSessionMeta = {
-    urlPath: meta?.urlPath,
-    referrerDomain: meta?.referrerDomain ?? null,
-    country: meta?.country ?? null,
+    urlPath: meta?.urlPath ?? previous?.urlPath,
+    referrerDomain: meta?.referrerDomain ?? previous?.referrerDomain ?? null,
+    country: meta?.country ?? previous?.country ?? null,
     updatedAt: Date.now(),
   };
 
-  const exists = await env.CACHE.get(sessionKey);
+  const exists = existing;
   await env.CACHE.put(sessionKey, JSON.stringify(payload), { expirationTtl: TTL });
 
   if (exists) return;

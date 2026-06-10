@@ -248,6 +248,9 @@ export function RealtimeGlobeOverlay({
         <BreakdownGridRow label={t('realtimeGlobeCountries')} rows={countries} />
         <BreakdownGridRow label={t('realtimeGlobeDevices')} rows={devices} />
       </div>
+      {visitors > 0 && countries.length === 0 ? (
+        <p className="realtime-globe-overlay-geo-hint">{t('realtimeGlobeLocationUnknown')}</p>
+      ) : null}
     </div>
   );
 }

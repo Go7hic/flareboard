@@ -14,6 +14,7 @@ import { t } from '../lib/i18n';
 import { getCountryLabel } from '../lib/map-format';
 import { useChartColors } from '../lib/useChartColors';
 import { SegmentTabs } from './SegmentTabs';
+import { SessionAvatar } from './SessionAvatar';
 
 const BUCKET_MS = 2 * 60 * 1000;
 const WINDOW_MS = 30 * 60 * 1000;
@@ -301,12 +302,11 @@ export function RealtimeBreakdown({
                     onSelectSession(isSelected ? null : session.sessionId)
                   }
                 >
-                  <span className="realtime-activity-icon" aria-hidden>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                  </span>
+                  <SessionAvatar
+                    seed={session.sessionId}
+                    size={28}
+                    className="realtime-activity-avatar"
+                  />
                   <span className="realtime-activity-body">
                     <span className="realtime-activity-time text-muted">
                       {new Date(session.createdAt).toLocaleTimeString()}

@@ -80,6 +80,7 @@ export async function handleDashboard(c: Ctx) {
       return {
         id: row.websiteId,
         name: site?.name ?? row.websiteId,
+        domain: site?.domain ?? undefined,
         pageviews: row.pageviews,
         visitors: row.visitors,
       };

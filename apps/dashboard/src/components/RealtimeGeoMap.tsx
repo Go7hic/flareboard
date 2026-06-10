@@ -30,11 +30,13 @@ import {
 } from '../lib/globe-visual-config';
 import { getCountryLabel } from '../lib/map-format';
 import { t } from '../lib/i18n';
+import { createSessionAvatarElement, createSessionAvatarSvg } from '../lib/session-avatar';
 import { MapTooltip } from './MapTooltip';
 import { isMapLibreGlobeEnabled } from '../lib/maplibre-config';
 import { RealtimeMapLibreMap } from './RealtimeMapLibreMap';
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
+const AVATAR_MARKER_SIZE = 36;
 
 /** Camera distance in globe-radius units — lower = closer / larger globe. */
 const GLOBE_CAMERA_ALTITUDE = 1.32;
@@ -51,11 +53,11 @@ type MarkerPoint = {
   coordinates: [number, number];
 };
 
-type CountryGlobePoint = {
+type GlobeHtmlMarker = {
+  sessionId: string;
   country: string;
   lat: number;
   lng: number;
-  count: number;
 };
 
 type GlobeLabel = {
@@ -101,36 +103,6 @@ function isWebGLAvailable(): boolean {
   } catch {
     return false;
   }
-}
-
-function readCssColor(varName: string, fallback: string): string {
-  if (typeof document === 'undefined') return fallback;
-  const value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
-  return value || fallback;
-}
-
-function useGlobeTheme() {
-  const [theme, setTheme] = useState(() => ({
-    point: readCssColor('--accent', '#0d9488'),
-    pointGlow: readCssColor('--accent-muted', 'rgba(13, 148, 136, 0.35)'),
-  }));
-
-  useEffect(() => {
-    function refresh() {
-      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-      setTheme({
-        point: readCssColor('--accent', isDark ? '#2dd4bf' : '#0d9488'),
-        pointGlow: readCssColor('--accent-muted', isDark ? 'rgba(45, 212, 191, 0.35)' : 'rgba(13, 148, 136, 0.35)'),
-      });
-    }
-
-    refresh();
-    const observer = new MutationObserver(refresh);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    return () => observer.disconnect();
-  }, []);
-
-  return theme;
 }
 
 function RealtimeMap2D({ sessions, visitors, siteName }: RealtimeGeoMapProps) {
@@ -239,20 +211,26 @@ function RealtimeMap2D({ sessions, visitors, siteName }: RealtimeGeoMapProps) {
             ))
           }
         </Geographies>
-        {markers.map((marker) => (
+        {markers.map((marker) => {
+          const avatarHref = `data:image/svg+xml,${encodeURIComponent(
+            createSessionAvatarSvg(marker.key, AVATAR_MARKER_SIZE),
+          )}`;
+          return (
           <Marker key={marker.key} coordinates={marker.coordinates}>
-            <circle
-              r={10}
-              fill="transparent"
-              className="map-marker-hit"
+            <image
+              href={avatarHref}
+              x={-AVATAR_MARKER_SIZE / 2}
+              y={-AVATAR_MARKER_SIZE / 2}
+              width={AVATAR_MARKER_SIZE}
+              height={AVATAR_MARKER_SIZE}
+              className="realtime-map-avatar-marker"
               onMouseEnter={(e) => setTooltipFromEvent(marker.country, e.clientX, e.clientY)}
               onMouseMove={(e) => setTooltipFromEvent(marker.country, e.clientX, e.clientY)}
               onMouseLeave={clearTooltip}
             />
-            <circle r={7} fill="var(--accent)" opacity={0.18} pointerEvents="none" />
-            <circle r={4} fill="var(--accent)" opacity={0.92} pointerEvents="none" />
           </Marker>
-        ))}
+          );
+        })}
       </ComposableMap>
       {tooltip && tooltipCount > 0 ? (
         <MapTooltip
@@ -293,7 +271,6 @@ function RealtimeGlobe({ sessions, visitors, siteName }: RealtimeGeoMapProps) {
   const [autoRotating, setAutoRotating] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const mouseRef = useRef({ x: 0, y: 0 });
-  const theme = useGlobeTheme();
   const labelFont = useGlobeLabelFont();
   const earthTexture = useCartographicEarthTexture();
   const [pov, setPov] = useState<GlobePov>(INITIAL_POV);
@@ -323,35 +300,36 @@ function RealtimeGlobe({ sessions, visitors, siteName }: RealtimeGeoMapProps) {
     return () => window.removeEventListener('mousemove', onMove);
   }, []);
 
-  const points = useMemo(() => {
-    const counts = new Map<string, number>();
+  const htmlMarkers = useMemo(() => {
+    const perCountry = new Map<string, number>();
+    const result: GlobeHtmlMarker[] = [];
+
     for (const session of sessions) {
       if (!session.country) continue;
       const country = session.country.toUpperCase();
-      counts.set(country, (counts.get(country) ?? 0) + 1);
-    }
-
-    const result: CountryGlobePoint[] = [];
-    for (const [country, count] of counts) {
-      const centroid = getCountryCentroid(country);
-      if (!centroid) continue;
+      const base = getCountryCentroid(country);
+      if (!base) continue;
+      const index = perCountry.get(country) ?? 0;
+      perCountry.set(country, index + 1);
+      const [lng, lat] = jitterCoords(base, session.sessionId, index);
       result.push({
+        sessionId: session.sessionId,
         country,
-        lng: centroid[0],
-        lat: centroid[1],
-        count,
+        lat,
+        lng,
       });
     }
+
     return result;
   }, [sessions]);
 
   const countryCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const point of points) {
-      counts.set(point.country, point.count);
+    for (const marker of htmlMarkers) {
+      counts.set(marker.country, (counts.get(marker.country) ?? 0) + 1);
     }
     return counts;
-  }, [points]);
+  }, [htmlMarkers]);
 
   const mapLabels = useMemo(
     () => buildGlobeLabels(zoomTier, pov, adminRegions?.labels ?? []),
@@ -473,6 +451,39 @@ function RealtimeGlobe({ sessions, visitors, siteName }: RealtimeGeoMapProps) {
 
   const clearTooltip = useCallback(() => setTooltip(null), []);
 
+  useEffect(() => {
+    type GlobeHtmlApi = {
+      htmlElementsData: (data: GlobeHtmlMarker[]) => GlobeHtmlApi;
+      htmlLat: (key: string) => GlobeHtmlApi;
+      htmlLng: (key: string) => GlobeHtmlApi;
+      htmlAltitude: (alt: number) => GlobeHtmlApi;
+      htmlElement: (fn: (datum: object) => HTMLElement) => GlobeHtmlApi;
+    };
+
+    const globe = globeRef.current as unknown as GlobeHtmlApi | null;
+    if (!globe) return;
+
+    globe
+      .htmlElementsData(htmlMarkers)
+      .htmlLat('lat')
+      .htmlLng('lng')
+      .htmlAltitude(0.03)
+      .htmlElement((datum: object) => {
+        const marker = datum as GlobeHtmlMarker;
+        const el = document.createElement('div');
+        el.className = 'realtime-globe-avatar-marker';
+        el.appendChild(createSessionAvatarElement(marker.sessionId, AVATAR_MARKER_SIZE));
+        el.addEventListener('mouseenter', () => {
+          setTooltipFromEvent(marker.country, mouseRef.current.x, mouseRef.current.y);
+        });
+        el.addEventListener('mousemove', () => {
+          setTooltipFromEvent(marker.country, mouseRef.current.x, mouseRef.current.y);
+        });
+        el.addEventListener('mouseleave', clearTooltip);
+        return el;
+      });
+  }, [htmlMarkers, setTooltipFromEvent, clearTooltip]);
+
   const tooltipCountry = tooltip?.country ?? null;
   const tooltipCount = tooltipCountry ? (countryCounts.get(tooltipCountry) ?? 0) : 0;
 
@@ -527,31 +538,8 @@ function RealtimeGlobe({ sessions, visitors, siteName }: RealtimeGeoMapProps) {
         labelIncludeDot={(label) => (label as GlobeLabel).includeDot}
         labelDotRadius={(label) => ((label as GlobeLabel).size / 12) * 0.35}
         labelsTransitionDuration={0}
-        pointsData={points}
-        pointLat="lat"
-        pointLng="lng"
-        pointAltitude={0.03}
-        pointRadius={0.18}
-        pointColor={() => theme.point}
-        pointResolution={18}
-        ringsData={points}
-        ringLat="lat"
-        ringLng="lng"
-        ringColor={() => theme.pointGlow}
-        ringAltitude={0.004}
-        ringMaxRadius={0.28}
-        ringPropagationSpeed={0}
-        ringRepeatPeriod={0}
         onGlobeReady={onGlobeReady}
         onZoom={onGlobeZoom}
-        onPointHover={(point: object | null) => {
-          if (point) {
-            const { country } = point as CountryGlobePoint;
-            setTooltipFromEvent(country, mouseRef.current.x, mouseRef.current.y);
-          } else {
-            clearTooltip();
-          }
-        }}
       />
       ) : null}
       {tooltip && tooltipCount > 0 ? (

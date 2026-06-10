@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { CollapsibleSection } from '../components/CollapsibleSection';
 import { PageHeader } from '../components/PageHeader';
 import { WebsiteFormDialog } from '../components/WebsiteFormDialog';
+import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -133,7 +134,7 @@ export default function Websites() {
               <article className="panel site-card">
                 <div className="site-card-header">
                   <Link to={`/websites/${site.id}`} className="site-card-link">
-                    <span className="site-card-name">{site.name}</span>
+                    <WebsiteNameLabel name={site.name} domain={site.domain} className="site-card-name" />
                     {site.domain ? <span className="site-card-domain">{site.domain}</span> : null}
                   </Link>
                   <div className="site-card-actions">

@@ -11,6 +11,7 @@ import {
   YAxis,
 } from 'recharts';
 import { DateRangePicker } from '../components/DateRangePicker';
+import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { DashboardSiteRanking } from '../components/DashboardSiteRanking';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
@@ -324,7 +325,7 @@ export default function DashboardHome() {
                   </span>
                   <div className="dashboard-site-card-head">
                     <div className="dashboard-site-card-identity">
-                      <span className="site-card-name">{w.name}</span>
+                      <WebsiteNameLabel name={w.name} domain={w.domain} className="site-card-name" />
                       {w.domain ? <span className="site-card-domain">{w.domain}</span> : null}
                     </div>
                     <div className="dashboard-site-row-kpis">

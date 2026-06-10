@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { WebsiteNameLabel } from './WebsiteNameLabel';
 import { t } from '../lib/i18n';
 
 const RANKING_COLORS = [
@@ -18,6 +19,7 @@ const DEFAULT_VISIBLE = 8;
 export type DashboardRankingSite = {
   id: string;
   name: string;
+  domain?: string;
   pageviews: number;
   visitors: number;
 };
@@ -55,7 +57,12 @@ export function DashboardSiteRanking({
                 style={{ background: RANKING_COLORS[index % RANKING_COLORS.length] }}
                 aria-hidden
               />
-              <span className="dashboard-site-ranking-name">{w.name}</span>
+              <WebsiteNameLabel
+                name={w.name}
+                domain={w.domain}
+                className="dashboard-site-ranking-name"
+                faviconSize={16}
+              />
               <span className="dashboard-site-ranking-stats">
                 {w.pageviews.toLocaleString()} / {w.visitors.toLocaleString()}
               </span>

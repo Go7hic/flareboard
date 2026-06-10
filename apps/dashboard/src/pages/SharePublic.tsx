@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import { BoardWidgets, parseBoardWidgets } from '../components/BoardWidgets';
 import { BrandLogo } from '../components/BrandLogo';
+import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { API_URL, type WebsiteStats } from '../lib/api';
 import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/dateRange';
 import { t } from '../lib/i18n';
@@ -78,7 +79,17 @@ export default function SharePublic() {
         <div className="shell-brand share-public-brand">
           <BrandLogo />
         </div>
-        <h1 className="page-title">{title}</h1>
+        <h1 className="page-title">
+          {isBoard ? (
+            title
+          ) : (
+            <WebsiteNameLabel
+              name={data.website.name}
+              domain={data.website.domain}
+              faviconSize={22}
+            />
+          )}
+        </h1>
         <p className="page-subtitle">
           {t('shared')}: {data.share.name}
         </p>

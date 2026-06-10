@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../components/PageHeader';
+import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { api, authenticatedFetch, getToken, type AdminUser } from '../lib/api';
@@ -244,8 +245,8 @@ export default function AdminPage() {
               {(websitesQuery.data ?? []).map((w) => (
                 <li key={w.id} className="list-item list-row">
                   <span>
-                    {w.name}
-                    {w.domain ? <span className="text-muted"> · {w.domain}</span> : null}
+                  <WebsiteNameLabel name={w.name} domain={w.domain} faviconSize={16} />
+                  {w.domain ? <span className="text-muted"> · {w.domain}</span> : null}
                   </span>
                   <span className="text-muted list-row-value">user {w.userId?.slice(0, 8) ?? 'unknown'}</span>
                 </li>

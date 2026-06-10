@@ -69,6 +69,7 @@ function countryCodeToGeoId(code: string): string | null {
 export interface CountryMapProps {
   rows: Array<{ x: string; y: number }>;
   accent?: string;
+  loading?: boolean;
 }
 
 type TooltipState = {
@@ -78,9 +79,13 @@ type TooltipState = {
   y: number;
 };
 
-export function CountryMap({ rows, accent = '#6366f1' }: CountryMapProps) {
+export function CountryMap({ rows, accent = 'var(--accent)', loading }: CountryMapProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+
+  if (loading) {
+    return <div className="country-map-wrap country-map-skeleton" aria-busy />;
+  }
 
   const max = Math.max(1, ...rows.map((r) => r.y));
   const byGeoId = new Map<string, number>();

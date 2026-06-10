@@ -1,5 +1,6 @@
 import { DateRangePicker } from './DateRangePicker';
 import { ExportMenu } from './ExportMenu';
+import { RealtimeOnlineKpi } from './RealtimeOnlineKpi';
 import { SegmentFilterMenu } from './SegmentFilterMenu';
 import { type DateRangePreset } from '../lib/dateRange';
 
@@ -8,8 +9,9 @@ interface Segment {
   name: string;
 }
 
-/** Overview only — segment filter + date range + export. */
+/** Overview only — live count + segment filter + date range + export. */
 export function WebsiteStatsControls({
+  websiteId,
   range,
   onRangeChange,
   onExport,
@@ -19,6 +21,7 @@ export function WebsiteStatsControls({
   compareEnabled,
   onCompareChange,
 }: {
+  websiteId: string;
   range: { preset: DateRangePreset; startAt: number; endAt: number };
   onRangeChange: (next: { preset: DateRangePreset; startAt: number; endAt: number }) => void;
   onExport: (type: 'pageviews' | 'events') => void;
@@ -29,16 +32,19 @@ export function WebsiteStatsControls({
   onCompareChange: (enabled: boolean) => void;
 }) {
   return (
-    <div className="stats-header-controls">
-      <SegmentFilterMenu
-        segmentId={segmentId}
-        onSegmentChange={onSegmentChange}
-        segments={segments}
-        compareEnabled={compareEnabled}
-        onCompareChange={onCompareChange}
-      />
-      <DateRangePicker value={range} onChange={onRangeChange} popover />
-      <ExportMenu onExport={onExport} />
+    <div className="stats-header-row">
+      <RealtimeOnlineKpi websiteId={websiteId} />
+      <div className="stats-header-controls">
+        <SegmentFilterMenu
+          segmentId={segmentId}
+          onSegmentChange={onSegmentChange}
+          segments={segments}
+          compareEnabled={compareEnabled}
+          onCompareChange={onCompareChange}
+        />
+        <DateRangePicker value={range} onChange={onRangeChange} popover />
+        <ExportMenu onExport={onExport} />
+      </div>
     </div>
   );
 }

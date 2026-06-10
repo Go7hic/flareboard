@@ -239,10 +239,6 @@ export default function WebsiteSettingsPage() {
 
         <div className="page-settings-main">
           <Panel variant="flush" className="page-settings-group">
-            <div className="panel-body page-settings-group-head">
-              <h2 className="section-title website-page-heading">{t('settings')}</h2>
-            </div>
-
             <form className="page-settings-form" onSubmit={onSubmit}>
               <Panel variant="accent-rail">
                 <h2 className="section-title">{t('sessionReplay')}</h2>

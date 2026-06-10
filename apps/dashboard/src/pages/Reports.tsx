@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { AttributionConversionResponse, UtmReportResponse } from '@flareboard/shared';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Bar,
   BarChart,
@@ -16,15 +17,101 @@ import {
 import { DateRangePicker } from '../components/DateRangePicker';
 import { RetentionHeatmap } from '../components/RetentionHeatmap';
 import { EmptyState } from '../components/EmptyState';
+import { MetricsTable } from '../components/MetricsTable';
 import { PageHeader } from '../components/PageHeader';
 import { ReportSection, SectionDataSkeleton } from '../components/ReportSection';
+import { SegmentTabs } from '../components/SegmentTabs';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { api, getToken, type UtmRow, type Website } from '../lib/api';
+import { Skeleton } from '../components/ui/skeleton';
+import { api, getToken, type Website } from '../lib/api';
 import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/dateRange';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
+
+type AttributionModel = 'first' | 'last';
+type AttributionType = 'path' | 'event';
+
+function formatPaidAdsLabel(name: string) {
+  switch (name) {
+    case 'Google Ads':
+      return t('paidAdsGoogle');
+    case 'Microsoft Ads':
+      return t('paidAdsMicrosoft');
+    case 'Meta Ads':
+      return t('paidAdsMeta');
+    case 'TikTok Ads':
+      return t('paidAdsTikTok');
+    case 'X Ads':
+      return t('paidAdsX');
+    default:
+      return name;
+  }
+}
+
+function attributionBreakdownRows(
+  rows: Array<{ name: string; value: number }>,
+  formatName?: (name: string) => string,
+) {
+  return rows.map((row) => ({
+    x: formatName ? formatName(row.name) : row.name,
+    y: row.value,
+  }));
+}
+
+function AttributionStatCard({
+  label,
+  value,
+  primary,
+}: {
+  label: string;
+  value: number;
+  primary?: boolean;
+}) {
+  return (
+    <div className={`stat-card${primary ? ' stat-card-primary' : ''}`}>
+      <div className="stat-label">{label}</div>
+      <div className="stat-value">{value.toLocaleString()}</div>
+    </div>
+  );
+}
+
+function AttributionStatSkeleton() {
+  return (
+    <div className="stat-card stat-card-skeleton" aria-hidden>
+      <Skeleton className="h-3 w-2/3" />
+      <Skeleton className="mt-[0.65rem] h-7 w-full" />
+    </div>
+  );
+}
+
+function AttributionBreakdownPanel({
+  title,
+  rows,
+  loading,
+  formatName,
+}: {
+  title: string;
+  rows: Array<{ name: string; value: number }>;
+  loading?: boolean;
+  formatName?: (name: string) => string;
+}) {
+  return (
+    <section className="panel overview-dimension-card">
+      <h2 className="overview-dimension-card-title">{title}</h2>
+      <MetricsTable
+        embedded
+        hideTitle
+        maxRows={8}
+        rows={attributionBreakdownRows(rows, formatName)}
+        loading={loading}
+        primaryMetric="views"
+        title={title}
+      />
+    </section>
+  );
+}
 
 export default function ReportsPage() {
   const chartColors = useChartColors();
@@ -68,6 +155,9 @@ export default function ReportsPage() {
   const [goalEvent, setGoalEvent] = useState('');
   const [goalTarget, setGoalTarget] = useState('');
   const [goalPeriod, setGoalPeriod] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
+  const [attributionModel, setAttributionModel] = useState<AttributionModel>('last');
+  const [attributionType, setAttributionType] = useState<AttributionType>('path');
+  const [attributionStep, setAttributionStep] = useState('/');
   const queryClient = useQueryClient();
 
   function setSectionOpen(id: string, open: boolean) {
@@ -155,7 +245,7 @@ export default function ReportsPage() {
   const utmQuery = useQuery({
     queryKey: ['reports-utm', websiteId, range, segmentId],
     enabled: Boolean(websiteId) && openSections.utm,
-    queryFn: () => api<UtmRow[]>(q('utm')),
+    queryFn: () => api<UtmReportResponse>(q('utm')),
   });
 
   const goalQuery = useQuery({
@@ -207,14 +297,33 @@ export default function ReportsPage() {
     queryFn: () => api<{ paths: Array<{ path: string; count: number }> }>(q('journey')),
   });
 
+  const attributionQueryExtra = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set('model', attributionModel);
+    params.set('type', attributionType);
+    params.set('step', attributionStep.trim());
+    return `&${params.toString()}`;
+  }, [attributionModel, attributionType, attributionStep]);
+
   const attributionQuery = useQuery({
-    queryKey: ['reports-attribution', websiteId, range, segmentId],
-    enabled: Boolean(websiteId) && openSections.attribution,
+    queryKey: [
+      'reports-attribution',
+      websiteId,
+      range,
+      segmentId,
+      attributionModel,
+      attributionType,
+      attributionStep,
+    ],
+    enabled:
+      Boolean(websiteId) && openSections.attribution && attributionStep.trim().length > 0,
     queryFn: () =>
-      api<{ model: string; sources: Array<{ source: string; sessions: number; pageviews: number }> }>(
-        q('attribution'),
-      ),
+      api<AttributionConversionResponse>(`${q('attribution')}${attributionQueryExtra}`),
   });
+
+  const attributionData = attributionQuery.data;
+  const attributionLoading = attributionQuery.isLoading;
+  const attributionHasConversions = (attributionData?.total.conversions ?? 0) > 0;
 
   const breakdownQuery = useQuery({
     queryKey: ['reports-breakdown', websiteId, range, segmentId],
@@ -567,20 +676,139 @@ export default function ReportsPage() {
               )}
             </GatedReportSection>
 
-            <GatedReportSection id="attribution" title={t('attribution')} loading={attributionQuery.isLoading}>
-              {(attributionQuery.data?.sources ?? []).length === 0 && !attributionQuery.isLoading ? (
+            <GatedReportSection id="attribution" title={t('attribution')}>
+              <div
+                className="stats-toolbar"
+                style={{ justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem' }}
+              >
+                <p className="text-muted" style={{ margin: 0, flex: '1 1 16rem' }}>
+                  {t('attributionLead')}
+                </p>
+                {websiteId ? (
+                  <Link to={`/websites/${websiteId}/attribution`} className="btn btn-ghost btn-sm">
+                    {t('overviewMore')}
+                  </Link>
+                ) : null}
+              </div>
+
+              <div
+                className="stats-toolbar attribution-filters section-gap"
+                style={{ flexWrap: 'wrap', gap: '0.75rem' }}
+              >
+                <SegmentTabs
+                  tabs={[
+                    { id: 'last', label: t('attributionModelLast') },
+                    { id: 'first', label: t('attributionModelFirst') },
+                  ]}
+                  value={attributionModel}
+                  onChange={(id) => setAttributionModel(id as AttributionModel)}
+                  aria-label={t('attribution')}
+                />
+                <SegmentTabs
+                  tabs={[
+                    { id: 'path', label: t('attributionTypePath') },
+                    { id: 'event', label: t('attributionTypeEvent') },
+                  ]}
+                  value={attributionType}
+                  onChange={(id) => setAttributionType(id as AttributionType)}
+                  aria-label={t('attributionStep')}
+                />
+                <div className="field" style={{ minWidth: '12rem', flex: '1 1 12rem', maxWidth: '20rem' }}>
+                  <Label htmlFor="reports-attribution-step">{t('attributionStep')}</Label>
+                  <Input
+                    id="reports-attribution-step"
+                    value={attributionStep}
+                    onChange={(e) => setAttributionStep(e.target.value)}
+                    placeholder={
+                      attributionType === 'path'
+                        ? t('attributionStepPathPlaceholder')
+                        : t('attributionStepEventPlaceholder')
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="analytics-hero-stats section-gap">
+                {attributionLoading ? (
+                  <>
+                    <AttributionStatSkeleton />
+                    <AttributionStatSkeleton />
+                    <AttributionStatSkeleton />
+                    <AttributionStatSkeleton />
+                  </>
+                ) : (
+                  <>
+                    <AttributionStatCard
+                      label={t('attributionConversions')}
+                      value={attributionData?.total.conversions ?? 0}
+                      primary
+                    />
+                    <AttributionStatCard label={t('visitors')} value={attributionData?.total.visitors ?? 0} />
+                    <AttributionStatCard label={t('visits')} value={attributionData?.total.visits ?? 0} />
+                    <AttributionStatCard label={t('pageviews')} value={attributionData?.total.pageviews ?? 0} />
+                  </>
+                )}
+              </div>
+
+              {!attributionStep.trim() ? (
+                <EmptyState
+                  title={t('attributionStep')}
+                  description={t('attributionStepPathPlaceholder')}
+                />
+              ) : attributionLoading ? (
+                <div className="overview-dimensions-grid section-gap">
+                  <div className="panel skeleton skeleton-block" aria-busy />
+                  <div className="panel skeleton skeleton-block" aria-busy />
+                </div>
+              ) : !attributionHasConversions ? (
                 <EmptyState title={t('noDataInPeriod')} />
               ) : (
-                <ul className="list-plain">
-                  {(attributionQuery.data?.sources ?? []).map((s) => (
-                    <li key={s.source} className="list-item list-row">
-                      <span>{s.source}</span>
-                      <span className="list-row-value">
-                        {s.sessions} {t('sessionsCount')}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <div className="overview-dimensions-grid section-gap">
+                    <AttributionBreakdownPanel
+                      title={t('attributionSectionSource')}
+                      rows={attributionData?.referrer ?? []}
+                      loading={attributionLoading}
+                    />
+                    <AttributionBreakdownPanel
+                      title={t('attributionSectionPaidAds')}
+                      rows={attributionData?.paidAds ?? []}
+                      loading={attributionLoading}
+                      formatName={formatPaidAdsLabel}
+                    />
+                  </div>
+
+                  <section className="section-gap" aria-label={t('attributionSectionUtm')}>
+                    <h3 className="section-title">{t('attributionSectionUtm')}</h3>
+                    <div className="overview-dimensions-grid">
+                      <AttributionBreakdownPanel
+                        title={t('source')}
+                        rows={attributionData?.utm_source ?? []}
+                        loading={attributionLoading}
+                      />
+                      <AttributionBreakdownPanel
+                        title={t('medium')}
+                        rows={attributionData?.utm_medium ?? []}
+                        loading={attributionLoading}
+                      />
+                      <AttributionBreakdownPanel
+                        title={t('campaign')}
+                        rows={attributionData?.utm_campaign ?? []}
+                        loading={attributionLoading}
+                      />
+                      <AttributionBreakdownPanel
+                        title={t('utmContent')}
+                        rows={attributionData?.utm_content ?? []}
+                        loading={attributionLoading}
+                      />
+                      <AttributionBreakdownPanel
+                        title={t('utmTerm')}
+                        rows={attributionData?.utm_term ?? []}
+                        loading={attributionLoading}
+                      />
+                    </div>
+                  </section>
+                </>
               )}
             </GatedReportSection>
 
@@ -621,32 +849,46 @@ export default function ReportsPage() {
             </GatedReportSection>
 
             <GatedReportSection id="utm" title={t('utmBreakdown')} loading={utmQuery.isLoading}>
-              {(utmQuery.data ?? []).length === 0 && !utmQuery.isLoading ? (
-                <EmptyState title={t('noDataInPeriod')} />
-              ) : (
-                <div className="table-scroll">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>{t('source')}</th>
-                        <th>{t('medium')}</th>
-                        <th>{t('campaign')}</th>
-                        <th className="num">{t('pageviews')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(utmQuery.data ?? []).map((row, i) => (
-                        <tr key={i}>
-                          <td>{row.source}</td>
-                          <td>{row.medium}</td>
-                          <td>{row.campaign}</td>
-                          <td className="num">{row.pageviews}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              <div className="utm-dimensions-stack">
+                {(
+                  [
+                    { key: 'campaign' as const, label: t('campaign') },
+                    { key: 'content' as const, label: t('utmContent') },
+                    { key: 'medium' as const, label: t('medium') },
+                    { key: 'source' as const, label: t('source') },
+                    { key: 'term' as const, label: t('utmTerm') },
+                  ] as const
+                ).map(({ key, label }) => {
+                  const rows = utmQuery.data?.[key] ?? [];
+                  return (
+                    <section key={key} className="panel overview-dimension-card">
+                      <h3 className="overview-dimension-card-title">{label}</h3>
+                      {rows.length === 0 && !utmQuery.isLoading ? (
+                        <EmptyState title={t('noDataInPeriod')} />
+                      ) : (
+                        <div className="table-scroll">
+                          <table className="data-table">
+                            <thead>
+                              <tr>
+                                <th>{t('metricName')}</th>
+                                <th className="num">{t('pageviews')}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {rows.map((row) => (
+                                <tr key={`${key}-${row.name}`}>
+                                  <td>{row.name}</td>
+                                  <td className="num">{row.pageviews.toLocaleString()}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </section>
+                  );
+                })}
+              </div>
             </GatedReportSection>
 
             <GatedReportSection id="revenue" title={t('revenue')} loading={revenueQuery.isLoading}>

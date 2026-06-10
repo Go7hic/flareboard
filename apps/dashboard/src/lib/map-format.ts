@@ -1,10 +1,20 @@
 import { getLocale } from './i18n';
 
 const countryNames = new Intl.DisplayNames([getLocale()], { type: 'region' });
+/** Globe.gl labels use a Latin-only bitmap font — keep English for 3D map text. */
+const countryNamesEn = new Intl.DisplayNames(['en'], { type: 'region' });
 
 export function getCountryLabel(code: string): string {
   try {
     return countryNames.of(code.toUpperCase()) ?? code.toUpperCase();
+  } catch {
+    return code.toUpperCase();
+  }
+}
+
+export function getCountryLabelEn(code: string): string {
+  try {
+    return countryNamesEn.of(code.toUpperCase()) ?? code.toUpperCase();
   } catch {
     return code.toUpperCase();
   }

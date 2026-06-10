@@ -15,7 +15,7 @@ import {
 import { EmptyState } from '../components/EmptyState';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
 import { WebsitePageShell } from '../components/WebsitePageShell';
-import { Button } from '../components/ui/button';
+import { SegmentTabs } from '../components/SegmentTabs';
 import { Skeleton } from '../components/ui/skeleton';
 import { api, getToken } from '../lib/api';
 import { t } from '../lib/i18n';
@@ -271,7 +271,7 @@ export default function PerformancePage() {
       />
 
       <section className="analytics-hero panel section-gap" aria-labelledby="performance-overview">
-        <h2 id="performance-overview" className="section-title">
+        <h2 id="performance-overview" className="visually-hidden">
           {t('performance')}
         </h2>
         <p className="section-lead">{t('performancePageLead')}</p>
@@ -340,21 +340,15 @@ export default function PerformancePage() {
         <div className="analytics-hero-chart">
           <div className="performance-trend-head">
             <h3 className="section-title">{t('performanceTrendTitle')}</h3>
-            <div className="metric-tabs" role="tablist" aria-label={t('performanceTrendTitle')}>
-              {TREND_METRICS.map((metric) => (
-                <Button
-                  key={metric}
-                  type="button"
-                  role="tab"
-                  aria-selected={trendMetric === metric}
-                  size="sm"
-                  variant={trendMetric === metric ? 'primary' : 'secondary'}
-                  onClick={() => setTrendMetric(metric)}
-                >
-                  {metric.toUpperCase()}
-                </Button>
-              ))}
-            </div>
+            <SegmentTabs
+              tabs={TREND_METRICS.map((metric) => ({
+                id: metric,
+                label: metric.toUpperCase(),
+              }))}
+              value={trendMetric}
+              onChange={(id) => setTrendMetric(id as (typeof TREND_METRICS)[number])}
+              aria-label={t('performanceTrendTitle')}
+            />
           </div>
           {loading ? (
             <Skeleton className="h-56 w-full" />
@@ -415,42 +409,33 @@ export default function PerformancePage() {
         <section className="panel breakdown-panel section-gap-lg">
           <div className="breakdown-panel-head">
             <h2 className="section-title">{t('performanceBreakdownTitle')}</h2>
-            <div className="metric-tabs" role="tablist">
-              {BREAKDOWN_TABS.map((tab) => (
-                <Button
-                  key={tab}
-                  type="button"
-                  role="tab"
-                  aria-selected={breakdownTab === tab}
-                  size="sm"
-                  variant={breakdownTab === tab ? 'primary' : 'secondary'}
-                  onClick={() => setBreakdownTab(tab)}
-                >
-                  {tab === 'url'
+            <SegmentTabs
+              tabs={BREAKDOWN_TABS.map((tab) => ({
+                id: tab,
+                label:
+                  tab === 'url'
                     ? t('performanceBreakdownUrl')
                     : tab === 'browser'
                       ? t('browser')
-                      : t('country')}
-                </Button>
-              ))}
-            </div>
+                      : t('country'),
+              }))}
+              value={breakdownTab}
+              onChange={(id) => setBreakdownTab(id as BreakdownTab)}
+              aria-label={t('performanceBreakdownTitle')}
+            />
           </div>
 
           <div className="performance-breakdown-metric-row">
             <span className="path-sort-toolbar-label">{t('performanceBreakdownMetric')}:</span>
-            <div className="path-sort-toolbar-pills">
-              {BREAKDOWN_METRICS.map((metric) => (
-                <Button
-                  key={metric}
-                  type="button"
-                  size="sm"
-                  variant={breakdownMetric === metric ? 'primary' : 'secondary'}
-                  onClick={() => setBreakdownMetric(metric)}
-                >
-                  {metric.toUpperCase()}
-                </Button>
-              ))}
-            </div>
+            <SegmentTabs
+              tabs={BREAKDOWN_METRICS.map((metric) => ({
+                id: metric,
+                label: metric.toUpperCase(),
+              }))}
+              value={breakdownMetric}
+              onChange={(id) => setBreakdownMetric(id as (typeof BREAKDOWN_METRICS)[number])}
+              aria-label={t('performanceBreakdownMetric')}
+            />
           </div>
 
           {loading ? (

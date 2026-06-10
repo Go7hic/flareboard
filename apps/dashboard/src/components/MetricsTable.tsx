@@ -9,14 +9,23 @@ export function MetricsTable({
   loading,
   embedded = false,
   showPageStats = false,
+  hideTitle = false,
+  maxRows,
+  primaryMetric = 'views',
 }: {
   title: string;
   rows: MetricRow[];
   loading?: boolean;
   embedded?: boolean;
   showPageStats?: boolean;
+  hideTitle?: boolean;
+  maxRows?: number;
+  primaryMetric?: 'views' | 'visitors';
 }) {
-  const maxY = rows.length ? Math.max(...rows.map((r) => r.y), 1) : 1;
+  const displayRows = maxRows != null ? rows.slice(0, maxRows) : rows;
+  const rowValue = (row: MetricRow) =>
+    primaryMetric === 'visitors' ? (row.visitors ?? row.y) : row.y;
+  const maxY = displayRows.length ? Math.max(...displayRows.map(rowValue), 1) : 1;
 
   const body = (
     <>
@@ -26,12 +35,18 @@ export function MetricsTable({
           <Skeleton className="mt-2 h-6 w-3/4" />
         </div>
       ) : null}
-      {!loading && rows.length > 0 ? (
+      {!loading && displayRows.length > 0 ? (
         <table className="data-table">
           <thead>
             <tr>
               <th>{t('metricName')}</th>
-              <th className="num">{showPageStats ? t('pagesSort_views') : t('views')}</th>
+              <th className="num">
+                {showPageStats
+                  ? t('pagesSort_views')
+                  : primaryMetric === 'visitors'
+                    ? t('visitors')
+                    : t('views')}
+              </th>
               {showPageStats ? (
                 <>
                   <th className="num">{t('pagesSort_visitors')}</th>
@@ -41,7 +56,9 @@ export function MetricsTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {displayRows.map((row) => {
+              const value = rowValue(row);
+              return (
               <tr key={`${title}-${row.x}`}>
                 <td>
                   <div>{row.x}</div>
@@ -49,12 +66,12 @@ export function MetricsTable({
                     <div className="metrics-table-bar-fill">
                       <div
                         className="metrics-table-bar-inner"
-                        style={{ width: `${Math.round((row.y / maxY) * 100)}%` }}
+                        style={{ width: `${Math.round((value / maxY) * 100)}%` }}
                       />
                     </div>
                   </div>
                 </td>
-                <td className="num">{row.y.toLocaleString()}</td>
+                <td className="num">{value.toLocaleString()}</td>
                 {showPageStats ? (
                   <>
                     <td className="num">{(row.visitors ?? 0).toLocaleString()}</td>
@@ -62,11 +79,12 @@ export function MetricsTable({
                   </>
                 ) : null}
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
       ) : null}
-      {!loading && rows.length === 0 ? (
+      {!loading && displayRows.length === 0 ? (
         <EmptyState title={t('noDataInPeriod')} description={t('noDataInPeriodHint')} />
       ) : null}
     </>
@@ -75,7 +93,7 @@ export function MetricsTable({
   if (embedded) {
     return (
       <div className="metrics-table-embedded">
-        <h3 className="metrics-table-embedded-title">{title}</h3>
+        {hideTitle ? null : <h3 className="metrics-table-embedded-title">{title}</h3>}
         {body}
       </div>
     );

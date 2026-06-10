@@ -1,8 +1,10 @@
 import { eq, and, isNull, sql, gte, lte, count, countDistinct, inArray, desc, asc } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
-import { EVENT_TYPE } from '@flareboard/shared';
+import { EVENT_TYPE, type UtmReportResponse } from '@flareboard/shared';
 import type { Env } from '../env';
 import { cachedRead } from './cache';
+import { channelCaseSql } from './channel';
+import { buildSegmentSql, type SegmentParams } from './segment-filters';
 
 export async function getUserByUsername(env: Env, username: string) {
   const db = createDb(env.DB);
@@ -209,6 +211,45 @@ export async function getPageviews(
   return { pageviews: rows.map((r) => ({ x: r.x, y: r.y })) };
 }
 
+export type WebsiteMetricsSeries = {
+  pageviews: { x: string; y: number }[];
+  visitors: { x: string; y: number }[];
+};
+
+export async function getWebsiteMetricsSeries(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  unit: string,
+): Promise<WebsiteMetricsSeries> {
+  const format =
+    unit === 'hour'
+      ? "%Y-%m-%d %H:00"
+      : unit === 'month'
+        ? '%Y-%m'
+        : unit === 'year'
+          ? '%Y'
+          : '%Y-%m-%d';
+  const { results } = await env.DB.prepare(
+    `SELECT strftime('${format}', datetime(created_at / 1000, 'unixepoch')) as x,
+            SUM(CASE WHEN event_type = ?4 THEN 1 ELSE 0 END) as pageviews,
+            COUNT(DISTINCT session_id) as visitors
+     FROM website_event
+     WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3
+     GROUP BY x
+     ORDER BY x`,
+  )
+    .bind(websiteId, startAt, endAt, EVENT_TYPE.pageView)
+    .all<{ x: string; pageviews: number; visitors: number }>();
+
+  const rows = results ?? [];
+  return {
+    pageviews: rows.map((r) => ({ x: r.x, y: r.pageviews })),
+    visitors: rows.map((r) => ({ x: r.x, y: r.visitors })),
+  };
+}
+
 export type DashboardSiteMetric = {
   websiteId: string;
   pageviews: number;
@@ -289,6 +330,85 @@ export async function getAggregateMetricsForWebsites(
   };
 }
 
+export type TrafficHeatmapCell = { dow: number; hour: number; count: number };
+export type TrafficHeatmapData = { cells: TrafficHeatmapCell[]; max: number };
+
+async function getVisitUrlMetrics(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  mode: 'entry' | 'exit',
+  limit: number,
+) {
+  const order = mode === 'entry' ? 'ASC' : 'DESC';
+  const rows = await env.DB.prepare(
+    `WITH ranked AS (
+       SELECT e.url_path,
+         ROW_NUMBER() OVER (PARTITION BY e.visit_id ORDER BY e.created_at ${order}) as rn
+       FROM website_event e
+       WHERE e.website_id = ?1 AND e.event_type = ?2
+         AND e.created_at >= ?3 AND e.created_at <= ?4
+     )
+     SELECT COALESCE(url_path, '/') as x, COUNT(*) as y
+     FROM ranked
+     WHERE rn = 1
+     GROUP BY x
+     ORDER BY y DESC
+     LIMIT ?5`,
+  )
+    .bind(websiteId, EVENT_TYPE.pageView, startAt, endAt, limit)
+    .all<{ x: string; y: number }>();
+
+  return (rows.results ?? []).map((r) => ({ x: r.x || '/', y: r.y }));
+}
+
+async function getChannelMetrics(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  limit: number,
+) {
+  const channelExpr = channelCaseSql('e');
+  const rows = await env.DB.prepare(
+    `SELECT ${channelExpr} as x, COUNT(*) as y
+     FROM website_event e
+     WHERE e.website_id = ?1 AND e.event_type = ?2
+       AND e.created_at >= ?3 AND e.created_at <= ?4
+     GROUP BY x
+     ORDER BY y DESC
+     LIMIT ?5`,
+  )
+    .bind(websiteId, EVENT_TYPE.pageView, startAt, endAt, limit)
+    .all<{ x: string; y: number }>();
+
+  return rows.results ?? [];
+}
+
+export async function getTrafficHeatmap(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+): Promise<TrafficHeatmapData> {
+  const rows = await env.DB.prepare(
+    `SELECT CAST(strftime('%w', datetime(created_at / 1000, 'unixepoch')) AS INTEGER) as dow,
+            CAST(strftime('%H', datetime(created_at / 1000, 'unixepoch')) AS INTEGER) as hour,
+            COUNT(*) as count
+     FROM website_event
+     WHERE website_id = ?1 AND event_type = ?2
+       AND created_at >= ?3 AND created_at <= ?4
+     GROUP BY dow, hour`,
+  )
+    .bind(websiteId, EVENT_TYPE.pageView, startAt, endAt)
+    .all<{ dow: number; hour: number; count: number }>();
+
+  const cells = rows.results ?? [];
+  const max = cells.reduce((m, c) => Math.max(m, c.count), 0);
+  return { cells, max };
+}
+
 export async function getMetrics(
   env: Env,
   websiteId: string,
@@ -297,6 +417,13 @@ export async function getMetrics(
   type: string,
   limit = 10,
 ) {
+  if (type === 'entry' || type === 'exit') {
+    return getVisitUrlMetrics(env, websiteId, startAt, endAt, type, limit);
+  }
+  if (type === 'channel') {
+    return getChannelMetrics(env, websiteId, startAt, endAt, limit);
+  }
+
   const { getMetricsFromRollups } = await import('./rollups');
   const rollupMetrics = await getMetricsFromRollups(env, websiteId, startAt, endAt, type, limit);
   if (rollupMetrics) return rollupMetrics;
@@ -806,21 +933,66 @@ export async function getReportById(env: Env, reportId: string) {
   return rows[0] ?? null;
 }
 
-export async function getUtmReport(env: Env, websiteId: string, startAt: number, endAt: number) {
-  const rows = await env.DB.prepare(
-    `SELECT COALESCE(utm_source, '(none)') as source,
-            COALESCE(utm_medium, '(none)') as medium,
-            COALESCE(utm_campaign, '(none)') as campaign,
-            COUNT(*) as pageviews
-     FROM website_event
-     WHERE website_id = ?1 AND event_type = ?2
-       AND created_at >= ?3 AND created_at <= ?4
-     GROUP BY utm_source, utm_medium, utm_campaign
-     ORDER BY pageviews DESC LIMIT 50`,
-  )
-    .bind(websiteId, EVENT_TYPE.pageView, startAt, endAt)
-    .all<{ source: string; medium: string; campaign: string; pageviews: number }>();
+const UTM_DIMENSIONS = [
+  { key: 'campaign' as const, column: 'utm_campaign', empty: '(none)' },
+  { key: 'content' as const, column: 'utm_content', empty: '(none)' },
+  { key: 'medium' as const, column: 'utm_medium', empty: '(direct)' },
+  { key: 'source' as const, column: 'utm_source', empty: '(direct)' },
+  { key: 'term' as const, column: 'utm_term', empty: '(none)' },
+];
+
+async function utmDimensionBreakdown(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  column: string,
+  emptyLabel: string,
+  segment?: SegmentParams | null,
+) {
+  const seg = buildSegmentSql(segment ?? null);
+  const joins = seg.joinSession ? ' INNER JOIN session s ON e.session_id = s.session_id' : '';
+  const clauses = [
+    'e.website_id = ?',
+    'e.created_at >= ?',
+    'e.created_at <= ?',
+    'e.event_type = ?',
+    ...seg.eventClauses,
+    ...seg.sessionClauses,
+  ];
+  const binds: (string | number)[] = [websiteId, startAt, endAt, EVENT_TYPE.pageView, ...seg.binds];
+  const sql = `SELECT COALESCE(NULLIF(e.${column}, ''), ?) AS name,
+                      COUNT(*) AS pageviews
+               FROM website_event e${joins}
+               WHERE ${clauses.join(' AND ')}
+               GROUP BY name
+               ORDER BY pageviews DESC
+               LIMIT 50`;
+  const rows = await env.DB.prepare(sql)
+    .bind(emptyLabel, ...binds)
+    .all<{ name: string; pageviews: number }>();
   return rows.results ?? [];
+}
+
+export async function getUtmReport(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  segment?: SegmentParams | null,
+): Promise<Omit<UtmReportResponse, 'segmentId' | 'startAt' | 'endAt'>> {
+  const breakdowns = await Promise.all(
+    UTM_DIMENSIONS.map(({ column, empty }) =>
+      utmDimensionBreakdown(env, websiteId, startAt, endAt, column, empty, segment),
+    ),
+  );
+  return {
+    campaign: breakdowns[0] ?? [],
+    content: breakdowns[1] ?? [],
+    medium: breakdowns[2] ?? [],
+    source: breakdowns[3] ?? [],
+    term: breakdowns[4] ?? [],
+  };
 }
 
 export async function getGoalReport(

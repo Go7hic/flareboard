@@ -2,13 +2,25 @@ import type { Context } from 'hono';
 import { compareQuerySchema, metricsQuerySchema, statsQuerySchema } from '@flareboard/shared';
 import type { Env } from '../env';
 import { canAccessWebsite } from '../lib/access';
-import { getMetrics, getPageviews, getPageMetrics, getSegmentById, getWebsiteById, getWebsiteStats } from '../lib/queries';
+import {
+  getMetrics,
+  getPageviews,
+  getPageMetrics,
+  getSegmentById,
+  getTrafficHeatmap,
+  getWebsiteById,
+  getWebsiteMetricsSeries,
+  getWebsiteStats,
+} from '../lib/queries';
 import {
   getMetricsFiltered,
   getPageMetricsFiltered,
   getPageviewsFiltered,
+  getTrafficHeatmapFiltered,
+  getWebsiteMetricsSeriesFiltered,
   getWebsiteStatsFiltered,
 } from '../lib/segment-stats';
+import { resolveCohortMemberJoin } from '../lib/cohorts';
 import { badRequest, json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
 
@@ -44,13 +56,24 @@ async function segmentParams(c: Ctx, websiteId: string) {
   return segment.parameters as Record<string, unknown>;
 }
 
+async function cohortJoin(c: Ctx, websiteId: string) {
+  const cohortId = c.req.query('cohort') || c.req.query('cohortId');
+  if (!cohortId) return null;
+  return resolveCohortMemberJoin(c.env, websiteId, cohortId);
+}
+
+function useFilteredQueries(segment: Record<string, unknown> | null, cohort: Awaited<ReturnType<typeof cohortJoin>>) {
+  return Boolean(segment || cohort);
+}
+
 export async function handleStats(c: Ctx) {
   const website = await requireWebsite(c);
   if (!website) return notFound();
   const { startAt, endAt } = parseRange(c);
   const segment = await segmentParams(c, website.websiteId);
-  const stats = segment
-    ? await getWebsiteStatsFiltered(c.env, website.websiteId, startAt, endAt, segment)
+  const cohort = await cohortJoin(c, website.websiteId);
+  const stats = useFilteredQueries(segment, cohort)
+    ? await getWebsiteStatsFiltered(c.env, website.websiteId, startAt, endAt, segment, cohort)
     : await getWebsiteStats(c.env, website.websiteId, startAt, endAt);
   return json(stats);
 }
@@ -60,8 +83,9 @@ export async function handlePageviews(c: Ctx) {
   if (!website) return notFound();
   const { startAt, endAt, unit } = parseRange(c);
   const segment = await segmentParams(c, website.websiteId);
-  const data = segment
-    ? await getPageviewsFiltered(c.env, website.websiteId, startAt, endAt, unit, segment)
+  const cohort = await cohortJoin(c, website.websiteId);
+  const data = useFilteredQueries(segment, cohort)
+    ? await getPageviewsFiltered(c.env, website.websiteId, startAt, endAt, unit, segment, cohort)
     : await getPageviews(c.env, website.websiteId, startAt, endAt, unit);
   return json(data);
 }
@@ -75,9 +99,18 @@ export async function handleMetrics(c: Ctx) {
   const sortBy = query.success && query.data.sortBy ? query.data.sortBy : undefined;
   const { startAt, endAt } = parseRange(c);
   const segment = await segmentParams(c, website.websiteId);
+  const cohort = await cohortJoin(c, website.websiteId);
+  const filtered = useFilteredQueries(segment, cohort);
+
+  if (type === 'heatmap') {
+    const data = filtered
+      ? await getTrafficHeatmapFiltered(c.env, website.websiteId, startAt, endAt, segment)
+      : await getTrafficHeatmap(c.env, website.websiteId, startAt, endAt);
+    return json(data);
+  }
 
   if ((type === 'path' || type === 'url') && sortBy) {
-    const data = segment
+    const data = filtered
       ? await getPageMetricsFiltered(
           c.env,
           website.websiteId,
@@ -86,13 +119,14 @@ export async function handleMetrics(c: Ctx) {
           sortBy,
           limit,
           segment,
+          cohort,
         )
       : await getPageMetrics(c.env, website.websiteId, startAt, endAt, sortBy, limit);
     return json(data);
   }
 
-  const data = segment
-    ? await getMetricsFiltered(c.env, website.websiteId, startAt, endAt, type, limit, segment)
+  const data = filtered
+    ? await getMetricsFiltered(c.env, website.websiteId, startAt, endAt, type, limit, segment, cohort)
     : await getMetrics(c.env, website.websiteId, startAt, endAt, type, limit);
   return json(data);
 }
@@ -106,8 +140,10 @@ export async function handleOverview(c: Ctx) {
   const limit = query.success && query.data.limit ? query.data.limit : 10;
   const sortBy = query.success && query.data.sortBy ? query.data.sortBy : undefined;
   const segment = await segmentParams(c, website.websiteId);
+  const cohort = await cohortJoin(c, website.websiteId);
+  const filtered = useFilteredQueries(segment, cohort);
 
-  if (segment) {
+  if (filtered) {
     const metricsPromise =
       (metricType === 'path' || metricType === 'url') && sortBy
         ? getPageMetricsFiltered(
@@ -118,6 +154,7 @@ export async function handleOverview(c: Ctx) {
             sortBy,
             limit,
             segment,
+            cohort,
           )
         : getMetricsFiltered(
             c.env,
@@ -127,10 +164,11 @@ export async function handleOverview(c: Ctx) {
             metricType,
             limit,
             segment,
+            cohort,
           );
     const [stats, pageviews, metrics] = await Promise.all([
-      getWebsiteStatsFiltered(c.env, website.websiteId, startAt, endAt, segment),
-      getPageviewsFiltered(c.env, website.websiteId, startAt, endAt, unit, segment),
+      getWebsiteStatsFiltered(c.env, website.websiteId, startAt, endAt, segment, cohort),
+      getPageviewsFiltered(c.env, website.websiteId, startAt, endAt, unit, segment, cohort),
       metricsPromise,
     ]);
     return json({ stats, pageviews, metrics });
@@ -150,6 +188,13 @@ export async function handleOverview(c: Ctx) {
   return json({ stats, pageviews, metrics });
 }
 
+function compareChartUnit(startAt: number, endAt: number) {
+  const periodMs = endAt - startAt;
+  if (periodMs <= 48 * 60 * 60 * 1000) return 'hour';
+  if (periodMs <= 90 * 24 * 60 * 60 * 1000) return 'day';
+  return 'month';
+}
+
 export async function handleCompare(c: Ctx) {
   const website = await requireWebsite(c);
   if (!website) return notFound();
@@ -165,19 +210,32 @@ export async function handleCompare(c: Ctx) {
       ? compareQuery.data.compareStartAt
       : compareEndAt - periodMs;
   const segment = await segmentParams(c, website.websiteId);
+  const unit = compareChartUnit(startAt, endAt);
 
   const load = (from: number, to: number) =>
     segment
       ? getWebsiteStatsFiltered(c.env, website.websiteId, from, to, segment)
       : getWebsiteStats(c.env, website.websiteId, from, to);
 
-  const [primary, compare] = await Promise.all([
+  const loadSeries = (from: number, to: number) =>
+    segment
+      ? getWebsiteMetricsSeriesFiltered(c.env, website.websiteId, from, to, unit, segment)
+      : getWebsiteMetricsSeries(c.env, website.websiteId, from, to, unit);
+
+  const [primary, compare, primarySeries, compareSeries] = await Promise.all([
     load(startAt, endAt),
     load(compareStartAt, compareEndAt),
+    loadSeries(startAt, endAt),
+    loadSeries(compareStartAt, compareEndAt),
   ]);
 
   return json({
     primary: { startAt, endAt, stats: primary },
     compare: { startAt: compareStartAt, endAt: compareEndAt, stats: compare },
+    unit,
+    series: {
+      primary: primarySeries,
+      compare: compareSeries,
+    },
   });
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { SegmentTabs } from './SegmentTabs';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
@@ -78,19 +79,13 @@ export function ReplayConfigWizard({ enabled, config, onChange }: Props) {
 
   return (
     <div className="replay-wizard">
-      <div className="replay-wizard-steps" role="tablist" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        {steps.map((label, i) => (
-          <Button
-            key={label}
-            type="button"
-            size="sm"
-            variant={step === i ? 'primary' : 'secondary'}
-            onClick={() => setStep(i)}
-          >
-            {i + 1}. {label}
-          </Button>
-        ))}
-      </div>
+      <SegmentTabs
+        className="replay-wizard-steps"
+        tabs={steps.map((label, i) => ({ id: String(i), label: `${i + 1}. ${label}` }))}
+        value={String(step)}
+        onChange={(id) => setStep(Number(id))}
+        aria-label={t('replayWizardStep1')}
+      />
 
       {step === 0 ? (
         <p className="section-lead">{t('replayWizardStep1Lead')}</p>

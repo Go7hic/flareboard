@@ -20,8 +20,8 @@ export function ShareManage({ websiteId }: { websiteId: string }) {
   });
 
   return (
-    <section className="panel section-gap-lg">
-      <h2 className="section-title">{t('shareLinks')}</h2>
+    <section className="section-gap-lg">
+      <h3 className="section-title">{t('shareLinks')}</h3>
       {sharesQuery.isLoading ? (
         <Skeleton className="h-8 w-full" aria-hidden />
       ) : !shares.length ? (

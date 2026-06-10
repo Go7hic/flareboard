@@ -1,5 +1,7 @@
 import { EVENT_TYPE } from '@flareboard/shared';
 import type { CohortDefinition } from '@flareboard/shared';
+import { createDb, schema } from '@flareboard/db';
+import { eq } from 'drizzle-orm';
 import type { Env } from '../env';
 import { clampReportRange } from './report-range';
 
@@ -61,7 +63,16 @@ function conditionSql(
   };
 }
 
-async function cohortMemberSubquery(env: Env, cohort: CohortRecord) {
+export type CohortMemberJoin = {
+  intersectSql: string;
+  binds: (string | number)[];
+  totalMembers: number;
+};
+
+export async function cohortMemberSubquery(
+  env: Env,
+  cohort: CohortRecord,
+): Promise<CohortMemberJoin | null> {
   const { conditions, windowStart, windowEnd } = cohort.definition;
   if (!conditions.length) return null;
 
@@ -79,6 +90,31 @@ async function cohortMemberSubquery(env: Env, cohort: CohortRecord) {
     .first<{ c: number }>();
 
   return { intersectSql, binds: flatBinds, totalMembers: countRow?.c ?? 0 };
+}
+
+export async function resolveCohortMemberJoin(
+  env: Env,
+  websiteId: string,
+  cohortId: string,
+): Promise<CohortMemberJoin | null> {
+  const db = createDb(env.DB);
+  const [row] = await db
+    .select()
+    .from(schema.cohort)
+    .where(eq(schema.cohort.cohortId, cohortId))
+    .limit(1);
+  if (!row || row.websiteId !== websiteId) return null;
+  const definition = parseCohortDefinition(
+    row.definition as CohortDefinition | null,
+    row.type,
+    row.value,
+  );
+  return cohortMemberSubquery(env, {
+    cohortId: row.cohortId,
+    websiteId: row.websiteId,
+    name: row.name,
+    definition,
+  });
 }
 
 export async function getCohortSizeOverTime(

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
 import { WebsitePageShell } from '../components/WebsitePageShell';
+import { SegmentTabs } from '../components/SegmentTabs';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -181,7 +182,6 @@ export default function HeatmapsPage() {
       />
 
       <Panel>
-        <h2 className="section-title">{t('heatmaps')}</h2>
         <p className="section-lead">{t('heatmapsLead')}</p>
 
         {!heatmapsAllowed && billingQuery.data ? (
@@ -224,24 +224,15 @@ export default function HeatmapsPage() {
           </div>
           <div className="field">
             <Label>{t('heatmapType')}</Label>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <Button
-                type="button"
-                variant={kind === 'click' ? 'primary' : 'secondary'}
-                size="sm"
-                onClick={() => setKind('click')}
-              >
-                {t('heatmapClicks')}
-              </Button>
-              <Button
-                type="button"
-                variant={kind === 'scroll' ? 'primary' : 'secondary'}
-                size="sm"
-                onClick={() => setKind('scroll')}
-              >
-                {t('heatmapScroll')}
-              </Button>
-            </div>
+            <SegmentTabs
+              tabs={[
+                { id: 'click', label: t('heatmapClicks') },
+                { id: 'scroll', label: t('heatmapScroll') },
+              ]}
+              value={kind}
+              onChange={(id) => setKind(id as 'click' | 'scroll')}
+              aria-label={t('heatmapType')}
+            />
           </div>
           <div className="field">
             <Label htmlFor="heatmap-device">{t('heatmapDevice')}</Label>

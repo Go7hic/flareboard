@@ -1,269 +1,233 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FormEvent, useMemo, useState } from 'react';
-import { SectionDataSkeleton } from './ReportSection';
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { EmptyState } from './EmptyState';
+import { SegmentFormDialog } from './SegmentFormDialog';
 import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { Textarea } from './ui/textarea';
 import { api, type Segment } from '../lib/api';
 import { t } from '../lib/i18n';
 
-type SegmentField =
-  | 'country'
-  | 'region'
-  | 'city'
-  | 'browser'
-  | 'os'
-  | 'device'
-  | 'language'
-  | 'path'
-  | 'referrer'
-  | 'event_name'
-  | 'utmSource'
-  | 'utmMedium'
-  | 'utmCampaign'
-  | 'hostname'
-  | 'tag';
+type SegmentRow = Segment & { createdAt?: string };
 
-type SegmentCondition = {
-  field: SegmentField;
-  operator: 'equals' | 'contains';
-  value: string;
-};
+const PAGE_SIZE = 10;
 
-const FIELD_OPTIONS: SegmentField[] = [
-  'path',
-  'referrer',
-  'browser',
-  'os',
-  'device',
-  'country',
-  'region',
-  'city',
-  'language',
-  'event_name',
-  'utmSource',
-  'utmMedium',
-  'utmCampaign',
-  'hostname',
-  'tag',
-];
-
-function conditionsToParams(conditions: SegmentCondition[]): Record<string, unknown> {
-  const params: Record<string, unknown> = {};
-  for (const c of conditions) {
-    if (!c.value.trim()) continue;
-    if (c.field === 'path' && c.operator === 'contains') {
-      params.pathContains = c.value.trim();
-    } else if (c.field === 'path') {
-      params.path = c.value.trim();
-    } else if (c.field === 'event_name') {
-      params.eventName = c.value.trim();
-    } else {
-      params[c.field] = c.value.trim();
-    }
-  }
-  return params;
-}
-
-function paramsToConditions(params: Record<string, unknown>): SegmentCondition[] {
-  const conditions: SegmentCondition[] = [];
-  for (const [key, raw] of Object.entries(params)) {
-    if (raw === undefined || raw === null || raw === '') continue;
-    const value = String(raw);
-    if (key === 'pathContains') {
-      conditions.push({ field: 'path', operator: 'contains', value });
-    } else if (key === 'path' || key === 'url') {
-      conditions.push({ field: 'path', operator: 'equals', value });
-    } else if (key === 'event' || key === 'eventName') {
-      conditions.push({ field: 'event_name', operator: 'equals', value });
-    } else if (FIELD_OPTIONS.includes(key as SegmentField)) {
-      conditions.push({ field: key as SegmentField, operator: 'equals', value });
-    }
-  }
-  return conditions.length
-    ? conditions
-    : [{ field: 'country', operator: 'equals', value: '' }];
+function formatCreatedAt(value?: string) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 export function SegmentsPanel({ websiteId }: { websiteId: string }) {
   const queryClient = useQueryClient();
-  const [name, setName] = useState('');
-  const [type, setType] = useState('filter');
-  const [showJson, setShowJson] = useState(false);
-  const [conditions, setConditions] = useState<SegmentCondition[]>([
-    { field: 'country', operator: 'equals', value: '' },
-  ]);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(0);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editId, setEditId] = useState<string | undefined>();
+  const [deleteTarget, setDeleteTarget] = useState<SegmentRow | null>(null);
 
-  const paramsPreview = useMemo(() => conditionsToParams(conditions), [conditions]);
-  const paramsJson = useMemo(() => JSON.stringify(paramsPreview, null, 2), [paramsPreview]);
-
-  const { data, isLoading } = useQuery({
+  const segmentsQuery = useQuery({
     queryKey: ['segments', websiteId],
-    queryFn: () => api<Segment[]>(`/api/websites/${websiteId}/segments`),
-  });
-
-  const createMutation = useMutation({
-    mutationFn: () => {
-      if (!Object.keys(paramsPreview).length) {
-        throw new Error(t('segmentNoConditions'));
-      }
-      return api<Segment>(`/api/websites/${websiteId}/segments`, {
-        method: 'POST',
-        body: JSON.stringify({ name, type, parameters: paramsPreview }),
-      });
-    },
-    onSuccess: () => {
-      setName('');
-      setConditions([{ field: 'country', operator: 'equals', value: '' }]);
-      queryClient.invalidateQueries({ queryKey: ['segments', websiteId] });
-    },
+    queryFn: () => api<SegmentRow[]>(`/api/websites/${websiteId}/segments`),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (segmentId: string) =>
       api(`/api/websites/${websiteId}/segments/${segmentId}`, { method: 'DELETE' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['segments', websiteId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['segments', websiteId] });
+      setDeleteTarget(null);
+    },
   });
 
-  function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) return;
-    createMutation.mutate();
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const rows = segmentsQuery.data ?? [];
+    if (!query) return rows;
+    return rows.filter((row) => row.name.toLowerCase().includes(query));
+  }, [segmentsQuery.data, search]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageRows = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+
+  function openCreate() {
+    setEditId(undefined);
+    setFormOpen(true);
+  }
+
+  function openEdit(row: SegmentRow) {
+    setEditId(row.id);
+    setFormOpen(true);
+  }
+
+  function closeForm() {
+    setFormOpen(false);
+    setEditId(undefined);
   }
 
   return (
-    <section className="panel section-gap-lg">
-      <h2 className="section-title">{t('segments')}</h2>
-      <p className="section-lead">{t('segmentsBuilderLead')}</p>
-
-      <form onSubmit={onSubmit}>
-        <div className="field">
-          <Input placeholder={t('name')} value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <div className="field">
-          <Input placeholder={t('type')} value={type} onChange={(e) => setType(e.target.value)} />
-        </div>
-
-        <p className="text-muted">{t('segmentConditions')}</p>
-        {conditions.map((cond, idx) => (
-          <div key={idx} className="stats-toolbar segment-condition-row">
-            <select
-              className="select"
-              value={cond.field}
-              onChange={(e) => {
-                const next = [...conditions];
-                next[idx] = { ...cond, field: e.target.value as SegmentField };
-                setConditions(next);
-              }}
+    <>
+      <section className="panel cohorts-panel">
+        <header className="cohorts-panel-head">
+          <div className="cohorts-search-wrap">
+            <svg
+              className="cohorts-search-icon"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden
             >
-              {FIELD_OPTIONS.map((f) => (
-                <option key={f} value={f}>
-                  {t(`segmentField_${f}`)}
-                </option>
-              ))}
-            </select>
-            <select
-              className="select"
-              value={cond.operator}
-              onChange={(e) => {
-                const next = [...conditions];
-                next[idx] = { ...cond, operator: e.target.value as 'equals' | 'contains' };
-                setConditions(next);
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3-3" />
+            </svg>
+            <input
+              type="search"
+              className="input cohorts-search"
+              placeholder={t('segmentSearch')}
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(0);
               }}
-              disabled={cond.field !== 'path'}
-            >
-              <option value="equals">{t('cohortEquals')}</option>
-              <option value="contains">{t('cohortContains')}</option>
-            </select>
-            <Input
-              value={cond.value}
-              onChange={(e) => {
-                const next = [...conditions];
-                next[idx] = { ...cond, value: e.target.value };
-                setConditions(next);
-              }}
-              placeholder={t('segmentValuePlaceholder')}
+              aria-label={t('segmentSearch')}
             />
-            {conditions.length > 1 ? (
+          </div>
+          <Button type="button" variant="primary" size="sm" onClick={openCreate}>
+            {t('createSegment')}
+          </Button>
+        </header>
+
+        {segmentsQuery.isLoading ? (
+          <div className="skeleton skeleton-block" aria-busy />
+        ) : filtered.length === 0 ? (
+          <EmptyState title={t('noSegments')} />
+        ) : (
+          <>
+            <div className="table-wrap">
+              <table className="data-table cohorts-table">
+                <thead>
+                  <tr>
+                    <th scope="col">{t('name')}</th>
+                    <th scope="col">{t('segmentCreated')}</th>
+                    <th scope="col" className="cohorts-actions-col">
+                      <span className="visually-hidden">{t('actions')}</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map((row) => (
+                    <tr key={row.id}>
+                      <td>
+                        <Link
+                          to={`/websites/${websiteId}?segment=${encodeURIComponent(row.id)}`}
+                          className="cohorts-name-link"
+                        >
+                          {row.name}
+                        </Link>
+                      </td>
+                      <td className="text-muted">{formatCreatedAt(row.createdAt)}</td>
+                      <td className="cohorts-actions-col">
+                        <div className="cohorts-row-actions">
+                          <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(row)}>
+                            {t('edit')}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="btn-danger-text"
+                            onClick={() => setDeleteTarget(row)}
+                          >
+                            {t('delete')}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {pageCount > 1 ? (
+              <footer className="cohorts-pagination">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={safePage <= 0}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                >
+                  {t('cohortPrevPage')}
+                </Button>
+                <span className="text-muted cohorts-page-label">
+                  {t('cohortPageOf')
+                    .replace('{page}', String(safePage + 1))
+                    .replace('{total}', String(pageCount))}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={safePage >= pageCount - 1}
+                  onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                >
+                  {t('cohortNextPage')}
+                </Button>
+              </footer>
+            ) : null}
+          </>
+        )}
+      </section>
+
+      <SegmentFormDialog
+        open={formOpen}
+        onClose={closeForm}
+        websiteId={websiteId}
+        segmentId={editId}
+      />
+
+      {deleteTarget ? (
+        <div className="dialog-backdrop" onClick={() => setDeleteTarget(null)}>
+          <div
+            className="dialog-panel cohort-delete-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="segment-delete-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="dialog-header">
+              <h2 id="segment-delete-title" className="dialog-title">
+                {t('delete')}
+              </h2>
+            </header>
+            <p className="dialog-body cohort-delete-message">
+              {t('segmentDeleteConfirm').replace('{name}', deleteTarget.name)}
+            </p>
+            <footer className="dialog-footer">
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
-                onClick={() => setConditions(conditions.filter((_, i) => i !== idx))}
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleteMutation.isPending}
               >
-                {t('cohortRemoveCondition')}
+                {t('cancel')}
               </Button>
-            ) : null}
-          </div>
-        ))}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() =>
-            setConditions([...conditions, { field: 'country', operator: 'equals', value: '' }])
-          }
-        >
-          {t('cohortAddCondition')}
-        </Button>
-
-        <div className="field" style={{ marginTop: '0.75rem' }}>
-          <Label>{t('segmentJsonPreview')}</Label>
-          <pre className="code-block" style={{ fontSize: '0.75rem' }}>
-            {paramsJson}
-          </pre>
-        </div>
-
-        <Button type="button" variant="secondary" size="sm" onClick={() => setShowJson(!showJson)}>
-          {showJson ? t('segmentHideAdvanced') : t('segmentShowAdvanced')}
-        </Button>
-        {showJson ? (
-          <div className="field">
-            <Textarea
-              className="textarea-mono"
-              value={paramsJson}
-              onChange={(e) => {
-                try {
-                  const parsed = JSON.parse(e.target.value) as Record<string, unknown>;
-                  setConditions(paramsToConditions(parsed));
-                } catch {
-                  /* ignore while typing */
-                }
-              }}
-            />
-          </div>
-        ) : null}
-
-        <div style={{ marginTop: '0.75rem' }}>
-          <Button type="submit" variant="primary" disabled={createMutation.isPending}>
-            {t('addSegment')}
-          </Button>
-        </div>
-      </form>
-
-      {createMutation.error ? (
-        <p className="text-danger">{(createMutation.error as Error).message}</p>
-      ) : null}
-      {isLoading ? (
-        <SectionDataSkeleton />
-      ) : (
-        <ul className="list-plain section-gap">
-          {(data ?? []).map((s) => (
-            <li key={s.id} className="list-item segment-list-item">
-              <div style={{ flex: 1 }}>
-                <strong>{s.name}</strong> <span className="badge">{s.type}</span>
-                <pre className="code-block" style={{ marginTop: '0.5rem', fontSize: '0.75rem' }}>
-                  {JSON.stringify(s.parameters, null, 2)}
-                </pre>
-              </div>
-              <Button type="button" variant="danger" size="sm" onClick={() => deleteMutation.mutate(s.id)}>
+              <Button
+                type="button"
+                variant="danger"
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(deleteTarget.id)}
+              >
                 {t('delete')}
               </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+            </footer>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

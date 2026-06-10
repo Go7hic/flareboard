@@ -51,8 +51,6 @@ export default function SessionsPage() {
         }
       />
 
-      <h2 className="section-title website-page-heading">{t('sessions')}</h2>
-
       {sessionsQuery.isLoading ? <div className="skeleton" style={{ height: '4rem' }} /> : null}
 
       {!sessionsQuery.isLoading && rows.length > 0 ? (

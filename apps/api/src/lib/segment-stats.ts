@@ -1,7 +1,19 @@
 import { EVENT_TYPE } from '@flareboard/shared';
 import type { Env } from '../env';
-import type { PageMetricRow } from './queries';
+import { channelCaseSql } from './channel';
+import type { CohortMemberJoin } from './cohorts';
+import type { PageMetricRow, TrafficHeatmapData } from './queries';
 import { buildSegmentSql, type SegmentParams } from './segment-filters';
+
+function cohortJoinSql(cohortJoin?: CohortMemberJoin | null) {
+  if (!cohortJoin) {
+    return { sql: '', binds: [] as (string | number)[] };
+  }
+  return {
+    sql: ` INNER JOIN (${cohortJoin.intersectSql}) _cohort_m ON e.session_id = _cohort_m.session_id`,
+    binds: cohortJoin.binds,
+  };
+}
 
 function statChange(current: number, previous: number) {
   const change =
@@ -15,9 +27,12 @@ function baseEventSql(
   endAt: number,
   segment: SegmentParams | null | undefined,
   extraEventType?: number,
+  cohortJoin?: CohortMemberJoin | null,
 ) {
   const seg = buildSegmentSql(segment);
-  const joins = seg.joinSession ? ' INNER JOIN session s ON e.session_id = s.session_id' : '';
+  const cohort = cohortJoinSql(cohortJoin);
+  const joins =
+    (seg.joinSession ? ' INNER JOIN session s ON e.session_id = s.session_id' : '') + cohort.sql;
   const clauses = [
     'e.website_id = ?',
     'e.created_at >= ?',
@@ -25,7 +40,7 @@ function baseEventSql(
     ...seg.eventClauses,
     ...seg.sessionClauses,
   ];
-  const binds: (string | number)[] = [websiteId, startAt, endAt, ...seg.binds];
+  const binds: (string | number)[] = [...cohort.binds, websiteId, startAt, endAt, ...seg.binds];
   if (extraEventType !== undefined) {
     clauses.push('e.event_type = ?');
     binds.push(extraEventType);
@@ -40,9 +55,17 @@ async function countFiltered(
   endAt: number,
   segment: SegmentParams | null | undefined,
   mode: 'pageviews' | 'visitors' | 'visits',
+  cohortJoin?: CohortMemberJoin | null,
 ) {
   const eventType = mode === 'pageviews' ? EVENT_TYPE.pageView : undefined;
-  const { joins, where, binds } = baseEventSql(websiteId, startAt, endAt, segment, eventType);
+  const { joins, where, binds } = baseEventSql(
+    websiteId,
+    startAt,
+    endAt,
+    segment,
+    eventType,
+    cohortJoin,
+  );
   const col =
     mode === 'visitors'
       ? 'COUNT(DISTINCT e.session_id)'
@@ -61,9 +84,12 @@ async function sumTotalTimeFiltered(
   startAt: number,
   endAt: number,
   segment: SegmentParams | null | undefined,
+  cohortJoin?: CohortMemberJoin | null,
 ) {
   const seg = buildSegmentSql(segment);
-  const joins = seg.joinSession ? ' INNER JOIN session s ON e.session_id = s.session_id' : '';
+  const cohort = cohortJoinSql(cohortJoin);
+  const joins =
+    (seg.joinSession ? ' INNER JOIN session s ON e.session_id = s.session_id' : '') + cohort.sql;
   const clauses = [
     'e.website_id = ?',
     'e.created_at >= ?',
@@ -71,7 +97,7 @@ async function sumTotalTimeFiltered(
     ...seg.eventClauses,
     ...seg.sessionClauses,
   ];
-  const binds: (string | number)[] = [websiteId, startAt, endAt, ...seg.binds];
+  const binds: (string | number)[] = [...cohort.binds, websiteId, startAt, endAt, ...seg.binds];
 
   const row = await env.DB.prepare(
     `SELECT COALESCE(SUM(duration_ms), 0) as total FROM (
@@ -92,12 +118,15 @@ async function countBouncesFiltered(
   startAt: number,
   endAt: number,
   segment: SegmentParams | null | undefined,
+  cohortJoin?: CohortMemberJoin | null,
 ) {
   const seg = buildSegmentSql(segment);
-  const sessionJoin = seg.joinSession ? ' INNER JOIN session s ON e.session_id = s.session_id' : '';
+  const cohort = cohortJoinSql(cohortJoin);
+  const sessionJoin =
+    (seg.joinSession ? ' INNER JOIN session s ON e.session_id = s.session_id' : '') + cohort.sql;
   const extra = [...seg.eventClauses, ...seg.sessionClauses];
   const extraSql = extra.length ? ` AND ${extra.join(' AND ')}` : '';
-  const binds = [websiteId, EVENT_TYPE.pageView, startAt, endAt, ...seg.binds];
+  const binds = [...cohort.binds, websiteId, EVENT_TYPE.pageView, startAt, endAt, ...seg.binds];
 
   const row = await env.DB.prepare(
     `SELECT COUNT(*) as count FROM (
@@ -118,6 +147,7 @@ export async function getWebsiteStatsFiltered(
   startAt: number,
   endAt: number,
   segment?: SegmentParams | null,
+  cohortJoin?: CohortMemberJoin | null,
 ) {
   const period = endAt - startAt;
   const prevStart = startAt - period;
@@ -135,16 +165,16 @@ export async function getWebsiteStatsFiltered(
     prevBounces,
     prevTotaltime,
   ] = await Promise.all([
-    countFiltered(env, websiteId, startAt, endAt, segment, 'pageviews'),
-    countFiltered(env, websiteId, startAt, endAt, segment, 'visitors'),
-    countFiltered(env, websiteId, startAt, endAt, segment, 'visits'),
-    countBouncesFiltered(env, websiteId, startAt, endAt, segment),
-    sumTotalTimeFiltered(env, websiteId, startAt, endAt, segment),
-    countFiltered(env, websiteId, prevStart, prevEnd, segment, 'pageviews'),
-    countFiltered(env, websiteId, prevStart, prevEnd, segment, 'visitors'),
-    countFiltered(env, websiteId, prevStart, prevEnd, segment, 'visits'),
-    countBouncesFiltered(env, websiteId, prevStart, prevEnd, segment),
-    sumTotalTimeFiltered(env, websiteId, prevStart, prevEnd, segment),
+    countFiltered(env, websiteId, startAt, endAt, segment, 'pageviews', cohortJoin),
+    countFiltered(env, websiteId, startAt, endAt, segment, 'visitors', cohortJoin),
+    countFiltered(env, websiteId, startAt, endAt, segment, 'visits', cohortJoin),
+    countBouncesFiltered(env, websiteId, startAt, endAt, segment, cohortJoin),
+    sumTotalTimeFiltered(env, websiteId, startAt, endAt, segment, cohortJoin),
+    countFiltered(env, websiteId, prevStart, prevEnd, segment, 'pageviews', cohortJoin),
+    countFiltered(env, websiteId, prevStart, prevEnd, segment, 'visitors', cohortJoin),
+    countFiltered(env, websiteId, prevStart, prevEnd, segment, 'visits', cohortJoin),
+    countBouncesFiltered(env, websiteId, prevStart, prevEnd, segment, cohortJoin),
+    sumTotalTimeFiltered(env, websiteId, prevStart, prevEnd, segment, cohortJoin),
   ]);
 
   return {
@@ -163,9 +193,12 @@ export async function getPageviewsFiltered(
   endAt: number,
   unit: string,
   segment?: SegmentParams | null,
+  cohortJoin?: CohortMemberJoin | null,
 ) {
   const seg = buildSegmentSql(segment);
-  const joins = seg.joinSession ? ' INNER JOIN session s ON e.session_id = s.session_id' : '';
+  const cohort = cohortJoinSql(cohortJoin);
+  const joins =
+    (seg.joinSession ? ' INNER JOIN session s ON e.session_id = s.session_id' : '') + cohort.sql;
   const format =
     unit === 'hour'
       ? "%Y-%m-%d %H:00"
@@ -183,6 +216,7 @@ export async function getPageviewsFiltered(
     ...seg.sessionClauses,
   ];
   const binds: (string | number)[] = [
+    ...cohort.binds,
     websiteId,
     EVENT_TYPE.pageView,
     startAt,
@@ -203,6 +237,52 @@ export async function getPageviewsFiltered(
   return { pageviews: (rows.results ?? []).map((r) => ({ x: r.x, y: r.y })) };
 }
 
+export async function getWebsiteMetricsSeriesFiltered(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  unit: string,
+  segment?: SegmentParams | null,
+) {
+  const seg = buildSegmentSql(segment);
+  const joins = seg.joinSession ? ' INNER JOIN session s ON e.session_id = s.session_id' : '';
+  const format =
+    unit === 'hour'
+      ? "%Y-%m-%d %H:00"
+      : unit === 'month'
+        ? '%Y-%m'
+        : unit === 'year'
+          ? '%Y'
+          : '%Y-%m-%d';
+  const clauses = [
+    'e.website_id = ?',
+    'e.created_at >= ?',
+    'e.created_at <= ?',
+    ...seg.eventClauses,
+    ...seg.sessionClauses,
+  ];
+  const binds: (string | number)[] = [websiteId, startAt, endAt, ...seg.binds];
+
+  const rows = await env.DB.prepare(
+    `SELECT strftime('${format}', datetime(e.created_at / 1000, 'unixepoch')) as x,
+            SUM(CASE WHEN e.event_type = ? THEN 1 ELSE 0 END) as pageviews,
+            COUNT(DISTINCT e.session_id) as visitors
+     FROM website_event e${joins}
+     WHERE ${clauses.join(' AND ')}
+     GROUP BY x
+     ORDER BY x`,
+  )
+    .bind(EVENT_TYPE.pageView, ...binds)
+    .all<{ x: string; pageviews: number; visitors: number }>();
+
+  const results = rows.results ?? [];
+  return {
+    pageviews: results.map((r) => ({ x: r.x, y: r.pageviews })),
+    visitors: results.map((r) => ({ x: r.x, y: r.visitors })),
+  };
+}
+
 export async function getMetricsFiltered(
   env: Env,
   websiteId: string,
@@ -211,9 +291,11 @@ export async function getMetricsFiltered(
   type: string,
   limit: number,
   segment?: SegmentParams | null,
+  cohortJoin?: CohortMemberJoin | null,
 ) {
   const seg = buildSegmentSql(segment);
-  const joins = ' INNER JOIN session s ON e.session_id = s.session_id';
+  const cohort = cohortJoinSql(cohortJoin);
+  const joins = ' INNER JOIN session s ON e.session_id = s.session_id' + cohort.sql;
   const clauses = [
     'e.website_id = ?',
     'e.event_type = ?',
@@ -223,12 +305,50 @@ export async function getMetricsFiltered(
     ...seg.sessionClauses,
   ];
   const binds: (string | number)[] = [
+    ...cohort.binds,
     websiteId,
     EVENT_TYPE.pageView,
     startAt,
     endAt,
     ...seg.binds,
   ];
+  const where = clauses.join(' AND ');
+
+  if (type === 'entry' || type === 'exit') {
+    const order = type === 'entry' ? 'ASC' : 'DESC';
+    const rows = await env.DB.prepare(
+      `WITH ranked AS (
+         SELECT e.url_path,
+           ROW_NUMBER() OVER (PARTITION BY e.visit_id ORDER BY e.created_at ${order}) as rn
+         FROM website_event e${joins}
+         WHERE ${where}
+       )
+       SELECT COALESCE(url_path, '/') as x, COUNT(*) as y
+       FROM ranked
+       WHERE rn = 1
+       GROUP BY x
+       ORDER BY y DESC
+       LIMIT ?`,
+    )
+      .bind(...binds, limit)
+      .all<{ x: string; y: number }>();
+    return (rows.results ?? []).map((r) => ({ x: r.x || '/', y: r.y }));
+  }
+
+  if (type === 'channel') {
+    const channelExpr = channelCaseSql('e');
+    const rows = await env.DB.prepare(
+      `SELECT ${channelExpr} as x, COUNT(*) as y
+       FROM website_event e${joins}
+       WHERE ${where}
+       GROUP BY x
+       ORDER BY y DESC
+       LIMIT ?`,
+    )
+      .bind(...binds, limit)
+      .all<{ x: string; y: number }>();
+    return rows.results ?? [];
+  }
 
   const col =
     type === 'url' || type === 'path'
@@ -254,7 +374,7 @@ export async function getMetricsFiltered(
   const rows = await env.DB.prepare(
     `SELECT COALESCE(${col}, 'Unknown') as x, COUNT(*) as y
      FROM website_event e${joins}
-     WHERE ${clauses.join(' AND ')}
+     WHERE ${where}
      GROUP BY x ORDER BY y DESC LIMIT ?`,
   )
     .bind(...binds, limit)
@@ -266,17 +386,15 @@ export async function getMetricsFiltered(
   }));
 }
 
-export async function getPageMetricsFiltered(
+export async function getTrafficHeatmapFiltered(
   env: Env,
   websiteId: string,
   startAt: number,
   endAt: number,
-  sortBy: 'views' | 'visitors' | 'time' = 'views',
-  limit = 10,
   segment?: SegmentParams | null,
-): Promise<PageMetricRow[]> {
+): Promise<TrafficHeatmapData> {
   const seg = buildSegmentSql(segment);
-  const joins = ' INNER JOIN session s ON e.session_id = s.session_id';
+  const joins = seg.joinSession ? ' INNER JOIN session s ON e.session_id = s.session_id' : '';
   const clauses = [
     'e.website_id = ?',
     'e.event_type = ?',
@@ -286,6 +404,52 @@ export async function getPageMetricsFiltered(
     ...seg.sessionClauses,
   ];
   const binds: (string | number)[] = [
+    websiteId,
+    EVENT_TYPE.pageView,
+    startAt,
+    endAt,
+    ...seg.binds,
+  ];
+
+  const rows = await env.DB.prepare(
+    `SELECT CAST(strftime('%w', datetime(e.created_at / 1000, 'unixepoch')) AS INTEGER) as dow,
+            CAST(strftime('%H', datetime(e.created_at / 1000, 'unixepoch')) AS INTEGER) as hour,
+            COUNT(*) as count
+     FROM website_event e${joins}
+     WHERE ${clauses.join(' AND ')}
+     GROUP BY dow, hour`,
+  )
+    .bind(...binds)
+    .all<{ dow: number; hour: number; count: number }>();
+
+  const cells = rows.results ?? [];
+  const max = cells.reduce((m, c) => Math.max(m, c.count), 0);
+  return { cells, max };
+}
+
+export async function getPageMetricsFiltered(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  sortBy: 'views' | 'visitors' | 'time' = 'views',
+  limit = 10,
+  segment?: SegmentParams | null,
+  cohortJoin?: CohortMemberJoin | null,
+): Promise<PageMetricRow[]> {
+  const seg = buildSegmentSql(segment);
+  const cohort = cohortJoinSql(cohortJoin);
+  const joins = ' INNER JOIN session s ON e.session_id = s.session_id' + cohort.sql;
+  const clauses = [
+    'e.website_id = ?',
+    'e.event_type = ?',
+    'e.created_at >= ?',
+    'e.created_at <= ?',
+    ...seg.eventClauses,
+    ...seg.sessionClauses,
+  ];
+  const binds: (string | number)[] = [
+    ...cohort.binds,
     websiteId,
     EVENT_TYPE.pageView,
     startAt,

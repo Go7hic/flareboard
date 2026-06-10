@@ -109,8 +109,6 @@ export default function ReplaysPage() {
         }
       />
 
-      <h2 className="section-title website-page-heading">{t('sessionReplays')}</h2>
-
       {!replayEnabled && websiteQuery.data ? (
         <div className="panel empty-state-rich section-gap">
           <EmptyState title={t('replayDisabledHint')} description={t('replaysVisitsLead')}>

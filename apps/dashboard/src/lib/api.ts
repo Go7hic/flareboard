@@ -251,6 +251,23 @@ export interface TrackingPixel {
   teamId?: string;
 }
 
+export interface UtmBreakdownRow {
+  name: string;
+  pageviews: number;
+}
+
+export interface UtmReportResponse {
+  campaign: UtmBreakdownRow[];
+  content: UtmBreakdownRow[];
+  medium: UtmBreakdownRow[];
+  source: UtmBreakdownRow[];
+  term: UtmBreakdownRow[];
+  segmentId: string | null;
+  startAt: number;
+  endAt: number;
+}
+
+/** @deprecated Use UtmReportResponse — legacy flat rows removed from API. */
 export interface UtmRow {
   source: string;
   medium: string;

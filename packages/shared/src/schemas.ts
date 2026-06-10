@@ -217,7 +217,10 @@ export const metricsQuerySchema = statsQuerySchema.extend({
     .enum([
       'path',
       'url',
+      'entry',
+      'exit',
       'referrer',
+      'channel',
       'browser',
       'os',
       'device',
@@ -226,6 +229,7 @@ export const metricsQuerySchema = statsQuerySchema.extend({
       'city',
       'language',
       'event',
+      'heatmap',
     ])
     .optional(),
   sortBy: z.enum(['views', 'visitors', 'time']).optional(),
@@ -404,6 +408,56 @@ export const funnelQuerySchema = z.object({
   endAt: z.coerce.number().optional(),
   segmentId: z.string().uuid().optional(),
 });
+
+export const attributionQuerySchema = z.object({
+  websiteId: z.string().uuid(),
+  model: z.enum(['first', 'last']).default('last'),
+  type: z.enum(['path', 'event']).optional(),
+  step: z.string().min(1).max(500).optional(),
+  dimension: z
+    .enum(['referrer', 'paidAds', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'])
+    .optional(),
+  startAt: z.coerce.number().optional(),
+  endAt: z.coerce.number().optional(),
+  segmentId: z.string().uuid().optional(),
+});
+
+export type AttributionBreakdownRow = { name: string; value: number };
+
+export type UtmBreakdownRow = { name: string; pageviews: number };
+
+export type UtmReportResponse = {
+  campaign: UtmBreakdownRow[];
+  content: UtmBreakdownRow[];
+  medium: UtmBreakdownRow[];
+  source: UtmBreakdownRow[];
+  term: UtmBreakdownRow[];
+  segmentId: string | null;
+  startAt: number;
+  endAt: number;
+};
+
+export type AttributionLegacyResponse = {
+  model: 'first' | 'last';
+  sources: Array<{ source: string; sessions: number; pageviews: number }>;
+};
+
+export type AttributionConversionResponse = {
+  model: 'first' | 'last';
+  type: 'path' | 'event';
+  step: string;
+  segmentId: string | null;
+  startAt: number;
+  endAt: number;
+  total: { visitors: number; visits: number; pageviews: number; conversions: number };
+  referrer: AttributionBreakdownRow[];
+  paidAds: AttributionBreakdownRow[];
+  utm_source: AttributionBreakdownRow[];
+  utm_medium: AttributionBreakdownRow[];
+  utm_campaign: AttributionBreakdownRow[];
+  utm_content: AttributionBreakdownRow[];
+  utm_term: AttributionBreakdownRow[];
+};
 
 export type CohortDefinition = z.infer<typeof cohortDefinitionSchema>;
 export type CohortCondition = z.infer<typeof cohortConditionSchema>;

@@ -1,13 +1,21 @@
 import type { Context } from 'hono';
 import { eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
-import { createReportSchema, statsQuerySchema, updateReportSchema, uuid } from '@flareboard/shared';
+import {
+  attributionQuerySchema,
+  createReportSchema,
+  statsQuerySchema,
+  updateReportSchema,
+  uuid,
+} from '@flareboard/shared';
 import type { Env } from '../env';
 import { canAccessWebsite } from '../lib/access';
 import {
+  getAttributionConversionReport,
   getAttributionReport,
   getBreakdownReport,
   getFunnelReport,
+  getJourneyFlowReport,
   getJourneyReport,
   getPerformanceReport,
   getRetentionReport,
@@ -120,15 +128,12 @@ export async function handleDelete(c: Ctx) {
 }
 
 export async function handleUtm(c: Ctx) {
-  const websiteId = c.req.query('websiteId');
-  if (!websiteId) return badRequest('websiteId required');
-  const website = await getWebsiteById(c.env, websiteId);
-  if (!website || !(await canAccessWebsite(c.env, website, c.get('user')))) {
-    return notFound();
-  }
+  const ctx = await requireReportWebsite(c);
+  if ('error' in ctx && ctx.error) return ctx.error;
   const { startAt, endAt } = parseRange(c);
-  const rows = await getUtmReport(c.env, websiteId, startAt, endAt);
-  return json(rows);
+  const segmentId = c.req.query('segmentId') ?? null;
+  const data = await getUtmReport(c.env, ctx.websiteId!, startAt, endAt, ctx.segment);
+  return json({ ...data, segmentId, startAt, endAt });
 }
 
 export async function handleGoal(c: Ctx) {
@@ -200,24 +205,72 @@ export async function handleJourney(c: Ctx) {
   const limit = Number(c.req.query('limit') || 20);
   const offset = Number(c.req.query('offset') || 0);
   const segmentId = c.req.query('segmentId');
-  const data = await getJourneyReport(
-    c.env,
-    ctx.websiteId!,
-    startAt,
-    endAt,
-    limit,
-    ctx.segment,
-    offset,
-  );
+  const flowMode = c.req.query('flow') === '1' || c.req.query('mode') === 'flow';
+  const prefixSteps = (c.req.queries('step') ?? [])
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const data = flowMode || prefixSteps.length > 0
+    ? await getJourneyFlowReport(
+        c.env,
+        ctx.websiteId!,
+        startAt,
+        endAt,
+        prefixSteps,
+        limit,
+        ctx.segment,
+      )
+    : await getJourneyReport(
+        c.env,
+        ctx.websiteId!,
+        startAt,
+        endAt,
+        limit,
+        ctx.segment,
+        offset,
+      );
   return json({ ...data, segmentId: segmentId ?? null });
 }
 
 export async function handleAttribution(c: Ctx) {
   const ctx = await requireReportWebsite(c);
   if ('error' in ctx && ctx.error) return ctx.error;
-  const { startAt, endAt } = parseRange(c);
-  const model = c.req.query('model') === 'first' ? 'first' : 'last';
-  const data = await getAttributionReport(c.env, ctx.websiteId!, startAt, endAt, model, ctx.segment);
+
+  const parsed = attributionQuerySchema.safeParse({
+    websiteId: ctx.websiteId,
+    model: c.req.query('model') === 'first' ? 'first' : 'last',
+    type: c.req.query('type') || undefined,
+    step: c.req.query('step') || undefined,
+    dimension: c.req.query('dimension') || undefined,
+    startAt: c.req.query('startAt') || undefined,
+    endAt: c.req.query('endAt') || undefined,
+    segmentId: c.req.query('segmentId') || undefined,
+  });
+  if (!parsed.success) return badRequest(parsed.error.message);
+
+  const { model, type, step } = parsed.data;
+  const segmentId = c.req.query('segmentId') ?? null;
+
+  if (!step) {
+    const { startAt, endAt } = parseRange(c);
+    const data = await getAttributionReport(c.env, ctx.websiteId!, startAt, endAt, model, ctx.segment);
+    return json(data);
+  }
+
+  if (!type) return badRequest('type required when step is set (path or event)');
+
+  const { startAt, endAt } = parseRange(c, true);
+  const data = await getAttributionConversionReport(
+    c.env,
+    ctx.websiteId!,
+    startAt,
+    endAt,
+    model,
+    type,
+    step,
+    ctx.segment,
+    segmentId,
+  );
   return json(data);
 }
 

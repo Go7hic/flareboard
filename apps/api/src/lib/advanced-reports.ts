@@ -1,5 +1,6 @@
-import { EVENT_TYPE } from '@flareboard/shared';
+import { EVENT_TYPE, type AttributionConversionResponse } from '@flareboard/shared';
 import type { Env } from '../env';
+import { paidAdsCaseSql } from './channel';
 import {
   clampJourneyLimit,
   clampReportRange,
@@ -134,6 +135,110 @@ export async function getRetentionReport(
   return { cohorts: rows.results ?? [], startAt: range.startAt, endAt: range.endAt };
 }
 
+function journeyPrefixHaving(prefixSteps: string[]) {
+  if (!prefixSteps.length) return { having: '', binds: [] as string[] };
+  const checks = prefixSteps.map(
+    (_, idx) => `MAX(CASE WHEN step_rn = ${idx + 1} THEN url_path END) = ?`,
+  );
+  return { having: checks.join(' AND '), binds: [...prefixSteps] };
+}
+
+export type JourneyFlowStep = { path: string; count: number };
+
+export async function getJourneyFlowReport(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  prefixSteps: string[],
+  limit = 20,
+  segment?: SegmentParams | null,
+) {
+  const range = clampReportRange(startAt, endAt);
+  const cappedLimit = clampJourneyLimit(limit);
+  const { joins, where, binds } = segmentEventFilter(websiteId, range.startAt, range.endAt, segment);
+  const { having, binds: prefixBinds } = journeyPrefixHaving(prefixSteps);
+  const nextStepRn = prefixSteps.length + 1;
+  const havingClause = having ? `HAVING ${having}` : '';
+
+  const baseCte = `WITH filtered AS (
+      SELECT e.visit_id, e.url_path, e.created_at
+      FROM website_event e${joins}
+      WHERE ${where} AND e.event_type = ${EVENT_TYPE.pageView}
+    ),
+    sampled_visits AS (
+      SELECT visit_id FROM (
+        SELECT visit_id, MAX(created_at) as last_at
+        FROM filtered
+        GROUP BY visit_id
+        ORDER BY last_at DESC
+        LIMIT ${MAX_JOURNEY_VISIT_SAMPLE}
+      )
+    ),
+    ranked AS (
+      SELECT f.visit_id, f.url_path, f.created_at,
+        ROW_NUMBER() OVER (PARTITION BY f.visit_id ORDER BY f.created_at) as step_rn
+      FROM filtered f
+      INNER JOIN sampled_visits sv ON sv.visit_id = f.visit_id
+    ),
+    matching_visits AS (
+      SELECT visit_id
+      FROM ranked
+      GROUP BY visit_id
+      ${havingClause}
+    )`;
+
+  const [nextRows, totalRow, pathRows] = await Promise.all([
+    env.DB.prepare(
+      `${baseCte}
+      SELECT r.url_path as path, COUNT(DISTINCT r.visit_id) as count
+      FROM ranked r
+      INNER JOIN matching_visits mv ON mv.visit_id = r.visit_id
+      WHERE r.step_rn = ${nextStepRn}
+      GROUP BY r.url_path
+      ORDER BY count DESC
+      LIMIT ?`,
+    )
+      .bind(...binds, ...prefixBinds, cappedLimit)
+      .all<JourneyFlowStep>(),
+    env.DB.prepare(
+      `${baseCte}
+      SELECT COUNT(*) as total FROM matching_visits`,
+    )
+      .bind(...binds, ...prefixBinds)
+      .first<{ total: number }>(),
+    env.DB.prepare(
+      `${baseCte},
+      visit_paths AS (
+        SELECT r.visit_id,
+          GROUP_CONCAT(r.url_path, ' → ') as path
+        FROM ranked r
+        INNER JOIN matching_visits mv ON mv.visit_id = r.visit_id
+        WHERE r.step_rn <= ${MAX_JOURNEY_PATH_STEPS}
+        GROUP BY r.visit_id
+      )
+      SELECT path, COUNT(*) as count
+      FROM visit_paths
+      GROUP BY path
+      ORDER BY count DESC
+      LIMIT ?`,
+    )
+      .bind(...binds, ...prefixBinds, cappedLimit)
+      .all<{ path: string; count: number }>(),
+  ]);
+
+  return {
+    prefix: prefixSteps,
+    depth: prefixSteps.length,
+    total: totalRow?.total ?? 0,
+    next: nextRows.results ?? [],
+    paths: pathRows.results ?? [],
+    startAt: range.startAt,
+    endAt: range.endAt,
+    limit: cappedLimit,
+  };
+}
+
 export async function getJourneyReport(
   env: Env,
   websiteId: string,
@@ -220,6 +325,206 @@ export async function getAttributionReport(
   const rows = await env.DB.prepare(sql).bind(...binds).all<{ source: string; sessions: number; pageviews: number }>();
 
   return { model, sources: rows.results ?? [] };
+}
+
+function attributionConversionCondition(type: 'path' | 'event', step: string) {
+  if (type === 'path') {
+    return {
+      clause: `e.event_type = ${EVENT_TYPE.pageView} AND e.url_path = ?`,
+      binds: [step] as (string | number)[],
+    };
+  }
+  return {
+    clause: `e.event_type = ${EVENT_TYPE.customEvent} AND e.event_name = ?`,
+    binds: [step] as (string | number)[],
+  };
+}
+
+function buildAttributionAttributedCte(
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  model: 'first' | 'last',
+  type: 'path' | 'event',
+  step: string,
+  segment?: SegmentParams | null,
+) {
+  const order = model === 'first' ? 'ASC' : 'DESC';
+  const { joins, where, binds } = segmentEventFilter(websiteId, startAt, endAt, segment);
+  const conversion = attributionConversionCondition(type, step);
+  const convertingWhere = `${where} AND ${conversion.clause}`;
+  const convertingBinds = [...binds, ...conversion.binds];
+  const paidAds = paidAdsCaseSql('tc');
+
+  const cte = `WITH converting_sessions AS (
+      SELECT e.session_id, MIN(e.created_at) AS converted_at
+      FROM website_event e${joins}
+      WHERE ${convertingWhere}
+      GROUP BY e.session_id
+    ),
+    touch_candidates AS (
+      SELECT
+        cs.session_id,
+        cs.converted_at,
+        e.referrer_domain,
+        e.gclid,
+        e.msclkid,
+        e.fbclid,
+        e.ttclid,
+        e.twclid,
+        e.utm_source,
+        e.utm_medium,
+        e.utm_campaign,
+        e.utm_content,
+        e.utm_term,
+        ROW_NUMBER() OVER (
+          PARTITION BY cs.session_id
+          ORDER BY e.created_at ${order}
+        ) AS rn
+      FROM converting_sessions cs
+      INNER JOIN website_event e ON e.session_id = cs.session_id
+      WHERE e.website_id = ?
+        AND e.event_type = ${EVENT_TYPE.pageView}
+        AND e.created_at <= cs.converted_at
+    ),
+    attributed AS (
+      SELECT
+        tc.session_id,
+        tc.converted_at,
+        COALESCE(NULLIF(tc.referrer_domain, ''), '(direct)') AS referrer,
+        ${paidAds} AS paid_ads,
+        COALESCE(NULLIF(tc.utm_source, ''), '(direct)') AS utm_source,
+        COALESCE(NULLIF(tc.utm_medium, ''), '(direct)') AS utm_medium,
+        COALESCE(NULLIF(tc.utm_campaign, ''), '(none)') AS utm_campaign,
+        COALESCE(NULLIF(tc.utm_content, ''), '(none)') AS utm_content,
+        COALESCE(NULLIF(tc.utm_term, ''), '(none)') AS utm_term
+      FROM touch_candidates tc
+      WHERE tc.rn = 1
+      UNION ALL
+      SELECT
+        cs.session_id,
+        cs.converted_at,
+        '(direct)' AS referrer,
+        NULL AS paid_ads,
+        '(direct)' AS utm_source,
+        '(direct)' AS utm_medium,
+        '(none)' AS utm_campaign,
+        '(none)' AS utm_content,
+        '(none)' AS utm_term
+      FROM converting_sessions cs
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM website_event e
+        WHERE e.session_id = cs.session_id
+          AND e.website_id = ?
+          AND e.event_type = ${EVENT_TYPE.pageView}
+          AND e.created_at <= cs.converted_at
+      )
+    )`;
+
+  const cteBinds = [...convertingBinds, websiteId, websiteId];
+  return { cte, cteBinds };
+}
+
+async function attributionBreakdown(
+  env: Env,
+  cte: string,
+  cteBinds: (string | number)[],
+  column: string,
+  filter?: string,
+) {
+  const whereClause = filter ? `WHERE ${filter}` : '';
+  const sql = `${cte}
+    SELECT ${column} AS name, COUNT(*) AS value
+    FROM attributed
+    ${whereClause}
+    GROUP BY ${column}
+    ORDER BY value DESC
+    LIMIT 50`;
+  const rows = await env.DB.prepare(sql)
+    .bind(...cteBinds)
+    .all<{ name: string; value: number }>();
+  return rows.results ?? [];
+}
+
+export async function getAttributionConversionReport(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  model: 'first' | 'last',
+  type: 'path' | 'event',
+  step: string,
+  segment?: SegmentParams | null,
+  segmentId?: string | null,
+): Promise<AttributionConversionResponse> {
+  const range = clampReportRange(startAt, endAt);
+  const { cte, cteBinds } = buildAttributionAttributedCte(
+    websiteId,
+    range.startAt,
+    range.endAt,
+    model,
+    type,
+    step,
+    segment,
+  );
+
+  const totalsSql = `${cte}
+    SELECT
+      (SELECT COUNT(DISTINCT cs.session_id) FROM converting_sessions cs) AS conversions,
+      (SELECT COUNT(DISTINCT cs.session_id) FROM converting_sessions cs) AS visits,
+      (
+        SELECT COUNT(DISTINCT COALESCE(s.distinct_id, cs.session_id))
+        FROM converting_sessions cs
+        LEFT JOIN session s ON s.session_id = cs.session_id
+      ) AS visitors,
+      (
+        SELECT COUNT(*)
+        FROM website_event e
+        INNER JOIN converting_sessions cs ON cs.session_id = e.session_id
+        WHERE e.website_id = ?
+          AND e.event_type = ${EVENT_TYPE.pageView}
+          AND e.created_at >= ?
+          AND e.created_at <= ?
+      ) AS pageviews`;
+
+  const totalsBinds = [...cteBinds, websiteId, range.startAt, range.endAt];
+  const totalsRow = await env.DB.prepare(totalsSql)
+    .bind(...totalsBinds)
+    .first<{ conversions: number; visits: number; visitors: number; pageviews: number }>();
+
+  const [referrer, paidAds, utm_source, utm_medium, utm_campaign, utm_content, utm_term] =
+    await Promise.all([
+      attributionBreakdown(env, cte, cteBinds, 'referrer'),
+      attributionBreakdown(env, cte, cteBinds, 'paid_ads', 'paid_ads IS NOT NULL'),
+      attributionBreakdown(env, cte, cteBinds, 'utm_source'),
+      attributionBreakdown(env, cte, cteBinds, 'utm_medium'),
+      attributionBreakdown(env, cte, cteBinds, 'utm_campaign'),
+      attributionBreakdown(env, cte, cteBinds, 'utm_content'),
+      attributionBreakdown(env, cte, cteBinds, 'utm_term'),
+    ]);
+
+  return {
+    model,
+    type,
+    step,
+    segmentId: segmentId ?? null,
+    startAt: range.startAt,
+    endAt: range.endAt,
+    total: {
+      visitors: totalsRow?.visitors ?? 0,
+      visits: totalsRow?.visits ?? 0,
+      pageviews: totalsRow?.pageviews ?? 0,
+      conversions: totalsRow?.conversions ?? 0,
+    },
+    referrer,
+    paidAds,
+    utm_source,
+    utm_medium,
+    utm_campaign,
+    utm_content,
+    utm_term,
+  };
 }
 
 export async function getBreakdownReport(

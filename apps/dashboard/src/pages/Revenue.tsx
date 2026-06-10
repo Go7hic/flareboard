@@ -60,7 +60,6 @@ export default function RevenuePage() {
       />
 
       <Panel>
-        <h2 className="section-title">{t('revenue')}</h2>
         <p className="section-lead">{t('revenuePageLead')}</p>
 
         {revenueQuery.isLoading ? (

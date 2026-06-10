@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Fragment, useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PageHeader } from '../components/PageHeader';
-import { WebsiteSubNav } from '../components/WebsiteSubNav';
 import { Button } from '../components/ui/button';
 import { api, getToken } from '../lib/api';
 import { t } from '../lib/i18n';
@@ -66,14 +65,7 @@ export default function SessionDetailPage() {
 
   return (
     <div className="page page-session-detail">
-      <PageHeader
-        title={t('session')}
-        subtitle={sessionId?.slice(0, 12)}
-        backTo={`/websites/${websiteId}/sessions`}
-        backLabel={t('sessions')}
-      />
-
-      {websiteId ? <WebsiteSubNav /> : null}
+      <PageHeader title={t('session')} subtitle={sessionId?.slice(0, 12)} />
 
       {s ? (
         <section className="panel panel-accent-rail section-gap">

@@ -120,7 +120,7 @@ Do not commit `VITE_*` to git; set them in your build environment.
 
 ## 5. Cloudflare Git Builds
 
-Connect the repo in Cloudflare → **Workers & Pages** → each Worker → **Builds**. Use **four separate configurations** (one per worker), all at repo root.
+Connect the repo in Cloudflare → **Workers & Pages** → each Worker → **Builds**. Use **five separate configurations** (one per worker), all at repo root.
 
 Before the first automated deploy: complete steps 1–2 above and run `pnpm validate:wrangler` locally.
 
@@ -130,8 +130,18 @@ Before the first automated deploy: complete steps 1–2 above and run `pnpm vali
 | Ingest | same | `pnpm --filter @flareboard/ingest run deploy` |
 | Aggregator | same | `pnpm --filter @flareboard/aggregator run deploy` |
 | Dashboard | same | `pnpm --filter @flareboard/dashboard run deploy` |
+| Blog | `pnpm install --frozen-lockfile && pnpm --filter @flareboard/blog typecheck` | `pnpm --filter @flareboard/blog run deploy` |
 
-Deploying with `--env production` creates Workers named `{wrangler-name}-production` for api, ingest, and aggregator. Dashboard uses the bare name from `apps/dashboard/wrangler.jsonc`.
+Blog build env vars (set in the Cloudflare build environment, not in git):
+
+| Variable | Example |
+|----------|---------|
+| `PUBLIC_SITE_URL` | `https://flareboard.dev` |
+| `PUBLIC_MARKETING_ORIGIN` | `https://flareboard.dev` |
+
+Add a Workers route so blog traffic reaches the blog worker: pattern `your-domain.com/blog*`, worker `flareboard-blog`.
+
+Deploying with `--env production` creates Workers named `{wrangler-name}-production` for api, ingest, and aggregator. Dashboard and blog use the bare names from their `wrangler.jsonc` files.
 
 Set secrets on the **`-production`** Workers via `wrangler secret put --env production` or the Cloudflare dashboard — not in git or build env vars.
 
@@ -151,7 +161,7 @@ wrangler d1 migrations apply flareboard-db --remote --env production --config ap
 
 ## Post-deploy checklist
 
-- [ ] All four workers healthy
+- [ ] All five workers healthy (api, ingest, aggregator, dashboard, blog)
 - [ ] D1 migrations applied
 - [ ] DLQ queue exists
 - [ ] CORS allows dashboard → API

@@ -145,7 +145,9 @@ export default function HeatmapsPage() {
     const stageW = Math.max(320, overlay.vw);
     const stageH = kind === 'scroll' ? 48 : Math.max(240, overlay.vh);
     const scale = containerWidth / stageW;
-    return { stageW, stageH, scale, scaledH: Math.round(stageH * scale) };
+    const displayW = Math.max(1, Math.round(stageW * scale));
+    const displayH = Math.max(1, Math.round(stageH * scale));
+    return { stageW, stageH, scale, displayW, displayH };
   }, [overlay.vw, overlay.vh, kind, containerWidth]);
 
   useEffect(() => {
@@ -163,27 +165,31 @@ export default function HeatmapsPage() {
     const canvas = canvasRef.current;
     if (!canvas || overlay.max === 0) return;
 
-    const { stageW, stageH } = stage;
-    canvas.width = stageW;
-    canvas.height = stageH;
+    const { displayW, displayH } = stage;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(displayW * dpr);
+    canvas.height = Math.round(displayH * dpr);
+    canvas.style.width = `${displayW}px`;
+    canvas.style.height = `${displayH}px`;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.clearRect(0, 0, stageW, stageH);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, displayW, displayH);
 
     const accent =
       getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0d9488';
 
     for (const cell of overlay.cells) {
       const intensity = cell.count / overlay.max;
-      const x = (cell.normX / overlay.normSize) * stageW;
-      const y = (cell.normY / overlay.normSize) * stageH;
-      const radius = kind === 'scroll' ? stageW * 0.5 : Math.max(6, stageW * 0.025);
+      const x = (cell.normX / overlay.normSize) * displayW;
+      const y = (cell.normY / overlay.normSize) * displayH;
+      const radius = kind === 'scroll' ? displayW * 0.5 : Math.max(6, displayW * 0.025);
       ctx.fillStyle = accent;
       ctx.globalAlpha = Math.min(0.9, intensity * 0.85);
       ctx.beginPath();
       if (kind === 'scroll') {
-        ctx.fillRect(0, y - 2, stageW, 4);
+        ctx.fillRect(0, y - 2, displayW, 4);
       } else {
         ctx.arc(x, y, radius, 0, Math.PI * 2);
         ctx.fill();
@@ -275,26 +281,18 @@ export default function HeatmapsPage() {
             <div
               ref={previewWrapRef}
               className="heatmap-preview-wrap"
-              style={{ height: `${stage.scaledH}px` }}
+              style={{ height: `${stage.displayH}px` }}
             >
-              <div
-                className="heatmap-preview-stage"
-                style={{
-                  width: `${stage.stageW}px`,
-                  height: `${stage.stageH}px`,
-                  transform: `scale(${stage.scale})`,
-                }}
-              >
+              <div className="heatmap-preview-scaler">
                 {previewUrl && (!iframeBlocked || iframeLoaded) ? (
                   <iframe
                     title={t('heatmapPreview')}
+                    className="heatmap-preview-iframe"
                     src={previewUrl}
                     style={{
                       width: `${stage.stageW}px`,
                       height: `${stage.stageH}px`,
-                      border: 'none',
-                      opacity: 0.35,
-                      pointerEvents: 'none',
+                      transform: `scale(${stage.scale})`,
                     }}
                     sandbox="allow-same-origin"
                     onLoad={() => {
@@ -307,8 +305,12 @@ export default function HeatmapsPage() {
                   />
                 ) : previewUrl && iframeBlocked && !iframeLoaded ? (
                   <div
-                    className="heatmap-iframe-fallback"
-                    style={{ width: `${stage.stageW}px`, height: `${stage.stageH}px` }}
+                    className="heatmap-preview-fallback heatmap-preview-iframe"
+                    style={{
+                      width: `${stage.stageW}px`,
+                      height: `${stage.stageH}px`,
+                      transform: `scale(${stage.scale})`,
+                    }}
                   >
                     <p>{t('heatmapIframeBlocked')}</p>
                     <p className="text-muted">{t('heatmapIframeBlockedDetail')}</p>
@@ -316,8 +318,12 @@ export default function HeatmapsPage() {
                   </div>
                 ) : (
                   <div
-                    className="heatmap-preview-empty"
-                    style={{ width: `${stage.stageW}px`, height: `${stage.stageH}px` }}
+                    className="heatmap-preview-empty heatmap-preview-iframe"
+                    style={{
+                      width: `${stage.stageW}px`,
+                      height: `${stage.stageH}px`,
+                      transform: `scale(${stage.scale})`,
+                    }}
                   >
                     {t('heatmapNoPreview')}
                   </div>
@@ -325,7 +331,10 @@ export default function HeatmapsPage() {
                 <canvas
                   ref={canvasRef}
                   className="heatmap-preview-canvas"
-                  style={{ width: `${stage.stageW}px`, height: `${stage.stageH}px` }}
+                  style={{
+                    width: `${stage.displayW}px`,
+                    height: `${stage.displayH}px`,
+                  }}
                   role="img"
                   aria-label={t('heatmaps')}
                 />

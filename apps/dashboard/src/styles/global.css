@@ -1,5 +1,7 @@
 @import url('https://fonts.bunny.net/css?family=outfit:400,500,600,700|jetbrains-mono:400,500');
 @import "tailwindcss";
+@source "../../index.html";
+@source "../**/*.{html,js,ts,jsx,tsx}";
 
 /* ── Dark mode variant: matches existing [data-theme="dark"] toggle ── */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));

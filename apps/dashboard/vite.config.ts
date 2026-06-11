@@ -2,8 +2,19 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
+const siteUrl = (process.env.VITE_SITE_URL ?? 'https://flareboard.dev').replace(/\/$/, '');
+
 export default defineConfig({
-  plugins: [tailwindcss(), react()],
+  plugins: [
+    tailwindcss(),
+    react(),
+    {
+      name: 'html-site-url',
+      transformIndexHtml(html) {
+        return html.replaceAll('%VITE_SITE_URL%', siteUrl);
+      },
+    },
+  ],
   build: {
     rollupOptions: {
       output: {

@@ -1,5 +1,3 @@
-import logoMarkUrl from '../assets/logo-mark.png';
-
 type BrandLogoProps = {
   /** Show "Flareboard" wordmark beside the mark */
   showWordmark?: boolean;
@@ -9,7 +7,7 @@ type BrandLogoProps = {
 };
 
 /**
- * Flareboard logo: bundled PNG mark + optional CSS wordmark (theme-aware text).
+ * Flareboard logo: public/logo.avif mark + optional CSS wordmark (theme-aware text).
  */
 export function BrandLogo({ showWordmark = true, size = 26, className = '' }: BrandLogoProps) {
   const px = `${size}px`;
@@ -20,7 +18,7 @@ export function BrandLogo({ showWordmark = true, size = 26, className = '' }: Br
       style={{ ['--brand-logo-size' as string]: px }}
     >
       <img
-        src={logoMarkUrl}
+        src="/logo.avif"
         alt={showWordmark ? '' : 'Flareboard'}
         aria-hidden={showWordmark ? true : undefined}
         width={size}

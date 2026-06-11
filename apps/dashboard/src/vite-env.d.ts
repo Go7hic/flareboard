@@ -9,6 +9,8 @@ interface ImportMetaEnv {
   readonly VITE_MAP_STYLE_URL?: string;
   /** Set to "true" to force legacy globe.gl fallback instead of MapLibre */
   readonly VITE_DISABLE_MAPLIBRE_GLOBE?: string;
+  /** Public dashboard origin for OG/canonical URLs (defaults to https://flareboard.dev) */
+  readonly VITE_SITE_URL?: string;
 }
 
 interface ImportMeta {

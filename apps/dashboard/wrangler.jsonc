@@ -7,6 +7,7 @@
   // VITE_API_URL=https://api.flareboard.dev  VITE_INGEST_URL=https://t.flareboard.dev
   // VITE_MAP_STYLE_URL=https://...  (optional — MapLibre style; defaults to CARTO Voyager)
   // VITE_DISABLE_MAPLIBRE_GLOBE=true  (optional — force legacy globe.gl instead of MapLibre)
+  // VITE_SITE_URL=https://flareboard.dev  (optional — OG/canonical URLs; defaults to flareboard.dev)
   // If unset, production infers API as https://api.<dashboard-host> (see src/lib/api-url.ts).
   "assets": {
     "directory": "./dist",

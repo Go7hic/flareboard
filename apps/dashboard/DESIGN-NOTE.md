@@ -7,7 +7,8 @@
 | Name | **Flareboard** |
 | Tagline | Google Analytics alternative on Cloudflare |
 | Logo | `BrandLogo` — teal rounded dashboard tile (`#0d9488`), white chart line, orange peak dot + corner flare (`#f6821f`); flat solids only |
-| Favicon | `public/favicon.svg` (same mark) |
+| Favicon | `public/logo.avif` (same mark) |
+| OG image | `public/ogimg.webp` (1200×630) |
 | Nav wordmark | Outfit, via `.brand-logo-wordmark` inside `.shell-brand` |
 
 ## Design read

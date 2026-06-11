@@ -2,9 +2,8 @@
 	"$schema": "../../node_modules/wrangler/config-schema.json",
 	"name": "flareboard-blog",
 	"compatibility_date": "2025-06-01",
-	// Deploy to flareboard.dev/blog/* via Workers route (see docs/deployment.md).
-	// PUBLIC_SITE_URL=https://flareboard.dev at build time for canonical/sitemap URLs.
+	// Static assets live under dist/blog/ (see astro.config.mjs outDir). Wrangler serves ./dist so /blog/* maps correctly.
 	"assets": {
-		"directory": "./dist/client"
+		"directory": "./dist"
 	}
 }

@@ -1,6 +1,6 @@
 # Flareboard Blog
 
-Static blog for [flareboard.dev/blog](https://flareboard.dev/blog) — Astro + MDX, deployed to Cloudflare Workers.
+Static blog for [flareboard.dev/blog](https://flareboard.dev/blog) — Astro + MDX (static output, no SSR adapter), deployed to Cloudflare Workers static assets.
 
 ## Develop
 

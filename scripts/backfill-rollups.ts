@@ -59,7 +59,7 @@ function main() {
             MAX(created_at)
      FROM website_event
      WHERE event_type = 1 ${scope}
-     GROUP BY website_id, ${DAY}, session_id;`,
+     GROUP BY website_id, ${DAY}, session_id, visit_id;`,
     remote,
   );
 
@@ -68,8 +68,8 @@ function main() {
      SELECT website_id,
             day,
             SUM(pageviews),
+            COUNT(DISTINCT session_id),
             COUNT(*),
-            COUNT(DISTINCT visit_id),
             SUM(CASE WHEN pageviews = 1 THEN 1 ELSE 0 END),
             COALESCE(SUM((last_at - first_at) / 1000), 0)
      FROM rollup_session_day

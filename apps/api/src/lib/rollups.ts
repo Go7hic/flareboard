@@ -256,8 +256,8 @@ export async function refreshRollupStatsDaily(env: Env, websiteId: string, day: 
        ?1,
        ?2,
        COALESCE(SUM(pageviews), 0),
+       COUNT(DISTINCT session_id),
        COUNT(*),
-       COUNT(DISTINCT visit_id),
        SUM(CASE WHEN pageviews = 1 THEN 1 ELSE 0 END),
        COALESCE(SUM((last_at - first_at) / 1000), 0)
      FROM rollup_session_day

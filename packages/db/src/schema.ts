@@ -445,17 +445,25 @@ export const rollupEventDaily = sqliteTable(
   (t) => [],
 );
 
-export const rollupSessionDay = sqliteTable('rollup_session_day', {
-  websiteId: text('website_id')
-    .notNull()
-    .references(() => website.websiteId),
-  day: text('day').notNull(),
-  sessionId: text('session_id').notNull(),
-  visitId: text('visit_id').notNull(),
-  pageviews: integer('pageviews').notNull().default(0),
-  firstAt: integer('first_at').notNull(),
-  lastAt: integer('last_at').notNull(),
-});
+export const rollupSessionDay = sqliteTable(
+  'rollup_session_day',
+  {
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    day: text('day').notNull(),
+    sessionId: text('session_id').notNull(),
+    visitId: text('visit_id').notNull(),
+    pageviews: integer('pageviews').notNull().default(0),
+    firstAt: integer('first_at').notNull(),
+    lastAt: integer('last_at').notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.websiteId, t.day, t.sessionId, t.visitId],
+    }),
+  ],
+);
 
 export const sessionReplaySummary = sqliteTable(
   'session_replay_summary',

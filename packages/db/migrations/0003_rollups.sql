@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS rollup_session_day (
   pageviews INTEGER NOT NULL DEFAULT 0,
   first_at INTEGER NOT NULL,
   last_at INTEGER NOT NULL,
-  PRIMARY KEY (website_id, day, session_id)
+  PRIMARY KEY (website_id, day, session_id, visit_id)
 );
 
 CREATE TABLE IF NOT EXISTS session_replay_summary (

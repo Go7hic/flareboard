@@ -9,21 +9,21 @@ type SessionMeta = {
   country?: string | null;
 };
 
-function dayKey(ms: number) {
+export function dayKey(ms: number) {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
-function hourBucket(ms: number) {
+export function hourBucket(ms: number) {
   const d = new Date(ms);
   d.setUTCMinutes(0, 0, 0);
   return d.toISOString().slice(0, 13).replace('T', ' ') + ':00';
 }
 
-function monthBucket(ms: number) {
+export function monthBucket(ms: number) {
   return new Date(ms).toISOString().slice(0, 7);
 }
 
-function yearBucket(ms: number) {
+export function yearBucket(ms: number) {
   return new Date(ms).toISOString().slice(0, 4);
 }
 
@@ -67,9 +67,8 @@ async function upsertSessionDay(
     .prepare(
       `INSERT INTO rollup_session_day (website_id, day, session_id, visit_id, pageviews, first_at, last_at)
        VALUES (?1, ?2, ?3, ?4, 1, ?5, ?5)
-       ON CONFLICT(website_id, day, session_id) DO UPDATE SET
+       ON CONFLICT(website_id, day, session_id, visit_id) DO UPDATE SET
          pageviews = pageviews + 1,
-         visit_id = excluded.visit_id,
          first_at = MIN(first_at, excluded.first_at),
          last_at = MAX(last_at, excluded.last_at)`,
     )
@@ -85,8 +84,8 @@ async function refreshRollupStatsDaily(db: D1Database, websiteId: string, day: s
          ?1,
          ?2,
          COALESCE(SUM(pageviews), 0),
+         COUNT(DISTINCT session_id),
          COUNT(*),
-         COUNT(DISTINCT visit_id),
          SUM(CASE WHEN pageviews = 1 THEN 1 ELSE 0 END),
          COALESCE(SUM((last_at - first_at) / 1000), 0)
        FROM rollup_session_day
@@ -141,6 +140,180 @@ export async function maintainRollupsForEvent(
       .bind(websiteId, day, event.eventName)
       .run();
   }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Batched rollup builders
+ *
+ * These return D1 prepared statements (with count/delta params) so a whole queue
+ * batch can be aggregated in memory and flushed via env.DB.batch(), instead of
+ * issuing one +1 upsert per event. Counts are merged per key before building.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export interface SessionDayAgg {
+  websiteId: string;
+  day: string;
+  sessionId: string;
+  visitId: string;
+  pageviews: number;
+  firstAt: number;
+  lastAt: number;
+}
+
+export interface SeriesAgg {
+  websiteId: string;
+  unit: string;
+  bucket: string;
+  count: number;
+}
+
+export interface DimensionAgg {
+  websiteId: string;
+  day: string;
+  dimension: string;
+  value: string;
+  count: number;
+}
+
+export interface EventDailyAgg {
+  websiteId: string;
+  day: string;
+  eventName: string;
+  count: number;
+}
+
+export interface HeatmapAgg {
+  websiteId: string;
+  urlPath: string;
+  day: string;
+  kind: string;
+  normX: number;
+  normY: number;
+  deviceClass: string;
+  viewportW: number;
+  viewportH: number;
+  count: number;
+}
+
+export function buildSessionDayStatements(
+  db: D1Database,
+  items: SessionDayAgg[],
+): D1PreparedStatement[] {
+  return items.map((s) =>
+    db
+      .prepare(
+        `INSERT INTO rollup_session_day (website_id, day, session_id, visit_id, pageviews, first_at, last_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         ON CONFLICT(website_id, day, session_id, visit_id) DO UPDATE SET
+           pageviews = pageviews + ?5,
+           first_at = MIN(first_at, excluded.first_at),
+           last_at = MAX(last_at, excluded.last_at)`,
+      )
+      .bind(s.websiteId, s.day, s.sessionId, s.visitId, s.pageviews, s.firstAt, s.lastAt),
+  );
+}
+
+export function buildPageviewSeriesStatements(
+  db: D1Database,
+  items: SeriesAgg[],
+): D1PreparedStatement[] {
+  return items.map((s) =>
+    db
+      .prepare(
+        `INSERT INTO rollup_pageview_series (website_id, unit, bucket, pageviews)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(website_id, unit, bucket) DO UPDATE SET pageviews = pageviews + ?4`,
+      )
+      .bind(s.websiteId, s.unit, s.bucket, s.count),
+  );
+}
+
+export function buildDimensionDailyStatements(
+  db: D1Database,
+  items: DimensionAgg[],
+): D1PreparedStatement[] {
+  return items.map((s) =>
+    db
+      .prepare(
+        `INSERT INTO rollup_dimension_daily (website_id, day, dimension, value, count)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(website_id, day, dimension, value) DO UPDATE SET count = count + ?5`,
+      )
+      .bind(s.websiteId, s.day, s.dimension, s.value, s.count),
+  );
+}
+
+export function buildEventDailyStatements(
+  db: D1Database,
+  items: EventDailyAgg[],
+): D1PreparedStatement[] {
+  return items.map((s) =>
+    db
+      .prepare(
+        `INSERT INTO rollup_event_daily (website_id, day, event_name, count)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(website_id, day, event_name) DO UPDATE SET count = count + ?4`,
+      )
+      .bind(s.websiteId, s.day, s.eventName, s.count),
+  );
+}
+
+export function buildHeatmapStatements(
+  db: D1Database,
+  items: HeatmapAgg[],
+): D1PreparedStatement[] {
+  return items.map((h) =>
+    db
+      .prepare(
+        `INSERT INTO heatmap_cell (website_id, url_path, day, kind, norm_x, norm_y, device_class, viewport_w, viewport_h, count)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+         ON CONFLICT(website_id, url_path, day, kind, norm_x, norm_y, device_class)
+         DO UPDATE SET count = count + ?10,
+           viewport_w = MAX(viewport_w, excluded.viewport_w),
+           viewport_h = MAX(viewport_h, excluded.viewport_h)`,
+      )
+      .bind(
+        h.websiteId,
+        h.urlPath,
+        h.day,
+        h.kind,
+        h.normX,
+        h.normY,
+        h.deviceClass,
+        h.viewportW,
+        h.viewportH,
+        h.count,
+      ),
+  );
+}
+
+export function buildStatsRefreshStatements(
+  db: D1Database,
+  siteDays: Array<{ websiteId: string; day: string }>,
+): D1PreparedStatement[] {
+  return siteDays.map(({ websiteId, day }) =>
+    db
+      .prepare(
+        `INSERT INTO rollup_stats_daily (website_id, day, pageviews, visitors, visits, bounces, totaltime_sec)
+         SELECT
+           ?1,
+           ?2,
+           COALESCE(SUM(pageviews), 0),
+           COUNT(DISTINCT session_id),
+           COUNT(*),
+           SUM(CASE WHEN pageviews = 1 THEN 1 ELSE 0 END),
+           COALESCE(SUM((last_at - first_at) / 1000), 0)
+         FROM rollup_session_day
+         WHERE website_id = ?1 AND day = ?2
+         ON CONFLICT(website_id, day) DO UPDATE SET
+           pageviews = excluded.pageviews,
+           visitors = excluded.visitors,
+           visits = excluded.visits,
+           bounces = excluded.bounces,
+           totaltime_sec = excluded.totaltime_sec`,
+      )
+      .bind(websiteId, day),
+  );
 }
 
 export async function maintainReplaySummary(

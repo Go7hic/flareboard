@@ -119,10 +119,10 @@ async function countPeriodStats(
 
   const bounceRow = await env.DB.prepare(
     `SELECT COUNT(*) as count FROM (
-      SELECT session_id FROM website_event
+      SELECT visit_id FROM website_event
       WHERE website_id = ?1 AND event_type = ?2
         AND created_at >= ?3 AND created_at <= ?4
-      GROUP BY session_id HAVING COUNT(*) = 1
+      GROUP BY visit_id HAVING COUNT(*) = 1
     )`,
   )
     .bind(websiteId, EVENT_TYPE.pageView, rangeStart, rangeEnd)
@@ -133,7 +133,7 @@ async function countPeriodStats(
       SELECT (MAX(created_at) - MIN(created_at)) as duration_ms
       FROM website_event
       WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3
-      GROUP BY session_id
+      GROUP BY visit_id
     )`,
   )
     .bind(websiteId, rangeStart, rangeEnd)

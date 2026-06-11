@@ -4,6 +4,7 @@ import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CollapsibleSection } from '../components/CollapsibleSection';
 import { PageHeader } from '../components/PageHeader';
+import { PlanUpgradeBanner } from '../components/PlanUpgradeBanner';
 import { WebsiteFormDialog } from '../components/WebsiteFormDialog';
 import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { Button } from '../components/ui/button';
@@ -85,8 +86,29 @@ export default function Websites() {
     queryFn: () => api<Website[]>('/api/websites'),
   });
 
+  const billingQuery = useQuery({
+    queryKey: ['billing-subscription'],
+    queryFn: () =>
+      api<{
+        hosted: boolean;
+        plan?: { maxWebsites?: number };
+      }>('/api/billing/subscription'),
+  });
+
   const sites = data ?? [];
   const hasSites = sites.length > 0;
+  const maxWebsites = billingQuery.data?.plan?.maxWebsites;
+  const atWebsiteLimit =
+    billingQuery.data?.hosted === true &&
+    typeof maxWebsites === 'number' &&
+    sites.length >= maxWebsites;
+
+  function renderAddWebsite() {
+    if (atWebsiteLimit) {
+      return <PlanUpgradeBanner message={t('websitesRequiresUpgrade')} />;
+    }
+    return <AddWebsiteForm onSuccess={onCreated} />;
+  }
 
   function onCreated(website: Website) {
     queryClient.invalidateQueries({ queryKey: ['websites'] });
@@ -99,13 +121,13 @@ export default function Websites() {
 
       {hasSites ? (
         <CollapsibleSection title={t('collapseAddWebsite')} summary={t('addWebsiteLead')}>
-          <AddWebsiteForm onSuccess={onCreated} />
+          {renderAddWebsite()}
         </CollapsibleSection>
       ) : (
         <section className="panel">
           <h2 className="section-title">{t('addWebsite')}</h2>
           <p className="section-lead">{t('addWebsiteLead')}</p>
-          <AddWebsiteForm onSuccess={onCreated} />
+          {renderAddWebsite()}
         </section>
       )}
 

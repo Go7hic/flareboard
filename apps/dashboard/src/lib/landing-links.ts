@@ -21,11 +21,12 @@ export type LandingPlan = {
   monthlyPriceUsd?: number | null;
 };
 
+/** Keep in sync with packages/shared/src/billing.ts PLANS. */
 export const LANDING_PLANS: LandingPlan[] = [
   {
     id: 'free',
     name: 'Free',
-    maxWebsites: 3,
+    maxWebsites: 1,
     maxEventsPerMonth: 100_000,
     replayEnabled: false,
     emailReportsEnabled: false,

@@ -15,6 +15,7 @@ describe('billing helpers', () => {
     expect(free.emailReportsEnabled).toBe(false);
     expect(free.heatmapsEnabled).toBe(false);
     expect(free.teamsEnabled).toBe(false);
+    expect(free.maxWebsites).toBe(1);
     expect(cloud.maxWebsites).toBe(10);
     expect(cloud.replayEnabled).toBe(true);
     expect(cloud.emailReportsEnabled).toBe(true);

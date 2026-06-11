@@ -24,7 +24,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
   free: {
     id: 'free',
     name: 'Free',
-    maxWebsites: 3,
+    maxWebsites: 1,
     maxEventsPerMonth: 100_000,
     replayEnabled: false,
     emailReportsEnabled: false,

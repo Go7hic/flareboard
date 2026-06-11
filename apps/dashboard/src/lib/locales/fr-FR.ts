@@ -837,6 +837,7 @@ export const frFRLocale: Record<string, string> = {
   emailReportsRequiresUpgrade: "Email reports are available on the Cloud plan.",
   heatmapsRequiresUpgrade: "Heatmaps are available on the Cloud plan.",
   teamsRequiresUpgrade: "Teams are available on the Cloud plan.",
+  websitesRequiresUpgrade: "Free plan includes 1 website. Upgrade to Cloud to add more sites.",
   enableEmailReports: "Activer les rapports e-mail",
   emailFrequency: "Fréquence",
   emailDaily: "Quotidien",

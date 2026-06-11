@@ -43,6 +43,8 @@ export default function HeatmapsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
   const navigate = useNavigate();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const previewWrapRef = useRef<HTMLDivElement>(null);
+  const [previewSize, setPreviewSize] = useState({ w: 960, h: 600 });
   const [iframeBlocked, setIframeBlocked] = useState(false);
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const iframeLoadedRef = useRef(false);
@@ -140,11 +142,28 @@ export default function HeatmapsPage() {
   }, [previewUrl, urlPath]);
 
   useEffect(() => {
+    const el = previewWrapRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const w = Math.max(320, el.clientWidth);
+      const h =
+        kind === 'scroll' ? 48 : Math.max(240, Math.round((overlay.vh / overlay.vw) * w));
+      setPreviewSize({ w, h });
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [overlay.vw, overlay.vh, kind]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || overlay.max === 0) return;
 
-    const displayW = Math.min(960, overlay.vw);
-    const displayH = kind === 'scroll' ? 48 : Math.round((overlay.vh / overlay.vw) * displayW);
+    const displayW = previewSize.w;
+    const displayH = previewSize.h;
     canvas.width = displayW;
     canvas.height = displayH;
 
@@ -171,7 +190,7 @@ export default function HeatmapsPage() {
       }
     }
     ctx.globalAlpha = 1;
-  }, [overlay, kind]);
+  }, [overlay, kind, previewSize]);
 
   return (
     <div className="page">
@@ -193,8 +212,8 @@ export default function HeatmapsPage() {
           disabled={!heatmapsAllowed}
           style={{ border: 'none', margin: 0, padding: 0, opacity: heatmapsAllowed ? 1 : 0.6 }}
         >
-        <div className="stats-toolbar" style={{ marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-          <div className="field" style={{ minWidth: '12rem' }}>
+        <div className="heatmap-toolbar">
+          <div className="field heatmap-toolbar-path">
             <Label htmlFor="heatmap-path">{t('heatmapPagePath')}</Label>
             {(pathsQuery.data ?? []).length > 0 ? (
               <select
@@ -218,7 +237,7 @@ export default function HeatmapsPage() {
               />
             )}
           </div>
-          <div className="field">
+          <div className="field heatmap-toolbar-type">
             <Label>{t('heatmapType')}</Label>
             <SegmentTabs
               tabs={[
@@ -230,7 +249,7 @@ export default function HeatmapsPage() {
               aria-label={t('heatmapType')}
             />
           </div>
-          <div className="field">
+          <div className="field heatmap-toolbar-device">
             <Label htmlFor="heatmap-device">{t('heatmapDevice')}</Label>
             <select
               id="heatmap-device"
@@ -254,15 +273,9 @@ export default function HeatmapsPage() {
         ) : (
           <>
             <div
+              ref={previewWrapRef}
               className="heatmap-preview-wrap"
-              style={{
-                position: 'relative',
-                maxWidth: '960px',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-md)',
-                overflow: 'hidden',
-                background: 'var(--bg-subtle)',
-              }}
+              style={{ height: `${previewSize.h}px` }}
             >
               {previewUrl && (!iframeBlocked || iframeLoaded) ? (
                 <iframe
@@ -270,7 +283,7 @@ export default function HeatmapsPage() {
                   src={previewUrl}
                   style={{
                     width: '100%',
-                    height: kind === 'scroll' ? '120px' : '600px',
+                    height: `${previewSize.h}px`,
                     border: 'none',
                     opacity: 0.35,
                     pointerEvents: 'none',
@@ -292,57 +305,26 @@ export default function HeatmapsPage() {
                 </div>
               ) : (
                 <div
-                  style={{
-                    width: '100%',
-                    height: kind === 'scroll' ? '48px' : '400px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'var(--text-muted)',
-                    fontSize: '0.875rem',
-                  }}
+                  className="heatmap-preview-empty"
+                  style={{ height: `${previewSize.h}px` }}
                 >
                   {t('heatmapNoPreview')}
                 </div>
               )}
               <canvas
                 ref={canvasRef}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: kind === 'scroll' ? '48px' : 'auto',
-                  pointerEvents: 'none',
-                }}
+                className="heatmap-preview-canvas"
+                style={{ height: `${previewSize.h}px` }}
                 role="img"
                 aria-label={t('heatmaps')}
               />
             </div>
-            <div
-              className="heatmap-legend"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                marginTop: '0.75rem',
-                maxWidth: '960px',
-                fontSize: '0.8125rem',
-                color: 'var(--text-muted)',
-              }}
-            >
+            <div className="heatmap-legend">
               <span>{t('heatmapLegendLow')}</span>
-              <div
-                style={{
-                  flex: 1,
-                  height: '8px',
-                  borderRadius: '4px',
-                  background: `linear-gradient(to right, transparent, var(--accent))`,
-                }}
-              />
+              <div className="heatmap-legend-bar" />
               <span>{t('heatmapLegendHigh')}</span>
             </div>
-            <p className="text-muted" style={{ marginTop: '0.5rem', fontSize: '0.8125rem' }}>
+            <p className="heatmap-viewport-hint text-muted">
               {t('heatmapViewportHint').replace('{w}', String(overlay.vw)).replace('{h}', String(overlay.vh))}
             </p>
           </>

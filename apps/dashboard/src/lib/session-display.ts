@@ -49,9 +49,14 @@ export function browserIconSlug(browser: string | null | undefined): string | nu
   return null;
 }
 
+export function usesCustomOsIcon(os: string | null | undefined): boolean {
+  const name = os?.toLowerCase() ?? '';
+  return name.includes('windows');
+}
+
 export function osIconSlug(os: string | null | undefined): string | null {
   const name = os?.toLowerCase() ?? '';
-  if (name.includes('windows')) return 'windows';
+  if (usesCustomOsIcon(os)) return null;
   if (name.includes('mac')) return 'apple';
   if (name.includes('ios') || name.includes('iphone') || name.includes('ipad')) return 'apple';
   if (name.includes('android')) return 'android';

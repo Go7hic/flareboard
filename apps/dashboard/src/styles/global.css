@@ -8273,6 +8273,98 @@ code {
   gap: 0.35rem;
 }
 
+.heatmap-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.65rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.heatmap-toolbar .field {
+  margin: 0;
+}
+
+.heatmap-toolbar-path {
+  flex: 1 1 12rem;
+  min-width: 10rem;
+  max-width: 22rem;
+}
+
+.heatmap-toolbar-path .select,
+.heatmap-toolbar-path .input {
+  width: 100%;
+}
+
+.heatmap-toolbar-type {
+  flex: 0 0 auto;
+}
+
+.heatmap-toolbar-device {
+  flex: 0 0 auto;
+  min-width: 8rem;
+}
+
+.heatmap-toolbar-device .select {
+  width: 100%;
+  min-width: 8rem;
+}
+
+.heatmap-preview-wrap {
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-subtle);
+}
+
+.heatmap-preview-empty {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.heatmap-preview-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  pointer-events: none;
+}
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  width: 100%;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.heatmap-legend-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, transparent, var(--accent));
+}
+
+.heatmap-viewport-hint {
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+@media (max-width: 720px) {
+  .heatmap-toolbar-path {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+}
+
 .segment-condition-row {
   flex-wrap: wrap;
   gap: 0.5rem;

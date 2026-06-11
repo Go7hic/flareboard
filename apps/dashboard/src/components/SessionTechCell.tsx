@@ -4,6 +4,7 @@ import {
   deviceIconKind,
   formatDeviceLabel,
   osIconSlug,
+  usesCustomOsIcon,
   type DeviceIconKind,
 } from '../lib/session-display';
 import { t } from '../lib/i18n';
@@ -19,6 +20,14 @@ function BrandIcon({ slug }: { slug: string }) {
       loading="lazy"
       decoding="async"
     />
+  );
+}
+
+function WindowsGlyph() {
+  return (
+    <svg className="session-tech-icon" width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M0 0h11.377v11.372H0Zm12.623 0H24v11.372H12.623ZM0 12.623h11.377V24H0Zm12.623 0H24V24H12.623" />
+    </svg>
   );
 }
 
@@ -64,8 +73,12 @@ export function SessionTechCell(props: SessionTechCellProps) {
     const slug = browserIconSlug(value);
     icon = slug ? <BrandIcon slug={slug} /> : null;
   } else if (kind === 'os') {
-    const slug = osIconSlug(value);
-    icon = slug ? <BrandIcon slug={slug} /> : null;
+    if (usesCustomOsIcon(value)) {
+      icon = <WindowsGlyph />;
+    } else {
+      const slug = osIconSlug(value);
+      icon = slug ? <BrandIcon slug={slug} /> : null;
+    }
   } else {
     icon = <DeviceGlyph kind={deviceIconKind(value)} />;
   }

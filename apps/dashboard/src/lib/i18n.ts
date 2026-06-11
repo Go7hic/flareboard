@@ -522,6 +522,7 @@ const enUS: Record<string, string> = {
   landingNavFeatures: 'Features',
   landingNavCompare: 'Compare',
   landingNavPricing: 'Pricing',
+  landingNavBlog: 'Blog',
   landingNavDocs: 'Docs',
   landingDataTitle: 'See your data clearly',
   landingDataLead:
@@ -1571,6 +1572,7 @@ const zhCN: Partial<Record<string, string>> = {
   landingNavFeatures: '功能',
   landingNavCompare: '对比',
   landingNavPricing: '定价',
+  landingNavBlog: '博客',
   landingNavDocs: '文档',
   landingDataTitle: '清晰查看你的数据',
   landingDataLead:

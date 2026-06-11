@@ -68,9 +68,10 @@ pnpm deploy:aggregator
 pnpm deploy:api
 pnpm deploy:ingest
 pnpm deploy:dashboard
+pnpm deploy:blog
 ```
 
-Recommended order: aggregator → api → ingest → dashboard.
+Recommended order: aggregator → api → ingest → dashboard → blog.
 
 | Script | Description |
 |--------|-------------|
@@ -79,15 +80,27 @@ Recommended order: aggregator → api → ingest → dashboard.
 | `pnpm deploy:ingest` | Ingest worker |
 | `pnpm deploy:aggregator` | Queue consumer |
 | `pnpm deploy:dashboard` | Dashboard static assets |
+| `pnpm deploy:blog` | Blog static site (`/blog` on your marketing domain) |
 | `pnpm backfill:rollups` | Rebuild rollup tables (`-- --remote` for production) |
 
 ## 4. Custom domains
 
 | Host | Worker |
 |------|--------|
-| `dashboard.your-domain.com` | Dashboard |
+| `dashboard.your-domain.com` or `your-domain.com/*` | Dashboard |
+| `your-domain.com/blog*` | Blog (`flareboard-blog`) |
 | `api.your-domain.com` | API |
 | `t.your-domain.com` | Ingest (`script.js`, `/api/send`) |
+
+In Cloudflare **Workers Routes**, add `your-domain.com/blog*` → `flareboard-blog` so the blog worker serves `/blog` while the dashboard worker handles other paths on the same hostname.
+
+Build blog with your site URL:
+
+```bash
+PUBLIC_SITE_URL=https://flareboard.dev \
+PUBLIC_MARKETING_ORIGIN=https://flareboard.dev \
+pnpm deploy:blog
+```
 
 Build dashboard with your URLs:
 

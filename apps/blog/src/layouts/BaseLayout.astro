@@ -1,0 +1,76 @@
+---
+import '../styles/global.css';
+import SiteHeader from '../components/SiteHeader.astro';
+import SiteFooter from '../components/SiteFooter.astro';
+import { MARKETING_ORIGIN, SITE } from '../consts';
+
+type Props = {
+  title?: string;
+  description?: string;
+  ogType?: 'website' | 'article';
+  pubDate?: Date;
+  author?: string;
+};
+
+const {
+  title,
+  description = SITE.description,
+  ogType = 'website',
+  pubDate,
+  author,
+} = Astro.props;
+
+const pageTitle = title ? `${title} - Flareboard Blog` : SITE.title;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+const ogImage = new URL('/ogimg.webp', MARKETING_ORIGIN).href;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/avif" href={`${MARKETING_ORIGIN}/logo.avif`} />
+    <link rel="alternate" type="application/rss+xml" title="Flareboard Blog" href={`${import.meta.env.BASE_URL}/rss.xml`} />
+    <meta property="og:type" content={ogType} />
+    <meta property="og:site_name" content="Flareboard" />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={pageTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    {pubDate && <meta property="article:published_time" content={pubDate.toISOString()} />}
+    {author && <meta property="article:author" content={author} />}
+    <script is:inline>
+      (function () {
+        try {
+          var s = localStorage.getItem('flareboard-theme');
+          var t =
+            s === 'light' || s === 'dark'
+              ? s
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
+          document.documentElement.setAttribute('data-theme', t);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div class="landing">
+      <SiteHeader activeNav="blog" />
+      <main class="page">
+        <slot />
+      </main>
+      <SiteFooter />
+    </div>
+  </body>
+</html>

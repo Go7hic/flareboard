@@ -24,6 +24,7 @@ type LandingChromeProps = {
 type NavItem =
   | { kind: 'home'; labelKey: string; active?: boolean }
   | { kind: 'route'; href: string; labelKey: string; active?: boolean }
+  | { kind: 'href'; href: string; labelKey: string; active?: boolean }
   | { kind: 'external'; href: string; labelKey: string };
 
 function LandingNavLink({ item }: { item: NavItem }) {
@@ -40,6 +41,14 @@ function LandingNavLink({ item }: { item: NavItem }) {
         target="_blank"
         rel="noopener noreferrer"
       >
+        {t(item.labelKey)}
+      </a>
+    );
+  }
+
+  if (item.kind === 'href') {
+    return (
+      <a href={item.href} className={className}>
         {t(item.labelKey)}
       </a>
     );
@@ -119,6 +128,7 @@ export function LandingChrome({ children, activeNav = 'home' }: LandingChromePro
     { kind: 'route', href: '/features', labelKey: 'landingNavFeatures', active: activeNav === 'features' },
     { kind: 'route', href: '/compare', labelKey: 'landingNavCompare', active: activeNav === 'compare' },
     { kind: 'route', href: '/pricing', labelKey: 'landingNavPricing', active: activeNav === 'pricing' },
+    { kind: 'href', href: '/blog', labelKey: 'landingNavBlog' },
     { kind: 'external', href: FLAREBOARD_README, labelKey: 'landingNavDocs' },
   ];
 
@@ -162,6 +172,7 @@ export function LandingChrome({ children, activeNav = 'home' }: LandingChromePro
             <Link to="/features">{t('landingNavFeatures')}</Link>
             <Link to="/compare">{t('landingNavCompare')}</Link>
             <Link to="/pricing">{t('landingNavPricing')}</Link>
+            <a href="/blog">{t('landingNavBlog')}</a>
             <Link to="/login">{t('signIn')}</Link>
             <Link to={startHref}>{t('landingGetStarted')}</Link>
             <a href={FLAREBOARD_GITHUB} target="_blank" rel="noopener noreferrer">

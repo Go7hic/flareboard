@@ -1,0 +1,10 @@
+{
+	"$schema": "../../node_modules/wrangler/config-schema.json",
+	"name": "flareboard-blog",
+	"compatibility_date": "2025-06-01",
+	// Deploy to flareboard.dev/blog/* via Workers route (see docs/deployment.md).
+	// PUBLIC_SITE_URL=https://flareboard.dev at build time for canonical/sitemap URLs.
+	"assets": {
+		"directory": "./dist/client"
+	}
+}

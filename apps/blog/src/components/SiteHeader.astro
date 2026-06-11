@@ -1,0 +1,96 @@
+---
+import { GITHUB_URL, MARKETING_ORIGIN } from '../consts';
+
+type Props = {
+  activeNav?: 'blog';
+};
+
+const { activeNav } = Astro.props;
+const docsUrl = `${GITHUB_URL}#readme`;
+const blogUrl = import.meta.env.BASE_URL.replace(/\/$/, '') || '/blog';
+
+const nav = [
+  { href: MARKETING_ORIGIN, label: 'Home', key: 'home' },
+  { href: `${MARKETING_ORIGIN}/features`, label: 'Features', key: 'features' },
+  { href: `${MARKETING_ORIGIN}/compare`, label: 'Compare', key: 'compare' },
+  { href: `${MARKETING_ORIGIN}/pricing`, label: 'Pricing', key: 'pricing' },
+  { href: blogUrl, label: 'Blog', key: 'blog' },
+  { href: docsUrl, label: 'Docs', key: 'docs', external: true },
+];
+---
+
+<header class="landing-nav">
+  <div class="landing-nav-inner">
+    <a class="shell-brand landing-brand" href={MARKETING_ORIGIN}>
+      <span class="brand-logo" style="--brand-logo-size: 26px">
+        <img
+          class="brand-logo-icon"
+          src={`${MARKETING_ORIGIN}/logo.avif`}
+          alt=""
+          width="26"
+          height="26"
+        />
+        <span class="brand-logo-wordmark">Flareboard</span>
+      </span>
+    </a>
+
+    <nav class="landing-nav-links shell-links" aria-label="Primary">
+      {
+        nav.map((item) => (
+          <a
+            href={item.href}
+            class:list={['shell-link', { active: activeNav === item.key }]}
+            target={item.external ? '_blank' : undefined}
+            rel={item.external ? 'noopener noreferrer' : undefined}
+          >
+            {item.label}
+          </a>
+        ))
+      }
+    </nav>
+
+    <div class="landing-nav-actions shell-nav-end">
+      <button type="button" class="theme-toggle" aria-label="Toggle theme" id="theme-toggle">
+        <span class="theme-toggle-track" aria-hidden="true">
+          <span class="theme-toggle-icons">
+            <svg class="theme-toggle-sun" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+            </svg>
+            <svg class="theme-toggle-moon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          </span>
+          <span class="theme-toggle-thumb" id="theme-toggle-thumb" />
+        </span>
+      </button>
+      <a class="btn btn-ghost btn-sm" href={`${MARKETING_ORIGIN}/login`}>Sign in</a>
+      <a class="btn btn-primary btn-sm" href={`${MARKETING_ORIGIN}/register`}>Get started</a>
+    </div>
+  </div>
+</header>
+
+<script>
+  function syncThemeToggle() {
+    const root = document.documentElement;
+    const btn = document.getElementById('theme-toggle');
+    const thumb = document.getElementById('theme-toggle-thumb');
+    const isDark = root.getAttribute('data-theme') === 'dark';
+    btn?.classList.toggle('is-dark', isDark);
+    thumb?.classList.toggle('is-dark', isDark);
+  }
+
+  syncThemeToggle();
+
+  document.getElementById('theme-toggle')?.addEventListener('click', () => {
+    const root = document.documentElement;
+    const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try {
+      localStorage.setItem('flareboard-theme', next);
+    } catch {
+      /* ignore */
+    }
+    syncThemeToggle();
+  });
+</script>

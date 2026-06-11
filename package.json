@@ -5,6 +5,7 @@
   "scripts": {
     "dev:api": "pnpm --filter @flareboard/api dev",
     "dev:ingest": "pnpm --filter @flareboard/ingest dev",
+    "dev:blog": "pnpm --filter @flareboard/blog dev",
     "dev:dashboard": "pnpm --filter @flareboard/dashboard dev",
     "dev:aggregator": "pnpm --filter @flareboard/aggregator dev",
     "dev": "pnpm run dev:api",
@@ -23,7 +24,8 @@
     "deploy:api": "node scripts/validate-wrangler.mjs && pnpm --filter @flareboard/api run deploy",
     "deploy:ingest": "node scripts/validate-wrangler.mjs && pnpm --filter @flareboard/ingest run deploy",
     "deploy:aggregator": "node scripts/validate-wrangler.mjs && pnpm --filter @flareboard/aggregator run deploy",
-    "deploy:dashboard": "pnpm --filter @flareboard/dashboard run deploy"
+    "deploy:dashboard": "pnpm --filter @flareboard/dashboard run deploy",
+    "deploy:blog": "pnpm --filter @flareboard/blog run deploy"
   },
   "dependencies": {
     "@flareboard/shared": "workspace:*"

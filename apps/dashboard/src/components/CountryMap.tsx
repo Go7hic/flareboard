@@ -1,9 +1,29 @@
 import { useRef, useState } from 'react';
-import { ComposableMap, Geographies, Geography } from 'react-simple-maps';
+import { ComposableMap, Geographies, Geography, ZoomableGroup } from 'react-simple-maps';
 import { getCountryLabel } from '../lib/map-format';
 import { MapTooltip } from './MapTooltip';
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
+const MAP_WIDTH = 800;
+const MAP_HEIGHT = 480;
+const MAP_SCALE = 175;
+const MAP_CENTER: [number, number] = [0, 20];
+
+type MapPosition = {
+  coordinates: [number, number];
+  zoom: number;
+};
+
+const DEFAULT_POSITION: MapPosition = {
+  coordinates: MAP_CENTER,
+  zoom: 1,
+};
+
+function mapZoomFilter(event: Event) {
+  if (event.type === 'wheel') return true;
+  const e = event as MouseEvent;
+  return !e.ctrlKey && !e.button;
+}
 
 /** ISO 3166-1 alpha-2 → numeric id used by world-atlas 110m */
 const ISO_NUMERIC: Record<string, string> = {
@@ -82,6 +102,7 @@ type TooltipState = {
 export function CountryMap({ rows, accent = 'var(--accent)', loading }: CountryMapProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  const [position, setPosition] = useState<MapPosition>(DEFAULT_POSITION);
 
   if (loading) {
     return <div className="country-map-wrap country-map-skeleton" aria-busy />;
@@ -121,51 +142,70 @@ export function CountryMap({ rows, accent = 'var(--accent)', loading }: CountryM
   }
 
   return (
-    <div ref={wrapRef} className="country-map-wrap" onMouseLeave={clearTooltip}>
-      <ComposableMap projectionConfig={{ scale: 140 }} width={800} height={400} style={{ width: '100%', height: 'auto' }}>
-        <Geographies geography={GEO_URL}>
-          {({ geographies }) =>
-            geographies.map((geo) => {
-              const geoId = String(geo.id);
-              const count = byGeoId.get(geoId);
-              const code = codeByGeoId.get(geoId);
-              const name = code
-                ? getCountryLabel(code)
-                : ((geo.properties as { name?: string } | undefined)?.name ?? geoId);
+    <div ref={wrapRef} className="country-map-wrap country-map-wrap--pan" onMouseLeave={clearTooltip}>
+      <ComposableMap
+        projectionConfig={{ scale: MAP_SCALE, center: MAP_CENTER }}
+        width={MAP_WIDTH}
+        height={MAP_HEIGHT}
+        style={{ width: '100%', height: 'auto', display: 'block' }}
+      >
+        <ZoomableGroup
+          zoom={position.zoom}
+          center={position.coordinates}
+          minZoom={1}
+          maxZoom={6}
+          filterZoomEvent={mapZoomFilter}
+          onMoveEnd={(next) => {
+            setPosition({
+              coordinates: next.coordinates as [number, number],
+              zoom: next.zoom,
+            });
+          }}
+        >
+          <Geographies geography={GEO_URL}>
+            {({ geographies }) =>
+              geographies.map((geo) => {
+                const geoId = String(geo.id);
+                const count = byGeoId.get(geoId);
+                const code = codeByGeoId.get(geoId);
+                const name = code
+                  ? getCountryLabel(code)
+                  : ((geo.properties as { name?: string } | undefined)?.name ?? geoId);
 
-              return (
-                <Geography
-                  key={geo.rsmKey}
-                  geography={geo}
-                  fill={fillForGeoId(geoId)}
-                  stroke="var(--border, #d1d5db)"
-                  strokeWidth={0.4}
-                  style={{
-                    default: { outline: 'none' },
-                    hover: {
-                      outline: 'none',
-                      fill: count ? accent : fillForGeoId(geoId),
-                      opacity: count ? 0.85 : 1,
-                      cursor: count ? 'pointer' : 'default',
-                    },
-                    pressed: { outline: 'none' },
-                  }}
-                  onMouseEnter={
-                    count
-                      ? (e) => setTooltipFromEvent(name, count, e.clientX, e.clientY)
-                      : undefined
-                  }
-                  onMouseMove={
-                    count
-                      ? (e) => setTooltipFromEvent(name, count, e.clientX, e.clientY)
-                      : undefined
-                  }
-                  onMouseLeave={count ? clearTooltip : undefined}
-                />
-              );
-            })
-          }
-        </Geographies>
+                return (
+                  <Geography
+                    key={geo.rsmKey}
+                    geography={geo}
+                    fill={fillForGeoId(geoId)}
+                    stroke="var(--border, #d1d5db)"
+                    strokeWidth={0.4}
+                    style={{
+                      default: { outline: 'none' },
+                      hover: {
+                        outline: 'none',
+                        fill: count ? accent : fillForGeoId(geoId),
+                        opacity: count ? 0.85 : 1,
+                        cursor: count ? 'pointer' : 'inherit',
+                      },
+                      pressed: { outline: 'none' },
+                    }}
+                    onMouseEnter={
+                      count
+                        ? (e) => setTooltipFromEvent(name, count, e.clientX, e.clientY)
+                        : undefined
+                    }
+                    onMouseMove={
+                      count
+                        ? (e) => setTooltipFromEvent(name, count, e.clientX, e.clientY)
+                        : undefined
+                    }
+                    onMouseLeave={count ? clearTooltip : undefined}
+                  />
+                );
+              })
+            }
+          </Geographies>
+        </ZoomableGroup>
       </ComposableMap>
       {tooltip ? (
         <MapTooltip label={tooltip.label} value={tooltip.value} x={tooltip.x} y={tooltip.y} />

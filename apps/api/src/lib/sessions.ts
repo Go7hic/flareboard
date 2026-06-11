@@ -13,7 +13,9 @@ export async function listSessions(
   const rows = await env.DB.prepare(
     `SELECT s.session_id as id, s.browser, s.os, s.device, s.country, s.city,
             s.created_at as createdAt,
-            COUNT(e.event_id) as views,
+            COUNT(DISTINCT e.visit_id) as visits,
+            SUM(CASE WHEN e.event_type = 1 THEN 1 ELSE 0 END) as pageviews,
+            SUM(CASE WHEN e.event_type NOT IN (1, 5, 6, 7) THEN 1 ELSE 0 END) as events,
             MAX(e.created_at) as lastAt
      FROM session s
      INNER JOIN website_event e ON e.session_id = s.session_id
@@ -31,7 +33,9 @@ export async function listSessions(
       country: string | null;
       city: string | null;
       createdAt: number;
-      views: number;
+      visits: number;
+      pageviews: number;
+      events: number;
       lastAt: number;
     }>();
 

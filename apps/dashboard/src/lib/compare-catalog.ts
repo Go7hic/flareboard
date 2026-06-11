@@ -57,6 +57,18 @@ export const COMPARE_COMPETITORS: CompareCompetitor[] = [
     detailAnchor: 'plausible',
   },
   {
+    id: 'cloudflare-web-analytics',
+    titleKey: 'compareVsCfWebAnalyticsTitle',
+    bulletKeys: [
+      'compareVsCfWebAnalyticsB1',
+      'compareVsCfWebAnalyticsB2',
+      'compareVsCfWebAnalyticsB3',
+      'compareVsCfWebAnalyticsB4',
+      'compareVsCfWebAnalyticsB5',
+    ],
+    detailAnchor: 'cloudflare-web-analytics',
+  },
+  {
     id: 'matomo',
     titleKey: 'compareVsMatomoTitle',
     bulletKeys: [

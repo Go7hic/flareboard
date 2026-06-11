@@ -9,8 +9,8 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       <input
         type={type}
         className={cn(
-          'flex w-full rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg)] px-[0.8rem] py-[0.6rem]',
-          'text-[length:inherit] font-[family-name:inherit]',
+          'flex h-[var(--control-height)] w-full items-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg)] px-[var(--control-padding-x)]',
+          'text-[length:var(--control-font-size)] leading-[var(--control-line-height)] font-[family-name:inherit]',
           'placeholder:text-[var(--text-faint)]',
           'transition-[border-color,box-shadow] duration-200',
           'hover:border-[var(--border-strong)]',

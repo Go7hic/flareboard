@@ -124,6 +124,12 @@
   --shell-control-height: calc(
     var(--shell-control-inner-h) + 2 * var(--shell-control-padding-y) + 2px
   );
+
+  /* Form controls — matches .segment-tabs outer height */
+  --control-height: calc(0.5rem + 0.7rem + 0.8125rem * 1.25 + 2px);
+  --control-font-size: 0.8125rem;
+  --control-line-height: 1.25;
+  --control-padding-x: 0.65rem;
 }
 
 /* ── Dark theme ── */
@@ -1476,12 +1482,26 @@ img.website-switcher-icon {
 .select,
 .textarea {
   width: 100%;
-  padding: 0.6rem 0.8rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);
   transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.input,
+.select {
+  box-sizing: border-box;
+  height: var(--control-height);
+  padding: 0 var(--control-padding-x);
+  font-size: var(--control-font-size);
+  line-height: var(--control-line-height);
+}
+
+.textarea {
+  padding: 0.55rem var(--control-padding-x);
+  font-size: var(--control-font-size);
+  line-height: 1.45;
 }
 
 .input::placeholder,
@@ -8285,6 +8305,11 @@ code {
   margin: 0;
 }
 
+.heatmap-toolbar .field-label {
+  font-size: 0.6875rem;
+  margin-bottom: 0.3rem;
+}
+
 .heatmap-toolbar-path {
   flex: 1 1 12rem;
   min-width: 10rem;
@@ -8319,6 +8344,11 @@ code {
   background: var(--bg-subtle);
 }
 
+.heatmap-preview-stage {
+  position: relative;
+  transform-origin: top left;
+}
+
 .heatmap-preview-empty {
   width: 100%;
   display: flex;
@@ -8332,7 +8362,6 @@ code {
   position: absolute;
   top: 0;
   left: 0;
-  width: 100%;
   pointer-events: none;
 }
 

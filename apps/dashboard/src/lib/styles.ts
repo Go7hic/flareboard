@@ -91,7 +91,10 @@ export const layout = {
   } as const,
   input: {
     width: '100%',
-    padding: '0.6rem 0.8rem',
+    height: 'var(--control-height)',
+    padding: '0 var(--control-padding-x)',
+    fontSize: 'var(--control-font-size)',
+    lineHeight: 'var(--control-line-height)',
     borderRadius: 6,
     border: '1px solid var(--border)',
     background: 'var(--bg)',

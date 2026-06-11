@@ -44,7 +44,7 @@ export default function HeatmapsPage() {
   const navigate = useNavigate();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previewWrapRef = useRef<HTMLDivElement>(null);
-  const [previewSize, setPreviewSize] = useState({ w: 960, h: 600 });
+  const [containerWidth, setContainerWidth] = useState(960);
   const [iframeBlocked, setIframeBlocked] = useState(false);
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const iframeLoadedRef = useRef(false);
@@ -141,56 +141,56 @@ export default function HeatmapsPage() {
     };
   }, [previewUrl, urlPath]);
 
+  const stage = useMemo(() => {
+    const stageW = Math.max(320, overlay.vw);
+    const stageH = kind === 'scroll' ? 48 : Math.max(240, overlay.vh);
+    const scale = containerWidth / stageW;
+    return { stageW, stageH, scale, scaledH: Math.round(stageH * scale) };
+  }, [overlay.vw, overlay.vh, kind, containerWidth]);
+
   useEffect(() => {
     const el = previewWrapRef.current;
     if (!el) return;
 
-    const update = () => {
-      const w = Math.max(320, el.clientWidth);
-      const h =
-        kind === 'scroll' ? 48 : Math.max(240, Math.round((overlay.vh / overlay.vw) * w));
-      setPreviewSize({ w, h });
-    };
-
+    const update = () => setContainerWidth(Math.max(320, el.clientWidth));
     update();
     const observer = new ResizeObserver(update);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [overlay.vw, overlay.vh, kind]);
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || overlay.max === 0) return;
 
-    const displayW = previewSize.w;
-    const displayH = previewSize.h;
-    canvas.width = displayW;
-    canvas.height = displayH;
+    const { stageW, stageH } = stage;
+    canvas.width = stageW;
+    canvas.height = stageH;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.clearRect(0, 0, displayW, displayH);
+    ctx.clearRect(0, 0, stageW, stageH);
 
     const accent =
       getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0d9488';
 
     for (const cell of overlay.cells) {
       const intensity = cell.count / overlay.max;
-      const x = (cell.normX / overlay.normSize) * displayW;
-      const y = (cell.normY / overlay.normSize) * displayH;
-      const radius = kind === 'scroll' ? displayW * 0.5 : Math.max(6, displayW * 0.025);
+      const x = (cell.normX / overlay.normSize) * stageW;
+      const y = (cell.normY / overlay.normSize) * stageH;
+      const radius = kind === 'scroll' ? stageW * 0.5 : Math.max(6, stageW * 0.025);
       ctx.fillStyle = accent;
       ctx.globalAlpha = Math.min(0.9, intensity * 0.85);
       ctx.beginPath();
       if (kind === 'scroll') {
-        ctx.fillRect(0, y - 2, displayW, 4);
+        ctx.fillRect(0, y - 2, stageW, 4);
       } else {
         ctx.arc(x, y, radius, 0, Math.PI * 2);
         ctx.fill();
       }
     }
     ctx.globalAlpha = 1;
-  }, [overlay, kind, previewSize]);
+  }, [overlay, kind, stage]);
 
   return (
     <div className="page">
@@ -275,49 +275,61 @@ export default function HeatmapsPage() {
             <div
               ref={previewWrapRef}
               className="heatmap-preview-wrap"
-              style={{ height: `${previewSize.h}px` }}
+              style={{ height: `${stage.scaledH}px` }}
             >
-              {previewUrl && (!iframeBlocked || iframeLoaded) ? (
-                <iframe
-                  title={t('heatmapPreview')}
-                  src={previewUrl}
-                  style={{
-                    width: '100%',
-                    height: `${previewSize.h}px`,
-                    border: 'none',
-                    opacity: 0.35,
-                    pointerEvents: 'none',
-                  }}
-                  sandbox="allow-same-origin"
-                  onLoad={() => {
-                    iframeLoadedRef.current = true;
-                    setIframeLoaded(true);
-                    setIframeBlocked(false);
-                    if (iframeTimerRef.current) clearTimeout(iframeTimerRef.current);
-                  }}
-                  onError={() => setIframeBlocked(true)}
+              <div
+                className="heatmap-preview-stage"
+                style={{
+                  width: `${stage.stageW}px`,
+                  height: `${stage.stageH}px`,
+                  transform: `scale(${stage.scale})`,
+                }}
+              >
+                {previewUrl && (!iframeBlocked || iframeLoaded) ? (
+                  <iframe
+                    title={t('heatmapPreview')}
+                    src={previewUrl}
+                    style={{
+                      width: `${stage.stageW}px`,
+                      height: `${stage.stageH}px`,
+                      border: 'none',
+                      opacity: 0.35,
+                      pointerEvents: 'none',
+                    }}
+                    sandbox="allow-same-origin"
+                    onLoad={() => {
+                      iframeLoadedRef.current = true;
+                      setIframeLoaded(true);
+                      setIframeBlocked(false);
+                      if (iframeTimerRef.current) clearTimeout(iframeTimerRef.current);
+                    }}
+                    onError={() => setIframeBlocked(true)}
+                  />
+                ) : previewUrl && iframeBlocked && !iframeLoaded ? (
+                  <div
+                    className="heatmap-iframe-fallback"
+                    style={{ width: `${stage.stageW}px`, height: `${stage.stageH}px` }}
+                  >
+                    <p>{t('heatmapIframeBlocked')}</p>
+                    <p className="text-muted">{t('heatmapIframeBlockedDetail')}</p>
+                    <p className="text-muted">{t('heatmapOverlayOnly')}</p>
+                  </div>
+                ) : (
+                  <div
+                    className="heatmap-preview-empty"
+                    style={{ width: `${stage.stageW}px`, height: `${stage.stageH}px` }}
+                  >
+                    {t('heatmapNoPreview')}
+                  </div>
+                )}
+                <canvas
+                  ref={canvasRef}
+                  className="heatmap-preview-canvas"
+                  style={{ width: `${stage.stageW}px`, height: `${stage.stageH}px` }}
+                  role="img"
+                  aria-label={t('heatmaps')}
                 />
-              ) : previewUrl && iframeBlocked && !iframeLoaded ? (
-                <div className="heatmap-iframe-fallback">
-                  <p>{t('heatmapIframeBlocked')}</p>
-                  <p className="text-muted">{t('heatmapIframeBlockedDetail')}</p>
-                  <p className="text-muted">{t('heatmapOverlayOnly')}</p>
-                </div>
-              ) : (
-                <div
-                  className="heatmap-preview-empty"
-                  style={{ height: `${previewSize.h}px` }}
-                >
-                  {t('heatmapNoPreview')}
-                </div>
-              )}
-              <canvas
-                ref={canvasRef}
-                className="heatmap-preview-canvas"
-                style={{ height: `${previewSize.h}px` }}
-                role="img"
-                aria-label={t('heatmaps')}
-              />
+              </div>
             </div>
             <div className="heatmap-legend">
               <span>{t('heatmapLegendLow')}</span>

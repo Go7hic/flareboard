@@ -69,6 +69,18 @@ export const COMPARE_COMPETITORS: CompareCompetitor[] = [
     detailAnchor: 'cloudflare-web-analytics',
   },
   {
+    id: 'vercel-analytics',
+    titleKey: 'compareVsVercelAnalyticsTitle',
+    bulletKeys: [
+      'compareVsVercelAnalyticsB1',
+      'compareVsVercelAnalyticsB2',
+      'compareVsVercelAnalyticsB3',
+      'compareVsVercelAnalyticsB4',
+      'compareVsVercelAnalyticsB5',
+    ],
+    detailAnchor: 'vercel-analytics',
+  },
+  {
     id: 'matomo',
     titleKey: 'compareVsMatomoTitle',
     bulletKeys: [

@@ -128,7 +128,7 @@ export function LandingChrome({ children, activeNav = 'home' }: LandingChromePro
     { kind: 'route', href: '/features', labelKey: 'landingNavFeatures', active: activeNav === 'features' },
     { kind: 'route', href: '/compare', labelKey: 'landingNavCompare', active: activeNav === 'compare' },
     { kind: 'route', href: '/pricing', labelKey: 'landingNavPricing', active: activeNav === 'pricing' },
-    { kind: 'href', href: '/blog', labelKey: 'landingNavBlog' },
+    { kind: 'external', href: '/blog', labelKey: 'landingNavBlog' },
     { kind: 'external', href: FLAREBOARD_README, labelKey: 'landingNavDocs' },
   ];
 

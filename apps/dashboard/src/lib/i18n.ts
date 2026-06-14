@@ -2083,29 +2083,52 @@ const messages: Record<Locale, Record<string, string>> = {
   'fr-FR': frFRLocale,
 };
 
-let locale: Locale =
-  (typeof localStorage !== 'undefined' ? (localStorage.getItem(STORAGE_KEY) as Locale) : null) ||
-  'en-US';
-
 export function isLocale(value: string): value is Locale {
   return (LOCALES as readonly string[]).includes(value);
 }
+
+function resolveBrowserLocale(): Locale {
+  if (typeof navigator === 'undefined') return 'en-US';
+
+  const candidates = navigator.languages?.length ? navigator.languages : [navigator.language];
+  for (const raw of candidates) {
+    if (!raw) continue;
+
+    if (isLocale(raw)) return raw;
+
+    const normalized = raw.replace('_', '-');
+    if (isLocale(normalized)) return normalized;
+
+    const base = normalized.toLowerCase().split('-')[0];
+    if (base === 'zh') return 'zh-CN';
+    if (base === 'ja') return 'ja-JP';
+    if (base === 'de') return 'de-DE';
+    if (base === 'fr') return 'fr-FR';
+    if (base === 'en') return 'en-US';
+  }
+
+  return 'en-US';
+}
+
+/** User manual choice in localStorage wins; otherwise match browser language. */
+function readInitialLocale(): Locale {
+  if (typeof localStorage !== 'undefined') {
+    const stored = localStorage.getItem(STORAGE_KEY) as Locale | null;
+    if (stored && isLocale(stored)) return stored;
+  }
+  return resolveBrowserLocale();
+}
+
+let locale: Locale = readInitialLocale();
 
 export function getLocale(): Locale {
   return locale;
 }
 
+/** Persist manual locale choice; call sites reload the page after switching. */
 export function setLocale(next: Locale) {
   locale = next;
   localStorage.setItem(STORAGE_KEY, next);
-}
-
-export function initLocaleFromConfig(configLocale?: string) {
-  const stored = localStorage.getItem(STORAGE_KEY) as Locale | null;
-  if (stored && isLocale(stored)) return;
-  if (configLocale && isLocale(configLocale)) {
-    locale = configLocale;
-  }
 }
 
 export function t(key: string): string {

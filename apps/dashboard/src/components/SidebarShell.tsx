@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, getToken, setToken } from '../lib/api';
-import { initLocaleFromConfig, t } from '../lib/i18n';
+import { t } from '../lib/i18n';
 import { AppSidebar } from './AppSidebar';
 import { AppTopBar } from './AppTopBar';
 
@@ -30,9 +30,8 @@ export function SidebarShell() {
   const userLabel = meQuery.data?.username || t('username');
 
   useEffect(() => {
-    api<{ locale?: string; hosted?: boolean; role?: string }>('/api/config')
+    api<{ hosted?: boolean; role?: string }>('/api/config')
       .then((cfg) => {
-        if (cfg.locale) initLocaleFromConfig(cfg.locale);
         setHosted(Boolean(cfg.hosted));
         setIsAdmin(cfg.role === 'admin');
       })

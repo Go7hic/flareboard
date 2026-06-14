@@ -7737,6 +7737,21 @@ code {
   gap: 1.25rem;
 }
 
+.landing-footer-brand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+}
+
+.landing-footer-fable-badge {
+  display: block;
+  height: 2rem;
+  width: auto;
+  max-width: min(100%, 14rem);
+  object-fit: contain;
+}
+
 .landing-footer-links {
   display: flex;
   flex-wrap: wrap;
@@ -7770,7 +7785,7 @@ code {
     align-items: center;
   }
 
-  .landing-footer-inner > .shell-brand {
+  .landing-footer-inner > .landing-footer-brand {
     grid-column: 1;
     grid-row: 1;
     align-self: start;

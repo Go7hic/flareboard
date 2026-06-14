@@ -167,7 +167,18 @@ export function LandingChrome({ children, activeNav = 'home' }: LandingChromePro
 
       <footer className="landing-footer">
         <div className="landing-footer-inner">
-          <LandingBrandLink className="shell-brand" />
+          <div className="landing-footer-brand">
+            <LandingBrandLink className="shell-brand" />
+            <img
+              src="/fable5.avif"
+              alt="Fable 5 Verified"
+              className="landing-footer-fable-badge"
+              width={220}
+              height={40}
+              loading="lazy"
+              decoding="async"
+            />
+          </div>
           <nav className="landing-footer-links" aria-label={t('landingFooterAria')}>
             <Link to="/features">{t('landingNavFeatures')}</Link>
             <Link to="/compare">{t('landingNavCompare')}</Link>

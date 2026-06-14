@@ -10,7 +10,7 @@ function secretKey(secret: string) {
 export async function createToken(
   payload: Record<string, unknown>,
   secret: string,
-  expiresIn = '24h',
+  expiresIn = '7d',
 ): Promise<string> {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
@@ -31,7 +31,7 @@ export async function parseToken(token: string, secret: string) {
 export async function createSecureToken(
   payload: Record<string, unknown>,
   secret: string,
-  expiresIn = '24h',
+  expiresIn = '7d',
 ): Promise<string> {
   const token = await createToken(payload, secret, expiresIn);
   return encrypt(token, secret);

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import {
   CartesianGrid,
@@ -25,10 +25,19 @@ import {
   type Segment,
   type WebsiteStats,
 } from '../lib/api';
+import {
+  isHourlyChartRange,
+  mergePageviewsVisitors,
+  type MetricsSeries,
+} from '../lib/chartTimeseries';
 import { t } from '../lib/i18n';
 import { useWebsiteExport } from '../lib/useWebsiteExport';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 import { useChartColors } from '../lib/useChartColors';
+
+function cssVar(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
 
 function StatCard({
   label,
@@ -72,6 +81,15 @@ export default function WebsiteStatsPage() {
   const segmentQs = activeSegmentId ? `&segmentId=${encodeURIComponent(activeSegmentId)}` : '';
   const cohortQs = cohortId ? `&cohort=${encodeURIComponent(cohortId)}` : '';
   const qs = `${rangeQs}${segmentQs}${cohortQs}`;
+  const hourly = isHourlyChartRange(range.startAt, range.endAt);
+
+  const metricColors = useMemo(
+    () => ({
+      pageviews: chartColors.accent,
+      visitors: cssVar('--cf-orange') || chartColors.muted,
+    }),
+    [chartColors],
+  );
 
   useEffect(() => {
     if (segmentFromUrl) setSegmentId(segmentFromUrl);
@@ -96,22 +114,14 @@ export default function WebsiteStatsPage() {
       api<{ id: string; name: string }>(`/api/websites/${websiteId}/cohorts/${cohortId}`),
   });
 
-  const useDataFilter = Boolean(activeSegmentId || cohortId);
-
   const overviewQuery = useQuery({
     queryKey: ['overview', websiteId, range, activeSegmentId, cohortId],
-    enabled: Boolean(websiteId) && !useDataFilter,
+    enabled: Boolean(websiteId),
     queryFn: () =>
       api<{
         stats: WebsiteStats;
-        pageviews: { pageviews: { x: string; y: number }[] };
-      }>(`/api/websites/${websiteId}/stats/overview?unit=day&type=path&${rangeQs}`),
-  });
-
-  const statsQuery = useQuery({
-    queryKey: ['stats', websiteId, activeSegmentId, cohortId, range],
-    enabled: Boolean(websiteId) && useDataFilter,
-    queryFn: () => api<WebsiteStats>(`/api/websites/${websiteId}/stats?${qs}`),
+        timeseries: MetricsSeries;
+      }>(`/api/websites/${websiteId}/stats/overview?type=path&${qs}`),
   });
 
   const compareQuery = useQuery({
@@ -124,28 +134,19 @@ export default function WebsiteStatsPage() {
       }>(`/api/websites/${websiteId}/stats/compare?${qs}`),
   });
 
-  const pageviewsQuery = useQuery({
-    queryKey: ['pageviews', websiteId, activeSegmentId, cohortId, range],
-    enabled: Boolean(websiteId) && useDataFilter,
-    queryFn: () =>
-      api<{ pageviews: { x: string; y: number }[] }>(
-        `/api/websites/${websiteId}/pageviews?unit=day&${qs}`,
-      ),
-  });
-
   const eventsQuery = useQuery({
     queryKey: ['events', websiteId],
     enabled: Boolean(websiteId),
     queryFn: () => api<MetricRow[]>(`/api/websites/${websiteId}/events`),
   });
 
-  const stats = useDataFilter ? statsQuery.data : overviewQuery.data?.stats;
-  const chartData = useDataFilter
-    ? (pageviewsQuery.data?.pageviews ?? [])
-    : (overviewQuery.data?.pageviews.pageviews ?? []);
-  const chartLoading = useDataFilter ? pageviewsQuery.isLoading : overviewQuery.isLoading;
-  const statsLoading =
-    (useDataFilter ? statsQuery.isLoading : overviewQuery.isLoading) && !stats;
+  const stats = overviewQuery.data?.stats;
+  const chartData = useMemo(
+    () => mergePageviewsVisitors(overviewQuery.data?.timeseries, hourly),
+    [overviewQuery.data?.timeseries, hourly],
+  );
+  const chartLoading = overviewQuery.isLoading;
+  const statsLoading = overviewQuery.isLoading && !stats;
 
   function clearCohortFilter() {
     const next = new URLSearchParams(searchParams);
@@ -219,7 +220,7 @@ export default function WebsiteStatsPage() {
 
       <section className="analytics-hero panel section-gap" aria-labelledby="analytics-overview">
         <h2 id="analytics-overview" className="visually-hidden">
-          {t('pageviewsOverTime')}
+          {t('trafficOverTime')}
         </h2>
         <div className="analytics-hero-stats">
           {statsLoading ? (
@@ -249,35 +250,68 @@ export default function WebsiteStatsPage() {
         ) : null}
 
         <div className="analytics-hero-chart">
-          <h3 className="section-title">{t('pageviewsOverTime')}</h3>
+          <h3 className="section-title">{t('trafficOverTime')}</h3>
           {chartLoading ? (
             <div className="chart-wrap chart-wrap-hero chart-skeleton" aria-busy>
               <div className="skeleton skeleton-block" />
             </div>
           ) : chartData.length > 0 ? (
-            <div className="chart-wrap chart-wrap-hero">
-              <ResponsiveContainer>
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
-                  <XAxis dataKey="x" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-                  <YAxis
-                    allowDecimals={false}
-                    tick={{ fontSize: 11, fill: chartColors.muted }}
-                    stroke={chartColors.border}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      background: chartColors.panel,
-                      border: `1px solid ${chartColors.border}`,
-                      borderRadius: 8,
-                      fontSize: 13,
-                      color: chartColors.text,
-                    }}
-                  />
-                  <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+            <>
+              <div className="chart-wrap chart-wrap-hero">
+                <ResponsiveContainer>
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
+                    <XAxis
+                      dataKey="x"
+                      tick={{ fontSize: 11, fill: chartColors.muted }}
+                      stroke={chartColors.border}
+                      interval={hourly ? 'preserveStartEnd' : undefined}
+                      minTickGap={hourly ? 24 : 8}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{ fontSize: 11, fill: chartColors.muted }}
+                      stroke={chartColors.border}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: chartColors.panel,
+                        border: `1px solid ${chartColors.border}`,
+                        borderRadius: 8,
+                        fontSize: 13,
+                        color: chartColors.text,
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="pageviews"
+                      name={t('pageviews')}
+                      stroke={metricColors.pageviews}
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="visitors"
+                      name={t('visitors')}
+                      stroke={metricColors.visitors}
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="dashboard-aggregate-legend analytics-chart-legend" aria-hidden>
+                <span className="dashboard-aggregate-legend-item">
+                  <span className="dashboard-aggregate-legend-swatch dashboard-aggregate-legend-swatch--pageviews" />
+                  <span className="dashboard-aggregate-legend-label">{t('pageviews')}</span>
+                </span>
+                <span className="dashboard-aggregate-legend-item">
+                  <span className="dashboard-aggregate-legend-swatch dashboard-aggregate-legend-swatch--visitors" />
+                  <span className="dashboard-aggregate-legend-label">{t('visitors')}</span>
+                </span>
+              </div>
+            </>
           ) : (
             <EmptyState title={t('chartNoData')} description={t('noDataInPeriodHint')} />
           )}

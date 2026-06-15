@@ -244,9 +244,12 @@ export async function getWebsiteMetricsSeriesFiltered(
   endAt: number,
   unit: string,
   segment?: SegmentParams | null,
+  cohortJoin?: CohortMemberJoin | null,
 ) {
   const seg = buildSegmentSql(segment);
-  const joins = seg.joinSession ? ' INNER JOIN session s ON e.session_id = s.session_id' : '';
+  const cohort = cohortJoinSql(cohortJoin);
+  const joins =
+    (seg.joinSession ? ' INNER JOIN session s ON e.session_id = s.session_id' : '') + cohort.sql;
   const format =
     unit === 'hour'
       ? "%Y-%m-%d %H:00"
@@ -262,7 +265,14 @@ export async function getWebsiteMetricsSeriesFiltered(
     ...seg.eventClauses,
     ...seg.sessionClauses,
   ];
-  const binds: (string | number)[] = [websiteId, startAt, endAt, ...seg.binds];
+  const binds: (string | number)[] = [
+    ...cohort.binds,
+    websiteId,
+    startAt,
+    endAt,
+    ...seg.binds,
+    EVENT_TYPE.pageView,
+  ];
 
   const rows = await env.DB.prepare(
     `SELECT strftime('${format}', datetime(e.created_at / 1000, 'unixepoch')) as x,
@@ -273,7 +283,7 @@ export async function getWebsiteMetricsSeriesFiltered(
      GROUP BY x
      ORDER BY x`,
   )
-    .bind(EVENT_TYPE.pageView, ...binds)
+    .bind(...binds)
     .all<{ x: string; pageviews: number; visitors: number }>();
 
   const results = rows.results ?? [];

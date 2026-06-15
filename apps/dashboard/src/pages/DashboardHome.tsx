@@ -17,6 +17,7 @@ import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { api, getToken } from '../lib/api';
+import { formatChartTimeLabel, isHourlyChartRange } from '../lib/chartTimeseries';
 import { t } from '../lib/i18n';
 import { useDashboardRange } from '../lib/useDashboardRange';
 import { useChartColors } from '../lib/useChartColors';
@@ -83,7 +84,7 @@ function mergeAggregateMetrics(metrics: AggregateMetrics | undefined, hourly: bo
   return Array.from(byKey.values())
     .sort((a, b) => a.rawX.localeCompare(b.rawX))
     .map(({ rawX, pageviews, visitors, visits }) => ({
-      x: formatChartLabel(rawX, hourly),
+      x: formatChartTimeLabel(rawX, hourly),
       pageviews,
       visitors,
       visits,
@@ -93,16 +94,6 @@ function mergeAggregateMetrics(metrics: AggregateMetrics | undefined, hourly: bo
 type AggregateMetricKey = 'pageviews' | 'visitors' | 'visits';
 
 const AGGREGATE_METRICS: AggregateMetricKey[] = ['pageviews', 'visitors', 'visits'];
-
-function formatChartLabel(x: string, hourly: boolean) {
-  if (hourly && x.includes(' ')) {
-    const [, time] = x.split(' ');
-    return time?.slice(0, 5) ?? x;
-  }
-  const parts = x.split('-');
-  if (parts.length >= 3) return `${parts[1]}/${parts[2]}`;
-  return x;
-}
 
 export default function DashboardHome() {
   const navigate = useNavigate();
@@ -124,7 +115,7 @@ export default function DashboardHome() {
   const hasWebsites = siteCount > 0;
   const cardsTruncated = overviewQuery.data?.cardsTruncated ?? false;
   const totals = overviewQuery.data?.totals;
-  const hourly = range.endAt - range.startAt <= 48 * 60 * 60 * 1000;
+  const hourly = isHourlyChartRange(range.startAt, range.endAt);
 
   const aggregateChart = useMemo(
     () => mergeAggregateMetrics(overviewQuery.data?.aggregateMetrics, hourly),
@@ -315,7 +306,7 @@ export default function DashboardHome() {
           <div className="dashboard-site-list section-gap">
             {sites.map((w) => {
               const chartData = w.series.map((p) => ({
-                x: formatChartLabel(p.x, hourly),
+                x: formatChartTimeLabel(p.x, hourly),
                 y: p.y,
               }));
               return (

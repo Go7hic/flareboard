@@ -166,12 +166,21 @@ export async function handleOverview(c: Ctx) {
             segment,
             cohort,
           );
-    const [stats, pageviews, metrics] = await Promise.all([
+    const [stats, pageviews, metrics, timeseries] = await Promise.all([
       getWebsiteStatsFiltered(c.env, website.websiteId, startAt, endAt, segment, cohort),
       getPageviewsFiltered(c.env, website.websiteId, startAt, endAt, unit, segment, cohort),
       metricsPromise,
+      getWebsiteMetricsSeriesFiltered(
+        c.env,
+        website.websiteId,
+        startAt,
+        endAt,
+        compareChartUnit(startAt, endAt),
+        segment,
+        cohort,
+      ),
     ]);
-    return json({ stats, pageviews, metrics });
+    return json({ stats, pageviews, metrics, timeseries });
   }
 
   const metricsPromise =
@@ -179,13 +188,20 @@ export async function handleOverview(c: Ctx) {
       ? getPageMetrics(c.env, website.websiteId, startAt, endAt, sortBy, limit)
       : getMetrics(c.env, website.websiteId, startAt, endAt, metricType, limit);
 
-  const [stats, pageviews, metrics] = await Promise.all([
+  const [stats, pageviews, metrics, timeseries] = await Promise.all([
     getWebsiteStats(c.env, website.websiteId, startAt, endAt),
     getPageviews(c.env, website.websiteId, startAt, endAt, unit),
     metricsPromise,
+    getWebsiteMetricsSeries(
+      c.env,
+      website.websiteId,
+      startAt,
+      endAt,
+      compareChartUnit(startAt, endAt),
+    ),
   ]);
 
-  return json({ stats, pageviews, metrics });
+  return json({ stats, pageviews, metrics, timeseries });
 }
 
 function compareChartUnit(startAt: number, endAt: number) {
@@ -210,6 +226,7 @@ export async function handleCompare(c: Ctx) {
       ? compareQuery.data.compareStartAt
       : compareEndAt - periodMs;
   const segment = await segmentParams(c, website.websiteId);
+  const cohort = await cohortJoin(c, website.websiteId);
   const unit = compareChartUnit(startAt, endAt);
 
   const load = (from: number, to: number) =>
@@ -219,7 +236,7 @@ export async function handleCompare(c: Ctx) {
 
   const loadSeries = (from: number, to: number) =>
     segment
-      ? getWebsiteMetricsSeriesFiltered(c.env, website.websiteId, from, to, unit, segment)
+      ? getWebsiteMetricsSeriesFiltered(c.env, website.websiteId, from, to, unit, segment, cohort)
       : getWebsiteMetricsSeries(c.env, website.websiteId, from, to, unit);
 
   const [primary, compare, primarySeries, compareSeries] = await Promise.all([

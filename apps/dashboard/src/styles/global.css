@@ -2202,6 +2202,14 @@ code {
   margin-bottom: 0.85rem;
 }
 
+.analytics-chart-legend {
+  padding-top: 0.5rem;
+}
+
+.analytics-chart-legend .dashboard-aggregate-legend-item {
+  cursor: default;
+}
+
 /* Core Web Vitals performance page */
 .cwv-vital-card .cwv-dist-bar {
   margin-top: 0.65rem;

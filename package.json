@@ -12,6 +12,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "test:api": "pnpm --filter @flareboard/api test",
+    "test:ingest": "pnpm --filter @flareboard/ingest test",
     "db:migrate": "pnpm --filter @flareboard/db migrate:local",
     "db:migrate:remote": "pnpm --filter @flareboard/db migrate:remote",
     "seed": "tsx scripts/seed.ts",

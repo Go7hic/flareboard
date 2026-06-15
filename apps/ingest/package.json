@@ -7,7 +7,10 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy --env production",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "pretest": "wrangler types",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@flareboard/db": "workspace:*",
@@ -17,9 +20,11 @@
     "isbot": "^5.1.40"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.16.13",
     "@cloudflare/workers-types": "^4.20250603.0",
     "@types/node": "^22.15.32",
     "typescript": "^5.8.3",
+    "vitest": "^4.1.0",
     "wrangler": "^4.19.0"
   }
 }

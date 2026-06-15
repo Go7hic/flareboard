@@ -247,6 +247,9 @@ importers:
         specifier: ^5.1.40
         version: 5.1.40
     devDependencies:
+      '@cloudflare/vitest-pool-workers':
+        specifier: ^0.16.13
+        version: 0.16.13(@cloudflare/workers-types@4.20260603.1)(@vitest/runner@4.1.8)(@vitest/snapshot@4.1.8)(vitest@4.1.8(@types/node@22.19.19)(vite@7.3.5(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)(yaml@2.9.0)))
       '@cloudflare/workers-types':
         specifier: ^4.20250603.0
         version: 4.20260603.1
@@ -256,6 +259,9 @@ importers:
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.8(@types/node@22.19.19)(vite@7.3.5(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)(yaml@2.9.0))
       wrangler:
         specifier: ^4.19.0
         version: 4.97.0(@cloudflare/workers-types@4.20260603.1)

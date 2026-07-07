@@ -560,6 +560,10 @@ export interface WarehouseQueryResponse {
   columns: string[];
   rows: Array<Record<string, unknown>>;
   rowCount: number;
+  cost: {
+    rowsRead: number;
+    durationMs: number;
+  };
   analysis: {
     valid: boolean;
     normalizedSql: string;

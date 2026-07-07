@@ -11,11 +11,25 @@ const UNSAFE_SCOPE_SQL = [
 ];
 const DEFAULT_LIMIT = 100;
 const MAX_USER_LIMIT = 1000;
+const MAX_ROWS_READ = 100_000;
+const QUERY_TIMEOUT_MS = 10_000;
 const MAX_IMPORT_ROWS = 10_000;
 const IMPORT_BATCH_SIZE = 100;
 const MAX_IMPORT_RESPONSE_BYTES = 5 * 1024 * 1024;
 const MAX_SYNC_WEBSITES_PER_TICK = 50;
 const MIN_SCHEDULE_INTERVAL_MINUTES = 1;
+
+export type WarehouseQueryCost = {
+  rowsRead: number;
+  durationMs: number;
+};
+
+export const WAREHOUSE_QUERY_LIMITS = {
+  defaultLimit: DEFAULT_LIMIT,
+  maxUserLimit: MAX_USER_LIMIT,
+  maxRowsRead: MAX_ROWS_READ,
+  timeoutMs: QUERY_TIMEOUT_MS,
+} as const;
 
 export type WarehouseQueryDiagnostic = {
   code:
@@ -461,15 +475,61 @@ function withLimit(sql: string, hasLimit = /\blimit\s+\d+\b/i.test(sql)) {
   return `SELECT * FROM (${sql}) LIMIT ${MAX_USER_LIMIT}`;
 }
 
+function queryDurationMs(meta: D1Meta | undefined, wallMs: number) {
+  const sqlMs = meta?.timings?.sql_duration_ms;
+  if (typeof sqlMs === 'number' && Number.isFinite(sqlMs)) return sqlMs;
+  const duration = meta?.duration;
+  if (typeof duration === 'number' && Number.isFinite(duration)) return duration * 1000;
+  return wallMs;
+}
+
+export function enforceWarehouseQueryCost(
+  meta: Pick<D1Meta, 'rows_read'> | undefined,
+  durationMs: number,
+  limits: Pick<typeof WAREHOUSE_QUERY_LIMITS, 'maxRowsRead' | 'timeoutMs'> = WAREHOUSE_QUERY_LIMITS,
+) {
+  const rowsRead = meta?.rows_read ?? 0;
+  if (rowsRead > limits.maxRowsRead) {
+    throw new Error(
+      `Query scanned ${rowsRead.toLocaleString()} rows; maximum allowed is ${limits.maxRowsRead.toLocaleString()}`,
+    );
+  }
+  if (durationMs > limits.timeoutMs) {
+    throw new Error(`Query exceeded ${limits.timeoutMs}ms timeout`);
+  }
+  return { rowsRead, durationMs };
+}
+
+async function withQueryTimeout<T>(promise: Promise<T>, timeoutMs: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Query exceeded ${timeoutMs}ms timeout`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function runWarehouseQuery(env: Env, websiteId: string, sql: string) {
   const analysis = assertReadOnlyScoped(sql);
-  const rows = await env.DB.prepare(analysis.executableSql!).bind(websiteId).all<Record<string, unknown>>();
+  const startedAt = Date.now();
+  const rows = await withQueryTimeout(
+    env.DB.prepare(analysis.executableSql!).bind(websiteId).all<Record<string, unknown>>(),
+    QUERY_TIMEOUT_MS,
+  );
+  const wallMs = Date.now() - startedAt;
+  const cost = enforceWarehouseQueryCost(rows.meta, queryDurationMs(rows.meta, wallMs));
   const resultRows = rows.results ?? [];
   const columns = resultRows.length ? Object.keys(resultRows[0]!) : [];
   return {
     columns,
     rows: resultRows,
     rowCount: resultRows.length,
+    cost,
     analysis,
   };
 }

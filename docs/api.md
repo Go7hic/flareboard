@@ -194,6 +194,8 @@ Alert rule CRUD exists today. Automatic alert evaluation and email/webhook deliv
 
 Warehouse endpoints run scoped D1 SQL against the current website and related analytics tables.
 
+Query execution is capped at **1000 rows returned**, **100,000 rows scanned** (D1 `meta.rows_read`), and **10 seconds** wall-clock timeout. Successful responses include a `cost` object with `rowsRead` and `durationMs`.
+
 | Method | Path | Auth |
 |--------|------|------|
 | GET | `/api/websites/:websiteId/warehouse/schema` | Bearer |

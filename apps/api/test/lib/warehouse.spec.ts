@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { EVENT_TYPE } from '@flareboard/shared';
-import { analyzeWarehouseQuery, getWarehouseSchema, runWarehouseQuery } from '../../src/lib/warehouse';
+import { analyzeWarehouseQuery, enforceWarehouseQueryCost, getWarehouseSchema, runWarehouseQuery, WAREHOUSE_QUERY_LIMITS } from '../../src/lib/warehouse';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
 
 const BASE = Date.UTC(2026, 0, 6, 12);
@@ -37,6 +37,8 @@ describe('runWarehouseQuery', () => {
 
     expect(result.columns).toEqual(['eventName', 'urlPath']);
     expect(result.rows[0]).toEqual({ eventName: 'signup', urlPath: '/pricing' });
+    expect(result.cost.rowsRead).toBeGreaterThanOrEqual(1);
+    expect(result.cost.durationMs).toBeGreaterThanOrEqual(0);
     expect(result.analysis).toMatchObject({
       valid: true,
       hasLimit: false,
@@ -155,6 +157,25 @@ describe('runWarehouseQuery', () => {
           message: 'Warehouse queries must scope reads with website_id = ?1',
         },
       ],
+    });
+  });
+
+  it('rejects queries that exceed scan or timeout limits', () => {
+    expect(() =>
+      enforceWarehouseQueryCost({ rows_read: WAREHOUSE_QUERY_LIMITS.maxRowsRead + 1 }, 1),
+    ).toThrow(/scanned/i);
+
+    expect(() =>
+      enforceWarehouseQueryCost({ rows_read: 1 }, WAREHOUSE_QUERY_LIMITS.timeoutMs + 1),
+    ).toThrow(/timeout/i);
+  });
+
+  it('exposes warehouse query limits for operators', () => {
+    expect(WAREHOUSE_QUERY_LIMITS).toMatchObject({
+      defaultLimit: 100,
+      maxUserLimit: 1000,
+      maxRowsRead: 100_000,
+      timeoutMs: 10_000,
     });
   });
 });

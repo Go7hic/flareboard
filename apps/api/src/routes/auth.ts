@@ -252,10 +252,30 @@ export async function handleOAuthCallback(c: Ctx) {
 
   const jwt = await issueAuthToken(c, { userId: result.user.userId, role: result.user.role });
   const dest = result.returnTo ?? '/dashboard';
+  // Hand the browser a short-lived one-time code, not the token itself, so the
+  // JWT never lands in browser history, Referer headers, or intermediary logs.
+  const exchangeCode = crypto.randomUUID().replace(/-/g, '');
+  await c.env.CACHE.put(`oauth-code:${exchangeCode}`, jwt, { expirationTtl: 60 });
   return c.redirect(
-    `${dashboardBase(c)}/login?token=${encodeURIComponent(jwt)}&next=${encodeURIComponent(dest)}`,
+    `${dashboardBase(c)}/login?code=${encodeURIComponent(exchangeCode)}&next=${encodeURIComponent(dest)}`,
     302,
   );
+}
+
+export async function handleOAuthExchange(c: Ctx) {
+  const limited = await rateLimited(c, 'oauth-exchange', 30, 60);
+  if (limited) return limited;
+
+  const body = await c.req.json().catch(() => null);
+  const code = typeof body?.code === 'string' ? body.code : '';
+  if (!code) return badRequest('Missing code');
+
+  const key = `oauth-code:${code}`;
+  const token = await c.env.CACHE.get(key);
+  if (!token) return unauthorized({ message: 'Invalid or expired code' });
+  await c.env.CACHE.delete(key);
+
+  return json({ token });
 }
 
 export async function handleForgotPassword(c: Ctx) {
@@ -318,5 +338,6 @@ export function getAuth() {
   auth.post('/reset-password', handleResetPassword);
   auth.get('/oauth/:provider', handleOAuthRedirect);
   auth.get('/oauth/:provider/callback', handleOAuthCallback);
+  auth.post('/oauth/exchange', handleOAuthExchange);
   return auth;
 }

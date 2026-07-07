@@ -59,12 +59,24 @@ export default function Login() {
       return;
     }
 
-    const token = searchParams.get('token');
+    const code = searchParams.get('code');
     const next = searchParams.get('next') ?? POST_LOGIN_PATH;
-    if (token) {
-      setToken(token);
-      window.flareboard?.track('login_success');
-      navigate(next, { replace: true });
+    if (code) {
+      void (async () => {
+        try {
+          const res = await api<LoginResponse>('/api/auth/oauth/exchange', {
+            method: 'POST',
+            body: JSON.stringify({ code }),
+          });
+          setToken(res.token);
+          setSearchParams({}, { replace: true });
+          window.flareboard?.track('login_success');
+          navigate(next, { replace: true });
+        } catch {
+          setError(t('requestFailed'));
+          setSearchParams({}, { replace: true });
+        }
+      })();
       return;
     }
 

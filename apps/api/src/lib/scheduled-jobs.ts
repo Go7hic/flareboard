@@ -2,6 +2,7 @@ import type { Env } from '../env';
 import { evaluateErrorAlertRules } from './errors';
 import { runScheduledEmailReports } from './email-reports';
 import { evaluateLogAlertRules } from './logs';
+import { runRetentionPurge } from './retention';
 import { runDueWarehouseScheduledQueries, runDueWarehouseDataSourceSyncs } from './warehouse';
 
 // Caps how many websites a single cron tick processes so one invocation
@@ -86,5 +87,6 @@ export async function runScheduledMaintenance(env: Env, cron: string) {
   const alerts = await runScheduledAlertChecks(env);
   const warehouse = await runScheduledWarehouseQueries(env);
   const dataSources = await runDueWarehouseDataSourceSyncs(env);
-  return { alerts, warehouse, dataSources };
+  const retention = await runRetentionPurge(env);
+  return { alerts, warehouse, dataSources, retention };
 }

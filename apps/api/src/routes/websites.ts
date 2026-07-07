@@ -168,6 +168,8 @@ export async function handleUpdate(c: Ctx) {
         parsed.data.heatmapConfig !== undefined ? parsed.data.heatmapConfig : website.heatmapConfig,
       goalConfig:
         parsed.data.goalConfig !== undefined ? parsed.data.goalConfig : website.goalConfig,
+      retentionDays:
+        parsed.data.retentionDays !== undefined ? parsed.data.retentionDays : website.retentionDays,
       updatedAt: new Date(),
     })
     .where(eq(schema.website.websiteId, website.websiteId));

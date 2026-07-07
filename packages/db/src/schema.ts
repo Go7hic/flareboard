@@ -90,6 +90,8 @@ export const website = sqliteTable(
     replayConfig: text('replay_config', { mode: 'json' }),
     heatmapConfig: text('heatmap_config', { mode: 'json' }),
     goalConfig: text('goal_config', { mode: 'json' }),
+    // Null keeps raw event data forever; a positive value purges rows older than N days.
+    retentionDays: integer('retention_days'),
   },
   (t) => [
     index('website_user_idx').on(t.userId),

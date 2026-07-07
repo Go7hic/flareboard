@@ -556,6 +556,7 @@ export const updateWebsiteSchema = z.object({
   replayConfig: z.record(z.unknown()).nullable().optional(),
   heatmapConfig: heatmapConfigSchema.nullable().optional(),
   goalConfig: goalConfigSchema.nullable().optional(),
+  retentionDays: z.number().int().min(1).max(3650).nullable().optional(),
 });
 
 export const updateProfileSchema = z.object({

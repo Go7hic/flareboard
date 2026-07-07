@@ -38,10 +38,16 @@ Drizzle schema and D1 SQL migrations in `migrations/`.
 | `0029_warehouse_data_sources.sql` | Warehouse external data source metadata |
 | `0030_people.sql` | Person/group identity tables with unique `(website_id, distinct_id)` |
 | `0031_warehouse_import.sql` | Imported warehouse rows from external data sources |
+| `0032_share_expiry.sql` | Optional `share.expires_at` for expiring public share links |
+| `0033_user_token_version.sql` | `user.token_version` for session revocation on password change |
+| `0034_dead_event.sql` | `dead_event` table for retry-exhausted queue messages |
+| `0035_website_retention.sql` | Opt-in `website.retention_days` for raw-data purge |
 
 ## Deletion model
 
 Websites are **soft-deleted** (`website.deleted_at`); child rows (events, sessions, feature flags, surveys, people, warehouse data, …) are intentionally kept and foreign keys do not declare `ON DELETE CASCADE`. Any future hard-delete/purge job must delete child tables explicitly before removing `website` rows.
+
+Raw event retention is opt-in per website via `website.retention_days`. When set, the API worker's hourly cron (`runRetentionPurge`) deletes `event_data`, `revenue`, `session_replay`, `session_data`, and `website_event` rows older than the window, child-before-parent, bounded per tick. Null keeps data forever (the default).
 
 Apply via the API worker wrangler config (paths are relative to `apps/api/wrangler.jsonc`):
 

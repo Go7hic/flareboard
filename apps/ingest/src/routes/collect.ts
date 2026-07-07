@@ -37,6 +37,8 @@ import { checkIpRateLimit, checkRateLimit, getTrustedClientIp } from '../lib/rat
 
 const SEND_BODY_MAX_BYTES = 65_536;
 const WORKFLOW_DELIVERIES_PER_HOUR = 60;
+const WORKFLOW_TRIGGER_PER_IP_MIN = 30;
+const WORKFLOW_TRIGGER_PER_IP_SITE_HOUR = 10;
 
 type LogEventDataInput = {
   data?: Record<string, unknown>;
@@ -118,8 +120,27 @@ async function recordWorkflowExecutions(
     eventId: string;
     eventName: string;
     createdAt: number;
+    trustedIp: string;
   },
 ) {
+  const globalTrigger = await checkIpRateLimit(
+    env,
+    'workflow-trigger',
+    args.trustedIp,
+    WORKFLOW_TRIGGER_PER_IP_MIN,
+    60,
+  );
+  if (!globalTrigger.allowed) return;
+
+  const perSiteTrigger = await checkIpRateLimit(
+    env,
+    `workflow-trigger:${args.websiteId}`,
+    args.trustedIp,
+    WORKFLOW_TRIGGER_PER_IP_SITE_HOUR,
+    3600,
+  );
+  if (!perSiteTrigger.allowed) return;
+
   const workflows = await env.DB.prepare(
     `SELECT workflow_id as workflowId,
             name,
@@ -246,7 +267,7 @@ async function deliverWorkflowAction(
         Authorization: `Bearer ${env.APP_SECRET}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ to, subject, text }),
+      body: JSON.stringify({ to, subject, text, websiteId: input.websiteId }),
     });
     if (!response.ok) {
       return { status: 'failed', error: `Email delivery failed (${response.status})` };
@@ -734,6 +755,7 @@ async function processSend(
             eventId,
             eventName: name,
             createdAt: createdAt.getTime(),
+            trustedIp,
           }),
         );
       }

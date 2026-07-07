@@ -660,6 +660,7 @@ export const jaJPLocale: Record<string, string> = {
   workflowExecutionStatus_queued: "キュー待ち",
   workflowExecutionStatus_success: "成功",
   workflowExecutionStatus_failed: "失敗",
+  workflowExecutionStatus_throttled: "制限中",
   createWorkflow: "ワークフローを作成",
   workflowExecutions: "回の実行",
   workflowFailures: "失敗数",

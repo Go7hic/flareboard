@@ -660,6 +660,7 @@ export const frFRLocale: Record<string, string> = {
   workflowExecutionStatus_queued: "en file",
   workflowExecutionStatus_success: "succès",
   workflowExecutionStatus_failed: "échec",
+  workflowExecutionStatus_throttled: "limité",
   createWorkflow: "Créer le workflow",
   workflowExecutions: "exécutions",
   workflowFailures: "Échecs",

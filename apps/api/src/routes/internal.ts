@@ -33,17 +33,25 @@ app.post('/deliver-email', async (c) => {
   if (!isAuthorized(c, c.req.header('Authorization'))) {
     return json({ error: 'Unauthorized' }, 401);
   }
-  const rl = await checkIpRateLimit(c.env, 'internal-email', getTrustedClientIp(c.req.raw), 60, 3600);
-  if (!rl.allowed) {
-    return json({ error: 'Rate limit exceeded' }, 429);
-  }
 
-  const body = await c.req.json<{ to?: string; subject?: string; text?: string; html?: string }>();
+  const body = await c.req.json<{ to?: string; subject?: string; text?: string; html?: string; websiteId?: string }>();
   const to = body.to?.trim();
   const subject = body.subject?.trim();
   const text = body.text?.trim();
   if (!to || !subject || !text) {
     return json({ error: 'to, subject, and text are required' }, 400);
+  }
+
+  const websiteId = body.websiteId?.trim();
+  const rl = await checkIpRateLimit(
+    c.env,
+    'internal-email',
+    websiteId || getTrustedClientIp(c.req.raw),
+    60,
+    3600,
+  );
+  if (!rl.allowed) {
+    return json({ error: 'Rate limit exceeded' }, 429);
   }
 
   const ok = await sendEmail(c.env, {

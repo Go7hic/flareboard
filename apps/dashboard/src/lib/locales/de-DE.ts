@@ -660,6 +660,7 @@ export const deDELocale: Record<string, string> = {
   workflowExecutionStatus_queued: "eingereiht",
   workflowExecutionStatus_success: "erfolgreich",
   workflowExecutionStatus_failed: "fehlgeschlagen",
+  workflowExecutionStatus_throttled: "gedrosselt",
   createWorkflow: "Workflow erstellen",
   workflowExecutions: "Ausführungen",
   workflowFailures: "Fehlschläge",

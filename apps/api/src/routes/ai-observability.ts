@@ -1,21 +1,12 @@
 import type { Context } from 'hono';
 import type { Env } from '../env';
-import { canAccessWebsite } from '../lib/access';
 import { parseStatsRange } from '../lib/parse-range';
+import { requireWebsite } from '../lib/website';
 import { getAiEvents, getAiStats } from '../lib/ai-observability';
-import { getWebsiteById } from '../lib/queries';
 import { json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
-
-async function requireWebsite(c: Ctx) {
-  const websiteId = c.req.param('websiteId');
-  if (!websiteId) return null;
-  const website = await getWebsiteById(c.env, websiteId);
-  if (!website || !(await canAccessWebsite(c.env, website, c.get('user')))) return null;
-  return website;
-}
 
 function normalizeOptionalParam(value: string | undefined) {
   const trimmed = value?.trim();

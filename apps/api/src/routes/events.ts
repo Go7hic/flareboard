@@ -1,28 +1,14 @@
 import type { Context } from 'hono';
 import { eventsQuerySchema } from '@flareboard/shared';
 import type { Env } from '../env';
-import { canAccessWebsite } from '../lib/access';
 import { parseStatsRange } from '../lib/parse-range';
+import { requireWebsite } from '../lib/website';
 import { getEventCatalog, getEventCatalogDetail } from '../lib/event-catalog';
-import { getCustomEvents, getEventSeries, getEventStats, getWebsiteById } from '../lib/queries';
+import { getCustomEvents, getEventSeries, getEventStats } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
-
-function websiteParam(c: Ctx) {
-  return c.req.param('websiteId') || null;
-}
-
-async function requireWebsite(c: Ctx) {
-  const websiteId = websiteParam(c);
-  if (!websiteId) return null;
-  const website = await getWebsiteById(c.env, websiteId);
-  if (!website || !(await canAccessWebsite(c.env, website, c.get('user')))) {
-    return null;
-  }
-  return website;
-}
 
 export async function handleEvents(c: Ctx) {
   const website = await requireWebsite(c);

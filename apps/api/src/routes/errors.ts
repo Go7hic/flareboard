@@ -7,8 +7,9 @@ import {
   uploadErrorSourceMapSchema,
 } from '@flareboard/shared';
 import type { Env } from '../env';
-import { canAccessWebsite, canMutateWebsite, userIdHasWebsiteAccess } from '../lib/access';
+import { canMutateWebsite, userIdHasWebsiteAccess } from '../lib/access';
 import { parseStatsRange } from '../lib/parse-range';
+import { requireWebsite } from '../lib/website';
 import {
   addErrorIssueComment,
   createErrorAlertRule,
@@ -24,7 +25,6 @@ import {
   updateErrorIssueState,
   upsertErrorSourceMap,
 } from '../lib/errors';
-import { getWebsiteById } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
 
@@ -40,13 +40,6 @@ function parseIssueStatus(value: string | undefined): 'open' | 'resolved' | 'ign
   return undefined;
 }
 
-async function requireWebsite(c: Ctx) {
-  const websiteId = c.req.param('websiteId');
-  if (!websiteId) return null;
-  const website = await getWebsiteById(c.env, websiteId);
-  if (!website || !(await canAccessWebsite(c.env, website, c.get('user')))) return null;
-  return website;
-}
 
 export async function handleList(c: Ctx) {
   const website = await requireWebsite(c);

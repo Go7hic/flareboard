@@ -1,15 +1,14 @@
 import type { Context } from 'hono';
 import { compareQuerySchema, metricsQuerySchema } from '@flareboard/shared';
-import { parseStatsRange } from '../lib/parse-range';
 import type { Env } from '../env';
-import { canAccessWebsite } from '../lib/access';
+import { parseStatsRange } from '../lib/parse-range';
+import { requireWebsite } from '../lib/website';
 import {
   getMetrics,
   getPageviews,
   getPageMetrics,
   getSegmentById,
   getTrafficHeatmap,
-  getWebsiteById,
   getWebsiteMetricsSeries,
   getWebsiteStats,
 } from '../lib/queries';
@@ -26,20 +25,6 @@ import { badRequest, json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
-
-function websiteParam(c: Ctx) {
-  return c.req.param('websiteId') || null;
-}
-
-async function requireWebsite(c: Ctx) {
-  const websiteId = websiteParam(c);
-  if (!websiteId) return null;
-  const website = await getWebsiteById(c.env, websiteId);
-  if (!website || !(await canAccessWebsite(c.env, website, c.get('user')))) {
-    return null;
-  }
-  return website;
-}
 
 async function segmentParams(c: Ctx, websiteId: string) {
   const segmentId = c.req.query('segmentId');

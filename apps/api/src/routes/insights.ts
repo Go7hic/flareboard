@@ -9,15 +9,16 @@ import {
   uuid,
 } from '@flareboard/shared';
 import type { Env } from '../env';
-import { canAccessWebsite, canMutateWebsite } from '../lib/access';
+import { canMutateWebsite } from '../lib/access';
 import { parseStatsRange } from '../lib/parse-range';
+import { requireWebsiteById } from '../lib/website';
 import {
   runInsightQuery,
   serializeInsight,
   type InsightQuery,
   type InsightType,
 } from '../lib/insights';
-import { getAccessibleWebsites, getWebsiteById } from '../lib/queries';
+import { getAccessibleWebsites } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
 
@@ -37,17 +38,12 @@ function rowLike(row: typeof schema.insight.$inferSelect) {
   };
 }
 
-async function requireWebsite(c: Ctx, websiteId: string) {
-  const website = await getWebsiteById(c.env, websiteId);
-  if (!website || !(await canAccessWebsite(c.env, website, c.get('user')))) return null;
-  return website;
-}
 
 async function getInsight(c: Ctx, insightId: string) {
   const db = createDb(c.env.DB);
   const [row] = await db.select().from(schema.insight).where(eq(schema.insight.insightId, insightId)).limit(1);
   if (!row) return null;
-  const website = await requireWebsite(c, row.websiteId);
+  const website = await requireWebsiteById(c, row.websiteId);
   if (!website) return null;
   return { row, website };
 }
@@ -66,7 +62,7 @@ export async function handleList(c: Ctx) {
       .orderBy(schema.insight.createdAt);
     return json(rows.map((row) => serializeInsight(rowLike(row))));
   }
-  const website = await requireWebsite(c, websiteId);
+  const website = await requireWebsiteById(c, websiteId);
   if (!website) return notFound();
 
   const rows = await db
@@ -81,7 +77,7 @@ export async function handleCreate(c: Ctx) {
   const body = await c.req.json().catch(() => null);
   const parsed = createInsightSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
-  const website = await requireWebsite(c, parsed.data.websiteId);
+  const website = await requireWebsiteById(c, parsed.data.websiteId);
   if (!website) return notFound();
   if (!(await canMutateWebsite(c.env, website, c.get('user')))) {
     return json({ message: 'Read-only access' }, 403);
@@ -167,7 +163,7 @@ export async function handleRun(c: Ctx) {
 export async function handlePreview(c: Ctx) {
   const websiteId = c.req.query('websiteId');
   if (!websiteId) return badRequest('websiteId required');
-  const website = await requireWebsite(c, websiteId);
+  const website = await requireWebsiteById(c, websiteId);
   if (!website) return notFound();
   const body = await c.req.json().catch(() => null);
   const typeParsed = insightTypeSchema.safeParse((body as { type?: unknown } | null)?.type);

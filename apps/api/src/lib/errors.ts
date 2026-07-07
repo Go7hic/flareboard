@@ -104,18 +104,43 @@ export type ErrorFilters = {
   status?: 'open' | 'resolved' | 'ignored';
 };
 
+const ERROR_PROP_SELECT = `
+    MAX(CASE WHEN d.data_key = 'message' THEN d.string_value END) as message,
+    MAX(CASE WHEN d.data_key IN ('name', 'errorName') THEN d.string_value END) as name,
+    MAX(CASE WHEN d.data_key = 'severity' THEN d.string_value END) as severity,
+    MAX(CASE WHEN d.data_key = 'handled' THEN d.string_value END) as handled,
+    MAX(CASE WHEN d.data_key = 'release' THEN d.string_value END) as release,
+    MAX(CASE WHEN d.data_key = 'environment' THEN d.string_value END) as environment`;
+
+const ERROR_PROP_KEYS = `('message', 'name', 'errorName', 'severity', 'handled', 'release', 'environment')`;
+
+// Scoped to error events inside the queried time window (binds: ?1 websiteId,
+// ?2 startAt, ?3 endAt, ?4 event type) so it never scans a website's full
+// event_data set.
 const errorPropsCte = `WITH props AS (
   SELECT
-    website_event_id,
-    MAX(CASE WHEN data_key = 'message' THEN string_value END) as message,
-    MAX(CASE WHEN data_key IN ('name', 'errorName') THEN string_value END) as name,
-    MAX(CASE WHEN data_key = 'severity' THEN string_value END) as severity,
-    MAX(CASE WHEN data_key = 'handled' THEN string_value END) as handled,
-    MAX(CASE WHEN data_key = 'release' THEN string_value END) as release,
-    MAX(CASE WHEN data_key = 'environment' THEN string_value END) as environment
-  FROM event_data
-  WHERE website_id = ?1
-  GROUP BY website_event_id
+    d.website_event_id,${ERROR_PROP_SELECT}
+  FROM event_data d
+  JOIN website_event ev
+    ON ev.event_id = d.website_event_id
+   AND ev.website_id = ?1
+   AND ev.event_type = ?4
+   AND ev.created_at >= ?2
+   AND ev.created_at <= ?3
+  WHERE d.website_id = ?1
+    AND d.data_key IN ${ERROR_PROP_KEYS}
+  GROUP BY d.website_event_id
+)`;
+
+// Single-event variant (binds: ?1 websiteId, ?2 eventId).
+const errorEventPropsCte = `WITH props AS (
+  SELECT
+    d.website_event_id,${ERROR_PROP_SELECT}
+  FROM event_data d
+  WHERE d.website_id = ?1
+    AND d.website_event_id = ?2
+    AND d.data_key IN ${ERROR_PROP_KEYS}
+  GROUP BY d.website_event_id
 )`;
 
 function bindErrorFilters(filters: ErrorFilters) {
@@ -213,27 +238,6 @@ export async function getErrorIssues(
        COUNT(DISTINCT e.session_id) as sessions,
        MIN(e.created_at) as firstSeenAt,
        MAX(e.created_at) as lastSeenAt,
-       (
-         SELECT latest.event_id
-         FROM website_event latest
-         LEFT JOIN props latest_props ON latest_props.website_event_id = latest.event_id
-         LEFT JOIN error_issue_state latest_state
-           ON latest_state.website_id = latest.website_id
-          AND latest_state.fingerprint =
-            COALESCE(latest_props.name, 'Error') || '|' || COALESCE(latest_props.message, latest.event_name, 'Unknown error')
-         WHERE latest.website_id = ?1
-           AND latest.event_type = ?4
-           AND latest.created_at >= ?2
-           AND latest.created_at <= ?3
-           AND (?5 IS NULL OR latest_props.release = ?5)
-           AND (?6 IS NULL OR latest_props.environment = ?6)
-           AND (?7 IS NULL OR COALESCE(latest_state.status, 'open') = ?7)
-           AND COALESCE(latest_props.name, 'Error') = COALESCE(props.name, 'Error')
-           AND COALESCE(latest_props.message, latest.event_name, 'Unknown error') =
-             COALESCE(props.message, e.event_name, 'Unknown error')
-           ORDER BY latest.created_at DESC
-         LIMIT 1
-       ) as latestEventId,
        COALESCE(state.status, 'open') as status,
        state.note as note,
        state.assignee_user_id as assigneeUserId,
@@ -270,26 +274,127 @@ export async function getErrorIssues(
       statusFilter,
       Math.min(Math.max(limit, 1), 100),
     )
-    .all<Omit<ErrorIssueRow, 'samples'>>();
+    .all<Omit<ErrorIssueRow, 'samples' | 'latestEventId'>>();
 
-  const issues: ErrorIssueRow[] = [];
-  for (const row of rows.results ?? []) {
-    const fingerprint = row.fingerprint;
-    const [samples, comments] = await Promise.all([
-      getErrorIssueSamples(
-        env,
-        websiteId,
-        startAt,
-        endAt,
-        row.name ?? 'Error',
-        row.message ?? 'Unknown error',
-        filters,
-      ),
-      getErrorIssueComments(env, websiteId, fingerprint),
-    ]);
-    issues.push({ ...row, comments, samples });
+  const grouped = rows.results ?? [];
+  if (!grouped.length) return [];
+
+  // Samples and comments are batched (one window-function query + chunked IN
+  // queries) instead of two D1 round-trips per issue.
+  const [samplesByFingerprint, commentsByFingerprint] = await Promise.all([
+    getErrorIssueSamplesBatch(env, websiteId, startAt, endAt, filters),
+    getErrorIssueCommentsBatch(env, websiteId, grouped.map((row) => row.fingerprint)),
+  ]);
+
+  return grouped.map((row) => {
+    const samples = samplesByFingerprint.get(row.fingerprint) ?? [];
+    return {
+      ...row,
+      latestEventId: samples[0]?.id ?? null,
+      comments: commentsByFingerprint.get(row.fingerprint) ?? [],
+      samples,
+    };
+  });
+}
+
+const IN_CHUNK_SIZE = 50;
+
+async function getErrorIssueCommentsBatch(env: Env, websiteId: string, fingerprints: string[]) {
+  const byFingerprint = new Map<string, ErrorIssueCommentRow[]>();
+  const unique = [...new Set(fingerprints)];
+  for (let offset = 0; offset < unique.length; offset += IN_CHUNK_SIZE) {
+    const chunk = unique.slice(offset, offset + IN_CHUNK_SIZE);
+    const placeholders = chunk.map((_, index) => `?${index + 2}`).join(', ');
+    const rows = await env.DB.prepare(
+      `SELECT fingerprint,
+              comment_id as id,
+              user_id as userId,
+              body,
+              created_at as createdAt
+       FROM error_issue_comment
+       WHERE website_id = ?1 AND fingerprint IN (${placeholders})
+       ORDER BY created_at ASC`,
+    )
+      .bind(websiteId, ...chunk)
+      .all<ErrorIssueCommentRow & { fingerprint: string }>();
+    for (const { fingerprint, ...comment } of rows.results ?? []) {
+      const list = byFingerprint.get(fingerprint) ?? [];
+      if (list.length < 20) list.push(comment);
+      byFingerprint.set(fingerprint, list);
+    }
   }
-  return issues;
+  return byFingerprint;
+}
+
+async function getErrorIssueSamplesBatch(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  filters: ErrorFilters,
+  samplesPerIssue = 3,
+) {
+  const [releaseFilter, environmentFilter, statusFilter] = bindErrorFilters(filters);
+  const rows = await env.DB.prepare(
+    `${errorPropsCte},
+     ranked AS (
+       SELECT
+         e.event_id as id,
+         e.session_id as sessionId,
+         e.visit_id as visitId,
+         e.url_path as urlPath,
+         e.event_name as eventName,
+         e.created_at as createdAt,
+         s.browser,
+         s.os,
+         s.device,
+         s.country,
+         props.message,
+         props.name,
+         props.severity,
+         props.handled,
+         props.release,
+         props.environment,
+         COALESCE(props.name, 'Error') || '|' || COALESCE(props.message, e.event_name, 'Unknown error') as fingerprint,
+         ROW_NUMBER() OVER (
+           PARTITION BY COALESCE(props.name, 'Error'), COALESCE(props.message, e.event_name, 'Unknown error')
+           ORDER BY e.created_at DESC
+         ) as rowNumber
+       FROM website_event e
+       LEFT JOIN props ON props.website_event_id = e.event_id
+       LEFT JOIN error_issue_state state
+         ON state.website_id = e.website_id
+        AND state.fingerprint = COALESCE(props.name, 'Error') || '|' || COALESCE(props.message, e.event_name, 'Unknown error')
+       LEFT JOIN session s ON s.session_id = e.session_id
+       WHERE e.website_id = ?1
+         AND e.created_at >= ?2
+         AND e.created_at <= ?3
+         AND e.event_type = ?4
+         AND (?5 IS NULL OR props.release = ?5)
+         AND (?6 IS NULL OR props.environment = ?6)
+         AND (?7 IS NULL OR COALESCE(state.status, 'open') = ?7)
+     )
+     SELECT * FROM ranked WHERE rowNumber <= ?8 ORDER BY fingerprint, createdAt DESC`,
+  )
+    .bind(
+      websiteId,
+      startAt,
+      endAt,
+      EVENT_TYPE.error,
+      releaseFilter,
+      environmentFilter,
+      statusFilter,
+      samplesPerIssue,
+    )
+    .all<ErrorEventRow & { fingerprint: string; rowNumber: number }>();
+
+  const byFingerprint = new Map<string, ErrorEventRow[]>();
+  for (const { fingerprint, rowNumber: _rowNumber, ...sample } of rows.results ?? []) {
+    const list = byFingerprint.get(fingerprint) ?? [];
+    list.push(sample);
+    byFingerprint.set(fingerprint, list);
+  }
+  return byFingerprint;
 }
 
 export async function getErrorIssueComments(env: Env, websiteId: string, fingerprint: string, limit = 20) {
@@ -606,59 +711,6 @@ export async function evaluateErrorAlertRules(env: Env, websiteId: string, now =
   return triggered;
 }
 
-async function getErrorIssueSamples(
-  env: Env,
-  websiteId: string,
-  startAt: number,
-  endAt: number,
-  name: string,
-  message: string,
-  filters: ErrorFilters,
-) {
-  const [releaseFilter, environmentFilter, statusFilter] = bindErrorFilters(filters);
-  const rows = await env.DB.prepare(
-    `${errorPropsCte}
-     SELECT
-       e.event_id as id,
-       e.session_id as sessionId,
-       e.visit_id as visitId,
-       e.url_path as urlPath,
-       e.event_name as eventName,
-       e.created_at as createdAt,
-       s.browser,
-       s.os,
-       s.device,
-       s.country,
-       props.message,
-       props.name,
-       props.severity,
-       props.handled,
-       props.release,
-       props.environment
-     FROM website_event e
-     LEFT JOIN props ON props.website_event_id = e.event_id
-     LEFT JOIN error_issue_state state
-       ON state.website_id = e.website_id
-      AND state.fingerprint = COALESCE(props.name, 'Error') || '|' || COALESCE(props.message, e.event_name, 'Unknown error')
-     LEFT JOIN session s ON s.session_id = e.session_id
-     WHERE e.website_id = ?1
-       AND e.created_at >= ?2
-       AND e.created_at <= ?3
-       AND e.event_type = ?4
-       AND COALESCE(props.name, 'Error') = ?5
-       AND COALESCE(props.message, e.event_name, 'Unknown error') = ?6
-       AND (?7 IS NULL OR props.release = ?7)
-       AND (?8 IS NULL OR props.environment = ?8)
-       AND (?9 IS NULL OR COALESCE(state.status, 'open') = ?9)
-     ORDER BY e.created_at DESC
-     LIMIT 3`,
-  )
-    .bind(websiteId, startAt, endAt, EVENT_TYPE.error, name, message, releaseFilter, environmentFilter, statusFilter)
-    .all<ErrorEventRow>();
-
-  return rows.results ?? [];
-}
-
 export async function updateErrorIssueState(
   env: Env,
   websiteId: string,
@@ -829,7 +881,7 @@ export async function getErrorStats(
 
 export async function getErrorEvent(env: Env, websiteId: string, eventId: string) {
   const event = await env.DB.prepare(
-    `${errorPropsCte}
+    `${errorEventPropsCte}
      SELECT
        e.event_id as id,
        e.session_id as sessionId,

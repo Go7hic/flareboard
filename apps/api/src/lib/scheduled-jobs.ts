@@ -4,11 +4,25 @@ import { runScheduledEmailReports } from './email-reports';
 import { evaluateLogAlertRules } from './logs';
 import { runDueWarehouseScheduledQueries, runDueWarehouseDataSourceSyncs } from './warehouse';
 
+// Caps how many websites a single cron tick processes so one invocation
+// cannot blow past Worker CPU/subrequest limits; the remainder is picked up
+// on the next tick.
+const MAX_ALERT_WEBSITES_PER_TICK = 100;
+const MAX_WAREHOUSE_WEBSITES_PER_TICK = 50;
+
 export async function runScheduledAlertChecks(env: Env, now = Date.now()) {
+  // Only visit websites that actually have enabled alert rules instead of
+  // iterating every website in the instance.
   const rows = await env.DB.prepare(
-    `SELECT website_id as websiteId
-     FROM website
-     WHERE deleted_at IS NULL`,
+    `SELECT DISTINCT w.website_id as websiteId
+     FROM website w
+     JOIN (
+       SELECT website_id FROM error_alert_rule WHERE enabled = 1
+       UNION
+       SELECT website_id FROM log_alert_rule WHERE enabled = 1
+     ) rules ON rules.website_id = w.website_id
+     WHERE w.deleted_at IS NULL
+     LIMIT ${MAX_ALERT_WEBSITES_PER_TICK}`,
   ).all<{ websiteId: string }>();
 
   let websites = 0;
@@ -37,9 +51,12 @@ export async function runScheduledAlertChecks(env: Env, now = Date.now()) {
 
 export async function runScheduledWarehouseQueries(env: Env, now = Date.now()) {
   const rows = await env.DB.prepare(
-    `SELECT DISTINCT website_id as websiteId
+    `SELECT website_id as websiteId, MIN(next_run_at) as dueAt
      FROM warehouse_scheduled_query
-     WHERE enabled = 1 AND next_run_at <= ?1`,
+     WHERE enabled = 1 AND next_run_at <= ?1
+     GROUP BY website_id
+     ORDER BY dueAt ASC
+     LIMIT ${MAX_WAREHOUSE_WEBSITES_PER_TICK}`,
   )
     .bind(now)
     .all<{ websiteId: string }>();

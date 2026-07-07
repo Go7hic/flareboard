@@ -140,29 +140,56 @@ export type LogFilters = {
   environment?: string;
 };
 
-const logPropsCte = `WITH props AS (
+const LOG_PROP_SELECT = `
+    MAX(CASE WHEN d.data_key = 'message' THEN d.string_value END) as message,
+    MAX(CASE WHEN d.data_key = 'level' THEN d.string_value END) as level,
+    MAX(CASE WHEN d.data_key = 'release' THEN d.string_value END) as release,
+    MAX(CASE WHEN d.data_key = 'environment' THEN d.string_value END) as environment,
+    MAX(CASE WHEN d.data_key = 'traceId' THEN d.string_value END) as traceId,
+    MAX(CASE WHEN d.data_key = 'spanId' THEN d.string_value END) as spanId,
+    MAX(CASE WHEN d.data_key = 'parentSpanId' THEN d.string_value END) as parentSpanId,
+    MAX(CASE WHEN d.data_key = 'service' THEN d.string_value END) as service,
+    MAX(CASE WHEN d.data_key = 'operation' THEN d.string_value END) as operation,
+    MAX(CASE WHEN d.data_key = 'durationMs' THEN d.number_value END) as durationMs,
+    MAX(CASE WHEN d.data_key = 'status' THEN d.string_value END) as status`;
+
+const LOG_PROP_KEYS = `('message', 'level', 'release', 'environment', 'traceId', 'spanId', 'parentSpanId', 'service', 'operation', 'durationMs', 'status')`;
+
+// The props CTE joins website_event with the caller's filter condition so it
+// only aggregates properties for matching log events instead of scanning the
+// website's entire event_data set.
+function logPropsCteWith(eventCondition: string) {
+  return `WITH props AS (
   SELECT
-    website_event_id,
-    MAX(CASE WHEN data_key = 'message' THEN string_value END) as message,
-    MAX(CASE WHEN data_key = 'level' THEN string_value END) as level,
-    MAX(CASE WHEN data_key = 'release' THEN string_value END) as release,
-    MAX(CASE WHEN data_key = 'environment' THEN string_value END) as environment,
-    MAX(CASE WHEN data_key = 'traceId' THEN string_value END) as traceId,
-    MAX(CASE WHEN data_key = 'spanId' THEN string_value END) as spanId,
-    MAX(CASE WHEN data_key = 'parentSpanId' THEN string_value END) as parentSpanId,
-    MAX(CASE WHEN data_key = 'service' THEN string_value END) as service,
-    MAX(CASE WHEN data_key = 'operation' THEN string_value END) as operation,
-    MAX(CASE WHEN data_key = 'durationMs' THEN number_value END) as durationMs,
-    MAX(CASE WHEN data_key = 'status' THEN string_value END) as status
-  FROM event_data
-  WHERE website_id = ?1
-  GROUP BY website_event_id
+    d.website_event_id,${LOG_PROP_SELECT}
+  FROM event_data d
+  JOIN website_event ev
+    ON ev.event_id = d.website_event_id
+   AND ev.website_id = ?1
+   AND ${eventCondition}
+  WHERE d.website_id = ?1
+    AND d.data_key IN ${LOG_PROP_KEYS}
+  GROUP BY d.website_event_id
 )`;
+}
+
+// Binds: ?1 websiteId, ?2 startAt, ?3 endAt, ?4 event type.
+const logPropsCte = logPropsCteWith('ev.event_type = ?4 AND ev.created_at >= ?2 AND ev.created_at <= ?3');
+// Binds: ?1 websiteId, ?2 sinceAt, ?3 event type.
+const logTailPropsCte = logPropsCteWith('ev.event_type = ?3 AND ev.created_at > ?2');
+// Binds: ?1 websiteId, ?2 event type.
+const logTracePropsCte = logPropsCteWith('ev.event_type = ?2');
 
 function normalizeSavedFilter(row: Omit<LogSavedFilterRow, 'filters' | 'isDefault'> & { filters: string; isDefault: number }) {
+  let filters: LogSavedFilterValue;
+  try {
+    filters = JSON.parse(row.filters) as LogSavedFilterValue;
+  } catch {
+    filters = {} as LogSavedFilterValue;
+  }
   return {
     ...row,
-    filters: JSON.parse(row.filters) as LogSavedFilterValue,
+    filters,
     isDefault: Boolean(row.isDefault),
   };
 }
@@ -251,7 +278,7 @@ export async function getLogTail(
 ) {
   const searchPattern = filters.search?.trim() ? `%${filters.search.trim().toLowerCase()}%` : null;
   const rows = await env.DB.prepare(
-    `${logPropsCte}
+    `${logTailPropsCte}
      SELECT
        e.event_id as id,
        e.session_id as sessionId,
@@ -724,7 +751,7 @@ export async function getTraceSummaries(
 
 export async function getTraceDetail(env: Env, websiteId: string, traceId: string) {
   const rows = await env.DB.prepare(
-    `${logPropsCte}
+    `${logTracePropsCte}
      SELECT
        e.event_id as id,
        e.session_id as sessionId,

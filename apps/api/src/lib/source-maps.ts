@@ -42,17 +42,36 @@ function fileCandidates(file: string): string[] {
   return Array.from(new Set([file, base, mapFile, `assets/${base}`, `assets/${mapFile}`]));
 }
 
-async function loadSourceMapContent(env: Env, websiteId: string, release: string, file: string) {
-  for (const candidate of fileCandidates(file)) {
-    const row = await env.DB.prepare(
-      `SELECT content
+const CANDIDATE_CHUNK_SIZE = 90;
+
+/**
+ * Loads source-map content for every candidate file name in a few batched IN
+ * queries instead of one lookup per candidate per stack frame.
+ */
+async function loadSourceMapContents(env: Env, websiteId: string, release: string, files: string[]) {
+  const candidates = [...new Set(files.flatMap(fileCandidates))];
+  const byFile = new Map<string, string>();
+  for (let offset = 0; offset < candidates.length; offset += CANDIDATE_CHUNK_SIZE) {
+    const chunk = candidates.slice(offset, offset + CANDIDATE_CHUNK_SIZE);
+    const placeholders = chunk.map((_, index) => `?${index + 3}`).join(', ');
+    const rows = await env.DB.prepare(
+      `SELECT file, content
        FROM error_source_map
-       WHERE website_id = ?1 AND release = ?2 AND file = ?3
-       LIMIT 1`,
+       WHERE website_id = ?1 AND release = ?2 AND file IN (${placeholders})`,
     )
-      .bind(websiteId, release, candidate)
-      .first<{ content: string }>();
-    if (row?.content) return row.content;
+      .bind(websiteId, release, ...chunk)
+      .all<{ file: string; content: string }>();
+    for (const row of rows.results ?? []) {
+      if (row.content) byFile.set(row.file, row.content);
+    }
+  }
+  return byFile;
+}
+
+function pickSourceMapContent(byFile: Map<string, string>, file: string) {
+  for (const candidate of fileCandidates(file)) {
+    const content = byFile.get(candidate);
+    if (content) return content;
   }
   return null;
 }
@@ -187,16 +206,19 @@ export async function resolveErrorStack(
   if (!normalizedRelease || !stack.trim()) return [];
 
   const frames = parseStackFrames(stack);
-  const resolved: ResolvedStackFrame[] = [];
+  if (!frames.length) return [];
+  const contentByFile = await loadSourceMapContents(
+    env,
+    websiteId,
+    normalizedRelease,
+    frames.map((frame) => frame.file),
+  );
 
-  for (const frame of frames) {
-    const content = await loadSourceMapContent(env, websiteId, normalizedRelease, frame.file);
+  return frames.map((frame) => {
+    const content = pickSourceMapContent(contentByFile, frame.file);
     if (!content) {
-      resolved.push({ ...frame, source: null, sourceLine: null, sourceColumn: null, resolved: false });
-      continue;
+      return { ...frame, source: null, sourceLine: null, sourceColumn: null, resolved: false };
     }
-    resolved.push(resolveFrame(content, frame));
-  }
-
-  return resolved;
+    return resolveFrame(content, frame);
+  });
 }

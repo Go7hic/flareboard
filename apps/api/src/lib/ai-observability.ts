@@ -29,24 +29,34 @@ export type AiFilters = {
   environment?: string;
 };
 
+// Scoped to AI events inside the queried time window (binds: ?1 websiteId,
+// ?2 startAt, ?3 endAt, ?4 event type) so it never scans a website's full
+// event_data set.
 const aiPropsSql = `
   WITH props AS (
     SELECT
-      website_event_id,
-      MAX(CASE WHEN data_key = 'provider' THEN string_value END) as provider,
-      MAX(CASE WHEN data_key = 'model' THEN string_value END) as model,
-      MAX(CASE WHEN data_key = 'inputTokens' THEN number_value END) as inputTokens,
-      MAX(CASE WHEN data_key = 'outputTokens' THEN number_value END) as outputTokens,
-      MAX(CASE WHEN data_key = 'totalTokens' THEN number_value END) as totalTokens,
-      MAX(CASE WHEN data_key = 'costUsd' THEN number_value END) as costUsd,
-      MAX(CASE WHEN data_key = 'latencyMs' THEN number_value END) as latencyMs,
-      MAX(CASE WHEN data_key = 'status' THEN string_value END) as status,
-      MAX(CASE WHEN data_key = 'quality' THEN string_value END) as quality,
-      MAX(CASE WHEN data_key = 'release' THEN string_value END) as release,
-      MAX(CASE WHEN data_key = 'environment' THEN string_value END) as environment
-    FROM event_data
-    WHERE website_id = ?1
-    GROUP BY website_event_id
+      d.website_event_id,
+      MAX(CASE WHEN d.data_key = 'provider' THEN d.string_value END) as provider,
+      MAX(CASE WHEN d.data_key = 'model' THEN d.string_value END) as model,
+      MAX(CASE WHEN d.data_key = 'inputTokens' THEN d.number_value END) as inputTokens,
+      MAX(CASE WHEN d.data_key = 'outputTokens' THEN d.number_value END) as outputTokens,
+      MAX(CASE WHEN d.data_key = 'totalTokens' THEN d.number_value END) as totalTokens,
+      MAX(CASE WHEN d.data_key = 'costUsd' THEN d.number_value END) as costUsd,
+      MAX(CASE WHEN d.data_key = 'latencyMs' THEN d.number_value END) as latencyMs,
+      MAX(CASE WHEN d.data_key = 'status' THEN d.string_value END) as status,
+      MAX(CASE WHEN d.data_key = 'quality' THEN d.string_value END) as quality,
+      MAX(CASE WHEN d.data_key = 'release' THEN d.string_value END) as release,
+      MAX(CASE WHEN d.data_key = 'environment' THEN d.string_value END) as environment
+    FROM event_data d
+    JOIN website_event ev
+      ON ev.event_id = d.website_event_id
+     AND ev.website_id = ?1
+     AND ev.event_type = ?4
+     AND ev.created_at >= ?2
+     AND ev.created_at <= ?3
+    WHERE d.website_id = ?1
+      AND d.data_key IN ('provider', 'model', 'inputTokens', 'outputTokens', 'totalTokens', 'costUsd', 'latencyMs', 'status', 'quality', 'release', 'environment')
+    GROUP BY d.website_event_id
   )
 `;
 

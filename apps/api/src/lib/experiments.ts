@@ -32,6 +32,8 @@ export type ExperimentResultSummary = {
   totalExposures: number;
   totalConversions: number;
   conversionRate: number;
+  /** True when the exposure sample hit the query cap and results are partial. */
+  truncated?: boolean;
   controlVariant: string | null;
   controlConversionRate: number | null;
   leaderVariant: string | null;
@@ -184,6 +186,11 @@ function buildSummary(variants: ExperimentVariantResult[]): ExperimentResultSumm
   };
 }
 
+const EXPOSURE_SAMPLE_LIMIT = 500;
+// D1 caps bound parameters per statement at 100; leave headroom for the
+// five named parameters.
+const SESSION_IN_CHUNK_SIZE = 90;
+
 function round2(value: number) {
   return Math.round(value * 100) / 100;
 }
@@ -264,15 +271,19 @@ export async function getExperimentResults(
        AND e.created_at >= ?3
        AND e.created_at <= ?4
      GROUP BY e.session_id, response.string_value
-     LIMIT 500`,
+     LIMIT ${EXPOSURE_SAMPLE_LIMIT}`,
   )
     .bind(websiteId, flagKey, startAt, endAt, EVENT_TYPE.customEvent)
     .all<{ id: string; sessionId: string; variant: string; urlPath: string | null; exposedAt: number }>();
 
   const exposures = exposureRows.results ?? [];
-  let conversionRows: Array<{ sessionId: string; variant: string; convertedAt: number }> = [];
-  if (exposures.length) {
-    const placeholders = exposures.map(() => '?').join(',');
+  const truncated = exposures.length >= EXPOSURE_SAMPLE_LIMIT;
+  const conversionRows: Array<{ sessionId: string; variant: string; convertedAt: number }> = [];
+  // D1 limits bound parameters per statement, so the session list is chunked.
+  const sessionIds = [...new Set(exposures.map((row) => row.sessionId))];
+  for (let offset = 0; offset < sessionIds.length; offset += SESSION_IN_CHUNK_SIZE) {
+    const chunk = sessionIds.slice(offset, offset + SESSION_IN_CHUNK_SIZE);
+    const placeholders = chunk.map(() => '?').join(',');
     const result = await env.DB.prepare(
       `SELECT e.session_id as sessionId,
               variant.string_value as variant,
@@ -288,16 +299,9 @@ export async function getExperimentResults(
          AND e.session_id IN (${placeholders})
        GROUP BY e.session_id, variant.string_value`,
     )
-      .bind(
-        websiteId,
-        `$feature/${flagKey}`,
-        goalEvent,
-        startAt,
-        endAt,
-        ...exposures.map((row) => row.sessionId),
-      )
+      .bind(websiteId, `$feature/${flagKey}`, goalEvent, startAt, endAt, ...chunk)
       .all<{ sessionId: string; variant: string; convertedAt: number }>();
-    conversionRows = result.results ?? [];
+    conversionRows.push(...(result.results ?? []));
   }
 
   const conversionBySessionVariant = new Map<string, number>();
@@ -379,7 +383,7 @@ export async function getExperimentResults(
   });
 
   return {
-    summary: buildSummary(results),
+    summary: { ...buildSummary(results), truncated },
     variants: results,
     recent: recent.sort((a, b) => b.exposedAt - a.exposedAt || b.id.localeCompare(a.id)).slice(0, 20),
     trend: [...trendByDay.values()]

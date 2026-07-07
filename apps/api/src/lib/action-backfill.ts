@@ -32,11 +32,45 @@ async function loadActionDefinitions(env: Env, websiteId: string): Promise<Actio
     .bind(websiteId)
     .all<{ id: string; name: string; rules: string | ActionRule[] }>();
 
-  return (rows.results ?? []).map((row) => ({
-    id: row.id,
-    name: row.name,
-    rules: typeof row.rules === 'string' ? (JSON.parse(row.rules) as ActionRule[]) : row.rules,
-  }));
+  const definitions: ActionDefinitionLike[] = [];
+  for (const row of rows.results ?? []) {
+    let rules: ActionRule[];
+    if (typeof row.rules === 'string') {
+      try {
+        rules = JSON.parse(row.rules) as ActionRule[];
+      } catch {
+        continue; // Corrupt rules must not fail the whole backfill.
+      }
+    } else {
+      rules = row.rules;
+    }
+    if (!Array.isArray(rules)) continue;
+    definitions.push({ id: row.id, name: row.name, rules });
+  }
+  return definitions;
+}
+
+const PROPERTY_CHUNK_SIZE = 90;
+
+async function loadEventProperties(env: Env, websiteId: string, eventIds: string[]) {
+  const byEvent = new Map<string, Record<string, unknown>>();
+  for (let offset = 0; offset < eventIds.length; offset += PROPERTY_CHUNK_SIZE) {
+    const chunk = eventIds.slice(offset, offset + PROPERTY_CHUNK_SIZE);
+    const placeholders = chunk.map((_, index) => `?${index + 2}`).join(', ');
+    const rows = await env.DB.prepare(
+      `SELECT website_event_id as eventId, data_key as dataKey, string_value as stringValue, number_value as numberValue
+       FROM event_data
+       WHERE website_id = ?1 AND website_event_id IN (${placeholders})`,
+    )
+      .bind(websiteId, ...chunk)
+      .all<{ eventId: string; dataKey: string; stringValue: string | null; numberValue: number | null }>();
+    for (const row of rows.results ?? []) {
+      const data = byEvent.get(row.eventId) ?? {};
+      data[row.dataKey] = row.stringValue ?? row.numberValue;
+      byEvent.set(row.eventId, data);
+    }
+  }
+  return byEvent;
 }
 
 export async function backfillActionTags(env: Env, input: ActionBackfillInput): Promise<ActionBackfillResult> {
@@ -75,20 +109,14 @@ export async function backfillActionTags(env: Env, input: ActionBackfillInput): 
   let tagged = 0;
   let skipped = 0;
   const rows = events.results ?? [];
+  const propertiesByEvent = await loadEventProperties(
+    env,
+    input.websiteId,
+    rows.map((event) => event.eventId),
+  );
 
   for (const event of rows) {
-    const propertyRows = await env.DB.prepare(
-      `SELECT data_key as dataKey, string_value as stringValue, number_value as numberValue
-       FROM event_data
-       WHERE website_event_id = ?1`,
-    )
-      .bind(event.eventId)
-      .all<{ dataKey: string; stringValue: string | null; numberValue: number | null }>();
-
-    const data: Record<string, unknown> = {};
-    for (const row of propertyRows.results ?? []) {
-      data[row.dataKey] = row.stringValue ?? row.numberValue;
-    }
+    const data = propertiesByEvent.get(event.eventId) ?? {};
 
     const matched = matchActionDefinitions(
       definitions,

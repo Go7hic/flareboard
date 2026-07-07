@@ -1,7 +1,28 @@
 import type { Context } from 'hono';
 import type { Env } from '../env';
+import { hasTargetingRules } from '../lib/feature-flags';
 import { getWebsiteById } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
+
+function parseVariants(raw: string | null) {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item) => item && typeof (item as { key?: string }).key === 'string')
+      .map((item) => {
+        const row = item as { key: string; name?: string; weight?: number };
+        return {
+          key: row.key,
+          name: typeof row.name === 'string' ? row.name : row.key,
+          weight: Math.min(100, Math.max(0, Number(row.weight ?? 0))),
+        };
+      });
+  } catch {
+    return [];
+  }
+}
 
 export async function handleTrackerConfig(c: Context<{ Bindings: Env }>) {
   const websiteId = c.req.query('website');
@@ -63,55 +84,13 @@ export async function handleTrackerConfig(c: Context<{ Bindings: Env }>) {
   const payload = {
     heatmapSampleRate: Math.min(1, Math.max(0, sampleRate)),
     heatmapEnabled: heatmapConfig.enabled !== false,
-    featureFlags: (flags.results ?? []).map((flag) => {
-      let variants: Array<{ key: string; name: string; weight: number }> = [];
-      let targetingRules: Array<{ field: string; operator: string; value: string }> = [];
-      if (flag.variants) {
-        try {
-          const parsed = JSON.parse(flag.variants);
-          if (Array.isArray(parsed)) {
-            variants = parsed
-              .filter((item) => item && typeof item.key === 'string')
-              .map((item) => ({
-                key: item.key,
-                name: typeof item.name === 'string' ? item.name : item.key,
-                weight: Math.min(100, Math.max(0, Number(item.weight ?? 0))),
-              }));
-          }
-        } catch {
-          variants = [];
-        }
-      }
-      if (flag.targetingRules) {
-        try {
-          const parsed = JSON.parse(flag.targetingRules);
-          if (Array.isArray(parsed)) {
-            targetingRules = parsed
-              .filter(
-                (item) =>
-                  item &&
-                  typeof item.field === 'string' &&
-                  typeof item.operator === 'string' &&
-                  typeof item.value === 'string',
-              )
-              .map((item) => ({
-                field: item.field,
-                operator: item.operator,
-                value: item.value,
-              }));
-          }
-        } catch {
-          targetingRules = [];
-        }
-      }
-      return {
-        key: flag.key,
-        enabled: Boolean(flag.enabled),
-        rollout: Math.min(100, Math.max(0, Number(flag.rollout ?? 100))),
-        variants,
-        targetingRules,
-      };
-    }),
+    featureFlags: (flags.results ?? []).map((flag) => ({
+      key: flag.key,
+      enabled: Boolean(flag.enabled),
+      rollout: Math.min(100, Math.max(0, Number(flag.rollout ?? 100))),
+      variants: parseVariants(flag.variants),
+      targeted: hasTargetingRules(flag.targetingRules),
+    })),
     surveys: (surveys.results ?? []).map((survey) => {
       let options: string[] = [];
       if (survey.options) {

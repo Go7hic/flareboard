@@ -8,6 +8,7 @@ The ingest worker handles public collection from browsers and server-side SDKs. 
 |--------|------|---------|
 | POST | `/api/send` | Single collection payload |
 | POST | `/api/batch` | Array of send payloads; returns `processed`, `errors`, and optional `cache` |
+| POST | `/api/feature-flags/evaluate` | Server-side feature flag evaluation for targeted flags |
 | GET | `/api/tracker-config?website=<uuid>` | Feature flags, surveys, heatmap settings for the tracker |
 | POST | `/api/surveys/response` | Survey answer collection |
 | POST | `/api/record` | Session replay chunks |
@@ -124,7 +125,7 @@ Structured log and trace spans.
 Returns runtime config for `script.js`:
 
 - Heatmap sampling and enablement
-- Active feature flags with rollout, variants, and targeting rules
+- Active feature flags with rollout, variants, and a `targeted` boolean (targeting rules are not exposed)
 - Active surveys with type, options, trigger event, display delay, and display rules
 
 Example:
@@ -132,6 +133,35 @@ Example:
 ```bash
 curl "https://t.example.com/api/tracker-config?website=<uuid>"
 ```
+
+## Feature flag evaluation (`POST /api/feature-flags/evaluate`)
+
+Public endpoint used by the embedded tracker for flags with `targeted: true`. Targeting rules stay server-side.
+
+```json
+{
+  "website": "<uuid>",
+  "keys": ["pricing.banner"],
+  "context": {
+    "path": "/pricing",
+    "language": "en-US",
+    "distinctId": "user-123",
+    "sessionId": "session-abc"
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "results": {
+    "pricing.banner": "test"
+  }
+}
+```
+
+Rate limit: **120 requests/min per IP**.
 
 ## Survey responses
 

@@ -414,7 +414,7 @@ describe('GET /api/tracker-config', () => {
     );
   });
 
-  it('returns feature flag targeting rules in tracker config', async () => {
+  it('does not expose targeting rules in tracker config', async () => {
     await seedTestWebsite(env.DB);
     const now = Date.now();
     const targetingRules = [
@@ -432,16 +432,88 @@ describe('GET /api/tracker-config', () => {
     const { response, body } = await fetchWorkerJson<{
       featureFlags: Array<{
         key: string;
-        targetingRules: Array<{ field: string; operator: string; value: string }>;
+        targeted?: boolean;
+        targetingRules?: unknown;
       }>;
     }>(`/api/tracker-config?website=${TEST_WEBSITE_ID}`);
 
     expect(response.status).toBe(200);
-    expect(body.featureFlags).toContainEqual(
-      expect.objectContaining({
-        key: 'pricing.banner',
-        targetingRules,
-      }),
+    const flag = body.featureFlags.find((item) => item.key === 'pricing.banner');
+    expect(flag).toMatchObject({ key: 'pricing.banner', targeted: true });
+    expect(flag).not.toHaveProperty('targetingRules');
+  });
+});
+
+describe('POST /api/feature-flags/evaluate', () => {
+  beforeAll(async () => {
+    await applyTestMigrations(env.DB);
+  });
+
+  it('evaluates targeted flags without exposing rules', async () => {
+    await seedTestWebsite(env.DB);
+    const now = Date.now();
+    const flagKey = 'pricing.evaluate';
+    const targetingRules = [
+      { field: 'path', operator: 'contains', value: '/pricing' },
+      { field: 'language', operator: 'starts_with', value: 'en' },
+    ];
+    await env.DB.prepare(
+      `INSERT INTO feature_flag (flag_id, website_id, key, name, description, enabled, rollout, targeting_rules, created_at, updated_at)
+       VALUES ('flag-eval', ?1, ?2, 'Pricing banner', '', 1, 100, ?3, ?4, ?4)`,
+    )
+      .bind(TEST_WEBSITE_ID, flagKey, JSON.stringify(targetingRules), now)
+      .run();
+
+    const matching = await fetchWorkerJson<{ results: Record<string, string> }>(
+      '/api/feature-flags/evaluate',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          website: TEST_WEBSITE_ID,
+          keys: [flagKey],
+          context: { path: '/pricing', language: 'en-US' },
+        }),
+      },
     );
+
+    expect(matching.response.status).toBe(200);
+    expect(matching.body.results[flagKey]).toBe('test');
+
+    const mismatch = await fetchWorkerJson<{ results: Record<string, string> }>(
+      '/api/feature-flags/evaluate',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          website: TEST_WEBSITE_ID,
+          keys: [flagKey],
+          context: { path: '/home', language: 'en-US' },
+        }),
+      },
+    );
+
+    expect(mismatch.response.status).toBe(200);
+    expect(mismatch.body.results[flagKey]).toBe('control');
+  });
+
+  it('returns false for unknown flag keys', async () => {
+    await seedTestWebsite(env.DB);
+
+    const { response, body } = await fetchWorkerJson<{ results: Record<string, boolean> }>(
+      '/api/feature-flags/evaluate',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          website: TEST_WEBSITE_ID,
+          keys: ['missing.flag'],
+          context: { path: '/' },
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(body.results['missing.flag']).toBe(false);
   });
 });

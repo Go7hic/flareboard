@@ -5,12 +5,12 @@ import {
   createInsightSchema,
   insightQuerySchema,
   insightTypeSchema,
-  statsQuerySchema,
   updateInsightSchema,
   uuid,
 } from '@flareboard/shared';
 import type { Env } from '../env';
 import { canAccessWebsite, canMutateWebsite } from '../lib/access';
+import { parseStatsRange } from '../lib/parse-range';
 import {
   runInsightQuery,
   serializeInsight,
@@ -22,13 +22,6 @@ import { badRequest, json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
-
-function parseRange(c: Ctx) {
-  const query = statsQuerySchema.safeParse(c.req.query());
-  const endAt = query.success && query.data.endAt ? query.data.endAt : Date.now();
-  const startAt = query.success && query.data.startAt ? query.data.startAt : endAt - 30 * 24 * 60 * 60 * 1000;
-  return { startAt, endAt };
-}
 
 function rowLike(row: typeof schema.insight.$inferSelect) {
   return {
@@ -159,7 +152,7 @@ export async function handleDelete(c: Ctx) {
 export async function handleRun(c: Ctx) {
   const found = await getInsight(c, c.req.param('insightId') ?? '');
   if (!found) return notFound();
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
   const data = await runInsightQuery(
     c.env,
     found.row.websiteId,
@@ -181,7 +174,7 @@ export async function handlePreview(c: Ctx) {
   const queryParsed = insightQuerySchema.safeParse((body as { query?: unknown } | null)?.query ?? {});
   if (!typeParsed.success) return badRequest(typeParsed.error.message);
   if (!queryParsed.success) return badRequest(queryParsed.error.message);
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
   const data = await runInsightQuery(c.env, website.websiteId, typeParsed.data, queryParsed.data, startAt, endAt);
   return json({ data, startAt, endAt });
 }

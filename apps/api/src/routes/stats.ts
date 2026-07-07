@@ -1,5 +1,6 @@
 import type { Context } from 'hono';
-import { compareQuerySchema, metricsQuerySchema, statsQuerySchema } from '@flareboard/shared';
+import { compareQuerySchema, metricsQuerySchema } from '@flareboard/shared';
+import { parseStatsRange } from '../lib/parse-range';
 import type { Env } from '../env';
 import { canAccessWebsite } from '../lib/access';
 import {
@@ -40,14 +41,6 @@ async function requireWebsite(c: Ctx) {
   return website;
 }
 
-function parseRange(c: Ctx) {
-  const query = statsQuerySchema.safeParse(c.req.query());
-  const endAt = query.success && query.data.endAt ? query.data.endAt : Date.now();
-  const startAt = query.success && query.data.startAt ? query.data.startAt : endAt - 24 * 60 * 60 * 1000;
-  const unit = query.success && query.data.unit ? query.data.unit : 'day';
-  return { startAt, endAt, unit };
-}
-
 async function segmentParams(c: Ctx, websiteId: string) {
   const segmentId = c.req.query('segmentId');
   if (!segmentId) return null;
@@ -69,7 +62,7 @@ function useFilteredQueries(segment: Record<string, unknown> | null, cohort: Awa
 export async function handleStats(c: Ctx) {
   const website = await requireWebsite(c);
   if (!website) return notFound();
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c);
   const segment = await segmentParams(c, website.websiteId);
   const cohort = await cohortJoin(c, website.websiteId);
   const stats = useFilteredQueries(segment, cohort)
@@ -81,7 +74,7 @@ export async function handleStats(c: Ctx) {
 export async function handlePageviews(c: Ctx) {
   const website = await requireWebsite(c);
   if (!website) return notFound();
-  const { startAt, endAt, unit } = parseRange(c);
+  const { startAt, endAt, unit } = parseStatsRange(c, { withUnit: true });
   const segment = await segmentParams(c, website.websiteId);
   const cohort = await cohortJoin(c, website.websiteId);
   const data = useFilteredQueries(segment, cohort)
@@ -97,7 +90,7 @@ export async function handleMetrics(c: Ctx) {
   const type = query.success && query.data.type ? query.data.type : c.req.query('type') || 'path';
   const limit = query.success && query.data.limit ? query.data.limit : 10;
   const sortBy = query.success && query.data.sortBy ? query.data.sortBy : undefined;
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c);
   const segment = await segmentParams(c, website.websiteId);
   const cohort = await cohortJoin(c, website.websiteId);
   const filtered = useFilteredQueries(segment, cohort);
@@ -134,7 +127,7 @@ export async function handleMetrics(c: Ctx) {
 export async function handleOverview(c: Ctx) {
   const website = await requireWebsite(c);
   if (!website) return notFound();
-  const { startAt, endAt, unit } = parseRange(c);
+  const { startAt, endAt, unit } = parseStatsRange(c, { withUnit: true });
   const query = metricsQuerySchema.safeParse(c.req.query());
   const metricType = query.success && query.data.type ? query.data.type : c.req.query('metricType') || 'path';
   const limit = query.success && query.data.limit ? query.data.limit : 10;
@@ -214,7 +207,7 @@ function compareChartUnit(startAt: number, endAt: number) {
 export async function handleCompare(c: Ctx) {
   const website = await requireWebsite(c);
   if (!website) return notFound();
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c);
   const compareQuery = compareQuerySchema.safeParse(c.req.query());
   const periodMs = endAt - startAt;
   const compareEndAt =

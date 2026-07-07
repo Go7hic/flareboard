@@ -1,19 +1,12 @@
 import type { Context } from 'hono';
-import { statsQuerySchema } from '@flareboard/shared';
 import type { Env } from '../env';
+import { parseStatsRange } from '../lib/parse-range';
 import { getGroupDetail, listGroups, listGroupTypes } from '../lib/groups';
 import { badRequest, json, notFound } from '../lib/response';
 import { requireWebsiteOr404 } from '../lib/website';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
-
-function parseRange(c: Ctx) {
-  const query = statsQuerySchema.safeParse(c.req.query());
-  const endAt = query.success && query.data.endAt ? query.data.endAt : Date.now();
-  const startAt = query.success && query.data.startAt ? query.data.startAt : endAt - 30 * 24 * 60 * 60 * 1000;
-  return { startAt, endAt };
-}
 
 export async function handleTypes(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
@@ -27,7 +20,7 @@ export async function handleList(c: Ctx) {
   if (response) return response;
   const groupType = c.req.query('type')?.trim();
   if (!groupType) return badRequest('type query parameter required');
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
   const groups = await listGroups(c.env, website!.websiteId, groupType, startAt, endAt, 100, {
     search: c.req.query('q'),
   });

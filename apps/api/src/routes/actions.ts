@@ -1,9 +1,10 @@
 import type { Context } from 'hono';
 import { eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
-import { createActionSchema, statsQuerySchema, updateActionSchema, uuid } from '@flareboard/shared';
+import { createActionSchema, updateActionSchema, uuid } from '@flareboard/shared';
 import type { Env } from '../env';
 import { canMutateWebsite } from '../lib/access';
+import { parseStatsRange } from '../lib/parse-range';
 import { getActionSummary, serializeAction, type ActionRule } from '../lib/actions';
 import { bumpActionDefinitionsVersion } from '../lib/action-cache';
 import { badRequest, json, notFound } from '../lib/response';
@@ -11,13 +12,6 @@ import { requireWebsiteOr404 } from '../lib/website';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
-
-function parseRange(c: Ctx) {
-  const query = statsQuerySchema.safeParse(c.req.query());
-  const endAt = query.success && query.data.endAt ? query.data.endAt : Date.now();
-  const startAt = query.success && query.data.startAt ? query.data.startAt : endAt - 30 * 24 * 60 * 60 * 1000;
-  return { startAt, endAt };
-}
 
 function actionRow(row: typeof schema.actionDefinition.$inferSelect) {
   return {
@@ -45,7 +39,7 @@ async function getAction(env: Env, websiteId: string, actionId: string) {
 export async function handleList(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
 
   const db = createDb(c.env.DB);
   const rows = await db
@@ -62,7 +56,7 @@ export async function handleList(c: Ctx) {
 export async function handleGet(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
 
   const row = await getAction(c.env, website!.websiteId, c.req.param('actionId') ?? '');
   if (!row) return notFound();

@@ -1,22 +1,16 @@
 import type { Context } from 'hono';
 import { eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
-import { createAnnotationSchema, statsQuerySchema, updateAnnotationSchema, uuid } from '@flareboard/shared';
+import { createAnnotationSchema, updateAnnotationSchema, uuid } from '@flareboard/shared';
 import type { Env } from '../env';
 import { canMutateWebsite } from '../lib/access';
+import { parseStatsRange } from '../lib/parse-range';
 import { listAnnotations, serializeAnnotation } from '../lib/annotations';
 import { json, notFound, badRequest } from '../lib/response';
 import { requireWebsiteOr404 } from '../lib/website';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
-
-function parseRange(c: Ctx) {
-  const query = statsQuerySchema.safeParse(c.req.query());
-  const endAt = query.success && query.data.endAt ? query.data.endAt : Date.now();
-  const startAt = query.success && query.data.startAt ? query.data.startAt : endAt - 90 * 24 * 60 * 60 * 1000;
-  return { startAt, endAt };
-}
 
 async function getAnnotation(env: Env, websiteId: string, annotationId: string) {
   const db = createDb(env.DB);
@@ -32,7 +26,7 @@ async function getAnnotation(env: Env, websiteId: string, annotationId: string) 
 export async function handleList(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '90d' });
 
   const rows = await listAnnotations(c.env, website!.websiteId, startAt, endAt);
   return json({ annotations: rows.map(serializeAnnotation), startAt, endAt });

@@ -1,6 +1,6 @@
 import type { Context } from 'hono';
-import { statsQuerySchema } from '@flareboard/shared';
 import type { Env } from '../env';
+import { parseStatsRange } from '../lib/parse-range';
 import { getSessionDataProperties, getSessionDataValues } from '../lib/queries';
 import { badRequest, json } from '../lib/response';
 import { requireWebsiteOr404 } from '../lib/website';
@@ -8,17 +8,10 @@ import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
 
-function parseRange(c: Ctx) {
-  const query = statsQuerySchema.safeParse(c.req.query());
-  const endAt = query.success && query.data.endAt ? query.data.endAt : Date.now();
-  const startAt = query.success && query.data.startAt ? query.data.startAt : endAt - 30 * 24 * 60 * 60 * 1000;
-  return { startAt, endAt };
-}
-
 export async function handleProperties(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
   const properties = await getSessionDataProperties(c.env, website!.websiteId, startAt, endAt);
   return json(properties);
 }
@@ -28,7 +21,7 @@ export async function handleValues(c: Ctx) {
   if (response) return response;
   const propertyName = c.req.query('propertyName');
   if (!propertyName) return badRequest('propertyName query parameter required');
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
   const values = await getSessionDataValues(
     c.env,
     website!.websiteId,
@@ -45,7 +38,7 @@ export async function handleStats(c: Ctx) {
   if (response) return response;
   const propertyName = c.req.query('propertyName');
   if (!propertyName) return badRequest('propertyName query parameter required');
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
 
   const rows = await c.env.DB.prepare(
     `SELECT

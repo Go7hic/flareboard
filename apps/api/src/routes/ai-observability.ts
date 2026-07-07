@@ -1,20 +1,13 @@
 import type { Context } from 'hono';
-import { statsQuerySchema } from '@flareboard/shared';
 import type { Env } from '../env';
 import { canAccessWebsite } from '../lib/access';
+import { parseStatsRange } from '../lib/parse-range';
 import { getAiEvents, getAiStats } from '../lib/ai-observability';
 import { getWebsiteById } from '../lib/queries';
 import { json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
-
-function parseRange(c: Ctx) {
-  const query = statsQuerySchema.safeParse(c.req.query());
-  const endAt = query.success && query.data.endAt ? query.data.endAt : Date.now();
-  const startAt = query.success && query.data.startAt ? query.data.startAt : endAt - 24 * 60 * 60 * 1000;
-  return { startAt, endAt };
-}
 
 async function requireWebsite(c: Ctx) {
   const websiteId = c.req.param('websiteId');
@@ -32,7 +25,7 @@ function normalizeOptionalParam(value: string | undefined) {
 export async function handleList(c: Ctx) {
   const website = await requireWebsite(c);
   if (!website) return notFound();
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c);
   const filters = {
     model: normalizeOptionalParam(c.req.query('model')),
     status: normalizeOptionalParam(c.req.query('status')),

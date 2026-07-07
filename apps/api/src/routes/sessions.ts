@@ -1,6 +1,6 @@
 import type { Context } from 'hono';
-import { statsQuerySchema } from '@flareboard/shared';
 import type { Env } from '../env';
+import { parseStatsRange } from '../lib/parse-range';
 import {
   exportEventsCsv,
   getSession,
@@ -18,17 +18,10 @@ import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
 
-function parseRange(c: Ctx) {
-  const query = statsQuerySchema.safeParse(c.req.query());
-  const endAt = query.success && query.data.endAt ? query.data.endAt : Date.now();
-  const startAt = query.success && query.data.startAt ? query.data.startAt : endAt - 30 * 24 * 60 * 60 * 1000;
-  return { startAt, endAt };
-}
-
 export async function handleList(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
   const page = Number(c.req.query('page') || 1);
   const pageSize = Math.min(Number(c.req.query('pageSize') || 20), 100);
   const data = await listSessions(c.env, website!.websiteId, startAt, endAt, page, pageSize);
@@ -46,7 +39,7 @@ export async function handleGet(c: Ctx) {
 export async function handleStats(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
   const stats = await getSessionStats(c.env, website!.websiteId, startAt, endAt);
   return json(stats);
 }
@@ -106,7 +99,7 @@ export async function handleSessionReplays(c: Ctx) {
 export async function handleExport(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
   const type = c.req.query('type') === 'pageviews' ? 'pageviews' : 'events';
   const csv = await exportEventsCsv(c.env, website!.websiteId, startAt, endAt, type);
   return new Response(csv, {

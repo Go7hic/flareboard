@@ -4,7 +4,6 @@ import { createDb, schema } from '@flareboard/db';
 import {
   attributionQuerySchema,
   createReportSchema,
-  statsQuerySchema,
   updateReportSchema,
   uuid,
 } from '@flareboard/shared';
@@ -21,7 +20,7 @@ import {
   getRetentionReport,
   getStickinessReport,
 } from '../lib/advanced-reports';
-import { clampReportRange } from '../lib/report-range';
+import { parseStatsRange } from '../lib/parse-range';
 import {
   getGoalReport,
   getReportById,
@@ -50,13 +49,6 @@ function serializeReport(r: typeof schema.report.$inferSelect) {
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
-}
-
-function parseRange(c: Ctx, clamp = false) {
-  const query = statsQuerySchema.safeParse(c.req.query());
-  const endAt = query.success && query.data.endAt ? query.data.endAt : Date.now();
-  const startAt = query.success && query.data.startAt ? query.data.startAt : endAt - 30 * 24 * 60 * 60 * 1000;
-  return clamp ? clampReportRange(startAt, endAt) : { startAt, endAt };
 }
 
 export async function handleList(c: Ctx) {
@@ -138,7 +130,7 @@ export async function handleDelete(c: Ctx) {
 export async function handleUtm(c: Ctx) {
   const ctx = await requireReportWebsite(c);
   if ('error' in ctx && ctx.error) return ctx.error;
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
   const segmentId = c.req.query('segmentId') ?? null;
   const data = await getUtmReport(c.env, ctx.websiteId!, startAt, endAt, ctx.segment);
   return json({ ...data, segmentId, startAt, endAt });
@@ -151,7 +143,7 @@ export async function handleGoal(c: Ctx) {
   if (!website || !(await canAccessWebsite(c.env, website, c.get('user')))) {
     return notFound();
   }
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
   const event = c.req.query('event') ?? undefined;
   const rows = await getGoalReport(c.env, websiteId, startAt, endAt, event);
   return json(rows);
@@ -164,7 +156,7 @@ export async function handleRevenue(c: Ctx) {
   if (!website || !(await canAccessWebsite(c.env, website, c.get('user')))) {
     return notFound();
   }
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
   const data = await getRevenueReport(c.env, websiteId, startAt, endAt);
   return json(data);
 }
@@ -193,7 +185,7 @@ export async function handleFunnel(c: Ctx) {
   const stepsRaw = c.req.query('steps') ?? '';
   const steps = stepsRaw.split(',').map((s) => s.trim()).filter(Boolean);
   if (!steps.length) return badRequest('steps required (comma-separated event names)');
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
   const data = await getFunnelReport(c.env, ctx.websiteId!, startAt, endAt, steps, ctx.segment);
   return json(data);
 }
@@ -201,7 +193,7 @@ export async function handleFunnel(c: Ctx) {
 export async function handleRetention(c: Ctx) {
   const ctx = await requireReportWebsite(c);
   if ('error' in ctx && ctx.error) return ctx.error;
-  const { startAt, endAt } = parseRange(c, true);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d', clamp: true });
   const data = await getRetentionReport(c.env, ctx.websiteId!, startAt, endAt, ctx.segment);
   return json(data);
 }
@@ -209,7 +201,7 @@ export async function handleRetention(c: Ctx) {
 export async function handleStickiness(c: Ctx) {
   const ctx = await requireReportWebsite(c);
   if ('error' in ctx && ctx.error) return ctx.error;
-  const { startAt, endAt } = parseRange(c, true);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d', clamp: true });
   const event = c.req.query('event')?.trim() || null;
   const actor = c.req.query('actor') === 'session' ? 'session' : 'person';
   const data = await getStickinessReport(c.env, ctx.websiteId!, startAt, endAt, event, actor, ctx.segment);
@@ -219,7 +211,7 @@ export async function handleStickiness(c: Ctx) {
 export async function handleJourney(c: Ctx) {
   const ctx = await requireReportWebsite(c);
   if ('error' in ctx && ctx.error) return ctx.error;
-  const { startAt, endAt } = parseRange(c, true);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d', clamp: true });
   const limit = Number(c.req.query('limit') || 20);
   const offset = Number(c.req.query('offset') || 0);
   const segmentId = c.req.query('segmentId');
@@ -270,14 +262,14 @@ export async function handleAttribution(c: Ctx) {
   const segmentId = c.req.query('segmentId') ?? null;
 
   if (!step) {
-    const { startAt, endAt } = parseRange(c);
+    const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
     const data = await getAttributionReport(c.env, ctx.websiteId!, startAt, endAt, model, ctx.segment);
     return json(data);
   }
 
   if (!type) return badRequest('type required when step is set (path or event)');
 
-  const { startAt, endAt } = parseRange(c, true);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d', clamp: true });
   const data = await getAttributionConversionReport(
     c.env,
     ctx.websiteId!,
@@ -295,7 +287,7 @@ export async function handleAttribution(c: Ctx) {
 export async function handleBreakdown(c: Ctx) {
   const ctx = await requireReportWebsite(c);
   if ('error' in ctx && ctx.error) return ctx.error;
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
   const dimension = c.req.query('dimension') || 'country';
   const data = await getBreakdownReport(
     c.env,
@@ -311,7 +303,7 @@ export async function handleBreakdown(c: Ctx) {
 export async function handlePerformance(c: Ctx) {
   const ctx = await requireReportWebsite(c);
   if ('error' in ctx && ctx.error) return ctx.error;
-  const { startAt, endAt } = parseRange(c);
+  const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
   const data = await getPerformanceReport(c.env, ctx.websiteId!, startAt, endAt, ctx.segment);
   return json(data);
 }

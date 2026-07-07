@@ -523,7 +523,7 @@ export default function WebsiteWorkflowsPage() {
                     ) : null
                   }
                 >
-                  <div className="surveys-stats">
+                  <div className="detail-stats">
                     <div>
                       <span className="stat-label">{t('workflowExecutions')}</span>
                       <strong className="stat-value">
@@ -549,7 +549,7 @@ export default function WebsiteWorkflowsPage() {
                   </div>
 
                   {summary?.trend?.length ? (
-                    <div className="survey-breakdown">
+                    <div className="detail-section">
                       <div className="panel-header compact-panel-header">
                         <div>
                           <h3 className="section-title experiment-title">{t('workflowTrend')}</h3>
@@ -583,7 +583,7 @@ export default function WebsiteWorkflowsPage() {
 
                   {summary?.statuses?.length || summary?.events?.length ? (
                     <div className="workflow-insights-grid">
-                      <div className="survey-breakdown">
+                      <div className="detail-section">
                         <div className="panel-header compact-panel-header">
                           <div>
                             <h3 className="section-title experiment-title">
@@ -592,16 +592,16 @@ export default function WebsiteWorkflowsPage() {
                             <p className="text-muted">{t('workflowStatusBreakdownLead')}</p>
                           </div>
                         </div>
-                        <div className="survey-breakdown-list">
+                        <div className="breakdown-list">
                           {(summary.statuses ?? []).map((item) => (
-                            <div key={item.status} className="survey-breakdown-row">
-                              <div className="survey-breakdown-meta">
+                            <div key={item.status} className="breakdown-row">
+                              <div className="breakdown-meta">
                                 <strong>{workflowExecutionStatusLabel(item.status)}</strong>
                                 <span className="text-muted">
                                   {item.executions.toLocaleString()} · {item.percentage.toLocaleString()}%
                                 </span>
                               </div>
-                              <div className="survey-breakdown-track" aria-hidden>
+                              <div className="breakdown-track" aria-hidden>
                                 <span style={{ width: `${Math.min(100, item.percentage)}%` }} />
                               </div>
                             </div>
@@ -609,7 +609,7 @@ export default function WebsiteWorkflowsPage() {
                         </div>
                       </div>
 
-                      <div className="survey-breakdown">
+                      <div className="detail-section">
                         <div className="panel-header compact-panel-header">
                           <div>
                             <h3 className="section-title experiment-title">

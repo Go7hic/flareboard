@@ -140,23 +140,23 @@ export default function WebsiteAiObservabilityPage() {
               </div>
             </div>
 
-            <div className="survey-breakdown error-severity-panel">
+            <div className="detail-section error-severity-panel">
               <header className="compact-panel-header">
                 <h2 className="section-title">{t('aiStatusBreakdown')}</h2>
                 <p className="text-muted">{t('aiStatusBreakdownLead')}</p>
               </header>
-              <div className="survey-breakdown-list">
+              <div className="breakdown-list">
                 {statuses.map((row) => {
                   const share = stats?.calls ? Math.round((row.calls / stats.calls) * 100) : 0;
                   return (
-                    <div key={row.status} className="survey-breakdown-row">
-                      <div className="survey-breakdown-meta">
+                    <div key={row.status} className="breakdown-row">
+                      <div className="breakdown-meta">
                         <strong>{row.status}</strong>
                         <span className="text-muted">
                           {row.calls.toLocaleString()} ({share}%)
                         </span>
                       </div>
-                      <div className="survey-breakdown-track" aria-hidden>
+                      <div className="breakdown-track" aria-hidden>
                         <span style={{ width: `${share}%` }} />
                       </div>
                     </div>
@@ -171,23 +171,23 @@ export default function WebsiteAiObservabilityPage() {
       {(providers.length || qualities.length) ? (
         <section className="panel section-gap">
           <div className="workflow-insights-grid">
-            <div className="survey-breakdown error-severity-panel">
+            <div className="detail-section error-severity-panel">
               <header className="compact-panel-header">
                 <h2 className="section-title">{t('aiProviderBreakdown')}</h2>
                 <p className="text-muted">{t('aiProviderBreakdownLead')}</p>
               </header>
-              <div className="survey-breakdown-list">
+              <div className="breakdown-list">
                 {providers.map((row) => {
                   const share = stats?.calls ? Math.round((row.calls / stats.calls) * 100) : 0;
                   return (
-                    <div key={row.provider} className="survey-breakdown-row">
-                      <div className="survey-breakdown-meta">
+                    <div key={row.provider} className="breakdown-row">
+                      <div className="breakdown-meta">
                         <strong>{row.provider}</strong>
                         <span className="text-muted">
                           {row.calls.toLocaleString()} · {money(row.costUsd)}
                         </span>
                       </div>
-                      <div className="survey-breakdown-track" aria-hidden>
+                      <div className="breakdown-track" aria-hidden>
                         <span style={{ width: `${share}%` }} />
                       </div>
                     </div>
@@ -196,23 +196,23 @@ export default function WebsiteAiObservabilityPage() {
               </div>
             </div>
 
-            <div className="survey-breakdown error-severity-panel">
+            <div className="detail-section error-severity-panel">
               <header className="compact-panel-header">
                 <h2 className="section-title">{t('aiQualityBreakdown')}</h2>
                 <p className="text-muted">{t('aiQualityBreakdownLead')}</p>
               </header>
-              <div className="survey-breakdown-list">
+              <div className="breakdown-list">
                 {qualities.map((row) => {
                   const share = stats?.calls ? Math.round((row.calls / stats.calls) * 100) : 0;
                   return (
-                    <div key={row.quality} className="survey-breakdown-row">
-                      <div className="survey-breakdown-meta">
+                    <div key={row.quality} className="breakdown-row">
+                      <div className="breakdown-meta">
                         <strong>{row.quality}</strong>
                         <span className="text-muted">
                           {row.calls.toLocaleString()} ({share}%)
                         </span>
                       </div>
-                      <div className="survey-breakdown-track" aria-hidden>
+                      <div className="breakdown-track" aria-hidden>
                         <span style={{ width: `${share}%` }} />
                       </div>
                     </div>
@@ -227,23 +227,23 @@ export default function WebsiteAiObservabilityPage() {
       {(releases.length || environments.length) ? (
         <section className="panel section-gap">
           <div className="workflow-insights-grid">
-            <div className="survey-breakdown error-severity-panel">
+            <div className="detail-section error-severity-panel">
               <header className="compact-panel-header">
                 <h2 className="section-title">{t('aiReleaseBreakdown')}</h2>
                 <p className="text-muted">{t('aiReleaseBreakdownLead')}</p>
               </header>
-              <div className="survey-breakdown-list">
+              <div className="breakdown-list">
                 {releases.map((row) => {
                   const share = stats?.calls ? Math.round((row.calls / stats.calls) * 100) : 0;
                   return (
-                    <div key={row.release} className="survey-breakdown-row">
-                      <div className="survey-breakdown-meta">
+                    <div key={row.release} className="breakdown-row">
+                      <div className="breakdown-meta">
                         <strong>{row.release}</strong>
                         <span className="text-muted">
                           {row.calls.toLocaleString()} · {money(row.costUsd)}
                         </span>
                       </div>
-                      <div className="survey-breakdown-track" aria-hidden>
+                      <div className="breakdown-track" aria-hidden>
                         <span style={{ width: `${share}%` }} />
                       </div>
                     </div>
@@ -252,23 +252,23 @@ export default function WebsiteAiObservabilityPage() {
               </div>
             </div>
 
-            <div className="survey-breakdown error-severity-panel">
+            <div className="detail-section error-severity-panel">
               <header className="compact-panel-header">
                 <h2 className="section-title">{t('aiEnvironmentBreakdown')}</h2>
                 <p className="text-muted">{t('aiEnvironmentBreakdownLead')}</p>
               </header>
-              <div className="survey-breakdown-list">
+              <div className="breakdown-list">
                 {environments.map((row) => {
                   const share = stats?.calls ? Math.round((row.calls / stats.calls) * 100) : 0;
                   return (
-                    <div key={row.environment} className="survey-breakdown-row">
-                      <div className="survey-breakdown-meta">
+                    <div key={row.environment} className="breakdown-row">
+                      <div className="breakdown-meta">
                         <strong>{row.environment}</strong>
                         <span className="text-muted">
                           {row.calls.toLocaleString()} · {money(row.costUsd)}
                         </span>
                       </div>
-                      <div className="survey-breakdown-track" aria-hidden>
+                      <div className="breakdown-track" aria-hidden>
                         <span style={{ width: `${share}%` }} />
                       </div>
                     </div>

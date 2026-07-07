@@ -201,7 +201,7 @@ export default function WebsiteAnnotationsPage() {
                 }
               >
                 {canEdit ? (
-                  <div className="survey-breakdown">
+                  <div className="detail-section">
                     <div className="field">
                       <Label htmlFor="annotation-title">{t('title')}</Label>
                       <Input

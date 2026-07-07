@@ -1665,7 +1665,7 @@ img.website-switcher-icon {
 
 .panel-form .form-actions,
 .panel-form-stack .form-actions,
-.survey-breakdown .form-actions,
+.detail-section .form-actions,
 .workflow-create-form .form-actions {
   grid-column: 1 / -1;
 }
@@ -4537,7 +4537,7 @@ code {
   margin-bottom: 1rem;
 }
 
-.surveys-stats {
+.detail-stats {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   display: grid;
@@ -4547,7 +4547,7 @@ code {
   padding: 1rem;
 }
 
-.survey-breakdown {
+.detail-section {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   display: grid;
@@ -4556,7 +4556,7 @@ code {
   padding: 1rem;
 }
 
-.survey-breakdown .field {
+.detail-section .field {
   margin-bottom: 0;
 }
 
@@ -4564,31 +4564,31 @@ code {
   margin-bottom: 0.9rem;
 }
 
-.survey-breakdown-list {
+.breakdown-list {
   display: grid;
   gap: 0.85rem;
 }
 
-.survey-breakdown-row {
+.breakdown-row {
   display: grid;
   gap: 0.45rem;
 }
 
-.survey-breakdown-meta {
+.breakdown-meta {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 1rem;
 }
 
-.survey-breakdown-track {
+.breakdown-track {
   height: 0.55rem;
   overflow: hidden;
   border-radius: 999px;
   background: var(--bg-subtle);
 }
 
-.survey-breakdown-track span {
+.breakdown-track span {
   display: block;
   height: 100%;
   border-radius: inherit;

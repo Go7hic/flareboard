@@ -276,23 +276,23 @@ export default function WebsiteLogsPage() {
                   </div>
                 </div>
 
-                <div className="survey-breakdown error-severity-panel">
+                <div className="detail-section error-severity-panel">
                   <header className="compact-panel-header">
                     <h2 className="section-title">{t('logsLevelBreakdown')}</h2>
                     <p className="text-muted">{t('logsLevelBreakdownLead')}</p>
                   </header>
-                  <div className="survey-breakdown-list">
+                  <div className="breakdown-list">
                     {levelRows.map((row) => {
                       const share = stats?.logs ? Math.round((row.logs / stats.logs) * 100) : 0;
                       return (
-                        <div key={row.level} className="survey-breakdown-row">
-                          <div className="survey-breakdown-meta">
+                        <div key={row.level} className="breakdown-row">
+                          <div className="breakdown-meta">
                             <strong>{row.level}</strong>
                             <span className="text-muted">
                               {row.logs.toLocaleString()} ({share}%)
                             </span>
                           </div>
-                          <div className="survey-breakdown-track" aria-hidden>
+                          <div className="breakdown-track" aria-hidden>
                             <span style={{ width: `${share}%` }} />
                           </div>
                         </div>

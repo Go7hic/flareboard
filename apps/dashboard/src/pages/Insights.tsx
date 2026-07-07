@@ -409,7 +409,7 @@ export default function InsightsPage() {
             </>
             ) : null}
 
-            <div className="survey-breakdown">
+            <div className="detail-section">
               <div className="panel-header compact-panel-header">
                 <div>
                   <h3 className="section-title experiment-title">{t('insightPreview')}</h3>

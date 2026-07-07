@@ -220,7 +220,7 @@ export default function WebsiteActionsPage() {
                 }
               >
                 {canEdit ? (
-                  <div className="survey-breakdown">
+                  <div className="detail-section">
                     <div className="field">
                       <Label htmlFor="action-name">{t('name')}</Label>
                       <Input
@@ -326,7 +326,7 @@ export default function WebsiteActionsPage() {
 
                 {selectedActionId ? (
                   <div className="action-summary-section">
-                    <div className="surveys-stats">
+                    <div className="detail-stats">
                       <div>
                         <span className="stat-label">{t('events')}</span>
                         <strong className="stat-value">{(summary?.events ?? 0).toLocaleString()}</strong>

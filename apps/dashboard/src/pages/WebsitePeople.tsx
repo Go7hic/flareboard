@@ -181,7 +181,7 @@ export default function WebsitePeoplePage() {
                     )
                   }
                 >
-                  <div className="surveys-stats">
+                  <div className="detail-stats">
                     <div>
                       <span className="stat-label">{t('peopleSessions')}</span>
                       <strong className="stat-value">{selectedPerson.sessions.toLocaleString()}</strong>
@@ -201,7 +201,7 @@ export default function WebsitePeoplePage() {
                   </div>
 
                   <div className="workflow-insights-grid">
-                    <div className="survey-breakdown">
+                    <div className="detail-section">
                       <div className="panel-header compact-panel-header">
                         <div>
                           <h3 className="section-title experiment-title">{t('peopleProperties')}</h3>
@@ -271,7 +271,7 @@ export default function WebsitePeoplePage() {
                       )}
                     </div>
 
-                    <div className="survey-breakdown">
+                    <div className="detail-section">
                       <div className="panel-header compact-panel-header">
                         <div>
                           <h3 className="section-title experiment-title">{t('peopleSessions')}</h3>
@@ -297,7 +297,7 @@ export default function WebsitePeoplePage() {
                     </div>
                   </div>
 
-                  <div className="survey-breakdown">
+                  <div className="detail-section">
                     <div className="panel-header compact-panel-header">
                       <div>
                         <h3 className="section-title experiment-title">{t('peopleRecentEvents')}</h3>

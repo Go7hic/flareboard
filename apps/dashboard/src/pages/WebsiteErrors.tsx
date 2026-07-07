@@ -283,23 +283,23 @@ export default function WebsiteErrorsPage() {
               </div>
             </div>
 
-            <div className="survey-breakdown error-severity-panel">
+            <div className="detail-section error-severity-panel">
               <header className="compact-panel-header">
                 <h2 className="section-title">{t('errorsSeverityBreakdown')}</h2>
                 <p className="text-muted">{t('errorsSeverityBreakdownLead')}</p>
               </header>
-              <div className="survey-breakdown-list">
+              <div className="breakdown-list">
                 {severityRows.map((row) => {
                   const share = stats?.errors ? Math.round((row.errors / stats.errors) * 100) : 0;
                   return (
-                    <div key={row.severity} className="survey-breakdown-row">
-                      <div className="survey-breakdown-meta">
+                    <div key={row.severity} className="breakdown-row">
+                      <div className="breakdown-meta">
                         <strong>{row.severity}</strong>
                         <span className="text-muted">
                           {row.errors.toLocaleString()} ({share}%)
                         </span>
                       </div>
-                      <div className="survey-breakdown-track" aria-hidden>
+                      <div className="breakdown-track" aria-hidden>
                         <span style={{ width: `${share}%` }} />
                       </div>
                     </div>

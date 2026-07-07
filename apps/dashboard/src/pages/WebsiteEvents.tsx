@@ -117,7 +117,7 @@ export default function WebsiteEventsPage() {
                       : t('eventCatalogNoProperties')
                   }
                 >
-                  <div className="surveys-stats">
+                  <div className="detail-stats">
                     <div>
                       <span className="stat-label">{t('events')}</span>
                       <strong className="stat-value">{summary.events.toLocaleString()}</strong>
@@ -137,7 +137,7 @@ export default function WebsiteEventsPage() {
                   </div>
 
                   <div className="workflow-insights-grid">
-                    <div className="survey-breakdown">
+                    <div className="detail-section">
                       <div className="panel-header compact-panel-header">
                         <div>
                           <h3 className="section-title experiment-title">{t('eventCatalogProperties')}</h3>
@@ -174,7 +174,7 @@ export default function WebsiteEventsPage() {
                       </div>
                     </div>
 
-                    <div className="survey-breakdown">
+                    <div className="detail-section">
                       <div className="panel-header compact-panel-header">
                         <div>
                           <h3 className="section-title experiment-title">{t('eventCatalogPaths')}</h3>
@@ -199,7 +199,7 @@ export default function WebsiteEventsPage() {
                     </div>
                   </div>
 
-                  <div className="survey-breakdown">
+                  <div className="detail-section">
                     <div className="panel-header compact-panel-header">
                       <div>
                         <h3 className="section-title experiment-title">{t('eventCatalogRecent')}</h3>

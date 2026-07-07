@@ -113,7 +113,7 @@ export default function WebsiteStickinessPage() {
           <EmptyState title={t('noDataInPeriod')} description={t('stickinessNoDataHint')} />
         ) : (
           <>
-            <div className="surveys-stats">
+            <div className="detail-stats">
               <div>
                 <span className="stat-label">{t('stickinessActors')}</span>
                 <strong className="stat-value">{stickinessQuery.data?.totalActors.toLocaleString()}</strong>

@@ -668,7 +668,7 @@ export default function WebsiteSurveysPage() {
                     ) : null
                   }
                 >
-                  <div className="surveys-stats">
+                  <div className="detail-stats">
                     <div>
                       <span className="stat-label">{t('surveyResponses')}</span>
                       <strong className="stat-value">
@@ -696,7 +696,7 @@ export default function WebsiteSurveysPage() {
                   </div>
 
                   {summary?.trend?.length ? (
-                    <div className="survey-breakdown">
+                    <div className="detail-section">
                       <div className="panel-header compact-panel-header">
                         <div>
                           <h3 className="section-title experiment-title">{t('surveyTrend')}</h3>
@@ -735,7 +735,7 @@ export default function WebsiteSurveysPage() {
                   {summary?.sentiment?.length || summary?.themes?.length ? (
                     <div className="workflow-insights-grid">
                       {summary?.sentiment?.length ? (
-                        <div className="survey-breakdown">
+                        <div className="detail-section">
                           <div className="panel-header compact-panel-header">
                             <div>
                               <h3 className="section-title experiment-title">
@@ -744,17 +744,17 @@ export default function WebsiteSurveysPage() {
                               <p className="text-muted">{t('surveySentimentBreakdownLead')}</p>
                             </div>
                           </div>
-                          <div className="survey-breakdown-list">
+                          <div className="breakdown-list">
                             {summary.sentiment.map((item) => (
-                              <div key={item.sentiment} className="survey-breakdown-row">
-                                <div className="survey-breakdown-meta">
+                              <div key={item.sentiment} className="breakdown-row">
+                                <div className="breakdown-meta">
                                   <strong>{sentimentLabel(item.sentiment)}</strong>
                                   <span className="text-muted">
                                     {item.responses.toLocaleString()} {t('surveyResponses')} ·{' '}
                                     {item.percentage.toLocaleString()}%
                                   </span>
                                 </div>
-                                <div className="survey-breakdown-track" aria-hidden>
+                                <div className="breakdown-track" aria-hidden>
                                   <span style={{ width: `${Math.min(100, item.percentage)}%` }} />
                                 </div>
                               </div>
@@ -764,7 +764,7 @@ export default function WebsiteSurveysPage() {
                       ) : null}
 
                       {summary?.themes?.length ? (
-                        <div className="survey-breakdown">
+                        <div className="detail-section">
                           <div className="panel-header compact-panel-header">
                             <div>
                               <h3 className="section-title experiment-title">
@@ -773,17 +773,17 @@ export default function WebsiteSurveysPage() {
                               <p className="text-muted">{t('surveyThemeBreakdownLead')}</p>
                             </div>
                           </div>
-                          <div className="survey-breakdown-list">
+                          <div className="breakdown-list">
                             {summary.themes.map((item) => (
-                              <div key={item.theme} className="survey-breakdown-row">
-                                <div className="survey-breakdown-meta">
+                              <div key={item.theme} className="breakdown-row">
+                                <div className="breakdown-meta">
                                   <strong>{themeLabel(item.theme)}</strong>
                                   <span className="text-muted">
                                     {item.responses.toLocaleString()} {t('surveyResponses')} ·{' '}
                                     {item.percentage.toLocaleString()}%
                                   </span>
                                 </div>
-                                <div className="survey-breakdown-track" aria-hidden>
+                                <div className="breakdown-track" aria-hidden>
                                   <span style={{ width: `${Math.min(100, item.percentage)}%` }} />
                                 </div>
                               </div>
@@ -795,7 +795,7 @@ export default function WebsiteSurveysPage() {
                   ) : null}
 
                   {summary?.pages?.length ? (
-                    <div className="survey-breakdown">
+                    <div className="detail-section">
                       <div className="panel-header compact-panel-header">
                         <div>
                           <h3 className="section-title experiment-title">
@@ -830,7 +830,7 @@ export default function WebsiteSurveysPage() {
                   ) : null}
 
                   {summary?.breakdown?.length ? (
-                    <div className="survey-breakdown">
+                    <div className="detail-section">
                       <div className="panel-header compact-panel-header">
                         <div>
                           <h3 className="section-title experiment-title">
@@ -839,17 +839,17 @@ export default function WebsiteSurveysPage() {
                           <p className="text-muted">{t('surveyResultBreakdownLead')}</p>
                         </div>
                       </div>
-                      <div className="survey-breakdown-list">
+                      <div className="breakdown-list">
                         {summary.breakdown.map((item) => (
-                          <div key={item.answer} className="survey-breakdown-row">
-                            <div className="survey-breakdown-meta">
+                          <div key={item.answer} className="breakdown-row">
+                            <div className="breakdown-meta">
                               <strong>{item.answer}</strong>
                               <span className="text-muted">
                                 {item.responses.toLocaleString()} {t('surveyResponses')} ·{' '}
                                 {item.percentage.toLocaleString()}%
                               </span>
                             </div>
-                            <div className="survey-breakdown-track" aria-hidden>
+                            <div className="breakdown-track" aria-hidden>
                               <span style={{ width: `${Math.min(100, item.percentage)}%` }} />
                             </div>
                           </div>

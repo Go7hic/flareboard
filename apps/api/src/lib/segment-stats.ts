@@ -3,6 +3,7 @@ import type { Env } from '../env';
 import { channelCaseSql } from './channel';
 import type { CohortMemberJoin } from './cohorts';
 import type { PageMetricRow, TrafficHeatmapData } from './queries';
+import { queryPeriodStats } from './period-stats';
 import { buildSegmentSql, type SegmentParams } from './segment-filters';
 
 function cohortJoinSql(cohortJoin?: CohortMemberJoin | null) {
@@ -141,6 +142,12 @@ async function countBouncesFiltered(
   return row?.count ?? 0;
 }
 
+function hasActiveFilters(segment?: SegmentParams | null, cohortJoin?: CohortMemberJoin | null) {
+  if (cohortJoin) return true;
+  const seg = buildSegmentSql(segment);
+  return seg.joinSession || seg.eventClauses.length > 0 || seg.sessionClauses.length > 0;
+}
+
 export async function getWebsiteStatsFiltered(
   env: Env,
   websiteId: string,
@@ -152,6 +159,20 @@ export async function getWebsiteStatsFiltered(
   const period = endAt - startAt;
   const prevStart = startAt - period;
   const prevEnd = startAt;
+
+  if (!hasActiveFilters(segment, cohortJoin)) {
+    const [current, previous] = await Promise.all([
+      queryPeriodStats(env, websiteId, startAt, endAt),
+      queryPeriodStats(env, websiteId, prevStart, prevEnd),
+    ]);
+    return {
+      pageviews: statChange(current.pageviews, previous.pageviews),
+      visitors: statChange(current.visitors, previous.visitors),
+      visits: statChange(current.visits, previous.visits),
+      bounces: statChange(current.bounces, previous.bounces),
+      totaltime: statChange(current.totaltime, previous.totaltime),
+    };
+  }
 
   const [
     pageviews,

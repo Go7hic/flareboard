@@ -2,6 +2,7 @@ import { EVENT_TYPE, getPlan } from '@flareboard/shared';
 import type { Env } from '../env';
 import { isHostedMode } from './billing';
 import { sendEmail } from './email';
+import { queryPeriodStats } from './period-stats';
 
 type ReportRow = {
   websiteId: string;
@@ -34,61 +35,39 @@ function parseRecipients(raw: string): string[] {
 }
 
 async function websiteDigest(env: Env, websiteId: string, startAt: number, endAt: number) {
-  const stats = await env.DB.prepare(
-    `SELECT
-       COUNT(CASE WHEN event_type = ${EVENT_TYPE.pageView} THEN 1 END) as pageviews,
-       COUNT(DISTINCT session_id) as visitors,
-       COUNT(DISTINCT visit_id) as sessions
-     FROM website_event
-     WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3`,
-  )
-    .bind(websiteId, startAt, endAt)
-    .first<{ pageviews: number; visitors: number; sessions: number }>();
-
-  const bounceRow = await env.DB.prepare(
-    `SELECT COUNT(*) as count FROM (
-       SELECT visit_id FROM website_event
-       WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3
-         AND event_type = ${EVENT_TYPE.pageView}
-       GROUP BY visit_id HAVING COUNT(*) = 1
-     )`,
-  )
-    .bind(websiteId, startAt, endAt)
-    .first<{ count: number }>();
+  const stats = await queryPeriodStats(env, websiteId, startAt, endAt);
 
   const topPages = await env.DB.prepare(
     `SELECT url_path as path, COUNT(*) as views
      FROM website_event
      WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3
-       AND event_type = ${EVENT_TYPE.pageView}
+       AND event_type = ?4
      GROUP BY url_path
      ORDER BY views DESC
      LIMIT 10`,
   )
-    .bind(websiteId, startAt, endAt)
+    .bind(websiteId, startAt, endAt, EVENT_TYPE.pageView)
     .all<{ path: string; views: number }>();
 
   const topReferrers = await env.DB.prepare(
     `SELECT COALESCE(NULLIF(referrer_domain, ''), '(direct)') as referrer, COUNT(*) as views
      FROM website_event
      WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3
-       AND event_type = ${EVENT_TYPE.pageView}
+       AND event_type = ?4
      GROUP BY referrer_domain
      ORDER BY views DESC
      LIMIT 5`,
   )
-    .bind(websiteId, startAt, endAt)
+    .bind(websiteId, startAt, endAt, EVENT_TYPE.pageView)
     .all<{ referrer: string; views: number }>();
 
-  const pageviews = stats?.pageviews ?? 0;
-  const sessions = stats?.sessions ?? 0;
-  const bounces = bounceRow?.count ?? 0;
-  const bounceRate = sessions > 0 ? Math.round((bounces / sessions) * 1000) / 10 : 0;
+  const bounceRate =
+    stats.visits > 0 ? Math.round((stats.bounces / stats.visits) * 1000) / 10 : 0;
 
   return {
-    pageviews,
-    visitors: stats?.visitors ?? 0,
-    sessions,
+    pageviews: stats.pageviews,
+    visitors: stats.visitors,
+    sessions: stats.visits,
     bounceRate,
     topPages: topPages.results ?? [],
     topReferrers: topReferrers.results ?? [],

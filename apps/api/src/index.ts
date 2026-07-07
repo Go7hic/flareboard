@@ -333,6 +333,8 @@ app.post('/api/admin/teams', admin.handleCreateTeam);
 app.get('/api/admin/websites', admin.handleListWebsites);
 app.post('/api/admin/websites', admin.handleCreateWebsite);
 
+export { RateLimiter } from '@flareboard/rate-limiter';
+
 export default {
   fetch: app.fetch,
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {

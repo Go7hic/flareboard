@@ -36,6 +36,9 @@ importers:
       '@flareboard/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@flareboard/rate-limiter':
+        specifier: workspace:*
+        version: link:../../packages/rate-limiter
       '@flareboard/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -234,6 +237,9 @@ importers:
       '@flareboard/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@flareboard/rate-limiter':
+        specifier: workspace:*
+        version: link:../../packages/rate-limiter
       '@flareboard/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -290,6 +296,15 @@ importers:
       wrangler:
         specifier: ^4.19.0
         version: 4.97.0(@cloudflare/workers-types@4.20260603.1)
+
+  packages/rate-limiter:
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20250603.0
+        version: 4.20260603.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
 
   packages/shared:
     dependencies:

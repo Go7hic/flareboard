@@ -1,6 +1,7 @@
 export interface Env {
   DB: D1Database;
   CACHE: KVNamespace;
+  RATE_LIMITER: DurableObjectNamespace;
   REPLAY_BUCKET?: R2Bucket;
   /** Cloudflare Email Sending binding (optional). */
   EMAIL?: SendEmail;

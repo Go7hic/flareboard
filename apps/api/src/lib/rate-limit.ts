@@ -1,3 +1,4 @@
+import { checkIpRateLimit as checkDoRateLimit } from '@flareboard/rate-limiter';
 import type { Env } from '../env';
 
 const DEFAULT_LIMIT = 10;
@@ -19,12 +20,5 @@ export async function checkIpRateLimit(
   limit = DEFAULT_LIMIT,
   windowSec = DEFAULT_WINDOW_SEC,
 ): Promise<{ allowed: boolean; remaining: number }> {
-  const key = `rl:${prefix}:${ip}`;
-  const current = await env.CACHE.get(key);
-  const count = current ? parseInt(current, 10) : 0;
-  if (count >= limit) {
-    return { allowed: false, remaining: 0 };
-  }
-  await env.CACHE.put(key, String(count + 1), { expirationTtl: windowSec });
-  return { allowed: true, remaining: limit - count - 1 };
+  return checkDoRateLimit(env.RATE_LIMITER, prefix, ip, limit, windowSec);
 }

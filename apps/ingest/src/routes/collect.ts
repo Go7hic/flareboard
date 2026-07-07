@@ -372,7 +372,7 @@ async function processSend(
       const websiteId = payload.website;
       const trustedIp = getTrustedClientIp(req);
       const [rl, quota] = await Promise.all([
-        checkRateLimit(env, websiteId, trustedIp, defer),
+        checkRateLimit(env, websiteId, trustedIp),
         assertEventAllowed(env, websiteId),
       ]);
       if (!rl.allowed) {
@@ -483,7 +483,7 @@ async function processSend(
     let billingUserId = '';
     if (websiteId) {
       const [rl, quota, parsedCache] = await Promise.all([
-        checkRateLimit(env, websiteId, trustedIp, defer),
+        checkRateLimit(env, websiteId, trustedIp),
         assertEventAllowed(env, websiteId),
         parseCacheToken(req, secret, opts.cacheToken),
       ]);

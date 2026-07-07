@@ -32,6 +32,20 @@
       }
     ]
   },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RATE_LIMITER",
+        "class_name": "RateLimiter"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-rate-limiter",
+      "new_sqlite_classes": ["RateLimiter"]
+    }
+  ],
   "r2_buckets": [
     {
       "binding": "REPLAY_BUCKET",
@@ -74,6 +88,20 @@
           }
         ]
       },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "RATE_LIMITER",
+            "class_name": "RateLimiter"
+          }
+        ]
+      },
+      "migrations": [
+        {
+          "tag": "v1-rate-limiter",
+          "new_sqlite_classes": ["RateLimiter"]
+        }
+      ],
       "r2_buckets": [
         {
           "binding": "REPLAY_BUCKET",

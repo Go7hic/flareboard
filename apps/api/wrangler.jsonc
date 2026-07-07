@@ -30,6 +30,20 @@
       "bucket_name": "flareboard-replays"
     }
   ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RATE_LIMITER",
+        "class_name": "RateLimiter"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-rate-limiter",
+      "new_sqlite_classes": ["RateLimiter"]
+    }
+  ],
   "send_email": [
     {
       "name": "EMAIL"
@@ -73,6 +87,20 @@
         {
           "binding": "REPLAY_BUCKET",
           "bucket_name": "flareboard-replays"
+        }
+      ],
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "RATE_LIMITER",
+            "class_name": "RateLimiter"
+          }
+        ]
+      },
+      "migrations": [
+        {
+          "tag": "v1-rate-limiter",
+          "new_sqlite_classes": ["RateLimiter"]
         }
       ],
       "send_email": [

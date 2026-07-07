@@ -9,6 +9,8 @@ import { handleRecord } from './routes/record';
 import { handleSurveyResponse } from './routes/surveys';
 import { json } from './lib/response';
 
+export { RateLimiter } from '@flareboard/rate-limiter';
+
 const app = new Hono<{ Bindings: Env }>();
 
 app.use(

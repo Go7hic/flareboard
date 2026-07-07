@@ -1,0 +1,17 @@
+{
+  "name": "@flareboard/rate-limiter",
+  "version": "1.2.0",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250603.0",
+    "typescript": "^5.8.3"
+  }
+}

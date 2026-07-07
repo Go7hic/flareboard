@@ -40,4 +40,13 @@ describe('checkIpRateLimit', () => {
     expect(third.allowed).toBe(false);
     expect(third.remaining).toBe(0);
   });
+
+  it('enforces the limit under concurrent requests', async () => {
+    const ip = `concurrent-${crypto.randomUUID()}`;
+    const limit = 5;
+    const results = await Promise.all(
+      Array.from({ length: 20 }, () => checkIpRateLimit(env, 'concurrent', ip, limit, 60)),
+    );
+    expect(results.filter((result) => result.allowed).length).toBe(limit);
+  });
 });

@@ -36,6 +36,12 @@ Drizzle schema and D1 SQL migrations in `migrations/`.
 | `0027_warehouse_query_history.sql` | Warehouse query history |
 | `0028_warehouse_scheduled_queries.sql` | Warehouse scheduled queries |
 | `0029_warehouse_data_sources.sql` | Warehouse external data source metadata |
+| `0030_people.sql` | Person/group identity tables with unique `(website_id, distinct_id)` |
+| `0031_warehouse_import.sql` | Imported warehouse rows from external data sources |
+
+## Deletion model
+
+Websites are **soft-deleted** (`website.deleted_at`); child rows (events, sessions, feature flags, surveys, people, warehouse data, …) are intentionally kept and foreign keys do not declare `ON DELETE CASCADE`. Any future hard-delete/purge job must delete child tables explicitly before removing `website` rows.
 
 Apply via the API worker wrangler config (paths are relative to `apps/api/wrangler.jsonc`):
 

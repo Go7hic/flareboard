@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, blob, index, primaryKey } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, blob, index, primaryKey, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 export const user = sqliteTable('user', {
   userId: text('user_id').primaryKey(),
@@ -996,7 +996,8 @@ export const person = sqliteTable(
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
   },
-  (t) => [index('person_website_distinct_idx').on(t.websiteId, t.distinctId)],
+  // Must stay unique to match migration 0030 (upserts rely on this constraint).
+  (t) => [uniqueIndex('person_website_distinct_idx').on(t.websiteId, t.distinctId)],
 );
 
 export const personGroupMembership = sqliteTable(

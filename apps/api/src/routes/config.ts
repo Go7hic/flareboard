@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import { parseSecureToken } from '@flareboard/shared';
 import type { Env } from '../env';
+import { readAuthToken } from '../lib/auth-credentials';
 import { getEnabledOAuthProviders } from '../lib/oauth';
 import { isHostedMode, listPublicPlans } from '../lib/billing';
 import { getAppSecret, json } from '../lib/response';
@@ -27,8 +28,7 @@ export async function handleConfig(c: Ctx) {
   const hosted = isHostedMode(c.env);
 
   let role: string | null = null;
-  const header = c.req.header('Authorization');
-  const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
+  const token = readAuthToken(c);
   if (token) {
     const payload = await parseSecureToken(token, getAppSecret(c));
     if (payload?.role) role = String(payload.role);

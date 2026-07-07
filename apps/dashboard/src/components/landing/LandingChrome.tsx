@@ -4,7 +4,7 @@ import { BrandLogo } from '../BrandLogo';
 import { LanguageSelector } from '../LanguageSelector';
 import { ThemeToggle } from '../ThemeToggle';
 import { Button } from '../ui/button';
-import { api, getToken } from '../../lib/api';
+import { api, bootstrapSession, hasSession } from '../../lib/api';
 import {
   FLAREBOARD_DEPLOY_DOCS,
   FLAREBOARD_GITHUB,
@@ -113,12 +113,13 @@ function LandingBrandLink({ className }: { className?: string }) {
 
 export function LandingChrome({ children, activeNav = 'home' }: LandingChromeProps) {
   const [config, setConfig] = useState<AppConfig>({});
-  const isLoggedIn = Boolean(getToken());
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     api<AppConfig>('/api/config')
       .then((cfg) => setConfig(cfg))
       .catch(() => {});
+    void bootstrapSession().then(setIsLoggedIn);
   }, []);
 
   const startHref = config.registrationEnabled ? '/register' : '/login';

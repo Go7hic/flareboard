@@ -2,7 +2,7 @@
 
 Base URL: `https://api.your-domain.com` (local dev: `http://localhost:8788`).
 
-Authenticated routes use `Authorization: Bearer <JWT>` from login, OAuth, or SSO.
+Authenticated routes accept either an httpOnly `flareboard_session` cookie (dashboard) or `Authorization: Bearer <JWT>` (API clients, SSO, tests). Login, email verification, and OAuth exchange set the session cookie and return `{ user }` without exposing the JWT in JSON.
 
 ## Auth & user
 

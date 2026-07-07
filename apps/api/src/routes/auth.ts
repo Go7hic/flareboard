@@ -16,6 +16,7 @@ import {
   verifySsoToken,
 } from '@flareboard/shared';
 import type { Env } from '../env';
+import { readAuthToken } from '../lib/auth-credentials';
 import { bumpTokenVersion, getTokenVersion, issueAuthToken } from '../lib/auth-token';
 import {
   buildOAuthAuthorizeUrl,
@@ -30,6 +31,7 @@ import { sendPasswordResetEmail, sendVerificationEmail } from '../lib/email';
 import { getUserByEmail, getUserById, getUserByUsername } from '../lib/queries';
 import { checkIpRateLimit, getTrustedClientIp } from '../lib/rate-limit';
 import { badRequest, getAppSecret, json, unauthorized } from '../lib/response';
+import { clearSessionCookie, setSessionCookie } from '../lib/session-cookie';
 
 type Ctx = Context<{ Bindings: Env }>;
 
@@ -56,6 +58,19 @@ async function resolveLoginUser(env: Env, identifier: string) {
     return getUserByEmail(env, identifier);
   }
   return null;
+}
+
+async function respondWithSession(
+  c: Ctx,
+  user: { userId: string; role: string; username: string },
+  options?: { includeToken?: boolean },
+) {
+  const jwt = await issueAuthToken(c, { userId: user.userId, role: user.role });
+  setSessionCookie(c, jwt);
+  return json({
+    ...(options?.includeToken ? { token: jwt } : {}),
+    user: { id: user.userId, username: user.username, role: user.role },
+  });
 }
 
 export async function handleRegister(c: Ctx) {
@@ -120,11 +135,7 @@ export async function handleVerifyEmail(c: Ctx) {
   const user = await getUserById(c.env, userId);
   if (!user) return badRequest('User not found');
 
-  const jwt = await issueAuthToken(c, { userId: user.userId, role: user.role });
-  return json({
-    token: jwt,
-    user: { id: user.userId, username: user.username, role: user.role },
-  });
+  return respondWithSession(c, { userId: user.userId, role: user.role, username: user.username });
 }
 
 export async function handleLogin(c: Ctx) {
@@ -149,13 +160,11 @@ export async function handleLogin(c: Ctx) {
     return json({ message: 'Please verify your email before signing in.' }, 403);
   }
 
-  const token = await issueAuthToken(c, { userId: user.userId, role: user.role });
-  return json({ token, user: { id: user.userId, username: user.username, role: user.role } });
+  return respondWithSession(c, { userId: user.userId, role: user.role, username: user.username });
 }
 
 export async function handleLogout(c: Ctx) {
-  const header = c.req.header('Authorization');
-  const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
+  const token = readAuthToken(c);
   if (token) {
     const payload = await parseSecureToken(token, getAppSecret(c));
     if (payload?.userId) {
@@ -166,6 +175,7 @@ export async function handleLogout(c: Ctx) {
       }
     }
   }
+  clearSessionCookie(c);
   return json({ ok: true });
 }
 
@@ -196,16 +206,11 @@ export async function handleSso(c: Ctx) {
   if (!user) return unauthorized({ message: 'User not found' });
 
   const role = user.role;
-  const token = await issueAuthToken(c, { userId: user.userId, role });
-  return json({
-    token,
-    user: { id: user.userId, username: user.username, role },
-  });
+  return respondWithSession(c, { userId: user.userId, role, username: user.username }, { includeToken: true });
 }
 
 export async function handleVerify(c: Ctx) {
-  const header = c.req.header('Authorization');
-  const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
+  const token = readAuthToken(c);
   if (!token) {
     return unauthorized();
   }
@@ -287,7 +292,20 @@ export async function handleOAuthExchange(c: Ctx) {
   if (!token) return unauthorized({ message: 'Invalid or expired code' });
   await c.env.CACHE.delete(key);
 
-  return json({ token });
+  const payload = await parseSecureToken(token, getAppSecret(c));
+  if (!payload?.userId || !payload?.role) {
+    return unauthorized({ message: 'Invalid or expired code' });
+  }
+
+  setSessionCookie(c, token);
+  const user = await getUserById(c.env, String(payload.userId));
+  return json({
+    user: {
+      id: String(payload.userId),
+      username: user?.username ?? String(payload.userId),
+      role: String(payload.role),
+    },
+  });
 }
 
 export async function handleForgotPassword(c: Ctx) {

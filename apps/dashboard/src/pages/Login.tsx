@@ -5,7 +5,7 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { api, API_URL, setToken, type LoginResponse } from '../lib/api';
+import { api, API_URL, bootstrapSession, hasSession, logoutSession, markSession, type LoginResponse } from '../lib/api';
 import { t } from '../lib/i18n';
 
 const POST_LOGIN_PATH = '/dashboard';
@@ -48,7 +48,7 @@ export default function Login() {
             method: 'POST',
             body: JSON.stringify({ token: verify }),
           });
-          setToken(res.token);
+          markSession(true);
           setSearchParams({}, { replace: true });
           navigate(POST_LOGIN_PATH, { replace: true });
         } catch (err) {
@@ -68,7 +68,7 @@ export default function Login() {
             method: 'POST',
             body: JSON.stringify({ code }),
           });
-          setToken(res.token);
+          markSession(true);
           setSearchParams({}, { replace: true });
           window.flareboard?.track('login_success');
           navigate(next, { replace: true });
@@ -102,7 +102,7 @@ export default function Login() {
         method: 'POST',
         body: JSON.stringify({ username, password }),
       });
-      setToken(res.token);
+      markSession(true);
       window.flareboard?.track('login_success');
       navigate(POST_LOGIN_PATH);
     } catch (err) {

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { api, getToken, logoutSession } from '../lib/api';
+import { api, bootstrapSession, hasSession, logoutSession } from '../lib/api';
+import { LazyRouteFallback } from './LazyRouteFallback';
 import { t } from '../lib/i18n';
 import { AppSidebar } from './AppSidebar';
 import { AppTopBar } from './AppTopBar';
@@ -15,15 +16,19 @@ export function SidebarShell() {
   const [hosted, setHosted] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
 
   useEffect(() => {
-    if (!getToken()) navigate('/login');
+    void bootstrapSession().then((ok) => {
+      setSessionReady(true);
+      if (!ok) navigate('/login');
+    });
   }, [navigate]);
 
   const meQuery = useQuery({
     queryKey: ['me'],
     queryFn: () => api<MeResponse>('/api/me'),
-    enabled: Boolean(getToken()),
+    enabled: sessionReady && hasSession(),
     staleTime: 60_000,
   });
 
@@ -54,6 +59,10 @@ export function SidebarShell() {
 
   function closeMobileNav() {
     setMobileNavOpen(false);
+  }
+
+  if (!sessionReady) {
+    return <LazyRouteFallback />;
   }
 
   return (

@@ -2,6 +2,7 @@ import { createMiddleware } from 'hono/factory';
 import { ROLES, parseSecureToken, type AuthUser } from '@flareboard/shared';
 import type { Env } from '../env';
 import { getTokenVersion } from '../lib/auth-token';
+import { readAuthToken } from '../lib/auth-credentials';
 import { forbidden, getAppSecret, unauthorized } from '../lib/response';
 
 export type ApiVariables = {
@@ -15,8 +16,7 @@ function isPasswordUpdate(path: string, method: string) {
 }
 
 export const jwtAuth = createMiddleware<{ Bindings: Env; Variables: ApiVariables }>(async (c, next) => {
-  const header = c.req.header('Authorization');
-  const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
+  const token = readAuthToken(c);
   if (!token) {
     return unauthorized();
   }

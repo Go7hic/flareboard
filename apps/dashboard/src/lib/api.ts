@@ -1,11 +1,13 @@
 import { apiReturnedHtmlError, apiUrlConfigError, resolveApiUrl } from './api-url';
 
-const TOKEN_KEY = 'flareboard_token';
+const LEGACY_TOKEN_KEY = 'flareboard_token';
 
 export const INGEST_URL =
   (import.meta.env.VITE_INGEST_URL ?? 'http://localhost:8787').replace(/\/$/, '');
 
 export const API_URL = resolveApiUrl();
+
+let sessionActive: boolean | null = null;
 
 function assertApiUrl(): void {
   if (API_URL) return;
@@ -13,37 +15,61 @@ function assertApiUrl(): void {
   throw new Error(apiUrlConfigError());
 }
 
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+function clearLegacyTokenStorage() {
+  try {
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
+  } catch {
+    // Ignore storage failures in restricted contexts.
+  }
 }
 
-export function setToken(token: string | null) {
-  if (token) {
-    localStorage.setItem(TOKEN_KEY, token);
-  } else {
-    localStorage.removeItem(TOKEN_KEY);
+export function hasSession(): boolean {
+  return sessionActive === true;
+}
+
+export function isSessionReady(): boolean {
+  return sessionActive !== null;
+}
+
+export function markSession(active: boolean) {
+  sessionActive = active;
+}
+
+/** @deprecated Use hasSession() after bootstrapSession(). */
+export function getToken(): string | null {
+  return hasSession() ? 'session' : null;
+}
+
+export async function bootstrapSession(): Promise<boolean> {
+  clearLegacyTokenStorage();
+  if (sessionActive !== null) return sessionActive;
+  try {
+    await api('/api/auth/verify');
+    sessionActive = true;
+    return true;
+  } catch {
+    sessionActive = false;
+    return false;
   }
 }
 
 export async function logoutSession(): Promise<void> {
-  const token = getToken();
-  if (token && API_URL) {
+  if (API_URL || import.meta.env.DEV) {
     try {
-      await fetch(`${API_URL}/api/auth/logout`, {
+      await fetch(`${API_URL || ''}/api/auth/logout`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
       });
     } catch {
       // Network errors should not block local sign-out.
     }
   }
-  setToken(null);
+  sessionActive = false;
+  clearLegacyTokenStorage();
 }
 
-export type ApiInit = RequestInit & { token?: string };
+export type ApiInit = RequestInit;
 
 /** Paths where 401 means invalid credentials, not an expired session. */
 const AUTH_FORM_PATHS = new Set([
@@ -53,6 +79,7 @@ const AUTH_FORM_PATHS = new Set([
   '/api/auth/forgot-password',
   '/api/auth/reset-password',
   '/api/auth/logout',
+  '/api/auth/verify',
 ]);
 
 let sessionRedirectPending = false;
@@ -74,7 +101,8 @@ export function clearSessionAndRedirectToLogin(): void {
   if (pathname === '/login') return;
 
   sessionRedirectPending = true;
-  setToken(null);
+  sessionActive = false;
+  clearLegacyTokenStorage();
   const next = encodeURIComponent(pathname + search);
   window.location.replace(`/login?next=${next}`);
 }
@@ -101,27 +129,22 @@ export class ApiError extends Error {
 export async function authenticatedFetch(path: string, init: RequestInit = {}): Promise<Response> {
   assertApiUrl();
   const headers = new Headers(init.headers);
-  const auth = getToken();
-  if (auth) headers.set('Authorization', `Bearer ${auth}`);
 
   const url = path.startsWith('http') ? path : `${API_URL}${path}`;
-  const res = await fetch(url, { ...init, headers });
+  const res = await fetch(url, { ...init, headers, credentials: 'include' });
   handleUnauthorizedIfNeeded(path, res.status);
   return res;
 }
 
 export async function api<T>(path: string, init: ApiInit = {}): Promise<T> {
   assertApiUrl();
-  const { token, ...rest } = init;
-  const headers = new Headers(rest.headers);
-  if (rest.body && !headers.has('Content-Type')) {
+  const headers = new Headers(init.headers);
+  if (init.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
-  const auth = token ?? getToken();
-  if (auth) headers.set('Authorization', `Bearer ${auth}`);
 
   const url = path.startsWith('http') ? path : `${API_URL}${path}`;
-  const res = await fetch(url, { ...rest, headers });
+  const res = await fetch(url, { ...init, headers, credentials: 'include' });
   if (!res.ok) {
     handleUnauthorizedIfNeeded(path, res.status);
     const err = await parseJsonBody<{ message?: string }>(res).catch(() => ({
@@ -152,8 +175,8 @@ async function parseJsonBody<T>(res: Response): Promise<T> {
 }
 
 export interface LoginResponse {
-  token: string;
   user: { id: string; username: string; role: string };
+  token?: string;
 }
 
 export interface Website {

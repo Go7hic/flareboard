@@ -7,22 +7,11 @@ import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { api, type PeopleResponse, type PersonDetailResponse, type PersonSummary } from '../lib/api';
+import { formatDate } from '../lib/formatDate';
 import { t } from '../lib/i18n';
+import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
-
-function formatDate(value: string | number | null | undefined) {
-  if (value == null) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 function personLabel(person: PersonSummary | null | undefined) {
   if (!person) return '-';
@@ -47,13 +36,14 @@ export default function WebsitePeoplePage() {
   const [editingProperties, setEditingProperties] = useState(false);
   const [propertiesDraft, setPropertiesDraft] = useState('');
   const [propertiesError, setPropertiesError] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
 
   const peopleQuery = useQuery({
-    queryKey: ['people', websiteId, rangeQs, search],
+    queryKey: ['people', websiteId, rangeQs, debouncedSearch],
     enabled: Boolean(websiteId),
     queryFn: () => {
       const params = new URLSearchParams(rangeQs);
-      if (search.trim()) params.set('q', search.trim());
+      if (debouncedSearch.trim()) params.set('q', debouncedSearch.trim());
       return api<PeopleResponse>(`/api/websites/${websiteId}/people?${params.toString()}`);
     },
   });
@@ -74,19 +64,19 @@ export default function WebsitePeoplePage() {
   });
 
   const savePropertiesMutation = useMutation({
-    mutationFn: async (properties: Record<string, unknown>) => {
-      if (!websiteId || !selectedPerson?.personId) return;
-      return api<PersonDetailResponse>(
-        `/api/websites/${websiteId}/people/${encodeURIComponent(selectedPerson.personId)}`,
+    mutationFn: ({ personId, properties }: { personId: string; properties: Record<string, unknown> }) =>
+      api<PersonDetailResponse>(
+        `/api/websites/${websiteId}/people/${encodeURIComponent(personId)}`,
         {
           method: 'PATCH',
           body: JSON.stringify({ properties }),
         },
-      );
-    },
-    onSuccess: (data) => {
-      if (!websiteId || !selectedPerson?.personId) return;
-      queryClient.setQueryData(['person-detail', websiteId, selectedPerson.personId], data);
+      ),
+    onSuccess: (data, variables) => {
+      // Use the personId from the mutation, not the current selection — the
+      // selected person may have changed by the time the request completes.
+      const personId = data?.personId ?? variables.personId;
+      queryClient.setQueryData(['person-detail', websiteId, personId], data);
       setEditingProperties(false);
       setPropertiesError('');
     },
@@ -116,7 +106,11 @@ export default function WebsitePeoplePage() {
       setPropertiesError(t('peoplePropertiesInvalid'));
       return;
     }
-    savePropertiesMutation.mutate(parsed as Record<string, unknown>);
+    if (!selectedPerson?.personId) return;
+    savePropertiesMutation.mutate({
+      personId: selectedPerson.personId,
+      properties: parsed as Record<string, unknown>,
+    });
   }
 
   return (

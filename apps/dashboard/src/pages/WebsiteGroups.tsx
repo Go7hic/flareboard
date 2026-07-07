@@ -6,20 +6,9 @@ import { EmptyState } from '../components/EmptyState';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Input } from '../components/ui/input';
 import { api, type GroupDetailResponse, type GroupRow, type GroupsResponse } from '../lib/api';
+import { formatDate } from '../lib/formatDate';
 import { t } from '../lib/i18n';
-
-function formatDate(value: string | number | null | undefined) {
-  if (value == null) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
+import { useDebouncedValue } from '../lib/useDebouncedValue';
 
 function groupLabel(group: GroupRow) {
   return group.latestName || group.groupKey;
@@ -39,13 +28,14 @@ export default function WebsiteGroupsPage() {
 
   const availableTypes = typesQuery.data?.types ?? [];
   const activeType = availableTypes.includes(groupType) ? groupType : availableTypes[0] || groupType;
+  const debouncedSearch = useDebouncedValue(search, 300);
 
   const groupsQuery = useQuery({
-    queryKey: ['groups', websiteId, activeType, search],
+    queryKey: ['groups', websiteId, activeType, debouncedSearch],
     enabled: Boolean(websiteId && activeType),
     queryFn: () =>
       api<GroupsResponse>(
-        `/api/websites/${websiteId}/groups?type=${encodeURIComponent(activeType)}${search.trim() ? `&q=${encodeURIComponent(search.trim())}` : ''}`,
+        `/api/websites/${websiteId}/groups?type=${encodeURIComponent(activeType)}${debouncedSearch.trim() ? `&q=${encodeURIComponent(debouncedSearch.trim())}` : ''}`,
       ),
   });
 

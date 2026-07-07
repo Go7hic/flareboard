@@ -438,7 +438,7 @@ export default function WebsiteAiObservabilityPage() {
                       <div className="errors-name-cell">
                         <Bot size={16} strokeWidth={2} aria-hidden />
                         <div>
-                          <div className="errors-message">{event.model ?? 'unknown'}</div>
+                          <div className="errors-message">{event.model ?? t('unknown')}</div>
                           <div className="text-muted">
                             {[event.provider, event.release, event.environment].filter(Boolean).join(' · ') || '-'}
                           </div>
@@ -447,7 +447,7 @@ export default function WebsiteAiObservabilityPage() {
                     </td>
                     <td>
                       <span className={`badge ${event.status === 'error' ? 'log-level-error' : 'badge-accent'}`}>
-                        {event.status ?? 'success'}
+                        {event.status ?? t('aiStatus_success')}
                       </span>
                     </td>
                     <td className="num">{(event.totalTokens ?? 0).toLocaleString()}</td>

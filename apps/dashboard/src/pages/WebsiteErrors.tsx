@@ -352,7 +352,7 @@ export default function WebsiteErrorsPage() {
                               <span className="errors-message">
                                 {shortText(issue.message, t('unknown'))}
                               </span>
-                              <span className="text-muted">{shortText(issue.name, 'Error')}</span>
+                              <span className="text-muted">{shortText(issue.name, t('errorNameFallback'))}</span>
                             </span>
                           </span>
                         </button>
@@ -455,7 +455,7 @@ export default function WebsiteErrorsPage() {
                         <AlertTriangle size={16} strokeWidth={2} aria-hidden />
                         <div>
                           <div className="errors-message">{shortText(row.message ?? row.eventName, t('unknown'))}</div>
-                          <div className="text-muted">{shortText(row.name, 'Error')}</div>
+                          <div className="text-muted">{shortText(row.name, t('errorNameFallback'))}</div>
                         </div>
                       </div>
                     </td>

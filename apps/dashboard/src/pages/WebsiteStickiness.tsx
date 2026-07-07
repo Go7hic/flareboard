@@ -10,6 +10,7 @@ import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
 import { api } from '../lib/api';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
+import { useDebouncedValue } from '../lib/useDebouncedValue';
 
 type StickinessResponse = {
   event: string | null;
@@ -33,15 +34,16 @@ export default function WebsiteStickinessPage() {
     useWebsiteReportContext('30d');
   const [eventName, setEventName] = useState('');
   const [actor, setActor] = useState<'person' | 'session'>('person');
+  const debouncedEventName = useDebouncedValue(eventName, 300);
 
   const stickinessQuery = useQuery({
-    queryKey: ['reports-stickiness', websiteId, eventName, actor, range, segmentId],
+    queryKey: ['reports-stickiness', websiteId, debouncedEventName, actor, range, segmentId],
     enabled: Boolean(websiteId),
     queryFn: () =>
       api<StickinessResponse>(
         reportUrl(
           'stickiness',
-          `&actor=${actor}${eventName.trim() ? `&event=${encodeURIComponent(eventName.trim())}` : ''}`,
+          `&actor=${actor}${debouncedEventName.trim() ? `&event=${encodeURIComponent(debouncedEventName.trim())}` : ''}`,
         ),
       ),
   });

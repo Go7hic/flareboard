@@ -152,7 +152,7 @@ export default function WebsiteWarehousePage() {
       try {
         config = JSON.parse(sourceDraft.configText) as Record<string, unknown>;
       } catch {
-        throw new Error('Invalid JSON configuration');
+        throw new Error(t('warehouseInvalidJsonConfig'));
       }
       return api<WarehouseDataSource>(`/api/websites/${websiteId}/warehouse/data-sources`, {
         method: 'POST',

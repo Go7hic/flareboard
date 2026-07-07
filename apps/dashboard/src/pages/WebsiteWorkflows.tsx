@@ -3,12 +3,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ExternalLink, Workflow as WorkflowIcon } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
+import { ModalDialog } from '../components/ModalDialog';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { api, type Workflow, type WorkflowExecutionsResponse } from '../lib/api';
+import { formatDate } from '../lib/formatDate';
 import { t } from '../lib/i18n';
+import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 
 const DEFAULT_WORKFLOW = {
@@ -26,23 +29,19 @@ const DEFAULT_FILTERS = {
   q: '',
 };
 
-function formatDate(value: string | number | null | undefined) {
-  if (value == null) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
+const EXECUTION_STATUSES = ['recorded', 'queued', 'success', 'failed'] as const;
 
 function workflowActionTypeLabel(actionType: Workflow['actionType']) {
   if (actionType === 'webhook') return t('workflowActionType_webhook');
   if (actionType === 'email') return t('workflowActionType_email');
   return t('workflowActionType_record');
+}
+
+function workflowExecutionStatusLabel(status: string) {
+  if ((EXECUTION_STATUSES as readonly string[]).includes(status)) {
+    return t(`workflowExecutionStatus_${status}`);
+  }
+  return status;
 }
 
 function WorkflowEditDialog({
@@ -87,14 +86,7 @@ function WorkflowEditDialog({
     !saving;
 
   return (
-    <div className="dialog-backdrop" onClick={onClose}>
-      <div
-        className="dialog-panel workflow-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('workflowEdit')}
-        onClick={(event) => event.stopPropagation()}
-      >
+    <ModalDialog className="workflow-dialog" aria-label={t('workflowEdit')} onClose={onClose}>
         <header className="dialog-header">
           <h2 className="dialog-title">{t('workflowEdit')}</h2>
         </header>
@@ -211,8 +203,7 @@ function WorkflowEditDialog({
             {saving ? t('saving') : t('save')}
           </Button>
         </footer>
-      </div>
-    </div>
+    </ModalDialog>
   );
 }
 
@@ -255,14 +246,21 @@ export default function WebsiteWorkflowsPage() {
     }
   }, [searchParams, selectedWorkflowId, setSearchParams, workflows]);
 
+  useEffect(() => {
+    setFilters(DEFAULT_FILTERS);
+  }, [selectedWorkflowId]);
+
+  const debouncedQ = useDebouncedValue(filters.q, 300);
+  const debouncedEvent = useDebouncedValue(filters.event, 300);
+
   const executionsQuery = useQuery({
-    queryKey: ['workflow-executions', websiteId, selectedWorkflowId, filters],
+    queryKey: ['workflow-executions', websiteId, selectedWorkflowId, filters.status, debouncedEvent, debouncedQ],
     enabled: Boolean(websiteId && selectedWorkflowId),
     queryFn: () => {
       const params = new URLSearchParams();
       if (filters.status) params.set('status', filters.status);
-      if (filters.event.trim()) params.set('event', filters.event.trim());
-      if (filters.q.trim()) params.set('q', filters.q.trim());
+      if (debouncedEvent.trim()) params.set('event', debouncedEvent.trim());
+      if (debouncedQ.trim()) params.set('q', debouncedQ.trim());
       const query = params.toString();
       return api<WorkflowExecutionsResponse>(
         `/api/websites/${websiteId}/workflows/${selectedWorkflowId}/executions${query ? `?${query}` : ''}`,
@@ -607,7 +605,7 @@ export default function WebsiteWorkflowsPage() {
                           {(summary.statuses ?? []).map((item) => (
                             <div key={item.status} className="survey-breakdown-row">
                               <div className="survey-breakdown-meta">
-                                <strong>{item.status}</strong>
+                                <strong>{workflowExecutionStatusLabel(item.status)}</strong>
                                 <span className="text-muted">
                                   {item.executions.toLocaleString()} · {item.percentage.toLocaleString()}%
                                 </span>
@@ -667,10 +665,11 @@ export default function WebsiteWorkflowsPage() {
                         }
                       >
                         <option value="">{t('all')}</option>
-                        <option value="recorded">recorded</option>
-                        <option value="queued">queued</option>
-                        <option value="success">success</option>
-                        <option value="failed">failed</option>
+                        {EXECUTION_STATUSES.map((status) => (
+                          <option key={status} value={status}>
+                            {workflowExecutionStatusLabel(status)}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div className="field">
@@ -712,7 +711,9 @@ export default function WebsiteWorkflowsPage() {
                             <tr key={execution.id}>
                               <td>{execution.eventName ?? '-'}</td>
                               <td>
-                                <span className="badge badge-accent">{execution.status}</span>
+                                <span className="badge badge-accent">
+                                  {workflowExecutionStatusLabel(execution.status)}
+                                </span>
                               </td>
                               <td>
                                 {execution.sessionId ? (

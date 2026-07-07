@@ -3569,13 +3569,6 @@ code {
   justify-content: center;
 }
 
-.traffic-heatmap-legend-bar {
-  flex: 1;
-  height: 8px;
-  border-radius: 4px;
-  background: linear-gradient(to right, var(--bg-subtle), var(--accent));
-}
-
 .traffic-heatmap-skeleton {
   border-radius: var(--radius-md);
 }
@@ -4238,21 +4231,6 @@ code {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
-}
-
-.warehouse-diagnostic-success {
-  background: rgba(13, 148, 136, 0.12);
-  color: var(--accent);
-}
-
-.warehouse-diagnostic-warning {
-  background: rgba(245, 158, 11, 0.14);
-  color: #b45309;
-}
-
-.warehouse-diagnostic-error {
-  background: rgba(239, 68, 68, 0.12);
-  color: #dc2626;
 }
 
 .warehouse-table td {
@@ -5654,7 +5632,8 @@ code {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: linear-gradient(180deg, #d4ebf7 0%, #c8e3f2 45%, #b8ddf0 100%);
+  /* Flat solid matching .realtime-vector-map-wrap's map water color. */
+  background: #c8e3f2;
 }
 
 .realtime-vector-map-sky.is-hidden {
@@ -9418,11 +9397,19 @@ code {
   color: var(--text-muted);
 }
 
-.retention-heatmap-legend-bar {
+/* Flat intensity scale: a row of discrete color-mix steps (no gradients). */
+.heatmap-legend-steps {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
   flex: 1;
+  justify-content: center;
+}
+
+.heatmap-legend-step {
+  width: 1.5rem;
   height: 8px;
   border-radius: 4px;
-  background: linear-gradient(to right, var(--bg-subtle), var(--accent));
 }
 
 .goal-progress-track {
@@ -9715,13 +9702,6 @@ code {
   width: 100%;
   font-size: 0.8125rem;
   color: var(--text-muted);
-}
-
-.heatmap-legend-bar {
-  flex: 1;
-  height: 8px;
-  border-radius: 4px;
-  background: linear-gradient(to right, transparent, var(--accent));
 }
 
 .heatmap-viewport-hint {

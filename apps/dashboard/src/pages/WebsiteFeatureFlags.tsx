@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ExternalLink, Flag, Search } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
+import { ModalDialog } from '../components/ModalDialog';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -192,14 +193,7 @@ function FeatureFlagEditDialog({
     !saving;
 
   return (
-    <div className="dialog-backdrop" onClick={onClose}>
-      <div
-        className="dialog-panel feature-flag-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('featureFlagEdit')}
-        onClick={(event) => event.stopPropagation()}
-      >
+    <ModalDialog className="feature-flag-dialog" aria-label={t('featureFlagEdit')} onClose={onClose}>
         <header className="dialog-header">
           <h2 className="dialog-title">{t('featureFlagEdit')}</h2>
         </header>
@@ -297,8 +291,51 @@ function FeatureFlagEditDialog({
             {saving ? t('saving') : t('save')}
           </Button>
         </footer>
-      </div>
-    </div>
+    </ModalDialog>
+  );
+}
+
+/**
+ * Inline rollout editor with a local draft so typing does not PATCH per
+ * keystroke; the change is committed on blur or Enter, and only when the
+ * value is valid (0-100) and actually different.
+ */
+function FeatureFlagRolloutInput({
+  flag,
+  onCommit,
+}: {
+  flag: FeatureFlag;
+  onCommit: (rollout: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(flag.rollout));
+
+  useEffect(() => {
+    setDraft(String(flag.rollout));
+  }, [flag.rollout]);
+
+  function commit() {
+    const next = Number(draft);
+    if (draft.trim() === '' || !Number.isFinite(next) || next < 0 || next > 100) {
+      setDraft(String(flag.rollout));
+      return;
+    }
+    if (next !== flag.rollout) onCommit(next);
+  }
+
+  return (
+    <input
+      className="input feature-flag-rollout-input"
+      type="number"
+      min={0}
+      max={100}
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') event.currentTarget.blur();
+      }}
+      aria-label={t('featureFlagRollout')}
+    />
   );
 }
 
@@ -694,7 +731,7 @@ export default function WebsiteFeatureFlagsPage() {
                             <div className="feature-flag-recent">
                               {flag.summary.recent.slice(0, 3).map((exposure) => (
                                 <div key={exposure.id} className="feature-flag-recent-row">
-                                  <span className="badge">{exposure.variant ?? 'control'}</span>
+                                  <span className="badge">{exposure.variant ?? t('featureFlagVariantControl')}</span>
                                   <span className="text-muted">{exposure.urlPath || '/'}</span>
                                   {exposure.release ? (
                                     <span className="text-muted">{exposure.release}</span>
@@ -719,19 +756,11 @@ export default function WebsiteFeatureFlagsPage() {
                     </td>
                     <td>
                       {canEdit ? (
-                      <input
-                        className="input feature-flag-rollout-input"
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={flag.rollout}
-                        onChange={(event) =>
-                          updateMutation.mutate({
-                            id: flag.id,
-                            patch: { rollout: Number(event.target.value) },
-                          })
+                      <FeatureFlagRolloutInput
+                        flag={flag}
+                        onCommit={(rollout) =>
+                          updateMutation.mutate({ id: flag.id, patch: { rollout } })
                         }
-                        aria-label={t('featureFlagRollout')}
                       />
                       ) : (
                         <span>{flag.rollout}%</span>

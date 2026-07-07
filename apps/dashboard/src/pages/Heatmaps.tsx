@@ -342,7 +342,15 @@ export default function HeatmapsPage() {
             </div>
             <div className="heatmap-legend">
               <span>{t('heatmapLegendLow')}</span>
-              <div className="heatmap-legend-bar" />
+              <div className="heatmap-legend-steps" aria-hidden>
+                {[0.15, 0.4, 0.7, 1].map((intensity) => (
+                  <span
+                    key={intensity}
+                    className="heatmap-legend-step"
+                    style={{ background: heatColor(intensity) }}
+                  />
+                ))}
+              </div>
               <span>{t('heatmapLegendHigh')}</span>
             </div>
             <p className="heatmap-viewport-hint text-muted">

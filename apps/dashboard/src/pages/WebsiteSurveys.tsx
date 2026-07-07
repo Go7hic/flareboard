@@ -3,12 +3,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ExternalLink, MessageSquareText } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
+import { ModalDialog } from '../components/ModalDialog';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { api, type Survey, type SurveyDisplayRule, type SurveyResponsesResponse } from '../lib/api';
+import { formatDate } from '../lib/formatDate';
 import { t } from '../lib/i18n';
+import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 
 const DEFAULT_SURVEY = {
@@ -21,19 +24,6 @@ const DEFAULT_SURVEY = {
   displayDelaySeconds: 0,
   displayRulesText: '',
 };
-
-function formatDate(value: string | number | null | undefined) {
-  if (value == null) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 function surveyTypeLabel(type: Survey['type']) {
   if (type === 'rating') return t('surveyType_rating');
@@ -175,14 +165,7 @@ function SurveyEditDialog({
     !saving;
 
   return (
-    <div className="dialog-backdrop" onClick={onClose}>
-      <div
-        className="dialog-panel survey-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('surveyEdit')}
-        onClick={(event) => event.stopPropagation()}
-      >
+    <ModalDialog className="survey-dialog" aria-label={t('surveyEdit')} onClose={onClose}>
         <header className="dialog-header">
           <h2 className="dialog-title">{t('surveyEdit')}</h2>
         </header>
@@ -325,8 +308,7 @@ function SurveyEditDialog({
             {saving ? t('saving') : t('save')}
           </Button>
         </footer>
-      </div>
-    </div>
+    </ModalDialog>
   );
 }
 
@@ -373,13 +355,16 @@ export default function WebsiteSurveysPage() {
     setFilters({ q: '', path: '', answer: '' });
   }, [selectedSurveyId]);
 
+  const debouncedQ = useDebouncedValue(filters.q, 300);
+  const debouncedPath = useDebouncedValue(filters.path, 300);
+
   const responsesQuery = useQuery({
-    queryKey: ['survey-responses', websiteId, selectedSurveyId, filters],
+    queryKey: ['survey-responses', websiteId, selectedSurveyId, debouncedQ, debouncedPath, filters.answer],
     enabled: Boolean(websiteId && selectedSurveyId),
     queryFn: () => {
       const params = new URLSearchParams();
-      if (filters.q.trim()) params.set('q', filters.q.trim());
-      if (filters.path.trim()) params.set('path', filters.path.trim());
+      if (debouncedQ.trim()) params.set('q', debouncedQ.trim());
+      if (debouncedPath.trim()) params.set('path', debouncedPath.trim());
       if (filters.answer.trim()) params.set('answer', filters.answer.trim());
       const qs = params.toString();
       return api<SurveyResponsesResponse>(

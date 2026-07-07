@@ -65,7 +65,15 @@ export function RetentionHeatmap({ cohorts }: { cohorts: RetentionRow[] }) {
       </div>
       <div className="heatmap-legend retention-heatmap-legend">
         <span>{t('heatmapLegendLow')}</span>
-        <div className="retention-heatmap-legend-bar" />
+        <div className="heatmap-legend-steps" aria-hidden>
+          {[0.15, 0.4, 0.7, 1].map((intensity) => (
+            <span
+              key={intensity}
+              className="heatmap-legend-step"
+              style={{ background: cellColor(intensity) }}
+            />
+          ))}
+        </div>
         <span>{t('heatmapLegendHigh')}</span>
       </div>
     </div>

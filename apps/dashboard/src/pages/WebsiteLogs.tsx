@@ -18,6 +18,7 @@ import {
   type LogTraceSummary,
 } from '../lib/api';
 import { t } from '../lib/i18n';
+import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 
@@ -65,23 +66,24 @@ export default function WebsiteLogsPage() {
   const [alertDraft, setAlertDraft] = useState(DEFAULT_ALERT);
 
   const trimmedSearch = search.trim();
+  const debouncedSearch = useDebouncedValue(trimmedSearch, 300);
   const qs = useMemo(() => {
     const params = new URLSearchParams(rangeQs);
     if (level) params.set('level', level);
-    if (trimmedSearch) params.set('q', trimmedSearch);
+    if (debouncedSearch) params.set('q', debouncedSearch);
     if (releaseFilter) params.set('release', releaseFilter);
     if (environmentFilter) params.set('environment', environmentFilter);
     return params.toString();
-  }, [environmentFilter, level, rangeQs, releaseFilter, trimmedSearch]);
+  }, [debouncedSearch, environmentFilter, level, rangeQs, releaseFilter]);
 
   const logsQuery = useQuery({
-    queryKey: ['logs', websiteId, range, level, trimmedSearch, releaseFilter, environmentFilter],
+    queryKey: ['logs', websiteId, range, level, debouncedSearch, releaseFilter, environmentFilter],
     enabled: Boolean(websiteId) && tab === 'events',
     queryFn: () => api<LogEventsResponse>(`/api/websites/${websiteId}/logs?${qs}`),
   });
 
   const tracesQuery = useQuery({
-    queryKey: ['log-traces', websiteId, range, level, trimmedSearch, releaseFilter, environmentFilter],
+    queryKey: ['log-traces', websiteId, range, level, debouncedSearch, releaseFilter, environmentFilter],
     enabled: Boolean(websiteId) && tab === 'traces',
     queryFn: () => api<{ traces: LogTraceSummary[] }>(`/api/websites/${websiteId}/logs/traces?${qs}`),
   });
@@ -446,7 +448,7 @@ export default function WebsiteLogsPage() {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Trace ID</th>
+                      <th>{t('logsTraceId')}</th>
                       <th>{t('logsTraceSpans')}</th>
                       <th>{t('logsTraceServices')}</th>
                       <th>{t('logsTraceDuration')}</th>
@@ -469,7 +471,7 @@ export default function WebsiteLogsPage() {
                         <td className="text-muted">{trace.durationMs != null ? `${trace.durationMs}ms` : '-'}</td>
                         <td>
                           <span className={`badge ${trace.hasError ? 'experiment-diagnostic-warning' : 'experiment-diagnostic-success'}`}>
-                            {trace.hasError ? 'error' : 'ok'}
+                            {trace.hasError ? t('logsTraceStatusError') : t('logsTraceStatusOk')}
                           </span>
                         </td>
                       </tr>
@@ -488,7 +490,7 @@ export default function WebsiteLogsPage() {
                       <thead>
                         <tr>
                           <th>{t('logAlertService')}</th>
-                          <th>Span</th>
+                          <th>{t('logsTraceSpan')}</th>
                           <th>{t('message')}</th>
                           <th>{t('logsTraceDuration')}</th>
                           <th>{t('status')}</th>

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { ExternalLink, FlaskConical } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
+import { ModalDialog } from '../components/ModalDialog';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -60,14 +61,7 @@ function ExperimentEditDialog({
   const canSave = Boolean(draft.name.trim() && draft.featureFlagId && draft.goalEvent.trim()) && !saving;
 
   return (
-    <div className="dialog-backdrop" onClick={onClose}>
-      <div
-        className="dialog-panel experiment-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('experimentEdit')}
-        onClick={(event) => event.stopPropagation()}
-      >
+    <ModalDialog className="experiment-dialog" aria-label={t('experimentEdit')} onClose={onClose}>
         <header className="dialog-header">
           <h2 className="dialog-title">{t('experimentEdit')}</h2>
         </header>
@@ -157,8 +151,7 @@ function ExperimentEditDialog({
             {saving ? t('saving') : t('save')}
           </Button>
         </footer>
-      </div>
-    </div>
+    </ModalDialog>
   );
 }
 

@@ -61,7 +61,7 @@ export default function WebsiteErrorDetailPage() {
               <AlertTriangle size={20} strokeWidth={2} aria-hidden />
               <div>
                 <h1 className="page-title">{display(error.message ?? error.eventName)}</h1>
-                <p className="text-muted">{display(error.name ?? 'Error')}</p>
+                <p className="text-muted">{display(error.name ?? t('errorNameFallback'))}</p>
               </div>
             </div>
 

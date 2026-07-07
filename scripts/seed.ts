@@ -33,8 +33,8 @@ Local dev defaults when password is omitted:
   username: admin
   password: flareboard
 
-Remote seed never uses a default password — pass --password or set SEED_PASSWORD.
-If the password is the dev default "flareboard", a warning is printed.
+Remote seed never uses a default password. Pass --password or set SEED_PASSWORD.
+Remote seed refuses the dev default "flareboard" and exits non-zero.
 
 Examples:
   pnpm seed
@@ -99,9 +99,10 @@ function parseArgs(argv: string[]): { remote: boolean; username: string; passwor
   }
 
   if (remote && password === LOCAL_DEFAULT_PASSWORD) {
-    console.warn(
-      'Warning: using the default dev password "flareboard" on remote production is insecure. Change it after login.',
+    console.error(
+      'Refusing to seed remote production with the dev default password "flareboard". Pass a real --password or set SEED_PASSWORD.',
     );
+    process.exit(1);
   }
 
   return { remote, username: username.trim(), password };

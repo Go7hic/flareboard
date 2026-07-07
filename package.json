@@ -17,7 +17,7 @@
     "db:migrate:remote": "pnpm --filter @flareboard/db migrate:remote",
     "seed": "tsx scripts/seed.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
-    "seed:remote": "tsx scripts/seed.ts --remote --password flareboard",
+    "seed:remote": "tsx scripts/seed.ts --remote",
     "migrate:legacy": "tsx scripts/migrate-legacy-analytics.ts",
     "validate:migration": "tsx scripts/validate-migration.ts",
     "backfill:rollups": "tsx scripts/backfill-rollups.ts",

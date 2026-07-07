@@ -13,6 +13,11 @@ import {
   YAxis,
 } from 'recharts';
 import { EmptyState } from '../components/EmptyState';
+import {
+  MasterDetailLayout,
+  MasterDetailListItem,
+  MasterDetailPane,
+} from '../components/master-detail';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -258,39 +263,35 @@ export default function InsightsPage() {
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
       <section className="panel section-gap">
-        <div className="surveys-layout">
-          <div className="surveys-list">
-            {(insightsQuery.data ?? []).map((insight) => (
-              <button
-                key={insight.id}
-                type="button"
-                className={`survey-list-item${selectedId === insight.id ? ' active' : ''}`}
-                onClick={() => selectInsight(insight)}
-              >
-                <span>
-                  <span className="survey-list-title">{insight.name}</span>
-                  <span className="text-muted">{insightTypeLabel(insight.type)}</span>
-                </span>
-              </button>
-            ))}
-            {!insightsQuery.isLoading && !(insightsQuery.data ?? []).length ? (
-              <EmptyState title={t('insightsEmptyTitle')} description={t('insightsEmptyBody')} />
-            ) : null}
-          </div>
-
-          <div className="surveys-detail">
-            <header className="surveys-detail-head">
-              <div>
-                <h2 className="section-title">{selectedId ? t('editInsight') : t('createInsight')}</h2>
-                <p className="text-muted">{t('insightBuilderLead')}</p>
-              </div>
-              {canEdit ? (
-                <Button type="button" variant="secondary" onClick={() => newInsight()}>
-                  {t('newInsight')}
-                </Button>
+        <MasterDetailLayout
+          list={
+            <>
+              {(insightsQuery.data ?? []).map((insight) => (
+                <MasterDetailListItem
+                  key={insight.id}
+                  selected={selectedId === insight.id}
+                  onSelect={() => selectInsight(insight)}
+                  title={insight.name}
+                  subtitle={insightTypeLabel(insight.type)}
+                />
+              ))}
+              {!insightsQuery.isLoading && !(insightsQuery.data ?? []).length ? (
+                <EmptyState title={t('insightsEmptyTitle')} description={t('insightsEmptyBody')} />
               ) : null}
-            </header>
-
+            </>
+          }
+          detail={
+            <MasterDetailPane
+              title={selectedId ? t('editInsight') : t('createInsight')}
+              description={t('insightBuilderLead')}
+              actions={
+                canEdit ? (
+                  <Button type="button" variant="secondary" onClick={() => newInsight()}>
+                    {t('newInsight')}
+                  </Button>
+                ) : null
+              }
+            >
             {canEdit ? (
             <>
             <div className="workflow-insights-grid">
@@ -427,8 +428,9 @@ export default function InsightsPage() {
                 <ResultPreview result={previewMutation.data?.data} />
               )}
             </div>
-          </div>
-        </div>
+            </MasterDetailPane>
+          }
+        />
       </section>
     </div>
   );

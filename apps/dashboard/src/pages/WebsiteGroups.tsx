@@ -1,10 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { ExternalLink, Search, UsersRound } from 'lucide-react';
+import { ExternalLink, UsersRound } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
+import {
+  MasterDetailLayout,
+  MasterDetailListItem,
+  MasterDetailPane,
+  ResourceSearchField,
+  useMasterDetailSelection,
+} from '../components/master-detail';
 import { WebsitePageShell } from '../components/WebsitePageShell';
-import { Input } from '../components/ui/input';
 import { api, type GroupDetailResponse, type GroupRow, type GroupsResponse } from '../lib/api';
 import { formatDate } from '../lib/formatDate';
 import { t } from '../lib/i18n';
@@ -18,7 +24,6 @@ export default function WebsiteGroupsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
   const [groupType, setGroupType] = useState('account');
   const [search, setSearch] = useState('');
-  const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
 
   const typesQuery = useQuery({
     queryKey: ['group-types', websiteId],
@@ -40,10 +45,8 @@ export default function WebsiteGroupsPage() {
   });
 
   const groups = groupsQuery.data?.groups ?? [];
-  const selectedGroup = useMemo(() => {
-    if (!groups.length) return null;
-    return groups.find((group) => group.groupKey === selectedGroupKey) ?? groups[0];
-  }, [groups, selectedGroupKey]);
+  const { setSelectedId: setSelectedGroupKey, selectedItem: selectedGroup } =
+    useMasterDetailSelection(groups, (group) => group.groupKey, { defaultToFirst: true });
 
   const detailQuery = useQuery({
     queryKey: ['group-detail', websiteId, activeType, selectedGroup?.groupKey],
@@ -85,61 +88,44 @@ export default function WebsiteGroupsPage() {
           </select>
         </header>
 
-        <div className="cohorts-search-wrap people-search">
-          <Search className="cohorts-search-icon" size={16} strokeWidth={2} aria-hidden />
-          <Input
-            type="search"
-            className="cohorts-search"
-            value={search}
-            placeholder={t('groupsSearchPlaceholder')}
-            onChange={(event) => setSearch(event.target.value)}
-            aria-label={t('groupsSearchPlaceholder')}
-          />
-        </div>
+        <ResourceSearchField
+          value={search}
+          onChange={setSearch}
+          placeholder={t('groupsSearchPlaceholder')}
+          aria-label={t('groupsSearchPlaceholder')}
+          className="people-search"
+        />
       </section>
 
       <section className="panel section-gap">
         {groupsQuery.isLoading ? (
           <div className="skeleton skeleton-block" aria-busy />
         ) : groups.length ? (
-          <div className="surveys-layout">
-            <div className="surveys-list">
-              {groups.map((group) => (
-                <button
-                  type="button"
-                  key={group.groupKey}
-                  className={`survey-list-item${group.groupKey === selectedGroup?.groupKey ? ' active' : ''}`}
-                  onClick={() => setSelectedGroupKey(group.groupKey)}
-                >
-                  <span className="errors-name-cell">
-                    <UsersRound size={16} strokeWidth={2} aria-hidden />
-                    <span>
-                      <span className="survey-list-title">{groupLabel(group)}</span>
-                      <span className="text-muted">{group.groupKey}</span>
-                    </span>
-                  </span>
-                  <span className="survey-list-meta">
+          <MasterDetailLayout
+            list={groups.map((group) => (
+              <MasterDetailListItem
+                key={group.groupKey}
+                selected={group.groupKey === selectedGroup?.groupKey}
+                onSelect={() => setSelectedGroupKey(group.groupKey)}
+                icon={<UsersRound size={16} strokeWidth={2} aria-hidden />}
+                title={groupLabel(group)}
+                subtitle={group.groupKey}
+                meta={
+                  <>
                     <span className="badge">
                       {group.people.toLocaleString()} {t('people')}
                     </span>
                     <span className="text-muted">{formatDate(group.lastSeenAt)}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            <div className="surveys-detail">
-              {selectedGroup ? (
-                <>
-                  <header className="surveys-detail-head">
-                    <div>
-                      <h3 className="section-title experiment-title">{groupLabel(selectedGroup)}</h3>
-                      <p className="text-muted">
-                        {activeType}: {selectedGroup.groupKey}
-                      </p>
-                    </div>
-                  </header>
-
+                  </>
+                }
+              />
+            ))}
+            detail={
+              selectedGroup ? (
+                <MasterDetailPane
+                  title={groupLabel(selectedGroup)}
+                  description={`${activeType}: ${selectedGroup.groupKey}`}
+                >
                   <div className="surveys-stats">
                     <div>
                       <span className="stat-label">{t('people')}</span>
@@ -258,10 +244,10 @@ export default function WebsiteGroupsPage() {
                       </table>
                     </div>
                   </div>
-                </>
-              ) : null}
-            </div>
-          </div>
+                </MasterDetailPane>
+              ) : null
+            }
+          />
         ) : (
           <EmptyState title={t('groupsEmptyTitle')} description={t('groupsEmptyBody')} />
         )}

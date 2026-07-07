@@ -1,11 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { ExternalLink, Search, UserRound } from 'lucide-react';
+import { ExternalLink, UserRound } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
+import {
+  MasterDetailLayout,
+  MasterDetailListItem,
+  MasterDetailPane,
+  ResourceSearchField,
+  useMasterDetailSelection,
+} from '../components/master-detail';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
 import { api, type PeopleResponse, type PersonDetailResponse, type PersonSummary } from '../lib/api';
 import { formatDate } from '../lib/formatDate';
 import { t } from '../lib/i18n';
@@ -32,7 +38,6 @@ export default function WebsitePeoplePage() {
   const { canEdit } = useWebsitePermissions(websiteId, 'analytics');
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
-  const [selectedPersonId, setSelectedPersonId] = useState('');
   const [editingProperties, setEditingProperties] = useState(false);
   const [propertiesDraft, setPropertiesDraft] = useState('');
   const [propertiesError, setPropertiesError] = useState('');
@@ -49,10 +54,8 @@ export default function WebsitePeoplePage() {
   });
 
   const people = peopleQuery.data?.people ?? [];
-  const selectedPerson = useMemo(
-    () => people.find((person) => person.personId === selectedPersonId) ?? people[0] ?? null,
-    [people, selectedPersonId],
-  );
+  const { setSelectedId: setSelectedPersonId, selectedItem: selectedPerson } =
+    useMasterDetailSelection(people, (person) => person.personId, { defaultToFirst: true });
 
   const detailQuery = useQuery({
     queryKey: ['person-detail', websiteId, selectedPerson?.personId],
@@ -125,74 +128,59 @@ export default function WebsitePeoplePage() {
           </div>
         </header>
 
-        <div className="cohorts-search-wrap people-search">
-          <Search className="cohorts-search-icon" size={16} strokeWidth={2} aria-hidden />
-          <Input
-            type="search"
-            className="cohorts-search"
-            value={search}
-            placeholder={t('peopleSearchPlaceholder')}
-            onChange={(event) => setSearch(event.target.value)}
-            aria-label={t('peopleSearchPlaceholder')}
-          />
-        </div>
+        <ResourceSearchField
+          value={search}
+          onChange={setSearch}
+          placeholder={t('peopleSearchPlaceholder')}
+          aria-label={t('peopleSearchPlaceholder')}
+          className="people-search"
+        />
       </section>
 
       <section className="panel section-gap">
         {peopleQuery.isLoading ? (
           <div className="skeleton skeleton-block" aria-busy />
         ) : people.length ? (
-          <div className="surveys-layout">
-            <div className="surveys-list">
-              {people.map((person) => (
-                <button
-                  type="button"
-                  key={person.personId}
-                  className={`survey-list-item${person.personId === selectedPerson?.personId ? ' active' : ''}`}
-                  onClick={() => {
-                    setSelectedPersonId(person.personId);
-                    setEditingProperties(false);
-                  }}
-                >
-                  <span className="errors-name-cell">
-                    <UserRound size={16} strokeWidth={2} aria-hidden />
-                    <span>
-                      <span className="survey-list-title">{personLabel(person)}</span>
-                      <span className="text-muted">
-                        {person.latestAlias && person.latestAlias !== person.personId
-                          ? `${person.latestAlias} · ${person.personId}`
-                          : person.personId}
-                      </span>
-                    </span>
-                  </span>
-                  <span className="survey-list-meta">
+          <MasterDetailLayout
+            list={people.map((person) => (
+              <MasterDetailListItem
+                key={person.personId}
+                selected={person.personId === selectedPerson?.personId}
+                onSelect={() => {
+                  setSelectedPersonId(person.personId);
+                  setEditingProperties(false);
+                }}
+                icon={<UserRound size={16} strokeWidth={2} aria-hidden />}
+                title={personLabel(person)}
+                subtitle={
+                  person.latestAlias && person.latestAlias !== person.personId
+                    ? `${person.latestAlias} · ${person.personId}`
+                    : person.personId
+                }
+                meta={
+                  <>
                     <span className="badge">
                       {person.sessions.toLocaleString()} {t('sessions')}
                     </span>
                     <span className="text-muted">{formatDate(person.lastSeenAt)}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            <div className="surveys-detail">
-              {selectedPerson ? (
-                <>
-                  <header className="surveys-detail-head">
-                    <div>
-                      <h3 className="section-title experiment-title">{personLabel(selectedPerson)}</h3>
-                      <p className="text-muted">
-                        {selectedPerson.latestAlias ? (
-                          <>
-                            {t('peopleAlias')}: {selectedPerson.latestAlias} · {selectedPerson.personId}
-                          </>
-                        ) : (
-                          selectedPerson.personId
-                        )}
-                      </p>
-                    </div>
-                  </header>
-
+                  </>
+                }
+              />
+            ))}
+            detail={
+              selectedPerson ? (
+                <MasterDetailPane
+                  title={personLabel(selectedPerson)}
+                  description={
+                    selectedPerson.latestAlias ? (
+                      <>
+                        {t('peopleAlias')}: {selectedPerson.latestAlias} · {selectedPerson.personId}
+                      </>
+                    ) : (
+                      selectedPerson.personId
+                    )
+                  }
+                >
                   <div className="surveys-stats">
                     <div>
                       <span className="stat-label">{t('peopleSessions')}</span>
@@ -352,10 +340,10 @@ export default function WebsitePeoplePage() {
                       </table>
                     </div>
                   </div>
-                </>
-              ) : null}
-            </div>
-          </div>
+                </MasterDetailPane>
+              ) : null
+            }
+          />
         ) : (
           <EmptyState title={t('peopleEmptyTitle')} description={t('peopleEmptyBody')} />
         )}

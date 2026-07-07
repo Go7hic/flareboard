@@ -124,6 +124,8 @@ describe('getExperimentResults', () => {
       totalExposures: 4,
       totalConversions: 3,
       conversionRate: 75,
+      truncated: false,
+      exposureSampleLimit: 500,
       controlVariant: 'control',
       controlConversionRate: 100,
       leaderVariant: 'control',
@@ -251,6 +253,8 @@ describe('getExperimentResults', () => {
     expect(result.summary).toMatchObject({
       totalExposures: 80,
       totalConversions: 52,
+      truncated: false,
+      exposureSampleLimit: 500,
       leaderVariant: 'test',
       significantVariant: 'test',
       sampleReady: true,
@@ -296,10 +300,42 @@ describe('getExperimentResults', () => {
 
     expect(result.summary).toMatchObject({
       totalExposures: 1,
+      truncated: false,
+      exposureSampleLimit: 500,
       controlVariant: null,
       decision: 'fix_setup',
       recommendation: 'no_control',
       diagnostics: [{ code: 'missing_control', level: 'warning' }],
+    });
+  });
+
+  it('marks summary truncated when exposure sample hits the query cap', async () => {
+    const later = BASE + DAY * 10;
+    const flagKey = 'checkout.truncation';
+
+    for (let i = 0; i < 501; i++) {
+      const sessionId = `trunc-session-${i}`;
+      await insertSession(sessionId);
+      await insertEvent(`trunc-exposure-${i}`, sessionId, '$feature_flag_called', later + i, {
+        '$feature_flag': flagKey,
+        '$feature_flag_response': 'control',
+        [`$feature/${flagKey}`]: 'control',
+      });
+    }
+
+    const result = await getExperimentResults(
+      env,
+      TEST_WEBSITE_ID,
+      flagKey,
+      'checkout_completed',
+      later - 1000,
+      later + 10_000,
+    );
+
+    expect(result.summary).toMatchObject({
+      totalExposures: 500,
+      truncated: true,
+      exposureSampleLimit: 500,
     });
   });
 });

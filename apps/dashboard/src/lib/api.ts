@@ -695,6 +695,8 @@ export interface ExperimentResults {
     totalExposures: number;
     totalConversions: number;
     conversionRate: number;
+    truncated?: boolean;
+    exposureSampleLimit: number;
     controlVariant: string | null;
     controlConversionRate: number | null;
     leaderVariant: string | null;

@@ -202,6 +202,14 @@ function ExperimentResultPanel({
 
   return (
     <div className="experiment-results">
+      {summary?.truncated ? (
+        <p className="experiment-results-truncated" role="status">
+          {t('experimentResultsTruncated').replace(
+            '{limit}',
+            String(summary.exposureSampleLimit ?? 500),
+          )}
+        </p>
+      ) : null}
       {summary ? (
         <>
           <div className="experiment-summary-grid">

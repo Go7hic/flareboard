@@ -589,6 +589,8 @@ const enUS: Record<string, string> = {
   experimentDiagnostic_traffic_imbalanced: 'Traffic split looks imbalanced',
   experimentDiagnostic_significant_variant: 'A variant has reached 95% confidence',
   experimentDiagnostic_no_significant_winner: 'No statistically clear winner yet',
+  experimentResultsTruncated:
+    'Results use only the most recent {limit} session exposures in this range. Narrow the date range for the full sample.',
   experimentNoResults: 'No exposure data yet. Call a feature flag on your site to start collecting results.',
   experimentTrend: 'Daily trend',
   experimentRecentSamples: 'Recent samples',
@@ -2268,6 +2270,8 @@ const zhCN: Partial<Record<string, string>> = {
   experimentDiagnostic_traffic_imbalanced: '流量分配看起来不均衡',
   experimentDiagnostic_significant_variant: '已有变体达到 95% 置信度',
   experimentDiagnostic_no_significant_winner: '暂时还没有统计上明确的赢家',
+  experimentResultsTruncated:
+    '本范围内仅统计最近 {limit} 次会话曝光，结论可能不完整。可缩小日期范围查看全部样本。',
   experimentNoResults: '还没有曝光数据。请在网站里调用功能开关后开始收集结果。',
   experimentTrend: '每日趋势',
   experimentRecentSamples: '最近样本',

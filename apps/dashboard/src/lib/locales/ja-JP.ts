@@ -568,6 +568,8 @@ export const jaJPLocale: Record<string, string> = {
   experimentDiagnostic_traffic_imbalanced: "トラフィックの配分に偏りがあるようです",
   experimentDiagnostic_significant_variant: "95% の信頼度に達したバリアントがあります",
   experimentDiagnostic_no_significant_winner: "統計的に明確な勝者はまだいません",
+  experimentResultsTruncated:
+    "この期間では直近 {limit} 件のセッションエクスポージャーのみを集計しています。全件を見るには日付範囲を狭めてください。",
   experimentNoResults: "エクスポージャーデータはまだありません。サイトでフィーチャーフラグを呼び出すと、結果の収集が始まります。",
   experimentTrend: "日次トレンド",
   experimentRecentSamples: "最近のサンプル",

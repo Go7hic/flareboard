@@ -4427,6 +4427,17 @@ code {
   gap: 0.9rem;
 }
 
+.experiment-results-truncated {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--cf-orange) 35%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--cf-orange) 8%, var(--bg-elevated));
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
 .experiment-recent {
   display: grid;
   gap: 0.65rem;

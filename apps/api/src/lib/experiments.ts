@@ -34,6 +34,8 @@ export type ExperimentResultSummary = {
   conversionRate: number;
   /** True when the exposure sample hit the query cap and results are partial. */
   truncated?: boolean;
+  /** Max session exposures loaded for result calculations. */
+  exposureSampleLimit: number;
   controlVariant: string | null;
   controlConversionRate: number | null;
   leaderVariant: string | null;
@@ -80,7 +82,12 @@ export type ExperimentTrendRow = {
   conversionRate: number;
 };
 
-function buildSummary(variants: ExperimentVariantResult[]): ExperimentResultSummary {
+const EXPOSURE_SAMPLE_LIMIT = 500;
+// D1 caps bound parameters per statement at 100; leave headroom for the
+// five named parameters.
+const SESSION_IN_CHUNK_SIZE = 90;
+
+function buildSummary(variants: ExperimentVariantResult[]): Omit<ExperimentResultSummary, 'truncated'> {
   const minimumExposuresPerVariant = 30;
   const minimumConversions = 10;
   const totalExposures = variants.reduce((sum, row) => sum + row.exposures, 0);
@@ -169,6 +176,7 @@ function buildSummary(variants: ExperimentVariantResult[]): ExperimentResultSumm
     totalExposures,
     totalConversions,
     conversionRate,
+    exposureSampleLimit: EXPOSURE_SAMPLE_LIMIT,
     controlVariant: control?.variant ?? null,
     controlConversionRate: control?.conversionRate ?? null,
     leaderVariant: leader?.variant ?? null,
@@ -185,11 +193,6 @@ function buildSummary(variants: ExperimentVariantResult[]): ExperimentResultSumm
     diagnostics,
   };
 }
-
-const EXPOSURE_SAMPLE_LIMIT = 500;
-// D1 caps bound parameters per statement at 100; leave headroom for the
-// five named parameters.
-const SESSION_IN_CHUNK_SIZE = 90;
 
 function round2(value: number) {
   return Math.round(value * 100) / 100;
@@ -383,7 +386,7 @@ export async function getExperimentResults(
   });
 
   return {
-    summary: { ...buildSummary(results), truncated },
+    summary: { ...buildSummary(results), truncated, exposureSampleLimit: EXPOSURE_SAMPLE_LIMIT },
     variants: results,
     recent: recent.sort((a, b) => b.exposedAt - a.exposedAt || b.id.localeCompare(a.id)).slice(0, 20),
     trend: [...trendByDay.values()]

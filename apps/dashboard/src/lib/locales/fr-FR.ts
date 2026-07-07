@@ -568,6 +568,8 @@ export const frFRLocale: Record<string, string> = {
   experimentDiagnostic_traffic_imbalanced: "La répartition du trafic semble déséquilibrée",
   experimentDiagnostic_significant_variant: "Une variante a atteint 95 % de confiance",
   experimentDiagnostic_no_significant_winner: "Pas encore de gagnant statistiquement net",
+  experimentResultsTruncated:
+    "Les résultats n'utilisent que les {limit} expositions de session les plus récentes sur cette période. Réduisez la plage de dates pour l'échantillon complet.",
   experimentNoResults: "Pas encore de données d'exposition. Appelez un feature flag sur votre site pour commencer à collecter des résultats.",
   experimentTrend: "Tendance quotidienne",
   experimentRecentSamples: "Échantillons récents",

@@ -176,7 +176,7 @@ export async function handleEvaluate(c: Ctx) {
   if (sessionId) {
     await recordFeatureFlagEvaluation(c.env, website!.websiteId, {
       flagKey: row.key,
-      variant: result.variant ?? null,
+      variant: typeof result.variant === 'string' ? result.variant : null,
       sessionId,
       visitId: context.visitId,
       urlPath: context.path,

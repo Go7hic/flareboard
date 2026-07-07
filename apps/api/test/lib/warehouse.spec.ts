@@ -61,6 +61,63 @@ describe('runWarehouseQuery', () => {
     ).rejects.toThrow(/website_id/i);
   });
 
+  it('rejects reads from tables outside the warehouse allowlist', async () => {
+    await expect(
+      runWarehouseQuery(env, TEST_WEBSITE_ID, 'SELECT username, password FROM user WHERE website_id = ?1'),
+    ).rejects.toThrow(/table not allowed/i);
+    await expect(
+      runWarehouseQuery(
+        env,
+        TEST_WEBSITE_ID,
+        'SELECT u.password FROM website_event e JOIN user u ON 1 = 1 WHERE e.website_id = ?1',
+      ),
+    ).rejects.toThrow(/table not allowed/i);
+    await expect(
+      runWarehouseQuery(
+        env,
+        TEST_WEBSITE_ID,
+        'SELECT t.access_code FROM website_event e, team t WHERE e.website_id = ?1',
+      ),
+    ).rejects.toThrow(/table not allowed/i);
+    await expect(
+      runWarehouseQuery(
+        env,
+        TEST_WEBSITE_ID,
+        `SELECT (SELECT password FROM user LIMIT 1) FROM website_event WHERE website_id = ?1`,
+      ),
+    ).rejects.toThrow(/table not allowed/i);
+  });
+
+  it('allows CTE names while still blocking non-allowlisted tables inside them', () => {
+    expect(
+      analyzeWarehouseQuery(
+        `WITH recent AS (SELECT event_name FROM website_event WHERE website_id = ?1 LIMIT 50)
+         SELECT * FROM recent LIMIT 50`,
+      ).valid,
+    ).toBe(true);
+    expect(
+      analyzeWarehouseQuery(
+        `WITH leak AS (SELECT password FROM user)
+         SELECT * FROM leak, website_event WHERE website_id = ?1 LIMIT 10`,
+      ).valid,
+    ).toBe(false);
+  });
+
+  it('caps user-supplied LIMIT values', () => {
+    const small = analyzeWarehouseQuery(
+      'SELECT event_name FROM website_event WHERE website_id = ?1 LIMIT 10',
+    );
+    expect(small.executableSql).toBe('SELECT event_name FROM website_event WHERE website_id = ?1 LIMIT 10');
+
+    const huge = analyzeWarehouseQuery(
+      'SELECT event_name FROM website_event WHERE website_id = ?1 LIMIT 1000000',
+    );
+    expect(huge.valid).toBe(true);
+    expect(huge.executableSql).toBe(
+      'SELECT * FROM (SELECT event_name FROM website_event WHERE website_id = ?1 LIMIT 1000000) LIMIT 1000',
+    );
+  });
+
   it('exposes queryable tables and scoped example queries', () => {
     const schema = getWarehouseSchema();
 

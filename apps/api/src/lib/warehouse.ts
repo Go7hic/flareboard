@@ -10,7 +10,11 @@ const UNSAFE_SCOPE_SQL = [
   /\bOR\s+(?:1\s*=\s*1|'1'\s*=\s*'1'|TRUE|0\s*=\s*0)\b/i,
 ];
 const DEFAULT_LIMIT = 100;
+const MAX_USER_LIMIT = 1000;
 const MAX_IMPORT_ROWS = 10_000;
+const IMPORT_BATCH_SIZE = 100;
+const MAX_IMPORT_RESPONSE_BYTES = 5 * 1024 * 1024;
+const MAX_SYNC_WEBSITES_PER_TICK = 50;
 const MIN_SCHEDULE_INTERVAL_MINUTES = 1;
 
 export type WarehouseQueryDiagnostic = {
@@ -19,6 +23,7 @@ export type WarehouseQueryDiagnostic = {
     | 'not_read_only'
     | 'multiple_statements'
     | 'forbidden_keyword'
+    | 'forbidden_table'
     | 'missing_website_scope'
     | 'missing_limit'
     | 'ready';
@@ -312,6 +317,57 @@ function normalizeSql(sql: string) {
   return sql.trim().replace(/\s+/g, ' ');
 }
 
+const ALLOWED_TABLES = new Set(WAREHOUSE_SCHEMA.tables.map((table) => table.name));
+
+function stripStringLiterals(sql: string) {
+  return sql.replace(/'(?:[^']|'')*'/g, "''").replace(/"(?:[^"]|"")*"/g, '""');
+}
+
+function collectCteNames(stripped: string) {
+  const names = new Set<string>();
+  const cteRe = /(?:\bwith\b|,)\s*([a-z_][a-z0-9_]*)\s+as\s*\(/gi;
+  let match: RegExpExecArray | null;
+  while ((match = cteRe.exec(stripped))) {
+    names.add(match[1]!.toLowerCase());
+  }
+  return names;
+}
+
+/**
+ * Extracts every table referenced via FROM/JOIN, including comma joins
+ * (`FROM a x, b y`). String literals are stripped first so quoted text
+ * cannot spoof or hide references.
+ */
+function collectTableReferences(stripped: string) {
+  const refs = new Set<string>();
+  const fromJoinRe = /\b(?:from|join)\s+([a-z_][a-z0-9_]*)/gi;
+  const commaRe = /^(?:\s+(?:as\s+)?(?!on\b|where\b|group\b|order\b|limit\b|having\b|join\b|left\b|right\b|inner\b|outer\b|cross\b|full\b|natural\b|using\b)[a-z_][a-z0-9_]*)?\s*,\s*([a-z_][a-z0-9_]*)/i;
+  let match: RegExpExecArray | null;
+  while ((match = fromJoinRe.exec(stripped))) {
+    refs.add(match[1]!.toLowerCase());
+    // Follow comma-separated table lists after the first FROM target.
+    let rest = stripped.slice(fromJoinRe.lastIndex);
+    let commaMatch = commaRe.exec(rest);
+    while (commaMatch) {
+      refs.add(commaMatch[1]!.toLowerCase());
+      rest = rest.slice(commaMatch[0].length);
+      commaMatch = commaRe.exec(rest);
+    }
+  }
+  return refs;
+}
+
+function findForbiddenTables(normalized: string): string[] {
+  const stripped = stripStringLiterals(normalized);
+  const cteNames = collectCteNames(stripped);
+  const refs = collectTableReferences(stripped);
+  const forbidden: string[] = [];
+  for (const ref of refs) {
+    if (!ALLOWED_TABLES.has(ref) && !cteNames.has(ref)) forbidden.push(ref);
+  }
+  return forbidden;
+}
+
 export function analyzeWarehouseQuery(sql: string): WarehouseQueryAnalysis {
   const normalized = normalizeSql(sql);
   const diagnostics: WarehouseQueryDiagnostic[] = [];
@@ -337,6 +393,14 @@ export function analyzeWarehouseQuery(sql: string): WarehouseQueryAnalysis {
       code: 'forbidden_keyword',
       level: 'error',
       message: 'Only read-only SELECT queries are allowed',
+    });
+  }
+  const forbiddenTables = normalized ? findForbiddenTables(normalized) : [];
+  if (forbiddenTables.length) {
+    diagnostics.push({
+      code: 'forbidden_table',
+      level: 'error',
+      message: `Table not allowed in warehouse queries: ${forbiddenTables.join(', ')}`,
     });
   }
   if (!/\bwebsite_id\s*=\s*\?1\b/i.test(normalized)) {
@@ -388,8 +452,13 @@ function assertReadOnlyScoped(sql: string) {
 }
 
 function withLimit(sql: string, hasLimit = /\blimit\s+\d+\b/i.test(sql)) {
-  if (hasLimit) return sql;
-  return `SELECT * FROM (${sql}) LIMIT ${DEFAULT_LIMIT}`;
+  if (!hasLimit) return `SELECT * FROM (${sql}) LIMIT ${DEFAULT_LIMIT}`;
+  // A user-supplied LIMIT is honored but hard-capped so a huge value cannot
+  // produce unbounded result sets; the outer LIMIT keeps smaller ones intact.
+  const declared = sql.match(/\blimit\s+(\d+)\b/gi)?.map((part) => Number(part.replace(/\D+/g, '')));
+  const maxDeclared = declared?.length ? Math.max(...declared) : 0;
+  if (maxDeclared <= MAX_USER_LIMIT) return sql;
+  return `SELECT * FROM (${sql}) LIMIT ${MAX_USER_LIMIT}`;
 }
 
 export async function runWarehouseQuery(env: Env, websiteId: string, sql: string) {
@@ -761,51 +830,50 @@ export async function runDueWarehouseScheduledQueries(env: Env, websiteId: strin
   for (const row of due.results ?? []) {
     const startedAt = Date.now();
     const nextRunAt = Math.max(now, row.nextRunAt) + row.intervalMinutes * 60_000;
+    let lastStatus: 'success' | 'failed';
+    let lastError: string | null;
+    let lastRowCount: number;
     try {
       const result = await runWarehouseQuery(env, websiteId, row.sql);
-      await recordWarehouseQueryHistory(env, websiteId, row.userId, {
-        sql: row.sql,
-        status: 'success',
-        rowCount: result.rowCount,
-        error: null,
-        durationMs: Date.now() - startedAt,
-      });
-      await env.DB.prepare(
-        `UPDATE warehouse_scheduled_query
-         SET next_run_at = ?3,
-             last_run_at = ?4,
-             last_status = 'success',
-             last_error = NULL,
-             last_row_count = ?5,
-             updated_at = ?4
-         WHERE website_id = ?1 AND scheduled_query_id = ?2`,
-      )
-        .bind(websiteId, row.id, nextRunAt, Date.now(), result.rowCount)
-        .run();
+      lastStatus = 'success';
+      lastError = null;
+      lastRowCount = result.rowCount;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      await recordWarehouseQueryHistory(env, websiteId, row.userId, {
-        sql: row.sql,
-        status: 'failed',
-        rowCount: 0,
-        error: message,
-        durationMs: Date.now() - startedAt,
-      });
-      await env.DB.prepare(
-        `UPDATE warehouse_scheduled_query
-         SET next_run_at = ?3,
-             last_run_at = ?4,
-             last_status = 'failed',
-             last_error = ?5,
-             last_row_count = 0,
-             updated_at = ?4
-         WHERE website_id = ?1 AND scheduled_query_id = ?2`,
-      )
-        .bind(websiteId, row.id, nextRunAt, Date.now(), message)
-        .run();
+      lastStatus = 'failed';
+      lastError = error instanceof Error ? error.message : String(error);
+      lastRowCount = 0;
     }
-    const updated = await getWarehouseScheduledQuery(env, websiteId, row.id);
-    if (updated) schedules.push(updated);
+    const finishedAt = Date.now();
+    await recordWarehouseQueryHistory(env, websiteId, row.userId, {
+      sql: row.sql,
+      status: lastStatus,
+      rowCount: lastRowCount,
+      error: lastError,
+      durationMs: finishedAt - startedAt,
+    });
+    await env.DB.prepare(
+      `UPDATE warehouse_scheduled_query
+       SET next_run_at = ?3,
+           last_run_at = ?4,
+           last_status = ?5,
+           last_error = ?6,
+           last_row_count = ?7,
+           updated_at = ?4
+       WHERE website_id = ?1 AND scheduled_query_id = ?2`,
+    )
+      .bind(websiteId, row.id, nextRunAt, finishedAt, lastStatus, lastError, lastRowCount)
+      .run();
+    schedules.push(
+      serializeScheduledQuery({
+        ...row,
+        nextRunAt,
+        lastRunAt: finishedAt,
+        lastStatus,
+        lastError,
+        lastRowCount,
+        updatedAt: finishedAt,
+      }),
+    );
   }
 
   return { executedCount: schedules.length, schedules };
@@ -951,6 +1019,35 @@ function syncIntervalMs(config: Record<string, unknown>): number | null {
   return Math.min(minutes, 24 * 60) * 60 * 1000;
 }
 
+function isPrivateIpv4(host: string) {
+  const parts = host.split('.').map(Number);
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return false;
+  }
+  const [a, b] = parts as [number, number, number, number];
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b! >= 64 && b! <= 127) ||
+    (a === 172 && b! >= 16 && b! <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 169 && b === 254)
+  );
+}
+
+function isPrivateIpv6(host: string) {
+  const normalized = host.replace(/^\[|\]$/g, '').toLowerCase();
+  return (
+    normalized === '::' ||
+    normalized === '::1' ||
+    normalized.startsWith('fc') ||
+    normalized.startsWith('fd') ||
+    normalized.startsWith('fe80') ||
+    normalized.startsWith('::ffff:')
+  );
+}
+
 function assertHttpImportUrl(url: string) {
   let parsed: URL;
   try {
@@ -961,10 +1058,43 @@ function assertHttpImportUrl(url: string) {
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error('Import URL must use http or https');
   }
+  if (parsed.username || parsed.password) {
+    throw new Error('Import URL must not include credentials');
+  }
   const host = parsed.hostname.toLowerCase();
-  if (host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local')) {
+  if (
+    host === 'localhost' ||
+    host.endsWith('.local') ||
+    host.endsWith('.internal') ||
+    host.endsWith('.localhost') ||
+    host === 'metadata.google.internal' ||
+    !host.includes('.') ||
+    isPrivateIpv4(host) ||
+    host.includes(':') ||
+    isPrivateIpv6(host)
+  ) {
     throw new Error('Import URL host is not allowed');
   }
+}
+
+async function fetchImportResponse(url: string) {
+  // Imports are read-only pulls; the request method is intentionally not
+  // user-configurable so this cannot be used to send state-changing requests.
+  const response = await fetch(url, {
+    method: 'GET',
+    redirect: 'error',
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const contentLength = Number(response.headers.get('content-length') ?? 0);
+  if (contentLength > MAX_IMPORT_RESPONSE_BYTES) {
+    throw new Error('Import response too large');
+  }
+  const text = await response.text();
+  if (text.length > MAX_IMPORT_RESPONSE_BYTES) {
+    throw new Error('Import response too large');
+  }
+  return text;
 }
 
 function assertScheduleInterval(intervalMinutes: number) {
@@ -977,9 +1107,7 @@ async function probeHttpJsonSource(config: Record<string, unknown>) {
   const url = typeof config.url === 'string' ? config.url.trim() : '';
   if (!url) throw new Error('Missing config.url');
   assertHttpImportUrl(url);
-  const method = typeof config.method === 'string' ? config.method.toUpperCase() : 'GET';
-  const response = await fetch(url, { method, signal: AbortSignal.timeout(15_000) });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  await fetchImportResponse(url);
 }
 
 function parseCsvLine(line: string): string[] {
@@ -1045,23 +1173,25 @@ async function importHttpRows(
     throw new Error(`Import exceeds ${MAX_IMPORT_ROWS} rows`);
   }
 
-  let imported = 0;
+  const statements = [];
   for (const row of rows) {
     const primaryKey = String(row[primaryKeyField] ?? '').trim();
     if (!primaryKey) continue;
 
-    const importRowId = `${dataSourceId}:${primaryKey}`;
-    await env.DB.prepare(
-      `INSERT OR REPLACE INTO warehouse_import
-       (import_row_id, website_id, data_source_id, primary_key, payload_json, imported_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
-    )
-      .bind(importRowId, websiteId, dataSourceId, primaryKey, JSON.stringify(row), now)
-      .run();
-    imported++;
+    statements.push(
+      env.DB.prepare(
+        `INSERT OR REPLACE INTO warehouse_import
+         (import_row_id, website_id, data_source_id, primary_key, payload_json, imported_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+      ).bind(`${dataSourceId}:${primaryKey}`, websiteId, dataSourceId, primaryKey, JSON.stringify(row), now),
+    );
   }
 
-  return imported;
+  for (let offset = 0; offset < statements.length; offset += IMPORT_BATCH_SIZE) {
+    await env.DB.batch(statements.slice(offset, offset + IMPORT_BATCH_SIZE));
+  }
+
+  return statements.length;
 }
 
 async function importHttpJsonSource(
@@ -1074,15 +1204,17 @@ async function importHttpJsonSource(
   const url = typeof config.url === 'string' ? config.url.trim() : '';
   if (!url) throw new Error('Missing config.url');
   assertHttpImportUrl(url);
-  const method = typeof config.method === 'string' ? config.method.toUpperCase() : 'GET';
   const primaryKeyField = typeof config.primaryKey === 'string' && config.primaryKey.trim()
     ? config.primaryKey.trim()
     : 'id';
 
-  const response = await fetch(url, { method, signal: AbortSignal.timeout(15_000) });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-  const body = (await response.json()) as unknown;
+  const text = await fetchImportResponse(url);
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new Error('Expected JSON array response');
+  }
   if (!Array.isArray(body)) throw new Error('Expected JSON array response');
 
   const rows = body
@@ -1102,15 +1234,11 @@ async function importHttpCsvSource(
   const url = typeof config.url === 'string' ? config.url.trim() : '';
   if (!url) throw new Error('Missing config.url');
   assertHttpImportUrl(url);
-  const method = typeof config.method === 'string' ? config.method.toUpperCase() : 'GET';
   const primaryKeyField = typeof config.primaryKey === 'string' && config.primaryKey.trim()
     ? config.primaryKey.trim()
     : 'id';
 
-  const response = await fetch(url, { method, signal: AbortSignal.timeout(15_000) });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-  const rows = parseCsvRows(await response.text()).map((row) => ({ ...row }));
+  const rows = parseCsvRows(await fetchImportResponse(url)).map((row) => ({ ...row }));
   return importHttpRows(env, websiteId, dataSourceId, rows, primaryKeyField, now);
 }
 
@@ -1167,10 +1295,15 @@ export async function syncWarehouseDataSource(
 }
 
 export async function runDueWarehouseDataSourceSyncs(env: Env, now = Date.now()) {
+  // Cap per-tick work so one cron invocation cannot exceed Worker limits;
+  // remaining websites are picked up on the next tick.
   const rows = await env.DB.prepare(
-    `SELECT DISTINCT website_id as websiteId
+    `SELECT website_id as websiteId, MIN(COALESCE(last_sync_at, 0)) as oldestSync
      FROM warehouse_data_source
-     WHERE enabled = 1`,
+     WHERE enabled = 1
+     GROUP BY website_id
+     ORDER BY oldestSync ASC
+     LIMIT ${MAX_SYNC_WEBSITES_PER_TICK}`,
   ).all<{ websiteId: string }>();
 
   let websites = 0;

@@ -40,8 +40,17 @@ function serializeShare(row: typeof schema.share.$inferSelect) {
     shareType: row.shareType,
     entityId: row.entityId,
     parameters: row.parameters,
+    expiresAt: row.expiresAt,
     createdAt: row.createdAt,
   };
+}
+
+function daysFromNow(days: number) {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+}
+
+function isShareExpired(row: typeof schema.share.$inferSelect) {
+  return row.expiresAt != null && row.expiresAt.getTime() <= Date.now();
 }
 
 function serializeBoard(b: typeof schema.board.$inferSelect) {
@@ -84,6 +93,7 @@ export async function handleCreate(c: Ctx) {
     shareType: ENTITY_TYPE.website,
     slug,
     parameters,
+    expiresAt: parsed.data.expiresInDays ? daysFromNow(parsed.data.expiresInDays) : null,
     createdAt: now,
     updatedAt: now,
   });
@@ -133,9 +143,15 @@ export async function handleUpdate(c: Ctx) {
   const parsed = updateShareSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
 
+  const expiresAt =
+    parsed.data.expiresInDays === undefined
+      ? share.expiresAt
+      : parsed.data.expiresInDays === null
+        ? null
+        : daysFromNow(parsed.data.expiresInDays);
   await db
     .update(schema.share)
-    .set({ name: parsed.data.name ?? share.name, updatedAt: new Date() })
+    .set({ name: parsed.data.name ?? share.name, expiresAt, updatedAt: new Date() })
     .where(eq(schema.share.shareId, shareId));
 
   const [updated] = await db.select().from(schema.share).where(eq(schema.share.shareId, shareId)).limit(1);
@@ -174,7 +190,7 @@ export async function handlePublicGet(c: Context<{ Bindings: Env }>) {
   const slug = c.req.param('slug');
   if (!slug) return notFound();
   const share = await getShareBySlug(c.env, slug);
-  if (!share) return notFound();
+  if (!share || isShareExpired(share)) return notFound();
 
   if (share.shareType === ENTITY_TYPE.board) {
     const db = createDb(c.env.DB);

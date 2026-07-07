@@ -382,6 +382,7 @@ export const share = sqliteTable(
     shareType: integer('share_type').notNull(),
     slug: text('slug').notNull().unique(),
     parameters: text('parameters', { mode: 'json' }).notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
   },

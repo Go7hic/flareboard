@@ -575,6 +575,7 @@ export const updateAdminUserSchema = z.object({
 
 export const updateShareSchema = z.object({
   name: z.string().max(100).optional(),
+  expiresInDays: z.number().int().min(1).max(3650).nullable().optional(),
 });
 
 export const statsQuerySchema = z.object({
@@ -632,6 +633,7 @@ export const joinTeamSchema = z.object({
 export const createShareSchema = z.object({
   websiteId: z.string().uuid(),
   name: z.string().max(100).optional(),
+  expiresInDays: z.number().int().min(1).max(3650).optional(),
 });
 
 export const createSegmentSchema = z.object({

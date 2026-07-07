@@ -836,8 +836,36 @@ async function processPerMessageFallback(
   }
 }
 
+const DLQ_QUEUE = 'flareboard-events-dlq';
+
+/** Persists retry-exhausted messages so failures are visible and replayable instead of silently dropped. */
+async function persistDeadEvents(batch: MessageBatch<QueueMessage>, env: Env) {
+  const now = Date.now();
+  const statements = batch.messages.map((message) =>
+    env.DB.prepare(
+      `INSERT INTO dead_event (dead_event_id, queue, message_type, payload_json, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5)`,
+    ).bind(
+      crypto.randomUUID(),
+      DLQ_QUEUE,
+      (message.body as { type?: string } | null)?.type ?? null,
+      JSON.stringify(message.body ?? null),
+      now,
+    ),
+  );
+  for (let i = 0; i < statements.length; i += DB_BATCH_SIZE) {
+    await env.DB.batch(statements.slice(i, i + DB_BATCH_SIZE));
+  }
+  batch.ackAll();
+}
+
 export default {
   async queue(batch: MessageBatch<QueueMessage>, env: Env) {
+    if (batch.queue === DLQ_QUEUE) {
+      await persistDeadEvents(batch, env);
+      return;
+    }
+
     const hostedBilling = env.HOSTED_MODE === 'true';
     const messages = [...batch.messages]
       .sort((a, b) => MESSAGE_ORDER[a.body.type] - MESSAGE_ORDER[b.body.type])

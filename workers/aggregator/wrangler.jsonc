@@ -25,6 +25,11 @@
         "max_batch_size": 50,
         "max_batch_timeout": 2,
         "dead_letter_queue": "flareboard-events-dlq"
+      },
+      {
+        "queue": "flareboard-events-dlq",
+        "max_batch_size": 50,
+        "max_batch_timeout": 30
       }
     ]
   },
@@ -57,6 +62,11 @@
             "max_batch_size": 50,
             "max_batch_timeout": 2,
             "dead_letter_queue": "flareboard-events-dlq"
+          },
+          {
+            "queue": "flareboard-events-dlq",
+            "max_batch_size": 50,
+            "max_batch_timeout": 30
           }
         ]
       }

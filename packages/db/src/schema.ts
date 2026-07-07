@@ -1080,6 +1080,18 @@ export const sessionReplaySaved = sqliteTable(
   ],
 );
 
+export const deadEvent = sqliteTable(
+  'dead_event',
+  {
+    deadEventId: text('dead_event_id').primaryKey(),
+    queue: text('queue').notNull(),
+    messageType: text('message_type'),
+    payloadJson: text('payload_json').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [index('dead_event_created_idx').on(t.createdAt)],
+);
+
 export type User = typeof user.$inferSelect;
 export type Website = typeof website.$inferSelect;
 export type Session = typeof session.$inferSelect;

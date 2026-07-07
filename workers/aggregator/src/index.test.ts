@@ -174,6 +174,30 @@ describe('aggregator queue batching', () => {
     expect(d1.statementsContaining('INSERT INTO rollup_event_daily')).toHaveLength(0);
   });
 
+  it('persists dead-letter messages instead of dropping them', async () => {
+    const d1 = new FakeD1Database();
+    const dead = createMessage({
+      type: 'event',
+      data: {
+        id: 'poison-1',
+        websiteId: 'website-1',
+        sessionId: 'session-1',
+        visitId: 'visit-1',
+        createdAt: Date.UTC(2026, 0, 1, 12),
+        urlPath: '/',
+        eventType: EVENT_TYPE.pageView,
+      },
+    });
+    const batch = { ...createBatch([dead]), queue: 'flareboard-events-dlq' };
+
+    await worker.queue(batch as unknown as MessageBatch<QueueMessage>, {
+      DB: d1 as unknown as D1Database,
+    } satisfies Env);
+
+    expect(d1.statementsContaining('INSERT INTO dead_event')).toHaveLength(1);
+    expect(batch.ackAll).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps separate daily session rollups for separate visits in the same session', async () => {
     const d1 = new FakeD1Database();
     const firstVisit = createMessage({

@@ -447,6 +447,20 @@ export const rollupPageviewSeries = sqliteTable(
   (t) => [],
 );
 
+export const rollupSeriesBucket = sqliteTable(
+  'rollup_series_bucket',
+  {
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    unit: text('unit').notNull(),
+    bucket: text('bucket').notNull(),
+    sessionId: text('session_id').notNull(),
+    visitId: text('visit_id').notNull(),
+  },
+  (t) => [index('rollup_series_bucket_lookup_idx').on(t.websiteId, t.unit, t.bucket)],
+);
+
 export const rollupDimensionDaily = sqliteTable(
   'rollup_dimension_daily',
   {

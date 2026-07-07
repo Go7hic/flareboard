@@ -42,6 +42,7 @@ Drizzle schema and D1 SQL migrations in `migrations/`.
 | `0033_user_token_version.sql` | `user.token_version` for session revocation on password change |
 | `0034_dead_event.sql` | `dead_event` table for retry-exhausted queue messages |
 | `0035_website_retention.sql` | Opt-in `website.retention_days` for raw-data purge |
+| `0036_rollup_series_bucket.sql` | Per-bucket session/visit identities for visitor & visit time series |
 
 ## Deletion model
 

@@ -3,7 +3,7 @@ import { eq, inArray, or } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
 import { ENTITY_TYPE, createBoardSchema, updateBoardSchema, uuid } from '@flareboard/shared';
 import type { Env } from '../env';
-import { canMutateTeamResource } from '../lib/access';
+import { canMutateTeam, canMutateTeamResource } from '../lib/access';
 import {
   parseBoardWidgets,
   validateBoardWidgetsForUser,
@@ -56,6 +56,10 @@ export async function handleCreate(c: Ctx) {
   const body = await c.req.json().catch(() => null);
   const parsed = createBoardSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
+
+  if (parsed.data.teamId && !(await canMutateTeam(c.env, parsed.data.teamId, c.get('user')))) {
+    return json({ message: 'Read-only access' }, 403);
+  }
 
   const widgetError = await validateBoardWidgetsForUser(
     c.env,

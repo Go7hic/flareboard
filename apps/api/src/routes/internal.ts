@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import type { Env } from '../env';
 import { backfillActionTags } from '../lib/action-backfill';
 import { sendEmail } from '../lib/email';
-import { json } from '../lib/response';
+import { checkIpRateLimit, getTrustedClientIp } from '../lib/rate-limit';
+import { getAppSecret, json } from '../lib/response';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -15,14 +16,26 @@ function timingSafeEqualString(a: string, b: string) {
   return mismatch === 0;
 }
 
-function isAuthorized(secret: string, header: string | undefined) {
+function isAuthorized(c: { env: Env }, header: string | undefined) {
   if (!header?.startsWith('Bearer ')) return false;
+  let secret: string;
+  try {
+    secret = getAppSecret(c);
+  } catch {
+    // Misconfigured secret must fail closed with 401, never 500.
+    return false;
+  }
+  if (!secret) return false;
   return timingSafeEqualString(header.slice('Bearer '.length), secret);
 }
 
 app.post('/deliver-email', async (c) => {
-  if (!isAuthorized(c.env.APP_SECRET, c.req.header('Authorization'))) {
+  if (!isAuthorized(c, c.req.header('Authorization'))) {
     return json({ error: 'Unauthorized' }, 401);
+  }
+  const rl = await checkIpRateLimit(c.env, 'internal-email', getTrustedClientIp(c.req.raw), 60, 3600);
+  if (!rl.allowed) {
+    return json({ error: 'Rate limit exceeded' }, 429);
   }
 
   const body = await c.req.json<{ to?: string; subject?: string; text?: string; html?: string }>();
@@ -44,7 +57,7 @@ app.post('/deliver-email', async (c) => {
 });
 
 app.post('/backfill-action-tags', async (c) => {
-  if (!isAuthorized(c.env.APP_SECRET, c.req.header('Authorization'))) {
+  if (!isAuthorized(c, c.req.header('Authorization'))) {
     return json({ error: 'Unauthorized' }, 401);
   }
 

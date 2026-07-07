@@ -24,6 +24,19 @@ export async function userHasTeamAccess(env: Env, userId: string, teamId: string
   return rows[0] ?? null;
 }
 
+/**
+ * Whether a user id (not necessarily the caller) can access a website —
+ * used to validate references like error-issue assignees.
+ */
+export async function userIdHasWebsiteAccess(env: Env, website: Website, userId: string) {
+  if (website.userId === userId) return true;
+  if (website.teamId) {
+    const membership = await userHasTeamAccess(env, userId, website.teamId);
+    return Boolean(membership);
+  }
+  return false;
+}
+
 export async function canAccessWebsite(env: Env, website: Website, user: AuthUser) {
   if (user.role === ROLES.admin) return true;
   if (website.userId === user.userId) return true;

@@ -8,7 +8,7 @@ import {
   uploadErrorSourceMapSchema,
 } from '@flareboard/shared';
 import type { Env } from '../env';
-import { canAccessWebsite, canMutateWebsite } from '../lib/access';
+import { canAccessWebsite, canMutateWebsite, userIdHasWebsiteAccess } from '../lib/access';
 import {
   addErrorIssueComment,
   createErrorAlertRule,
@@ -92,6 +92,13 @@ export async function handleUpdateIssue(c: Ctx) {
   const body = await c.req.json().catch(() => null);
   const parsed = updateErrorIssueStateSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
+
+  if (
+    parsed.data.assigneeUserId &&
+    !(await userIdHasWebsiteAccess(c.env, website, parsed.data.assigneeUserId))
+  ) {
+    return badRequest('Assignee does not have access to this website.');
+  }
 
   const state = await updateErrorIssueState(
     c.env,

@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
 import { checkPassword, hashPassword, updatePasswordSchema, updateProfileSchema } from '@flareboard/shared';
 import type { Env } from '../env';
+import { bumpTokenVersion, issueAuthToken } from '../lib/auth-token';
 import { badRequest, json, unauthorized } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
 
@@ -45,7 +46,10 @@ export async function handleUpdatePassword(c: Ctx) {
     .set({ password: hashPassword(parsed.data.newPassword), updatedAt: new Date() })
     .where(eq(schema.user.userId, user.userId));
 
-  return json({ ok: true });
+  // Invalidate other sessions, then hand this device a fresh token so it stays signed in.
+  await bumpTokenVersion(c.env, user.userId);
+  const token = await issueAuthToken(c, { userId: user.userId, role: user.role });
+  return json({ ok: true, token });
 }
 
 export async function handleUpdateProfile(c: Ctx) {

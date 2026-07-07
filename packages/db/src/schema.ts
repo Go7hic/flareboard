@@ -9,6 +9,8 @@ export const user = sqliteTable('user', {
   emailVerifiedAt: integer('email_verified_at', { mode: 'timestamp_ms' }),
   logoUrl: text('logo_url'),
   displayName: text('display_name'),
+  // Bumped on password change to invalidate every previously issued token.
+  tokenVersion: integer('token_version').notNull().default(0),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
   deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),

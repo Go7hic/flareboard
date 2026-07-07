@@ -3,7 +3,6 @@ import { eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
 import {
   checkPassword,
-  createSecureToken,
   forgotPasswordSchema,
   hashPassword,
   loginSchema,
@@ -17,6 +16,7 @@ import {
   verifySsoToken,
 } from '@flareboard/shared';
 import type { Env } from '../env';
+import { bumpTokenVersion, issueAuthToken } from '../lib/auth-token';
 import {
   buildOAuthAuthorizeUrl,
   consumeOAuthState,
@@ -120,7 +120,7 @@ export async function handleVerifyEmail(c: Ctx) {
   const user = await getUserById(c.env, userId);
   if (!user) return badRequest('User not found');
 
-  const jwt = await createSecureToken({ userId: user.userId, role: user.role }, getAppSecret(c));
+  const jwt = await issueAuthToken(c, { userId: user.userId, role: user.role });
   return json({
     token: jwt,
     user: { id: user.userId, username: user.username, role: user.role },
@@ -149,7 +149,7 @@ export async function handleLogin(c: Ctx) {
     return json({ message: 'Please verify your email before signing in.' }, 403);
   }
 
-  const token = await createSecureToken({ userId: user.userId, role: user.role }, getAppSecret(c));
+  const token = await issueAuthToken(c, { userId: user.userId, role: user.role });
   return json({ token, user: { id: user.userId, username: user.username, role: user.role } });
 }
 
@@ -184,7 +184,7 @@ export async function handleSso(c: Ctx) {
   if (!user) return unauthorized({ message: 'User not found' });
 
   const role = user.role;
-  const token = await createSecureToken({ userId: user.userId, role }, getAppSecret(c));
+  const token = await issueAuthToken(c, { userId: user.userId, role });
   return json({
     token,
     user: { id: user.userId, username: user.username, role },
@@ -250,10 +250,7 @@ export async function handleOAuthCallback(c: Ctx) {
     return c.redirect(`${dashboardBase(c)}/login?error=oauth_failed`, 302);
   }
 
-  const jwt = await createSecureToken(
-    { userId: result.user.userId, role: result.user.role },
-    getAppSecret(c),
-  );
+  const jwt = await issueAuthToken(c, { userId: result.user.userId, role: result.user.role });
   const dest = result.returnTo ?? '/dashboard';
   return c.redirect(
     `${dashboardBase(c)}/login?token=${encodeURIComponent(jwt)}&next=${encodeURIComponent(dest)}`,
@@ -304,6 +301,7 @@ export async function handleResetPassword(c: Ctx) {
     .set({ password: hashPassword(parsed.data.password), updatedAt: new Date() })
     .where(eq(schema.user.userId, userId));
 
+  await bumpTokenVersion(c.env, userId);
   await c.env.CACHE.delete(`reset:${parsed.data.token}`);
   return json({ ok: true });
 }

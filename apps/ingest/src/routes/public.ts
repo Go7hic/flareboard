@@ -3,6 +3,20 @@ import { EVENT_TYPE, getSalt, uuid, visitSalt, type QueueMessage } from '@flareb
 import type { Env } from '../env';
 import { json } from '../lib/response';
 import { getLinkBySlug, getPixelBySlug } from '../lib/queries';
+import { checkIpRateLimit, getTrustedClientIp } from '../lib/rate-limit';
+
+const REDIRECT_HIT_LIMIT = 120;
+const REDIRECT_HIT_WINDOW_SEC = 60;
+
+/**
+ * Gates only the queue write, never the visitor-facing redirect or pixel.
+ * A flood drops analytics for the abuser without breaking the link or image.
+ */
+async function enqueueAllowed(env: Env, prefix: string, slug: string, req: Request) {
+  const ip = getTrustedClientIp(req);
+  const rl = await checkIpRateLimit(env, `${prefix}:${slug}`, ip, REDIRECT_HIT_LIMIT, REDIRECT_HIT_WINDOW_SEC);
+  return rl.allowed;
+}
 
 const TRANSPARENT_GIF = Uint8Array.from(
   atob('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'),
@@ -108,7 +122,9 @@ export async function handleLinkRedirect(c: Ctx) {
   const link = await getLinkBySlug(c.env, slug);
   if (!link) return json({ message: 'Not found' }, 404);
 
-  await enqueueLinkHit(c.env, link.linkId, c.req.raw);
+  if (await enqueueAllowed(c.env, 'link', slug, c.req.raw)) {
+    await enqueueLinkHit(c.env, link.linkId, c.req.raw);
+  }
   return c.redirect(link.url, 302);
 }
 
@@ -118,7 +134,9 @@ export async function handleLinkRedirectApi(c: Ctx) {
   const link = await getLinkBySlug(c.env, slug);
   if (!link) return json({ message: 'Not found' }, 404);
 
-  await enqueueLinkHit(c.env, link.linkId, c.req.raw);
+  if (await enqueueAllowed(c.env, 'link', slug, c.req.raw)) {
+    await enqueueLinkHit(c.env, link.linkId, c.req.raw);
+  }
   return c.redirect(link.url, 302);
 }
 
@@ -128,7 +146,7 @@ export async function handlePixelGif(c: Ctx) {
     return new Response(TRANSPARENT_GIF, { headers: { 'Content-Type': 'image/gif' } });
   }
   const pixel = await getPixelBySlug(c.env, slug);
-  if (pixel) {
+  if (pixel && (await enqueueAllowed(c.env, 'pixel', slug, c.req.raw))) {
     await enqueuePixelHit(c.env, pixel.pixelId, c.req.raw);
   }
 

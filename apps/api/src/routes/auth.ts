@@ -38,6 +38,12 @@ const LOGIN_WINDOW_SEC = 60;
 const RESET_TTL = 3600;
 const VERIFY_TTL = 86400;
 
+/** Returns a 429 response when the caller is over the limit, else null. */
+async function rateLimited(c: Ctx, prefix: string, limit: number, windowSec: number) {
+  const rl = await checkIpRateLimit(c.env, prefix, getTrustedClientIp(c.req.raw), limit, windowSec);
+  return rl.allowed ? null : json({ message: 'Too many attempts' }, 429);
+}
+
 /** Production hosted SaaS only — local/dev skips email verification for seeded admins. */
 function requiresEmailVerification(env: Env): boolean {
   return isHostedMode(env) && env.ENVIRONMENT === 'production';
@@ -94,6 +100,9 @@ export async function handleRegister(c: Ctx) {
 }
 
 export async function handleVerifyEmail(c: Ctx) {
+  const limited = await rateLimited(c, 'verify-email', 10, 300);
+  if (limited) return limited;
+
   const body = await c.req.json().catch(() => null);
   const parsed = verifyEmailSchema.safeParse(body);
   if (!parsed.success) return badRequest('Invalid verification token');
@@ -156,6 +165,9 @@ function getSsoSecret(c: Ctx): string | null {
 }
 
 export async function handleSso(c: Ctx) {
+  const limited = await rateLimited(c, 'sso', 10, 60);
+  if (limited) return limited;
+
   const secret = getSsoSecret(c);
   if (!secret) {
     return json({ message: 'SSO is not configured' }, 503);
@@ -221,6 +233,11 @@ export async function handleOAuthRedirect(c: Ctx) {
 }
 
 export async function handleOAuthCallback(c: Ctx) {
+  const rl = await checkIpRateLimit(c.env, 'oauth-callback', getTrustedClientIp(c.req.raw), 20, 60);
+  if (!rl.allowed) {
+    return c.redirect(`${dashboardBase(c)}/login?error=rate_limited`, 302);
+  }
+
   const provider = c.req.param('provider') ?? '';
   const code = c.req.query('code') ?? null;
   const state = c.req.query('state') ?? null;
@@ -245,6 +262,9 @@ export async function handleOAuthCallback(c: Ctx) {
 }
 
 export async function handleForgotPassword(c: Ctx) {
+  const limited = await rateLimited(c, 'forgot-password', 5, 900);
+  if (limited) return limited;
+
   const body = await c.req.json().catch(() => null);
   const parsed = forgotPasswordSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
@@ -268,6 +288,9 @@ export async function handleForgotPassword(c: Ctx) {
 }
 
 export async function handleResetPassword(c: Ctx) {
+  const limited = await rateLimited(c, 'reset-password', 10, 300);
+  if (limited) return limited;
+
   const body = await c.req.json().catch(() => null);
   const parsed = resetPasswordSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);

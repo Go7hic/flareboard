@@ -3432,6 +3432,27 @@ code {
   font-size: 0.875rem;
 }
 
+.cohort-conditions-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.segment-parameters-preview {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .overview-dimensions-bottom {
   display: flex;
   flex-direction: column;

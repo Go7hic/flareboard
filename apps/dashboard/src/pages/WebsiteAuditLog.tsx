@@ -1,6 +1,14 @@
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
+import { ClipboardList } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
+import {
+  MasterDetailLayout,
+  MasterDetailListItem,
+  MasterDetailPane,
+  useMasterDetailSelection,
+} from '../components/master-detail';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { api } from '../lib/api';
 import { t } from '../lib/i18n';
@@ -32,8 +40,8 @@ function formatDate(value: string | number | null) {
 }
 
 function formatMetadata(metadata: Record<string, unknown> | null) {
-  if (!metadata || !Object.keys(metadata).length) return '-';
-  return JSON.stringify(metadata);
+  if (!metadata || !Object.keys(metadata).length) return null;
+  return JSON.stringify(metadata, null, 2);
 }
 
 export default function WebsiteAuditLogPage() {
@@ -45,6 +53,20 @@ export default function WebsiteAuditLogPage() {
   });
 
   const items = auditQuery.data?.items ?? [];
+  const { selectedId, setSelectedId, selectedItem: selectedEntry } = useMasterDetailSelection(
+    items,
+    (entry) => entry.id,
+  );
+
+  useEffect(() => {
+    if (!items.length) {
+      setSelectedId(null);
+      return;
+    }
+    if (!selectedId || !items.some((entry) => entry.id === selectedId)) {
+      setSelectedId(items[0].id);
+    }
+  }, [items, selectedId, setSelectedId]);
 
   return (
     <div className="page page-audit-log">
@@ -61,32 +83,51 @@ export default function WebsiteAuditLogPage() {
         {auditQuery.isLoading ? <div className="skeleton skeleton-block" aria-busy /> : null}
 
         {!auditQuery.isLoading && items.length ? (
-          <div className="table-scroll">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>{t('action')}</th>
-                  <th>{t('operator')}</th>
-                  <th>{t('entity')}</th>
-                  <th>{t('metadata')}</th>
-                  <th>{t('when')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((entry) => (
-                  <tr key={entry.id}>
-                    <td>{entry.action}</td>
-                    <td>{entry.username}</td>
-                    <td>{entry.entityType}</td>
-                    <td>
-                      <code>{formatMetadata(entry.metadata)}</code>
-                    </td>
-                    <td>{formatDate(entry.createdAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <MasterDetailLayout
+            list={items.map((entry) => (
+              <MasterDetailListItem
+                key={entry.id}
+                selected={entry.id === selectedId}
+                onSelect={() => setSelectedId(entry.id)}
+                icon={<ClipboardList size={16} strokeWidth={2} aria-hidden />}
+                title={entry.action}
+                subtitle={`${entry.username} · ${entry.entityType}`}
+                meta={<span className="text-muted">{formatDate(entry.createdAt)}</span>}
+              />
+            ))}
+            detail={
+              selectedEntry ? (
+                <MasterDetailPane
+                  title={selectedEntry.action}
+                  description={
+                    <>
+                      <p className="text-muted">
+                        {t('operator')}: {selectedEntry.username}
+                      </p>
+                      <p className="text-muted">
+                        {t('entity')}: {selectedEntry.entityType}
+                        {selectedEntry.entityId ? ` · ${selectedEntry.entityId}` : ''}
+                      </p>
+                      <p className="text-muted">
+                        {t('when')}: {formatDate(selectedEntry.createdAt)}
+                      </p>
+                    </>
+                  }
+                >
+                  <div className="detail-section">
+                    <h4 className="section-title experiment-title">{t('metadata')}</h4>
+                    {formatMetadata(selectedEntry.metadata) ? (
+                      <pre className="mono text-muted segment-parameters-preview">
+                        {formatMetadata(selectedEntry.metadata)}
+                      </pre>
+                    ) : (
+                      <p className="text-muted">—</p>
+                    )}
+                  </div>
+                </MasterDetailPane>
+              ) : null
+            }
+          />
         ) : null}
 
         {!auditQuery.isLoading && !items.length ? (

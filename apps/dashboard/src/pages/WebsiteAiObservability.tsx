@@ -1,8 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { Bot, ExternalLink } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
+import {
+  MasterDetailLayout,
+  MasterDetailListItem,
+  MasterDetailPane,
+  useMasterDetailSelection,
+} from '../components/master-detail';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
@@ -67,6 +73,22 @@ export default function WebsiteAiObservabilityPage() {
 
   const stats = aiQuery.data?.stats;
   const events = aiQuery.data?.events ?? [];
+  const {
+    selectedId: selectedEventId,
+    setSelectedId: setSelectedEventId,
+    selectedItem: selectedEvent,
+  } = useMasterDetailSelection(events, (event) => event.id);
+
+  useEffect(() => {
+    if (!events.length) {
+      setSelectedEventId(null);
+      return;
+    }
+    if (!selectedEventId || !events.some((event) => event.id === selectedEventId)) {
+      setSelectedEventId(events[0].id);
+    }
+  }, [events, selectedEventId, setSelectedEventId]);
+
   const models = stats?.models ?? [];
   const statuses = stats?.statuses ?? [];
   const providers = stats?.providers ?? [];
@@ -418,53 +440,80 @@ export default function WebsiteAiObservabilityPage() {
         {aiQuery.isLoading ? <div className="skeleton" style={{ height: '8rem' }} /> : null}
 
         {!aiQuery.isLoading && events.length ? (
-          <div className="table-scroll">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>{t('aiModel')}</th>
-                  <th>{t('status')}</th>
-                  <th>{t('aiTokens')}</th>
-                  <th>{t('aiCost')}</th>
-                  <th>{t('aiLatency')}</th>
-                  <th>{t('session')}</th>
-                  <th>{t('created')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.map((event) => (
-                  <tr key={event.id}>
-                    <td>
-                      <div className="errors-name-cell">
-                        <Bot size={16} strokeWidth={2} aria-hidden />
-                        <div>
-                          <div className="errors-message">{event.model ?? t('unknown')}</div>
-                          <div className="text-muted">
-                            {[event.provider, event.release, event.environment].filter(Boolean).join(' · ') || '-'}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`badge ${event.status === 'error' ? 'log-level-error' : 'badge-accent'}`}>
-                        {event.status ?? t('aiStatus_success')}
-                      </span>
-                    </td>
-                    <td className="num">{(event.totalTokens ?? 0).toLocaleString()}</td>
-                    <td className="num">{money(event.costUsd)}</td>
-                    <td className="num">{event.latencyMs ?? 0}ms</td>
-                    <td>
-                      <Link to={`/websites/${websiteId}/sessions/${event.sessionId}`} className="inline-link">
-                        {event.sessionId.slice(0, 8)}
-                        <ExternalLink size={12} strokeWidth={2} aria-hidden />
-                      </Link>
-                    </td>
-                    <td className="text-muted">{formatDate(event.createdAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <MasterDetailLayout
+            list={events.map((event) => (
+              <MasterDetailListItem
+                key={event.id}
+                selected={event.id === selectedEventId}
+                onSelect={() => setSelectedEventId(event.id)}
+                icon={<Bot size={16} strokeWidth={2} aria-hidden />}
+                title={event.model ?? t('unknown')}
+                subtitle={[event.provider, event.release, event.environment].filter(Boolean).join(' · ') || '-'}
+                meta={
+                  <span
+                    className={`badge ${event.status === 'error' ? 'log-level-error' : 'badge-accent'}`}
+                  >
+                    {event.status ?? t('aiStatus_success')}
+                  </span>
+                }
+              />
+            ))}
+            detail={
+              selectedEvent ? (
+                <MasterDetailPane
+                  title={selectedEvent.model ?? t('unknown')}
+                  description={
+                    <p className="text-muted">
+                      {[selectedEvent.provider, selectedEvent.release, selectedEvent.environment]
+                        .filter(Boolean)
+                        .join(' · ') || '-'}
+                    </p>
+                  }
+                  actions={
+                    <Link
+                      to={`/websites/${websiteId}/sessions/${selectedEvent.sessionId}`}
+                      className="inline-link"
+                    >
+                      {selectedEvent.sessionId.slice(0, 8)}
+                      <ExternalLink size={12} strokeWidth={2} aria-hidden />
+                    </Link>
+                  }
+                >
+                  <div className="detail-stats">
+                    <div>
+                      <span className="stat-label">{t('status')}</span>
+                      <strong className="stat-value">{selectedEvent.status ?? t('aiStatus_success')}</strong>
+                    </div>
+                    <div>
+                      <span className="stat-label">{t('aiTokens')}</span>
+                      <strong className="stat-value">
+                        {(selectedEvent.totalTokens ?? 0).toLocaleString()}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="stat-label">{t('aiCost')}</span>
+                      <strong className="stat-value">{money(selectedEvent.costUsd)}</strong>
+                    </div>
+                    <div>
+                      <span className="stat-label">{t('aiLatency')}</span>
+                      <strong className="stat-value">{selectedEvent.latencyMs ?? 0}ms</strong>
+                    </div>
+                  </div>
+                  <div className="detail-section">
+                    <p className="text-muted">
+                      {t('aiQuality')}: {selectedEvent.quality ?? '—'}
+                    </p>
+                    <p className="text-muted">
+                      {t('page')}: {selectedEvent.urlPath || '/'}
+                    </p>
+                    <p className="text-muted">
+                      {t('created')}: {formatDate(selectedEvent.createdAt)}
+                    </p>
+                  </div>
+                </MasterDetailPane>
+              ) : null
+            }
+          />
         ) : null}
 
         {!aiQuery.isLoading && !events.length ? (

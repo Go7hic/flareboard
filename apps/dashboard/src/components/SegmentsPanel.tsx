@@ -1,15 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Layers } from 'lucide-react';
 import { EmptyState } from './EmptyState';
 import { SegmentFormDialog } from './SegmentFormDialog';
+import {
+  MasterDetailLayout,
+  MasterDetailListItem,
+  MasterDetailPane,
+  ResourceSearchField,
+  useMasterDetailSelection,
+} from './master-detail';
 import { Button } from './ui/button';
 import { api, type Segment } from '../lib/api';
 import { t } from '../lib/i18n';
 
 type SegmentRow = Segment & { createdAt?: string };
-
-const PAGE_SIZE = 10;
 
 function formatCreatedAt(value?: string) {
   if (!value) return '—';
@@ -21,7 +27,6 @@ function formatCreatedAt(value?: string) {
 export function SegmentsPanel({ websiteId }: { websiteId: string }) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
   const [editId, setEditId] = useState<string | undefined>();
   const [deleteTarget, setDeleteTarget] = useState<SegmentRow | null>(null);
@@ -47,9 +52,20 @@ export function SegmentsPanel({ websiteId }: { websiteId: string }) {
     return rows.filter((row) => row.name.toLowerCase().includes(query));
   }, [segmentsQuery.data, search]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, pageCount - 1);
-  const pageRows = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  const { selectedId, setSelectedId, selectedItem: selectedSegment } = useMasterDetailSelection(
+    filtered,
+    (row) => row.id,
+  );
+
+  useEffect(() => {
+    if (!filtered.length) {
+      setSelectedId(null);
+      return;
+    }
+    if (!selectedId || !filtered.some((row) => row.id === selectedId)) {
+      setSelectedId(filtered[0].id);
+    }
+  }, [filtered, selectedId, setSelectedId]);
 
   function openCreate() {
     setEditId(undefined);
@@ -70,32 +86,12 @@ export function SegmentsPanel({ websiteId }: { websiteId: string }) {
     <>
       <section className="panel cohorts-panel">
         <header className="cohorts-panel-head">
-          <div className="cohorts-search-wrap">
-            <svg
-              className="cohorts-search-icon"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              aria-hidden
-            >
-              <circle cx="11" cy="11" r="7" />
-              <path d="M20 20l-3-3" />
-            </svg>
-            <input
-              type="search"
-              className="input cohorts-search"
-              placeholder={t('segmentSearch')}
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setPage(0);
-              }}
-              aria-label={t('segmentSearch')}
-            />
-          </div>
+          <ResourceSearchField
+            value={search}
+            onChange={setSearch}
+            placeholder={t('segmentSearch')}
+            aria-label={t('segmentSearch')}
+          />
           <Button type="button" variant="primary" size="sm" onClick={openCreate}>
             {t('createSegment')}
           </Button>
@@ -106,89 +102,75 @@ export function SegmentsPanel({ websiteId }: { websiteId: string }) {
         ) : filtered.length === 0 ? (
           <EmptyState title={t('noSegments')} />
         ) : (
-          <>
-            <div className="table-wrap">
-              <table className="data-table cohorts-table">
-                <thead>
-                  <tr>
-                    <th scope="col">{t('name')}</th>
-                    <th scope="col">{t('segmentCreated')}</th>
-                    <th scope="col" className="cohorts-actions-col">
-                      <span className="visually-hidden">{t('actions')}</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pageRows.map((row) => (
-                    <tr key={row.id}>
-                      <td>
+          <MasterDetailLayout
+            list={filtered.map((row) => (
+              <MasterDetailListItem
+                key={row.id}
+                selected={row.id === selectedId}
+                onSelect={() => setSelectedId(row.id)}
+                icon={<Layers size={16} strokeWidth={2} aria-hidden />}
+                title={row.name}
+                subtitle={row.type}
+                meta={<span className="text-muted">{formatCreatedAt(row.createdAt)}</span>}
+              />
+            ))}
+            detail={
+              selectedSegment ? (
+                <MasterDetailPane
+                  title={selectedSegment.name}
+                  description={
+                    <>
+                      <p className="text-muted">
+                        {t('type')}: {selectedSegment.type}
+                      </p>
+                      <p className="text-muted">
+                        {t('segmentCreated')}: {formatCreatedAt(selectedSegment.createdAt)}
+                      </p>
+                    </>
+                  }
+                  actions={
+                    <div className="cohorts-row-actions">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openEdit(selectedSegment)}
+                      >
+                        {t('edit')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="btn-danger-text"
+                        onClick={() => setDeleteTarget(selectedSegment)}
+                      >
+                        {t('delete')}
+                      </Button>
+                      <Button type="button" variant="secondary" size="sm" asChild>
                         <Link
-                          to={`/websites/${websiteId}?segment=${encodeURIComponent(row.id)}`}
-                          className="cohorts-name-link"
+                          to={`/websites/${websiteId}?segment=${encodeURIComponent(selectedSegment.id)}`}
                         >
-                          {row.name}
+                          {t('dashboard')}
                         </Link>
-                      </td>
-                      <td className="text-muted">{formatCreatedAt(row.createdAt)}</td>
-                      <td className="cohorts-actions-col">
-                        <div className="cohorts-row-actions">
-                          <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(row)}>
-                            {t('edit')}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="btn-danger-text"
-                            onClick={() => setDeleteTarget(row)}
-                          >
-                            {t('delete')}
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {pageCount > 1 ? (
-              <footer className="cohorts-pagination">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={safePage <= 0}
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                      </Button>
+                    </div>
+                  }
                 >
-                  {t('cohortPrevPage')}
-                </Button>
-                <span className="text-muted cohorts-page-label">
-                  {t('cohortPageOf')
-                    .replace('{page}', String(safePage + 1))
-                    .replace('{total}', String(pageCount))}
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={safePage >= pageCount - 1}
-                  onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-                >
-                  {t('cohortNextPage')}
-                </Button>
-              </footer>
-            ) : null}
-          </>
+                  <div className="detail-section">
+                    <h4 className="section-title experiment-title">{t('segmentJsonPreview')}</h4>
+                    <pre className="mono text-muted segment-parameters-preview">
+                      {JSON.stringify(selectedSegment.parameters, null, 2)}
+                    </pre>
+                  </div>
+                </MasterDetailPane>
+              ) : null
+            }
+          />
         )}
       </section>
 
-      <SegmentFormDialog
-        open={formOpen}
-        onClose={closeForm}
-        websiteId={websiteId}
-        segmentId={editId}
-      />
+      <SegmentFormDialog open={formOpen} onClose={closeForm} websiteId={websiteId} segmentId={editId} />
 
       {deleteTarget ? (
         <div className="dialog-backdrop" onClick={() => setDeleteTarget(null)}>

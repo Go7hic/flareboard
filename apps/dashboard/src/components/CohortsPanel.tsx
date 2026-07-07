@@ -1,8 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Users } from 'lucide-react';
 import { CohortFormDialog } from './CohortFormDialog';
 import { EmptyState } from './EmptyState';
+import {
+  MasterDetailLayout,
+  MasterDetailListItem,
+  MasterDetailPane,
+  ResourceSearchField,
+  useMasterDetailSelection,
+} from './master-detail';
 import { Button } from './ui/button';
 import { api } from '../lib/api';
 import { t } from '../lib/i18n';
@@ -16,8 +24,6 @@ type CohortRow = {
   };
 };
 
-const PAGE_SIZE = 10;
-
 function formatCreatedAt(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
@@ -27,7 +33,6 @@ function formatCreatedAt(value: string) {
 export function CohortsPanel({ websiteId }: { websiteId: string }) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
   const [editId, setEditId] = useState<string | undefined>();
   const [deleteTarget, setDeleteTarget] = useState<CohortRow | null>(null);
@@ -53,9 +58,20 @@ export function CohortsPanel({ websiteId }: { websiteId: string }) {
     return rows.filter((row) => row.name.toLowerCase().includes(query));
   }, [cohortsQuery.data, search]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, pageCount - 1);
-  const pageRows = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  const { selectedId, setSelectedId, selectedItem: selectedCohort } = useMasterDetailSelection(
+    filtered,
+    (row) => row.id,
+  );
+
+  useEffect(() => {
+    if (!filtered.length) {
+      setSelectedId(null);
+      return;
+    }
+    if (!selectedId || !filtered.some((row) => row.id === selectedId)) {
+      setSelectedId(filtered[0].id);
+    }
+  }, [filtered, selectedId, setSelectedId]);
 
   function openCreate() {
     setEditId(undefined);
@@ -76,32 +92,12 @@ export function CohortsPanel({ websiteId }: { websiteId: string }) {
     <>
       <section className="panel cohorts-panel">
         <header className="cohorts-panel-head">
-          <div className="cohorts-search-wrap">
-            <svg
-              className="cohorts-search-icon"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              aria-hidden
-            >
-              <circle cx="11" cy="11" r="7" />
-              <path d="M20 20l-3-3" />
-            </svg>
-            <input
-              type="search"
-              className="input cohorts-search"
-              placeholder={t('cohortSearch')}
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setPage(0);
-              }}
-              aria-label={t('cohortSearch')}
-            />
-          </div>
+          <ResourceSearchField
+            value={search}
+            onChange={setSearch}
+            placeholder={t('cohortSearch')}
+            aria-label={t('cohortSearch')}
+          />
           <Button type="button" variant="primary" size="sm" onClick={openCreate}>
             {t('createCohort')}
           </Button>
@@ -112,87 +108,81 @@ export function CohortsPanel({ websiteId }: { websiteId: string }) {
         ) : filtered.length === 0 ? (
           <EmptyState title={t('noCohorts')} />
         ) : (
-          <>
-            <div className="table-wrap">
-              <table className="data-table cohorts-table">
-                <thead>
-                  <tr>
-                    <th scope="col">{t('name')}</th>
-                    <th scope="col">{t('cohortCreated')}</th>
-                    <th scope="col" className="cohorts-actions-col">
-                      <span className="visually-hidden">{t('actions')}</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pageRows.map((row) => (
-                    <tr key={row.id}>
-                      <td>
-                        <Link
-                          to={`/websites/${websiteId}?cohort=${encodeURIComponent(row.id)}`}
-                          className="cohorts-name-link"
-                        >
-                          {row.name}
+          <MasterDetailLayout
+            list={filtered.map((row) => (
+              <MasterDetailListItem
+                key={row.id}
+                selected={row.id === selectedId}
+                onSelect={() => setSelectedId(row.id)}
+                icon={<Users size={16} strokeWidth={2} aria-hidden />}
+                title={row.name}
+                subtitle={formatCreatedAt(row.createdAt)}
+                meta={
+                  <span className="text-muted">
+                    {row.definition.conditions.length} {t('cohortConditions').toLowerCase()}
+                  </span>
+                }
+              />
+            ))}
+            detail={
+              selectedCohort ? (
+                <MasterDetailPane
+                  title={selectedCohort.name}
+                  description={
+                    <span className="text-muted">
+                      {t('cohortCreated')}: {formatCreatedAt(selectedCohort.createdAt)}
+                    </span>
+                  }
+                  actions={
+                    <div className="cohorts-row-actions">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openEdit(selectedCohort)}
+                      >
+                        {t('edit')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="btn-danger-text"
+                        onClick={() => setDeleteTarget(selectedCohort)}
+                      >
+                        {t('delete')}
+                      </Button>
+                      <Button type="button" variant="secondary" size="sm" asChild>
+                        <Link to={`/websites/${websiteId}?cohort=${encodeURIComponent(selectedCohort.id)}`}>
+                          {t('dashboard')}
                         </Link>
-                      </td>
-                      <td className="text-muted">{formatCreatedAt(row.createdAt)}</td>
-                      <td className="cohorts-actions-col">
-                        <div className="cohorts-row-actions">
-                          <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(row)}>
-                            {t('edit')}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="btn-danger-text"
-                            onClick={() => setDeleteTarget(row)}
-                          >
-                            {t('delete')}
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {pageCount > 1 ? (
-              <footer className="cohorts-pagination">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={safePage <= 0}
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                      </Button>
+                    </div>
+                  }
                 >
-                  {t('cohortPrevPage')}
-                </Button>
-                <span className="text-muted cohorts-page-label">
-                  {t('cohortPageOf').replace('{page}', String(safePage + 1)).replace('{total}', String(pageCount))}
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={safePage >= pageCount - 1}
-                  onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-                >
-                  {t('cohortNextPage')}
-                </Button>
-              </footer>
-            ) : null}
-          </>
+                  <div className="detail-section">
+                    <h4 className="section-title experiment-title">{t('cohortConditions')}</h4>
+                    {selectedCohort.definition.conditions.length ? (
+                      <ul className="cohort-conditions-list">
+                        {selectedCohort.definition.conditions.map((condition, index) => (
+                          <li key={`${condition.field}-${index}`} className="text-muted">
+                            <span className="badge">{condition.field}</span>{' '}
+                            {condition.operator} {condition.value}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-muted">—</p>
+                    )}
+                  </div>
+                </MasterDetailPane>
+              ) : null
+            }
+          />
         )}
       </section>
 
-      <CohortFormDialog
-        open={formOpen}
-        onClose={closeForm}
-        websiteId={websiteId}
-        cohortId={editId}
-      />
+      <CohortFormDialog open={formOpen} onClose={closeForm} websiteId={websiteId} cohortId={editId} />
 
       {deleteTarget ? (
         <div className="dialog-backdrop" onClick={() => setDeleteTarget(null)}>

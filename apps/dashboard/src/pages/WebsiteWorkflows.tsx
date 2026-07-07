@@ -3,7 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ExternalLink, Workflow as WorkflowIcon } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
-import { ModalDialog } from '../components/ModalDialog';
+import {
+  MasterDetailLayout,
+  MasterDetailListItem,
+  MasterDetailPane,
+  useMasterDetailSelection,
+} from '../components/master-detail';
+import { ResourceEditDialog } from '../components/ResourceEditDialog';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -86,11 +92,29 @@ function WorkflowEditDialog({
     !saving;
 
   return (
-    <ModalDialog className="workflow-dialog" aria-label={t('workflowEdit')} onClose={onClose}>
-        <header className="dialog-header">
-          <h2 className="dialog-title">{t('workflowEdit')}</h2>
-        </header>
-        <div className="dialog-body workflow-dialog-body">
+    <ResourceEditDialog
+      title={t('workflowEdit')}
+      ariaLabel={t('workflowEdit')}
+      panelClassName="workflow-dialog"
+      bodyClassName="workflow-dialog-body"
+      saving={saving}
+      error={error}
+      canSave={canSave}
+      onClose={onClose}
+      onSave={() =>
+        onSave(workflow, {
+          name: draft.name.trim(),
+          triggerEvent: draft.triggerEvent.trim(),
+          enabled: draft.enabled,
+          actionType: draft.actionType,
+          actionConfig: {
+            note: draft.actionNote.trim(),
+            url: draft.actionUrl.trim(),
+            email: draft.actionEmail.trim(),
+          },
+        })
+      }
+    >
           <div className="field">
             <Label htmlFor="workflow-dialog-name">{t('name')}</Label>
             <Input
@@ -176,34 +200,7 @@ function WorkflowEditDialog({
               }
             />
           </div>
-        </div>
-        {error ? <p className="text-danger">{error.message}</p> : null}
-        <footer className="dialog-footer">
-          <Button type="button" variant="ghost" onClick={onClose}>
-            {t('cancel')}
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            disabled={!canSave}
-            onClick={() =>
-              onSave(workflow, {
-                name: draft.name.trim(),
-                triggerEvent: draft.triggerEvent.trim(),
-                enabled: draft.enabled,
-                actionType: draft.actionType,
-                actionConfig: {
-                  note: draft.actionNote.trim(),
-                  url: draft.actionUrl.trim(),
-                  email: draft.actionEmail.trim(),
-                },
-              })
-            }
-          >
-            {saving ? t('saving') : t('save')}
-          </Button>
-        </footer>
-    </ModalDialog>
+    </ResourceEditDialog>
   );
 }
 
@@ -215,7 +212,6 @@ export default function WebsiteWorkflowsPage() {
   const [draft, setDraft] = useState(DEFAULT_WORKFLOW);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [editingWorkflow, setEditingWorkflow] = useState<Workflow | null>(null);
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
 
   const workflowsQuery = useQuery({
     queryKey: ['workflows', websiteId],
@@ -224,6 +220,8 @@ export default function WebsiteWorkflowsPage() {
   });
 
   const workflows = useMemo(() => workflowsQuery.data ?? [], [workflowsQuery.data]);
+  const { selectedId: selectedWorkflowId, setSelectedId: setSelectedWorkflowId, selectedItem: selectedWorkflowFromList } =
+    useMasterDetailSelection(workflows, (workflow) => workflow.id);
 
   useEffect(() => {
     if (!workflows.length) {
@@ -314,9 +312,7 @@ export default function WebsiteWorkflowsPage() {
   });
 
   const selectedWorkflow =
-    workflows.find((workflow) => workflow.id === selectedWorkflowId) ??
-    executionsQuery.data?.workflow ??
-    null;
+    selectedWorkflowFromList ?? executionsQuery.data?.workflow ?? null;
   const summary = executionsQuery.data?.summary ?? selectedWorkflow?.summary;
   const executions = executionsQuery.data?.executions ?? [];
   const canCreate =
@@ -441,45 +437,38 @@ export default function WebsiteWorkflowsPage() {
         {workflowsQuery.isLoading ? (
           <div className="skeleton skeleton-block" aria-busy />
         ) : workflows.length ? (
-          <div className="surveys-layout">
-            <div className="surveys-list">
-              {workflows.map((workflow) => (
-                <button
-                  type="button"
-                  key={workflow.id}
-                  className={`survey-list-item${workflow.id === selectedWorkflowId ? ' active' : ''}`}
-                  onClick={() => {
-                    setSelectedWorkflowId(workflow.id);
-                    setSearchParams((current) => {
-                      const next = new URLSearchParams(current);
-                      next.set('workflow', workflow.id);
-                      return next;
-                    });
-                  }}
-                >
-                  <span className="errors-name-cell">
-                    <WorkflowIcon size={16} strokeWidth={2} aria-hidden />
-                    <span>
-                      <span className="survey-list-title">{workflow.name}</span>
-                      <span className="text-muted">{workflow.triggerEvent}</span>
-                    </span>
-                  </span>
-                  <span className="survey-list-meta">
+          <MasterDetailLayout
+            list={workflows.map((workflow) => (
+              <MasterDetailListItem
+                key={workflow.id}
+                selected={workflow.id === selectedWorkflowId}
+                onSelect={() => {
+                  setSelectedWorkflowId(workflow.id);
+                  setSearchParams((current) => {
+                    const next = new URLSearchParams(current);
+                    next.set('workflow', workflow.id);
+                    return next;
+                  });
+                }}
+                icon={<WorkflowIcon size={16} strokeWidth={2} aria-hidden />}
+                title={workflow.name}
+                subtitle={workflow.triggerEvent}
+                meta={
+                  <>
                     <span className="badge">{workflow.enabled ? t('enabled') : t('disabled')}</span>
                     <span className="text-muted">
                       {workflow.summary?.executions.toLocaleString() ?? 0} {t('workflowExecutions')}
                     </span>
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            <div className="surveys-detail">
-              {selectedWorkflow ? (
-                <>
-                  <header className="surveys-detail-head">
-                    <div>
-                      <h3 className="section-title experiment-title">{selectedWorkflow.name}</h3>
+                  </>
+                }
+              />
+            ))}
+            detail={
+              selectedWorkflow ? (
+                <MasterDetailPane
+                  title={selectedWorkflow.name}
+                  description={
+                    <>
                       <p className="text-muted">
                         {t('workflowTriggerEvent')}: {selectedWorkflow.triggerEvent}
                       </p>
@@ -495,43 +484,45 @@ export default function WebsiteWorkflowsPage() {
                       {selectedWorkflow.actionConfig?.note ? (
                         <p className="workflow-action-note">{selectedWorkflow.actionConfig.note}</p>
                       ) : null}
-                    </div>
-                    {canEdit ? (
-                    <div className="cohorts-row-actions">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setEditingWorkflow(selectedWorkflow)}
-                      >
-                        {t('edit')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          updateMutation.mutate({
-                            id: selectedWorkflow.id,
-                            patch: { enabled: !selectedWorkflow.enabled },
-                          })
-                        }
-                      >
-                        {selectedWorkflow.enabled ? t('disable') : t('enable')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="btn-danger-text"
-                        onClick={() => deleteMutation.mutate(selectedWorkflow.id)}
-                      >
-                        {t('delete')}
-                      </Button>
-                    </div>
-                    ) : null}
-                  </header>
-
+                    </>
+                  }
+                  actions={
+                    canEdit ? (
+                      <div className="cohorts-row-actions">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditingWorkflow(selectedWorkflow)}
+                        >
+                          {t('edit')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            updateMutation.mutate({
+                              id: selectedWorkflow.id,
+                              patch: { enabled: !selectedWorkflow.enabled },
+                            })
+                          }
+                        >
+                          {selectedWorkflow.enabled ? t('disable') : t('enable')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="btn-danger-text"
+                          onClick={() => deleteMutation.mutate(selectedWorkflow.id)}
+                        >
+                          {t('delete')}
+                        </Button>
+                      </div>
+                    ) : null
+                  }
+                >
                   <div className="surveys-stats">
                     <div>
                       <span className="stat-label">{t('workflowExecutions')}</span>
@@ -742,10 +733,10 @@ export default function WebsiteWorkflowsPage() {
                       </tbody>
                     </table>
                   </div>
-                </>
-              ) : null}
-            </div>
-          </div>
+                </MasterDetailPane>
+              ) : null
+            }
+          />
         ) : (
           <EmptyState title={t('workflowsEmptyTitle')} description={t('workflowsEmptyBody')} />
         )}

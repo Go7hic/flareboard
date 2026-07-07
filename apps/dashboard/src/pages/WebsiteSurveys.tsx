@@ -3,7 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ExternalLink, MessageSquareText } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
-import { ModalDialog } from '../components/ModalDialog';
+import {
+  MasterDetailLayout,
+  MasterDetailListItem,
+  MasterDetailPane,
+  useMasterDetailSelection,
+} from '../components/master-detail';
+import { ResourceEditDialog } from '../components/ResourceEditDialog';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -165,11 +171,29 @@ function SurveyEditDialog({
     !saving;
 
   return (
-    <ModalDialog className="survey-dialog" aria-label={t('surveyEdit')} onClose={onClose}>
-        <header className="dialog-header">
-          <h2 className="dialog-title">{t('surveyEdit')}</h2>
-        </header>
-        <div className="dialog-body survey-dialog-body">
+    <ResourceEditDialog
+      title={t('surveyEdit')}
+      ariaLabel={t('surveyEdit')}
+      panelClassName="survey-dialog"
+      bodyClassName="survey-dialog-body"
+      saving={saving}
+      error={error}
+      canSave={canSave}
+      onClose={onClose}
+      onSave={() =>
+        onSave(survey, {
+          name: draft.name.trim(),
+          question: draft.question.trim(),
+          type: draft.type,
+          options,
+          triggerPath: draft.triggerPath.trim() || null,
+          triggerEvent: draft.triggerEvent.trim() || null,
+          displayDelaySeconds: Number(draft.displayDelaySeconds),
+          displayRules,
+          enabled: draft.enabled,
+        })
+      }
+    >
           <div className="field">
             <Label htmlFor="survey-dialog-name">{t('name')}</Label>
             <Input
@@ -281,34 +305,7 @@ function SurveyEditDialog({
               {t('surveyDisplayRulesHint').replace('{count}', String(displayRules.length))}
             </p>
           </div>
-          {error ? <p className="text-danger">{error.message}</p> : null}
-        </div>
-        <footer className="dialog-footer">
-          <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
-            {t('cancel')}
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            disabled={!canSave}
-            onClick={() =>
-              onSave(survey, {
-                name: draft.name.trim(),
-                question: draft.question.trim(),
-                type: draft.type,
-                options,
-                triggerPath: draft.triggerPath.trim() || null,
-                triggerEvent: draft.triggerEvent.trim() || null,
-                displayDelaySeconds: Number(draft.displayDelaySeconds),
-                displayRules,
-                enabled: draft.enabled,
-              })
-            }
-          >
-            {saving ? t('saving') : t('save')}
-          </Button>
-        </footer>
-    </ModalDialog>
+    </ResourceEditDialog>
   );
 }
 
@@ -318,7 +315,6 @@ export default function WebsiteSurveysPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState(DEFAULT_SURVEY);
-  const [selectedSurveyId, setSelectedSurveyId] = useState<string | null>(null);
   const [filters, setFilters] = useState({ q: '', path: '', answer: '' });
   const [editingSurvey, setEditingSurvey] = useState<Survey | null>(null);
 
@@ -329,6 +325,8 @@ export default function WebsiteSurveysPage() {
   });
 
   const surveys = useMemo(() => surveysQuery.data ?? [], [surveysQuery.data]);
+  const { selectedId: selectedSurveyId, setSelectedId: setSelectedSurveyId, selectedItem: selectedSurveyFromList } =
+    useMasterDetailSelection(surveys, (survey) => survey.id);
 
   useEffect(() => {
     if (!surveys.length) {
@@ -419,7 +417,7 @@ export default function WebsiteSurveysPage() {
   });
 
   const selectedSurvey =
-    surveys.find((survey) => survey.id === selectedSurveyId) ?? responsesQuery.data?.survey ?? null;
+    selectedSurveyFromList ?? responsesQuery.data?.survey ?? null;
   const responses = responsesQuery.data?.responses ?? [];
   const summary = responsesQuery.data?.summary ?? selectedSurvey?.summary;
   const answerOptions =
@@ -575,45 +573,38 @@ export default function WebsiteSurveysPage() {
         {surveysQuery.isLoading ? (
           <div className="skeleton skeleton-block" aria-busy />
         ) : surveys.length ? (
-          <div className="surveys-layout">
-            <div className="surveys-list">
-              {surveys.map((survey) => (
-                <button
-                  type="button"
-                  key={survey.id}
-                  className={`survey-list-item${survey.id === selectedSurveyId ? ' active' : ''}`}
-                  onClick={() => {
-                    setSelectedSurveyId(survey.id);
-                    setSearchParams((current) => {
-                      const next = new URLSearchParams(current);
-                      next.set('survey', survey.id);
-                      return next;
-                    });
-                  }}
-                >
-                  <span className="errors-name-cell">
-                    <MessageSquareText size={16} strokeWidth={2} aria-hidden />
-                    <span>
-                      <span className="survey-list-title">{survey.name}</span>
-                      <span className="text-muted">{survey.question}</span>
-                    </span>
-                  </span>
-                  <span className="survey-list-meta">
+          <MasterDetailLayout
+            list={surveys.map((survey) => (
+              <MasterDetailListItem
+                key={survey.id}
+                selected={survey.id === selectedSurveyId}
+                onSelect={() => {
+                  setSelectedSurveyId(survey.id);
+                  setSearchParams((current) => {
+                    const next = new URLSearchParams(current);
+                    next.set('survey', survey.id);
+                    return next;
+                  });
+                }}
+                icon={<MessageSquareText size={16} strokeWidth={2} aria-hidden />}
+                title={survey.name}
+                subtitle={survey.question}
+                meta={
+                  <>
                     <span className="badge">{survey.enabled ? t('enabled') : t('disabled')}</span>
                     <span className="text-muted">
                       {survey.summary?.responses.toLocaleString() ?? 0} {t('surveyResponses')}
                     </span>
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            <div className="surveys-detail">
-              {selectedSurvey ? (
-                <>
-                  <header className="surveys-detail-head">
-                    <div>
-                      <h3 className="section-title experiment-title">{selectedSurvey.name}</h3>
+                  </>
+                }
+              />
+            ))}
+            detail={
+              selectedSurvey ? (
+                <MasterDetailPane
+                  title={selectedSurvey.name}
+                  description={
+                    <>
                       <p className="text-muted">{selectedSurvey.question}</p>
                       <p className="text-muted">
                         {t('surveyType')}: {surveyTypeLabel(selectedSurvey.type)}
@@ -638,43 +629,45 @@ export default function WebsiteSurveysPage() {
                           {t('surveyDisplayRules')}: {selectedSurvey.displayRules.length}
                         </p>
                       ) : null}
-                    </div>
-                    {canEdit ? (
-                    <div className="cohorts-row-actions">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          updateMutation.mutate({
-                            id: selectedSurvey.id,
-                            patch: { enabled: !selectedSurvey.enabled },
-                          })
-                        }
-                      >
-                        {selectedSurvey.enabled ? t('disable') : t('enable')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setEditingSurvey(selectedSurvey)}
-                      >
-                        {t('edit')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="btn-danger-text"
-                        onClick={() => deleteMutation.mutate(selectedSurvey.id)}
-                      >
-                        {t('delete')}
-                      </Button>
-                    </div>
-                    ) : null}
-                  </header>
-
+                    </>
+                  }
+                  actions={
+                    canEdit ? (
+                      <div className="cohorts-row-actions">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            updateMutation.mutate({
+                              id: selectedSurvey.id,
+                              patch: { enabled: !selectedSurvey.enabled },
+                            })
+                          }
+                        >
+                          {selectedSurvey.enabled ? t('disable') : t('enable')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditingSurvey(selectedSurvey)}
+                        >
+                          {t('edit')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="btn-danger-text"
+                          onClick={() => deleteMutation.mutate(selectedSurvey.id)}
+                        >
+                          {t('delete')}
+                        </Button>
+                      </div>
+                    ) : null
+                  }
+                >
                   <div className="surveys-stats">
                     <div>
                       <span className="stat-label">{t('surveyResponses')}</span>
@@ -962,10 +955,10 @@ export default function WebsiteSurveysPage() {
                       </tbody>
                     </table>
                   </div>
-                </>
-              ) : null}
-            </div>
-          </div>
+                </MasterDetailPane>
+              ) : null
+            }
+          />
         ) : (
           <EmptyState title={t('surveysEmptyTitle')} description={t('surveysEmptyBody')} />
         )}

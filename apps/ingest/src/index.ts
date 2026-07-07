@@ -20,6 +20,15 @@ app.use(
   }),
 );
 
+app.use('*', async (c, next) => {
+  await next();
+  c.header('X-Content-Type-Options', 'nosniff');
+  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  if (c.env.ENVIRONMENT === 'production') {
+    c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+});
+
 app.get('/', (c) => json({ name: 'flareboard-ingest', version: '0.0.1' }));
 
 app.post('/api/send', (c) => handleSend(c));

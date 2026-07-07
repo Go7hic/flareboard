@@ -57,6 +57,16 @@ app.use('*', (c, next) => {
   })(c, next);
 });
 
+app.use('*', async (c, next) => {
+  await next();
+  c.header('X-Content-Type-Options', 'nosniff');
+  c.header('X-Frame-Options', 'DENY');
+  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  if (c.env.ENVIRONMENT === 'production') {
+    c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+});
+
 app.get('/', (c) => json({ name: 'flareboard-api', version: '0.0.1' }));
 app.get('/api/heartbeat', (c) => json({ ok: true, service: 'flareboard-api', environment: c.env.ENVIRONMENT }));
 

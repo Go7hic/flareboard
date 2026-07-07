@@ -6,6 +6,7 @@ import {
   utcCalendarDaysRange,
 } from '@flareboard/shared';
 import {
+  getAggregateMetricsFromRollups,
   getPageviewsFromRollups,
   getWebsiteMetricsSeriesFromRollups,
   getWebsiteStatsFromRollups,
@@ -29,6 +30,27 @@ function mockEnv(statements: Array<{ sql: string; result: unknown }>): Env {
     },
   };
   return { DB: db } as unknown as Env;
+}
+
+function captureEnv() {
+  const queries: Array<{ sql: string; args: unknown[] }> = [];
+  const env = {
+    DB: {
+      prepare(sql: string) {
+        return {
+          bind(...args: unknown[]) {
+            queries.push({ sql, args });
+            return {
+              first: async () => ({ count: 0 }),
+              all: async () => ({ results: [] as unknown[] }),
+              run: async () => ({}),
+            };
+          },
+        };
+      },
+    },
+  } as unknown as Env;
+  return { env, queries };
 }
 
 describe('rollup eligibility', () => {
@@ -108,5 +130,19 @@ describe('getWebsiteMetricsSeriesFromRollups', () => {
       { x: '2026-07-06', y: 2 },
       { x: '2026-07-07', y: 3 },
     ]);
+  });
+});
+
+describe('getAggregateMetricsFromRollups', () => {
+  it('uses sequential D1 placeholders for multi-site hourly queries', async () => {
+    const { startAt, endAt } = rolling24hRange(Date.parse('2026-07-07T12:00:00.000Z'));
+    const { env, queries } = captureEnv();
+    await getAggregateMetricsFromRollups(env, ['site-a', 'site-b'], startAt, endAt, 'hour');
+    expect(queries).toHaveLength(2);
+    for (const { sql, args } of queries) {
+      expect(sql).toContain('website_id IN (?1, ?2) AND unit = ?3 AND bucket >= ?4 AND bucket <= ?5');
+      expect(sql).not.toMatch(/IN \(\?\)[^?]*\?1/);
+      expect(args).toEqual(['site-a', 'site-b', 'hour', expect.any(String), expect.any(String)]);
+    }
   });
 });

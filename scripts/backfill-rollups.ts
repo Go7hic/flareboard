@@ -16,6 +16,7 @@ const configPath = 'apps/api/wrangler.jsonc';
 
 const DAY = "strftime('%Y-%m-%d', datetime(created_at / 1000, 'unixepoch'))";
 const DAY_E = "strftime('%Y-%m-%d', datetime(e.created_at / 1000, 'unixepoch'))";
+const HOUR_BUCKET = "strftime('%Y-%m-%d %H:00', datetime(created_at / 1000, 'unixepoch'))";
 const MONTH_BUCKET = "strftime('%Y-%m', datetime(created_at / 1000, 'unixepoch'))";
 const YEAR_BUCKET = "strftime('%Y', datetime(created_at / 1000, 'unixepoch'))";
 

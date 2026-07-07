@@ -82,12 +82,16 @@ function seriesEndBucket(unitKey: string, endAt: number) {
         : dayKey(endAt);
 }
 
+function sqlInPlaceholders(count: number, startIndex = 1) {
+  return Array.from({ length: count }, (_, i) => `?${startIndex + i}`).join(', ');
+}
+
 async function rollupDaysComplete(env: Env, websiteId: string, days: string[]) {
   if (!days.length) return false;
-  const placeholders = days.map(() => '?').join(',');
+  const dayPlaceholders = sqlInPlaceholders(days.length, 2);
   const row = await env.DB.prepare(
     `SELECT COUNT(*) as count FROM rollup_stats_daily
-     WHERE website_id = ?1 AND day IN (${placeholders})`,
+     WHERE website_id = ?1 AND day IN (${dayPlaceholders})`,
   )
     .bind(websiteId, ...days)
     .first<{ count: number }>();
@@ -114,7 +118,7 @@ export async function getWebsiteStatsFromRollups(
     if (!targetDays.length) {
       return { pageviews: 0, visitors: 0, visits: 0, bounces: 0, totaltime_sec: 0 };
     }
-    const placeholders = targetDays.map(() => '?').join(',');
+    const dayPlaceholders = sqlInPlaceholders(targetDays.length, 2);
     return (
       (await env.DB.prepare(
         `SELECT
@@ -124,7 +128,7 @@ export async function getWebsiteStatsFromRollups(
            COALESCE(SUM(bounces), 0) as bounces,
            COALESCE(SUM(totaltime_sec), 0) as totaltime_sec
          FROM rollup_stats_daily
-         WHERE website_id = ?1 AND day IN (${placeholders})`,
+         WHERE website_id = ?1 AND day IN (${dayPlaceholders})`,
       )
         .bind(websiteId, ...targetDays)
         .first<{
@@ -215,14 +219,15 @@ export async function getMetricsFromRollups(
   const days = daysInRange(startAt, endAt);
   if (!(await rollupDaysComplete(env, websiteId, days))) return null;
 
-  const placeholders = days.map(() => '?').join(',');
+  const dayPlaceholders = sqlInPlaceholders(days.length, 3);
+  const limitIndex = days.length + 3;
   const rows = await env.DB.prepare(
     `SELECT value, SUM(count) as count
      FROM rollup_dimension_daily
-     WHERE website_id = ?1 AND dimension = ?2 AND day IN (${placeholders})
+     WHERE website_id = ?1 AND dimension = ?2 AND day IN (${dayPlaceholders})
      GROUP BY value
      ORDER BY count DESC
-     LIMIT ?${days.length + 3}`,
+     LIMIT ?${limitIndex}`,
   )
     .bind(websiteId, dimension, ...days, limit)
     .all<{ value: string; count: number }>();
@@ -246,11 +251,11 @@ export async function getCustomEventsFromRollups(
   const days = daysInRange(startAt, endAt);
   if (!(await rollupDaysComplete(env, websiteId, days))) return null;
 
-  const placeholders = days.map(() => '?').join(',');
+  const dayPlaceholders = sqlInPlaceholders(days.length, 2);
   const rows = await env.DB.prepare(
     `SELECT event_name as eventName, SUM(count) as count
      FROM rollup_event_daily
-     WHERE website_id = ?1 AND day IN (${placeholders})
+     WHERE website_id = ?1 AND day IN (${dayPlaceholders})
      GROUP BY event_name
      ORDER BY count DESC`,
   )
@@ -294,11 +299,11 @@ async function loadDailyVisitorsFromSessionDay(
   days: string[],
 ): Promise<{ x: string; y: number }[]> {
   if (!days.length) return [];
-  const placeholders = days.map(() => '?').join(',');
+  const dayPlaceholders = sqlInPlaceholders(days.length, 2);
   const rows = await env.DB.prepare(
     `SELECT day as x, COUNT(DISTINCT session_id) as y
      FROM rollup_session_day
-     WHERE website_id = ?1 AND day IN (${placeholders})
+     WHERE website_id = ?1 AND day IN (${dayPlaceholders})
      GROUP BY day
      ORDER BY day ASC`,
   )
@@ -367,8 +372,8 @@ export async function getDashboardMetricsFromRollups(
   const days = daysInRange(startAt, endAt);
   if (!days.length) return null;
 
-  const dayPlaceholders = days.map(() => '?').join(',');
-  const sitePlaceholders = websiteIds.map(() => '?').join(',');
+  const sitePlaceholders = sqlInPlaceholders(websiteIds.length, 1);
+  const dayPlaceholders = sqlInPlaceholders(days.length, websiteIds.length + 1);
   const completeChecks = await Promise.all(
     websiteIds.map((id) => rollupDaysComplete(env, id, days)),
   );
@@ -432,11 +437,15 @@ export async function getAggregateMetricsFromRollups(
     if (!completeChecks.every(Boolean)) return null;
   }
 
-  const sitePlaceholders = websiteIds.map(() => '?').join(',');
+  const siteCount = websiteIds.length;
+  const sitePlaceholders = sqlInPlaceholders(siteCount, 1);
+  const unitIndex = siteCount + 1;
+  const startIndex = siteCount + 2;
+  const endIndex = siteCount + 3;
   const pageviewRows = await env.DB.prepare(
     `SELECT bucket as x, SUM(pageviews) as pageviews
      FROM rollup_pageview_series
-     WHERE website_id IN (${sitePlaceholders}) AND unit = ?1 AND bucket >= ?2 AND bucket <= ?3
+     WHERE website_id IN (${sitePlaceholders}) AND unit = ?${unitIndex} AND bucket >= ?${startIndex} AND bucket <= ?${endIndex}
      GROUP BY bucket
      ORDER BY bucket ASC`,
   )
@@ -448,7 +457,7 @@ export async function getAggregateMetricsFromRollups(
             COUNT(DISTINCT session_id) as visitors,
             COUNT(DISTINCT visit_id) as visits
      FROM rollup_series_bucket
-     WHERE website_id IN (${sitePlaceholders}) AND unit = ?1 AND bucket >= ?2 AND bucket <= ?3
+     WHERE website_id IN (${sitePlaceholders}) AND unit = ?${unitIndex} AND bucket >= ?${startIndex} AND bucket <= ?${endIndex}
      GROUP BY bucket
      ORDER BY bucket ASC`,
   )

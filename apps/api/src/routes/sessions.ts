@@ -11,6 +11,7 @@ import {
   getSessionWeekly,
   listSessions,
 } from '../lib/sessions';
+import { getSessionContext } from '../lib/session-context';
 import { badRequest, json, notFound } from '../lib/response';
 import { requireWebsiteOr404 } from '../lib/website';
 import type { ApiVariables } from '../middleware/auth';
@@ -67,6 +68,17 @@ export async function handleActivity(c: Ctx) {
     c.req.param('sessionId') ?? '',
   );
   return json(activity);
+}
+
+export async function handleContext(c: Ctx) {
+  const { website, response } = await requireWebsiteOr404(c);
+  if (response) return response;
+  const context = await getSessionContext(
+    c.env,
+    website!.websiteId,
+    c.req.param('sessionId') ?? '',
+  );
+  return json(context);
 }
 
 export async function handleProperties(c: Ctx) {

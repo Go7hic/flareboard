@@ -6,4 +6,6 @@ export interface Env {
   APP_SECRET: string;
   ENVIRONMENT: string;
   HOSTED_MODE?: string;
+  /** API worker base URL for workflow email delivery (optional). */
+  API_URL?: string;
 }

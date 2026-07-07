@@ -1,6 +1,6 @@
 ---
-title: Privacy-first Google Analytics alternative on Cloudflare
-description: Why teams choose cookieless analytics on Workers, D1, KV, R2, and Queues — and how Flareboard compares to GA4.
+title: Privacy-first product analytics on Cloudflare
+description: Why teams choose a PostHog-like analytics stack on Workers, D1, KV, R2, and Queues.
 pubDate: 2026-06-01
 author: Flareboard
 tags:
@@ -9,13 +9,13 @@ tags:
   - cloudflare
 ---
 
-Google Analytics 4 is powerful, but it comes with cookie banners, complex tag setups, and data flowing into Google's ad ecosystem. For many product and marketing teams, that's more overhead than insight.
+Google Analytics 4 is powerful, but product teams now need more than pageview reporting. Feature flags, experiments, surveys, session replay, errors, logs, and warehouse queries should share the same event context without forcing teams to run a heavyweight analytics cluster.
 
-Flareboard is built as a **privacy-first alternative** that runs on your Cloudflare stack:
+Flareboard is built as a **privacy-first product analytics suite** that runs on your Cloudflare stack:
 
 - **Cookieless collection** — fewer consent popups in many regions
 - **First-party ingest** — events hit your edge, not a third-party collector
-- **Operator-friendly dashboards** — realtime globe, funnels, retention, UTM, and journeys without an enterprise maze
+- **Operator-friendly workflows** — realtime, funnels, retention, replay, flags, experiments, surveys, errors, logs, and warehouse views in one shell
 
 ## Who this is for
 
@@ -24,17 +24,17 @@ Flareboard fits teams that already use Cloudflare and want analytics they contro
 1. **Self-host** on Workers + D1 + KV + R2 with Wrangler
 2. **Flareboard Cloud** — managed hosting with a generous free tier
 
-## How it differs from GA4
+## How it differs from older analytics tools
 
-| Topic | Google Analytics 4 | Flareboard |
+| Topic | Older analytics tools | Flareboard |
 | --- | --- | --- |
-| Data ownership | Google | Your Cloudflare account |
-| Cookieless option | Limited / complex | Default |
-| Edge ingest | No | Yes — closest PoP to visitors |
-| Session replay | No (needs other tools) | Optional, stored in your R2 |
+| Data ownership | Third-party product cloud | Your Cloudflare account |
+| Product workflows | Often split across tools | Analytics, replay, flags, experiments, surveys, quality, and warehouse |
+| Edge ingest | Usually centralized | Closest Cloudflare PoP to visitors |
+| Session replay | Separate product or add-on | Optional, stored in your R2 |
 
 ## Next steps
 
 - Explore the [feature overview](https://flareboard.dev/features)
-- See [how we compare](https://flareboard.dev/compare) to GA, Umami, Plausible, and Cloudflare Web Analytics
+- See [how we compare](https://flareboard.dev/compare) to GA, Umami, Plausible, Cloudflare Web Analytics, and PostHog
 - [Get started free](https://flareboard.dev/register) on Flareboard Cloud

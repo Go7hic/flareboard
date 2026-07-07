@@ -2,16 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BoardEditorForm } from '../components/BoardEditorForm';
-import {
-  BoardWidgets,
-  emptyStatsWidgetDraft,
-  parseBoardWidgets,
-  statsWidgetsToDrafts,
-} from '../components/BoardWidgets';
+import { BoardWidgets } from '../components/BoardWidgets';
 import { CollapsibleSection } from '../components/CollapsibleSection';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
-import { api, getToken, type Website } from '../lib/api';
+import { boardConfigToDrafts, emptyStatsWidgetDraft, parseBoardConfig } from '../lib/board-config';
+import { api, getToken, type Insight, type Website } from '../lib/api';
 import { t } from '../lib/i18n';
 
 interface Board {
@@ -39,6 +35,11 @@ export default function BoardsPage() {
   const boardsQuery = useQuery({
     queryKey: ['boards'],
     queryFn: () => api<Board[]>('/api/boards'),
+  });
+
+  const insightsQuery = useQuery({
+    queryKey: ['insights-all'],
+    queryFn: () => api<Insight[]>('/api/insights'),
   });
 
   const createMutation = useMutation({
@@ -116,6 +117,7 @@ export default function BoardsPage() {
 
   const websites = websitesQuery.data ?? [];
   const boards = boardsQuery.data ?? [];
+  const insights = insightsQuery.data ?? [];
   const hasBoards = boards.length > 0;
 
   return (
@@ -132,8 +134,10 @@ export default function BoardsPage() {
           <BoardEditorForm
             key={`create-board-${createFormKey}`}
             websites={websites}
+            insights={insights}
             initialName=""
             initialWidgets={[emptyStatsWidgetDraft()]}
+            initialRangePreset="7d"
             submitLabel={t('createBoard')}
             isPending={createMutation.isPending}
             onSubmit={(payload) => createMutation.mutate(payload)}
@@ -149,8 +153,10 @@ export default function BoardsPage() {
           <BoardEditorForm
             key={`create-board-${createFormKey}`}
             websites={websites}
+            insights={insights}
             initialName=""
             initialWidgets={[emptyStatsWidgetDraft()]}
+            initialRangePreset="7d"
             submitLabel={t('createBoard')}
             isPending={createMutation.isPending}
             onSubmit={(payload) => createMutation.mutate(payload)}
@@ -164,7 +170,7 @@ export default function BoardsPage() {
       <ul className="board-grid section-gap-lg">
         {boards.map((b) => {
           const isEditing = editingId === b.id;
-          const widgets = parseBoardWidgets(b.parameters);
+          const config = parseBoardConfig(b.parameters);
 
           return (
             <li
@@ -177,8 +183,10 @@ export default function BoardsPage() {
                   <BoardEditorForm
                     key={`edit-${b.id}`}
                     websites={websites}
+                    insights={insights}
                     initialName={b.name}
-                    initialWidgets={statsWidgetsToDrafts(widgets)}
+                    initialWidgets={boardConfigToDrafts(config)}
+                    initialRangePreset={config.rangePreset}
                     submitLabel={t('saveBoard')}
                     isPending={updateMutation.isPending}
                     onCancel={() => setEditingId(null)}
@@ -230,7 +238,7 @@ export default function BoardsPage() {
                       </Button>
                     </div>
                   </div>
-                  <BoardWidgets widgets={widgets} />
+                  <BoardWidgets widgets={config.widgets} rangePreset={config.rangePreset} />
                   {shareUrls[b.id] ? (
                     <p className="text-muted board-share-url">
                       <a href={shareUrls[b.id]} target="_blank" rel="noreferrer">

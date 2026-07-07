@@ -72,6 +72,7 @@ export async function assertEventAllowed(
     return { ok: false, message: 'Monthly event limit exceeded.' };
   }
 
+  await recordEventUsageKv(env, userId, 1);
   return { ok: true, userId };
 }
 

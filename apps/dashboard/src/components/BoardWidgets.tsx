@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -8,30 +10,16 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { api, type WebsiteStats } from '../lib/api';
+import { api, type InsightResult, type WebsiteStats } from '../lib/api';
+import {
+  type BoardRangePreset,
+  type BoardWidget,
+  type InsightWidgetConfig,
+  type StatsWidgetConfig,
+} from '../lib/board-config';
 import { presetToRange, rangeQueryString } from '../lib/dateRange';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
-
-const BOARD_WIDGET_DAYS = 7;
-
-export type StatsWidgetConfig = {
-  type: 'stats';
-  websiteId: string;
-  label?: string;
-  stats?: WebsiteStats;
-  series?: { x: string; y: number }[];
-};
-
-export type StatsWidgetDraft = {
-  type: 'stats';
-  websiteId: string;
-  label: string;
-};
-
-export type BoardWidget =
-  | StatsWidgetConfig
-  | { type: 'title'; text: string };
 
 type Widget = BoardWidget;
 
@@ -41,63 +29,55 @@ function formatChartLabel(x: string) {
   return x;
 }
 
-export function emptyStatsWidgetDraft(): StatsWidgetDraft {
-  return { type: 'stats', websiteId: '', label: '' };
+function boardWidgetClassName(widget: Widget) {
+  return `board-stat-widget board-stat-widget--${widget.width ?? 'half'}`;
 }
 
-export function statsWidgetsToDrafts(widgets: StatsWidgetConfig[]): StatsWidgetDraft[] {
-  return widgets.map((w) => ({
-    type: 'stats',
-    websiteId: w.websiteId,
-    label: w.label ?? '',
-  }));
-}
-
-export function draftsToBoardParameters(drafts: StatsWidgetDraft[]): Record<string, unknown> {
-  return {
-    widgets: drafts
-      .filter((d) => d.websiteId)
-      .map((d) => ({
-        type: 'stats' as const,
-        websiteId: d.websiteId,
-        ...(d.label.trim() ? { label: d.label.trim() } : {}),
-      })),
-  };
-}
-
-export function BoardWidgets({ widgets, publicMode }: { widgets: Widget[]; publicMode?: boolean }) {
+export function BoardWidgets({
+  widgets,
+  publicMode,
+  rangePreset,
+}: {
+  widgets: Widget[];
+  publicMode?: boolean;
+  rangePreset: BoardRangePreset;
+}) {
   return (
     <div className="board-widgets-grid">
       {widgets.map((w, i) => (
-        <BoardWidget key={i} widget={w} publicMode={publicMode} />
+        <BoardWidget key={i} widget={w} publicMode={publicMode} rangePreset={rangePreset} />
       ))}
     </div>
   );
 }
 
-function BoardWidget({ widget, publicMode }: { widget: Widget; publicMode?: boolean }) {
+function BoardWidget({
+  widget,
+  publicMode,
+  rangePreset,
+}: {
+  widget: Widget;
+  publicMode?: boolean;
+  rangePreset: BoardRangePreset;
+}) {
   const chartColors = useChartColors();
 
-  if (widget.type === 'title') {
-    return (
-      <section className="board-widget-title">
-        <h2 className="section-title">{widget.text}</h2>
-      </section>
-    );
+  if (widget.type === 'insight') {
+    return <InsightBoardWidget widget={widget} publicMode={publicMode} rangePreset={rangePreset} />;
   }
 
-  const range = presetToRange('7d');
+  const range = presetToRange(rangePreset);
   const rangeQs = rangeQueryString(range.startAt, range.endAt);
 
   const statsQuery = useQuery({
-    queryKey: ['board-widget-stats', widget.websiteId, BOARD_WIDGET_DAYS],
+    queryKey: ['board-widget-stats', widget.websiteId, rangePreset],
     enabled: !publicMode && widget.type === 'stats' && Boolean(widget.websiteId),
     queryFn: () =>
       api<WebsiteStats>(`/api/websites/${widget.websiteId}/stats?${rangeQs}`),
   });
 
   const pageviewsQuery = useQuery({
-    queryKey: ['board-widget-pageviews', widget.websiteId, BOARD_WIDGET_DAYS],
+    queryKey: ['board-widget-pageviews', widget.websiteId, rangePreset],
     enabled: !publicMode && widget.type === 'stats' && Boolean(widget.websiteId),
     queryFn: () =>
       api<{ pageviews: { x: string; y: number }[] }>(
@@ -105,8 +85,7 @@ function BoardWidget({ widget, publicMode }: { widget: Widget; publicMode?: bool
       ),
   });
 
-  const stats =
-    widget.type === 'stats' && widget.stats ? widget.stats : statsQuery.data;
+  const stats = widget.type === 'stats' && widget.stats ? (widget.stats as WebsiteStats) : statsQuery.data;
   const series =
     widget.type === 'stats' && widget.series
       ? widget.series
@@ -115,7 +94,7 @@ function BoardWidget({ widget, publicMode }: { widget: Widget; publicMode?: bool
   const chartData = series.map((p) => ({ x: formatChartLabel(p.x), y: p.y }));
 
   return (
-    <section className="board-stat-widget">
+    <section className={boardWidgetClassName(widget)}>
       <h3 className="board-stat-widget-title">{widget.label?.trim() || t('boardWidgetStats')}</h3>
       {loading ? (
         <div className="board-stat-widget-skeleton" aria-busy>
@@ -187,21 +166,82 @@ function BoardWidget({ widget, publicMode }: { widget: Widget; publicMode?: bool
               <p className="text-muted board-stat-widget-empty">{t('noDataInPeriod')}</p>
             )}
           </div>
-          <p className="text-muted board-stat-widget-period">{t('boardWidgetPeriod7d')}</p>
+          <p className="text-muted board-stat-widget-period">{t(`boardWidgetPeriod${rangePreset}`)}</p>
         </>
       ) : null}
     </section>
   );
 }
 
-export function parseBoardWidgets(parameters: Record<string, unknown>): StatsWidgetConfig[] {
-  const raw = parameters.widgets;
-  if (!Array.isArray(raw)) return [];
-  return raw.filter(
-    (w): w is StatsWidgetConfig =>
-      typeof w === 'object' &&
-      w !== null &&
-      (w as BoardWidget).type === 'stats' &&
-      typeof (w as { websiteId?: string }).websiteId === 'string',
+function InsightBoardWidget({
+  widget,
+  publicMode,
+  rangePreset,
+}: {
+  widget: InsightWidgetConfig;
+  publicMode?: boolean;
+  rangePreset: BoardRangePreset;
+}) {
+  const chartColors = useChartColors();
+  const range = presetToRange(rangePreset);
+  const rangeQs = rangeQueryString(range.startAt, range.endAt);
+  const insightQuery = useQuery({
+    queryKey: ['board-widget-insight', widget.insightId, rangePreset],
+    enabled: !publicMode && Boolean(widget.insightId),
+    queryFn: () => api<{ data: InsightResult }>(`/api/insights/${widget.insightId}/run?${rangeQs}`),
+  });
+  const result = (widget.result as InsightResult | undefined) ?? insightQuery.data?.data;
+  const loading = !publicMode && insightQuery.isLoading;
+
+  return (
+    <section className={boardWidgetClassName(widget)}>
+      <h3 className="board-stat-widget-title">{widget.label?.trim() || t('insight')}</h3>
+      {loading ? <div className="skeleton skeleton-block" aria-busy /> : null}
+      {!loading && result ? (
+        <div className="board-stat-widget-chart">
+          {result.kind === 'trend' ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={result.series.map((point) => ({ x: formatChartLabel(point.x), y: point.y }))}>
+                <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
+                <XAxis dataKey="x" tick={{ fontSize: 10, fill: chartColors.muted }} stroke={chartColors.border} />
+                <YAxis allowDecimals={false} width={40} tick={{ fontSize: 10, fill: chartColors.muted }} stroke={chartColors.border} />
+                <Tooltip contentStyle={{ background: chartColors.panel, border: `1px solid ${chartColors.border}`, borderRadius: 8, fontSize: 12, color: chartColors.text }} />
+                <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : result.kind === 'funnel' ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={result.steps.map((step) => ({ x: step.step, y: step.count }))} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 10, fill: chartColors.muted }} stroke={chartColors.border} />
+                <YAxis type="category" dataKey="x" width={80} tick={{ fontSize: 10, fill: chartColors.muted }} stroke={chartColors.border} />
+                <Tooltip contentStyle={{ background: chartColors.panel, border: `1px solid ${chartColors.border}`, borderRadius: 8, fontSize: 12, color: chartColors.text }} />
+                <Bar dataKey="y" fill={chartColors.accent} radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : result.kind === 'table' ? (
+            <ul className="list-plain">
+              {result.rows.slice(0, 5).map((row) => (
+                <li key={row.x} className="list-item list-row">
+                  <span>{row.x}</span>
+                  <span className="list-row-value">{row.y.toLocaleString()}</span>
+                </li>
+              ))}
+            </ul>
+          ) : result.kind === 'path' ? (
+            <ul className="list-plain">
+              {result.next.slice(0, 5).map((row) => (
+                <li key={row.path} className="list-item list-row">
+                  <span>{row.path}</span>
+                  <span className="list-row-value">{row.count.toLocaleString()}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-muted board-stat-widget-empty">{t('boardInsightSummary')}</p>
+          )}
+        </div>
+      ) : null}
+    </section>
   );
 }

@@ -46,6 +46,63 @@ export async function canMutateWebsite(env: Env, website: Website, user: AuthUse
   return false;
 }
 
+function websiteModulePermissions(canView: boolean, canEdit: boolean, canManageTeam: boolean) {
+  const readonlyModule = { canView, canEdit: false };
+  const editableModule = { canView, canEdit };
+  return {
+    analytics: editableModule,
+    boards: editableModule,
+    featureFlags: editableModule,
+    experiments: editableModule,
+    errors: editableModule,
+    logs: editableModule,
+    surveys: editableModule,
+    warehouse: editableModule,
+    settings: editableModule,
+    team: { canView, canEdit: canManageTeam },
+  };
+}
+
+export async function getWebsitePermissions(env: Env, website: Website, user: AuthUser) {
+  if (user.role === ROLES.admin) {
+    return {
+      role: ROLES.admin,
+      canView: true,
+      canEdit: true,
+      canManageTeam: true,
+      capabilities: {
+        viewAnalytics: true,
+        editWebsite: true,
+        manageMembers: true,
+        manageWebsites: true,
+      },
+      modules: websiteModulePermissions(true, true, true),
+    };
+  }
+
+  const membership = website.teamId ? await userHasTeamAccess(env, user.userId, website.teamId) : null;
+  const canView = website.userId === user.userId || Boolean(membership);
+  const canEdit = await canMutateWebsite(env, website, user);
+  const role = membership?.role ?? user.role;
+  const canManageTeam =
+    Boolean(membership && (membership.role === ROLES.teamOwner || membership.role === ROLES.teamManager)) &&
+    !isGlobalReadOnly(user.role);
+
+  return {
+    role,
+    canView,
+    canEdit,
+    canManageTeam,
+    capabilities: {
+      viewAnalytics: canView,
+      editWebsite: canEdit,
+      manageMembers: canManageTeam,
+      manageWebsites: canManageTeam,
+    },
+    modules: websiteModulePermissions(canView, canEdit, canManageTeam),
+  };
+}
+
 export async function canMutateTeam(
   env: Env,
   teamId: string,

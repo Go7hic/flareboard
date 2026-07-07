@@ -3,6 +3,11 @@ import { eq, inArray, or } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
 import { ENTITY_TYPE, createBoardSchema, updateBoardSchema, uuid } from '@flareboard/shared';
 import type { Env } from '../env';
+import { canMutateTeamResource } from '../lib/access';
+import {
+  parseBoardWidgets,
+  validateBoardWidgetsForUser,
+} from '../lib/board-widgets';
 import { getUserTeams } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
@@ -52,6 +57,13 @@ export async function handleCreate(c: Ctx) {
   const parsed = createBoardSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
 
+  const widgetError = await validateBoardWidgetsForUser(
+    c.env,
+    c.get('user'),
+    parseBoardWidgets(parsed.data.parameters),
+  );
+  if (widgetError) return badRequest(widgetError);
+
   const boardId = uuid();
   const now = new Date();
   const db = createDb(c.env.DB);
@@ -83,11 +95,19 @@ export async function handleUpdate(c: Ctx) {
   const boardId = c.req.param('boardId') ?? '';
   const db = createDb(c.env.DB);
   const [board] = await db.select().from(schema.board).where(eq(schema.board.boardId, boardId)).limit(1);
-  if (!board || board.userId !== c.get('user').userId) return notFound();
+  if (!board || !(await canMutateTeamResource(c.env, board, c.get('user')))) return notFound();
 
   const body = await c.req.json().catch(() => null);
   const parsed = updateBoardSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
+
+  const nextParameters = parsed.data.parameters ?? board.parameters;
+  const widgetError = await validateBoardWidgetsForUser(
+    c.env,
+    c.get('user'),
+    parseBoardWidgets(nextParameters),
+  );
+  if (widgetError) return badRequest(widgetError);
 
   await db
     .update(schema.board)
@@ -107,7 +127,7 @@ export async function handleDelete(c: Ctx) {
   const boardId = c.req.param('boardId') ?? '';
   const db = createDb(c.env.DB);
   const [board] = await db.select().from(schema.board).where(eq(schema.board.boardId, boardId)).limit(1);
-  if (!board || board.userId !== c.get('user').userId) return notFound();
+  if (!board || !(await canMutateTeamResource(c.env, board, c.get('user')))) return notFound();
   await db.delete(schema.board).where(eq(schema.board.boardId, boardId));
   await db.delete(schema.share).where(eq(schema.share.entityId, boardId));
   return json({ ok: true });
@@ -117,7 +137,7 @@ export async function handleShareCreate(c: Ctx) {
   const boardId = c.req.param('boardId') ?? '';
   const db = createDb(c.env.DB);
   const [board] = await db.select().from(schema.board).where(eq(schema.board.boardId, boardId)).limit(1);
-  if (!board || board.userId !== c.get('user').userId) return notFound();
+  if (!board || !(await canMutateTeamResource(c.env, board, c.get('user')))) return notFound();
 
   const body = (await c.req.json().catch(() => null)) as { name?: string } | null;
   const shareId = uuid();

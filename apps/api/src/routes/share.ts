@@ -3,7 +3,12 @@ import { eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
 import { ENTITY_TYPE, createShareSchema, statsQuerySchema, updateShareSchema, uuid } from '@flareboard/shared';
 import type { Env } from '../env';
-import { canAccessWebsite } from '../lib/access';
+import { canAccessTeamResource, canAccessWebsite, canMutateTeamResource, canMutateWebsite } from '../lib/access';
+import {
+  filterBoardWidgetsForPublicShare,
+  parseBoardWidgets,
+  resolveBoardOwner,
+} from '../lib/board-widgets';
 import { cachedRead } from '../lib/cache';
 import {
   getMetrics,
@@ -14,6 +19,7 @@ import {
   getWebsiteStats,
 } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
+import { runInsightQuery, type InsightQuery, type InsightType } from '../lib/insights';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
@@ -61,7 +67,7 @@ export async function handleCreate(c: Ctx) {
   if (!parsed.success) return badRequest(parsed.error.message);
 
   const website = await getWebsiteById(c.env, parsed.data.websiteId);
-  if (!website || !(await canAccessWebsite(c.env, website, c.get('user')))) {
+  if (!website || !(await canMutateWebsite(c.env, website, c.get('user')))) {
     return notFound();
   }
 
@@ -94,10 +100,24 @@ async function userOwnsShare(c: Ctx, share: typeof schema.share.$inferSelect) {
       .from(schema.board)
       .where(eq(schema.board.boardId, share.entityId))
       .limit(1);
-    return board?.userId === c.get('user').userId;
+    return board ? canAccessTeamResource(c.env, board, c.get('user')) : false;
   }
   const website = await getWebsiteById(c.env, share.entityId);
   return website ? canAccessWebsite(c.env, website, c.get('user')) : false;
+}
+
+async function canMutateShare(c: Ctx, share: typeof schema.share.$inferSelect) {
+  if (share.shareType === ENTITY_TYPE.board) {
+    const db = createDb(c.env.DB);
+    const [board] = await db
+      .select()
+      .from(schema.board)
+      .where(eq(schema.board.boardId, share.entityId))
+      .limit(1);
+    return board ? canMutateTeamResource(c.env, board, c.get('user')) : false;
+  }
+  const website = await getWebsiteById(c.env, share.entityId);
+  return website ? canMutateWebsite(c.env, website, c.get('user')) : false;
 }
 
 export async function handleUpdate(c: Ctx) {
@@ -107,6 +127,7 @@ export async function handleUpdate(c: Ctx) {
   const db = createDb(c.env.DB);
   const [share] = await db.select().from(schema.share).where(eq(schema.share.shareId, shareId)).limit(1);
   if (!share || !(await userOwnsShare(c, share))) return notFound();
+  if (!(await canMutateShare(c, share))) return json({ message: 'Read-only access' }, 403);
 
   const body = await c.req.json().catch(() => null);
   const parsed = updateShareSchema.safeParse(body);
@@ -128,15 +149,23 @@ export async function handleDelete(c: Ctx) {
   const db = createDb(c.env.DB);
   const [share] = await db.select().from(schema.share).where(eq(schema.share.shareId, shareId)).limit(1);
   if (!share || !(await userOwnsShare(c, share))) return notFound();
+  if (!(await canMutateShare(c, share))) return json({ message: 'Read-only access' }, 403);
 
   await db.delete(schema.share).where(eq(schema.share.shareId, shareId));
   return json({ ok: true });
 }
 
-function parsePublicRange(c: Context<{ Bindings: Env }>) {
+function presetSpanMs(preset: unknown) {
+  if (preset === '24h') return 24 * 60 * 60 * 1000;
+  if (preset === '30d') return 30 * 24 * 60 * 60 * 1000;
+  if (preset === '90d') return 90 * 24 * 60 * 60 * 1000;
+  return 7 * 24 * 60 * 60 * 1000;
+}
+
+function parsePublicRange(c: Context<{ Bindings: Env }>, defaultPreset?: unknown) {
   const query = statsQuerySchema.safeParse(c.req.query());
   const endAt = query.success && query.data.endAt ? query.data.endAt : Date.now();
-  const startAt = query.success && query.data.startAt ? query.data.startAt : endAt - 24 * 60 * 60 * 1000;
+  const startAt = query.success && query.data.startAt ? query.data.startAt : endAt - presetSpanMs(defaultPreset ?? '24h');
   const unit = query.success && query.data.unit ? query.data.unit : 'day';
   return { startAt, endAt, unit };
 }
@@ -156,22 +185,44 @@ export async function handlePublicGet(c: Context<{ Bindings: Env }>) {
       .limit(1);
     if (!board) return notFound();
 
-    const { startAt, endAt } = parsePublicRange(c);
-    const params = board.parameters as { widgets?: Array<{ type?: string; websiteId?: string; label?: string }> };
-    const widgets = Array.isArray(params.widgets) ? params.widgets : [];
+    const owner = board.userId ? await resolveBoardOwner(c.env, board.userId) : null;
+    if (!owner) return notFound();
+
+    const params = board.parameters as { rangePreset?: string; widgets?: unknown };
+    const { startAt, endAt } = parsePublicRange(c, params.rangePreset);
+    const widgets = await filterBoardWidgetsForPublicShare(c.env, owner, parseBoardWidgets(params));
     const enriched = await Promise.all(
       widgets.map(async (w) => {
-        if (w.type !== 'stats' || !w.websiteId) return w;
-        const [stats, pageviews] = await Promise.all([
-          getWebsiteStats(c.env, w.websiteId, startAt, endAt),
-          getPageviews(c.env, w.websiteId, startAt, endAt, 'day'),
-        ]);
-        return { ...w, stats, series: pageviews.pageviews };
+        if (w.type === 'stats' && w.websiteId) {
+          const [stats, pageviews] = await Promise.all([
+            getWebsiteStats(c.env, w.websiteId, startAt, endAt),
+            getPageviews(c.env, w.websiteId, startAt, endAt, 'day'),
+          ]);
+          return { ...w, stats, series: pageviews.pageviews };
+        }
+        if (w.type === 'insight' && w.insightId) {
+          const [insight] = await db
+            .select()
+            .from(schema.insight)
+            .where(eq(schema.insight.insightId, w.insightId))
+            .limit(1);
+          if (!insight) return w;
+          const result = await runInsightQuery(
+            c.env,
+            insight.websiteId,
+            insight.type as InsightType,
+            insight.query as InsightQuery,
+            startAt,
+            endAt,
+          );
+          return { ...w, result };
+        }
+        return w;
       }),
     );
 
     return json({
-      board: { ...serializeBoard(board), parameters: { widgets: enriched } },
+      board: { ...serializeBoard(board), parameters: { rangePreset: params.rangePreset, widgets: enriched } },
       share: { name: share.name, slug: share.slug },
       period: { startAt, endAt },
     });

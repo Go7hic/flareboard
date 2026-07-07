@@ -107,6 +107,55 @@ export async function handleGet(c: Ctx) {
   });
 }
 
+export async function handleStatus(c: Ctx) {
+  const teamId = c.req.param('teamId');
+  if (!teamId) return notFound();
+  const team = await getTeamById(c.env, teamId);
+  if (!team) return notFound();
+
+  const membership = await userHasTeamAccess(c.env, c.get('user').userId, teamId);
+  const isAdmin = c.get('user').role === ROLES.admin;
+  if (!membership && !isAdmin) {
+    return notFound();
+  }
+
+  const db = createDb(c.env.DB);
+  const members = await db
+    .select({
+      userId: schema.teamUser.userId,
+      username: schema.user.username,
+      role: schema.teamUser.role,
+      createdAt: schema.teamUser.createdAt,
+    })
+    .from(schema.teamUser)
+    .innerJoin(schema.user, eq(schema.teamUser.userId, schema.user.userId))
+    .where(eq(schema.teamUser.teamId, teamId));
+  const websites = await getTeamWebsites(c.env, teamId);
+  const roles = members.reduce<Record<string, number>>((acc, member) => {
+    acc[member.role] = (acc[member.role] ?? 0) + 1;
+    return acc;
+  }, {});
+  const readonlyMemberCount = members.filter((member) => member.role === ROLES.teamViewOnly).length;
+
+  return json({
+    teamId,
+    teamName: team.name,
+    currentUserRole: membership?.role ?? ROLES.admin,
+    canManageMembers: canManageMembers(membership?.role, isAdmin),
+    memberCount: members.length,
+    editableMemberCount: members.length - readonlyMemberCount,
+    readonlyMemberCount,
+    websiteCount: websites.length,
+    roles,
+    members: members.map((member) => ({
+      userId: member.userId,
+      username: member.username,
+      role: member.role,
+      createdAt: member.createdAt,
+    })),
+  });
+}
+
 export async function handleUpdate(c: Ctx) {
   const teamId = c.req.param('teamId');
   if (!teamId) return notFound();
@@ -222,10 +271,14 @@ export async function handleCreateWebsite(c: Ctx) {
   const parsed = createTeamWebsiteSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
 
+  const { checkWebsiteLimit } = await import('../lib/billing');
+  const user = c.get('user');
+  const limit = await checkWebsiteLimit(c.env, user.userId);
+  if (!limit.ok) return badRequest(limit.message);
+
   const websiteId = uuid();
   const now = new Date();
   const db = createDb(c.env.DB);
-  const user = c.get('user');
 
   await db.insert(schema.website).values({
     websiteId,
@@ -316,6 +369,10 @@ export async function handleUpdateUser(c: Ctx) {
     .limit(1);
   if (!row) return notFound();
 
+  if (row.role === ROLES.teamOwner && membership?.role !== ROLES.teamOwner && c.get('user').role !== ROLES.admin) {
+    return badRequest('Only team owners can change owner roles');
+  }
+
   if (row.role === ROLES.teamOwner && parsed.data.role !== ROLES.teamOwner) {
     const owners = await db
       .select()
@@ -354,6 +411,10 @@ export async function handleDeleteUser(c: Ctx) {
     .where(and(eq(schema.teamUser.teamId, teamId), eq(schema.teamUser.userId, targetUserId)))
     .limit(1);
   if (!row) return notFound();
+
+  if (row.role === ROLES.teamOwner && !self && membership?.role !== ROLES.teamOwner && !isAdmin) {
+    return badRequest('Only team owners can remove owners');
+  }
 
   if (row.role === ROLES.teamOwner) {
     const owners = await db

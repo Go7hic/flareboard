@@ -5,7 +5,7 @@
 | Element | Value |
 |---------|--------|
 | Name | **Flareboard** |
-| Tagline | Google Analytics alternative on Cloudflare |
+| Tagline | Product analytics on Cloudflare |
 | Logo | `BrandLogo` — teal rounded dashboard tile (`#0d9488`), white chart line, orange peak dot + corner flare (`#f6821f`); flat solids only |
 | Favicon | `public/logo.avif` (same mark) |
 | OG image | `public/ogimg.webp` (1200×630) |
@@ -13,7 +13,7 @@
 
 ## Design read
 
-**Reading this as:** B2B analytics product UI for technical operators, with Cloudflare-native devtool-trust language, leaning toward Primer/Carbon data-density patterns with premium polish.
+**Reading this as:** B2B product analytics UI for technical operators, growth teams, and product owners who want a PostHog-like surface on Cloudflare infrastructure. The dashboard should keep Cloudflare-native devtool trust while making experimentation, feedback, quality, and warehouse workflows readable for non-infra users.
 
 ### taste-skill approach
 
@@ -81,10 +81,10 @@ Dashboard and landing surfaces use **flat, solid colors only** — no `linear-gr
 
 ## Landing messaging (prominent)
 
-1. **Hero** — GA alternative badge; headline leads with Google Analytics alternative on Cloudflare; subhead names Workers, D1, R2, Queues; pipeline visual (Edge Ingest → Queue → D1 → Dashboard).
-2. **Why not Google Analytics?** — Privacy, cookie banners, data ownership, edge speed (comparison strip, not three equal cards).
+1. **Hero** — Product analytics badge; headline leads with product analytics on Cloudflare; subhead names Workers, D1, R2, Queues; pipeline visual (Edge Ingest → Queue → D1 → Dashboard).
+2. **Why not the old stack?** — Privacy, data ownership, edge speed, and lower ops burden than ClickHouse/Kubernetes products.
 3. **Cloudflare stack** — Workers, D1, R2, KV, Queues with role copy for Flareboard.
-4. **Features bento** — 4 asymmetric cells with visual variety (accent rail + highlight border-top cells, no gradients).
+4. **Features bento** — asymmetric cells for analytics, replay, flags, experiments, surveys, errors/logs, warehouse, and collaboration.
 5. **Trust** — Runs on Cloudflare global network; decorative edge-node field (not a fake dashboard screenshot).
 6. **CTA band** — Deploy on Cloudflare in minutes → `/login`.
 
@@ -96,11 +96,25 @@ Primary conversion CTA label: **Get started** (hero + footer). CTA band uses **D
 |-----|---------|
 | `/login` | Sign in → `/websites` |
 | `/websites` | Website list |
-| `/websites/:id` | Stats (primary operator view) |
+| `/websites/:id` | Website overview, traffic, events, sessions, realtime, performance |
+| `/websites/:id/actions` | Action definitions |
+| `/websites/:id/people` | People list and profile drilldown |
+| `/websites/:id/groups` | Group analytics |
+| `/websites/:id/feature-flags` | Feature flags and targeting |
+| `/websites/:id/experiments` | Experiments and results |
+| `/websites/:id/surveys` | Surveys, responses, and feedback inbox |
+| `/websites/:id/errors` | Error tracking issues |
+| `/websites/:id/logs` | Logs and traces |
+| `/websites/:id/ai-observability` | AI observation events |
+| `/websites/:id/workflows` | Event-triggered workflows |
+| `/websites/:id/warehouse` | D1 warehouse query workbench |
 | `/websites/:id/replays` | Session replay player |
+| `/websites/:id/annotations` | Release, campaign, incident, and experiment annotations |
+| `/websites/:id/audit` | Website audit log |
 | `/teams` | Teams CRUD + join |
 | `/links` | Short links & pixels |
-| `/reports` | Funnels, vitals, UTM, revenue |
+| `/reports` | Funnels, vitals, UTM, revenue, retention, journeys |
+| `/insights` | Saved trend, funnel, retention, path, stickiness, and table insights |
 | `/boards` | Custom widget boards |
 | `/admin` | Users, teams, websites (admin) |
 | `/share/:slug` | Public read-only stats |

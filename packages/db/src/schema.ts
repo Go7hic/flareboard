@@ -349,6 +349,30 @@ export const board = sqliteTable(
   ],
 );
 
+export const insight = sqliteTable(
+  'insight',
+  {
+    insightId: text('insight_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.userId),
+    type: text('type').notNull(),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    query: text('query', { mode: 'json' }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [
+    index('insight_website_idx').on(t.websiteId),
+    index('insight_user_idx').on(t.userId),
+    index('insight_type_idx').on(t.websiteId, t.type),
+  ],
+);
+
 export const share = sqliteTable(
   'share',
   {
@@ -555,6 +579,484 @@ export const cohort = sqliteTable(
   (t) => [index('cohort_website_idx').on(t.websiteId)],
 );
 
+export const featureFlag = sqliteTable(
+  'feature_flag',
+  {
+    flagId: text('flag_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    key: text('key').notNull(),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    rollout: integer('rollout').notNull().default(100),
+    variants: text('variants', { mode: 'json' }),
+    targetingRules: text('targeting_rules', { mode: 'json' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [
+    index('feature_flag_website_idx').on(t.websiteId),
+    index('feature_flag_website_key_idx').on(t.websiteId, t.key),
+  ],
+);
+
+export const experiment = sqliteTable(
+  'experiment',
+  {
+    experimentId: text('experiment_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    featureFlagId: text('feature_flag_id')
+      .notNull()
+      .references(() => featureFlag.flagId),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    status: text('status').notNull().default('draft'),
+    goalEvent: text('goal_event').notNull(),
+    startedAt: integer('started_at', { mode: 'timestamp_ms' }),
+    endedAt: integer('ended_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [
+    index('experiment_website_idx').on(t.websiteId),
+    index('experiment_flag_idx').on(t.featureFlagId),
+    index('experiment_status_idx').on(t.websiteId, t.status),
+  ],
+);
+
+export const actionDefinition = sqliteTable(
+  'action_definition',
+  {
+    actionId: text('action_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    rules: text('rules', { mode: 'json' }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [
+    index('action_definition_website_idx').on(t.websiteId),
+    index('action_definition_website_name_idx').on(t.websiteId, t.name),
+  ],
+);
+
+export const annotation = sqliteTable(
+  'annotation',
+  {
+    annotationId: text('annotation_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.userId),
+    title: text('title').notNull(),
+    description: text('description').notNull().default(''),
+    category: text('category').notNull().default('note'),
+    happenedAt: integer('happened_at', { mode: 'timestamp_ms' }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [
+    index('annotation_website_idx').on(t.websiteId),
+    index('annotation_website_happened_idx').on(t.websiteId, t.happenedAt),
+    index('annotation_user_idx').on(t.userId),
+  ],
+);
+
+export const survey = sqliteTable(
+  'survey',
+  {
+    surveyId: text('survey_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    name: text('name').notNull(),
+    question: text('question').notNull(),
+    type: text('type').notNull().default('text'),
+    options: text('options', { mode: 'json' }).$type<string[]>(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    triggerPath: text('trigger_path'),
+    triggerEvent: text('trigger_event'),
+    displayDelaySeconds: integer('display_delay_seconds').notNull().default(0),
+    displayRules: text('display_rules', { mode: 'json' }).$type<
+      Array<{ field: string; operator: string; value: string; key?: string }>
+    >(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [
+    index('survey_website_idx').on(t.websiteId),
+    index('survey_website_enabled_idx').on(t.websiteId, t.enabled),
+  ],
+);
+
+export const surveyResponse = sqliteTable(
+  'survey_response',
+  {
+    responseId: text('response_id').primaryKey(),
+    surveyId: text('survey_id')
+      .notNull()
+      .references(() => survey.surveyId),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    sessionId: text('session_id'),
+    visitId: text('visit_id'),
+    answer: text('answer').notNull(),
+    urlPath: text('url_path'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [
+    index('survey_response_survey_idx').on(t.surveyId),
+    index('survey_response_website_created_idx').on(t.websiteId, t.createdAt),
+    index('survey_response_session_idx').on(t.sessionId),
+  ],
+);
+
+export const workflow = sqliteTable(
+  'workflow',
+  {
+    workflowId: text('workflow_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    name: text('name').notNull(),
+    triggerEvent: text('trigger_event').notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    actionType: text('action_type').notNull().default('record'),
+    actionConfig: text('action_config', { mode: 'json' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [
+    index('workflow_website_idx').on(t.websiteId),
+    index('workflow_website_enabled_idx').on(t.websiteId, t.enabled),
+    index('workflow_trigger_idx').on(t.websiteId, t.triggerEvent),
+  ],
+);
+
+export const workflowExecution = sqliteTable(
+  'workflow_execution',
+  {
+    executionId: text('execution_id').primaryKey(),
+    workflowId: text('workflow_id')
+      .notNull()
+      .references(() => workflow.workflowId),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    sessionId: text('session_id'),
+    visitId: text('visit_id'),
+    eventId: text('event_id'),
+    eventName: text('event_name'),
+    status: text('status').notNull().default('recorded'),
+    error: text('error'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [
+    index('workflow_execution_workflow_idx').on(t.workflowId),
+    index('workflow_execution_website_created_idx').on(t.websiteId, t.createdAt),
+    index('workflow_execution_session_idx').on(t.sessionId),
+  ],
+);
+
+export const errorIssueState = sqliteTable(
+  'error_issue_state',
+  {
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    fingerprint: text('fingerprint').notNull(),
+    status: text('status').notNull().default('open'),
+    note: text('note'),
+    assigneeUserId: text('assignee_user_id').references(() => user.userId),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.websiteId, t.fingerprint] }),
+    index('error_issue_state_website_status_idx').on(t.websiteId, t.status),
+  ],
+);
+
+export const errorIssueComment = sqliteTable(
+  'error_issue_comment',
+  {
+    commentId: text('comment_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    fingerprint: text('fingerprint').notNull(),
+    userId: text('user_id').references(() => user.userId),
+    body: text('body').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('error_issue_comment_issue_idx').on(t.websiteId, t.fingerprint, t.createdAt)],
+);
+
+export const errorSourceMap = sqliteTable(
+  'error_source_map',
+  {
+    sourceMapId: text('source_map_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    release: text('release').notNull(),
+    file: text('file').notNull(),
+    content: text('content').notNull(),
+    size: integer('size').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [
+    index('error_source_map_unique_idx').on(t.websiteId, t.release, t.file),
+    index('error_source_map_release_idx').on(t.websiteId, t.release),
+  ],
+);
+
+export const errorAlertRule = sqliteTable(
+  'error_alert_rule',
+  {
+    alertRuleId: text('alert_rule_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    name: text('name').notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    threshold: integer('threshold').notNull(),
+    windowMinutes: integer('window_minutes').notNull(),
+    severity: text('severity'),
+    release: text('release'),
+    environment: text('environment'),
+    channel: text('channel').notNull().default('record'),
+    target: text('target'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('error_alert_rule_website_idx').on(t.websiteId, t.enabled)],
+);
+
+export const errorAlertEvent = sqliteTable(
+  'error_alert_event',
+  {
+    alertEventId: text('alert_event_id').primaryKey(),
+    alertRuleId: text('alert_rule_id')
+      .notNull()
+      .references(() => errorAlertRule.alertRuleId),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    count: integer('count').notNull(),
+    threshold: integer('threshold').notNull(),
+    windowStartAt: integer('window_start_at', { mode: 'timestamp_ms' }).notNull(),
+    windowEndAt: integer('window_end_at', { mode: 'timestamp_ms' }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('error_alert_event_rule_idx').on(t.websiteId, t.alertRuleId, t.createdAt)],
+);
+
+export const logSavedFilter = sqliteTable(
+  'log_saved_filter',
+  {
+    filterId: text('filter_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    userId: text('user_id').references(() => user.userId),
+    name: text('name').notNull(),
+    filters: text('filters', { mode: 'json' }).notNull(),
+    isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('log_saved_filter_website_idx').on(t.websiteId, t.createdAt)],
+);
+
+export const logAlertRule = sqliteTable(
+  'log_alert_rule',
+  {
+    alertRuleId: text('alert_rule_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    name: text('name').notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    threshold: integer('threshold').notNull(),
+    windowMinutes: integer('window_minutes').notNull(),
+    level: text('level'),
+    service: text('service'),
+    search: text('search'),
+    release: text('release'),
+    environment: text('environment'),
+    channel: text('channel').notNull().default('record'),
+    target: text('target'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('log_alert_rule_website_idx').on(t.websiteId, t.enabled)],
+);
+
+export const logAlertEvent = sqliteTable(
+  'log_alert_event',
+  {
+    alertEventId: text('alert_event_id').primaryKey(),
+    alertRuleId: text('alert_rule_id')
+      .notNull()
+      .references(() => logAlertRule.alertRuleId),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    count: integer('count').notNull(),
+    threshold: integer('threshold').notNull(),
+    windowStartAt: integer('window_start_at', { mode: 'timestamp_ms' }).notNull(),
+    windowEndAt: integer('window_end_at', { mode: 'timestamp_ms' }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('log_alert_event_rule_idx').on(t.websiteId, t.alertRuleId, t.createdAt)],
+);
+
+export const warehouseSavedQuery = sqliteTable(
+  'warehouse_saved_query',
+  {
+    savedQueryId: text('saved_query_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    userId: text('user_id').references(() => user.userId),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    sql: text('sql').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('warehouse_saved_query_website_idx').on(t.websiteId, t.createdAt)],
+);
+
+export const warehouseQueryHistory = sqliteTable(
+  'warehouse_query_history',
+  {
+    historyId: text('history_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    userId: text('user_id').references(() => user.userId),
+    sql: text('sql').notNull(),
+    status: text('status').notNull(),
+    rowCount: integer('row_count').notNull().default(0),
+    error: text('error'),
+    durationMs: integer('duration_ms').notNull().default(0),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('warehouse_query_history_website_idx').on(t.websiteId, t.createdAt)],
+);
+
+export const warehouseScheduledQuery = sqliteTable(
+  'warehouse_scheduled_query',
+  {
+    scheduledQueryId: text('scheduled_query_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    userId: text('user_id').references(() => user.userId),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    sql: text('sql').notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    intervalMinutes: integer('interval_minutes').notNull(),
+    nextRunAt: integer('next_run_at', { mode: 'timestamp_ms' }).notNull(),
+    lastRunAt: integer('last_run_at', { mode: 'timestamp_ms' }),
+    lastStatus: text('last_status'),
+    lastError: text('last_error'),
+    lastRowCount: integer('last_row_count').notNull().default(0),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('warehouse_scheduled_query_due_idx').on(t.websiteId, t.enabled, t.nextRunAt)],
+);
+
+export const person = sqliteTable(
+  'person',
+  {
+    personId: text('person_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    distinctId: text('distinct_id').notNull(),
+    propertiesJson: text('properties_json').notNull().default('{}'),
+    firstSeenAt: integer('first_seen_at', { mode: 'timestamp_ms' }),
+    lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('person_website_distinct_idx').on(t.websiteId, t.distinctId)],
+);
+
+export const personGroupMembership = sqliteTable(
+  'person_group_membership',
+  {
+    membershipId: text('membership_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    personId: text('person_id')
+      .notNull()
+      .references(() => person.personId),
+    groupType: text('group_type').notNull(),
+    groupKey: text('group_key').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('person_group_membership_unique_idx').on(t.websiteId, t.personId, t.groupType, t.groupKey)],
+);
+
+export const warehouseDataSource = sqliteTable(
+  'warehouse_data_source',
+  {
+    dataSourceId: text('data_source_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    userId: text('user_id').references(() => user.userId),
+    name: text('name').notNull(),
+    type: text('type').notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    configJson: text('config_json').notNull(),
+    lastSyncAt: integer('last_sync_at', { mode: 'timestamp_ms' }),
+    lastStatus: text('last_status'),
+    lastError: text('last_error'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('warehouse_data_source_website_idx').on(t.websiteId, t.createdAt)],
+);
+
+export const warehouseImport = sqliteTable(
+  'warehouse_import',
+  {
+    importRowId: text('import_row_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    dataSourceId: text('data_source_id')
+      .notNull()
+      .references(() => warehouseDataSource.dataSourceId),
+    primaryKey: text('primary_key').notNull(),
+    payloadJson: text('payload_json').notNull(),
+    importedAt: integer('imported_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [
+    index('warehouse_import_source_key_idx').on(t.websiteId, t.dataSourceId, t.primaryKey),
+    index('warehouse_import_website_idx').on(t.websiteId, t.importedAt),
+  ],
+);
+
 export const sessionReplaySaved = sqliteTable(
   'session_replay_saved',
   {
@@ -578,3 +1080,27 @@ export type User = typeof user.$inferSelect;
 export type Website = typeof website.$inferSelect;
 export type Session = typeof session.$inferSelect;
 export type WebsiteEvent = typeof websiteEvent.$inferSelect;
+export type ActionDefinition = typeof actionDefinition.$inferSelect;
+export type Annotation = typeof annotation.$inferSelect;
+export type FeatureFlag = typeof featureFlag.$inferSelect;
+export type Experiment = typeof experiment.$inferSelect;
+export type Survey = typeof survey.$inferSelect;
+export type SurveyResponse = typeof surveyResponse.$inferSelect;
+export type Workflow = typeof workflow.$inferSelect;
+export type WorkflowExecution = typeof workflowExecution.$inferSelect;
+export type ErrorIssueState = typeof errorIssueState.$inferSelect;
+export type ErrorIssueComment = typeof errorIssueComment.$inferSelect;
+export type ErrorSourceMap = typeof errorSourceMap.$inferSelect;
+export type ErrorAlertRule = typeof errorAlertRule.$inferSelect;
+export type ErrorAlertEvent = typeof errorAlertEvent.$inferSelect;
+export type LogSavedFilter = typeof logSavedFilter.$inferSelect;
+export type LogAlertRule = typeof logAlertRule.$inferSelect;
+export type LogAlertEvent = typeof logAlertEvent.$inferSelect;
+export type WarehouseSavedQuery = typeof warehouseSavedQuery.$inferSelect;
+export type WarehouseQueryHistory = typeof warehouseQueryHistory.$inferSelect;
+export type WarehouseScheduledQuery = typeof warehouseScheduledQuery.$inferSelect;
+export type WarehouseDataSource = typeof warehouseDataSource.$inferSelect;
+export type WarehouseImport = typeof warehouseImport.$inferSelect;
+export type Person = typeof person.$inferSelect;
+export type PersonGroupMembership = typeof personGroupMembership.$inferSelect;
+export type Insight = typeof insight.$inferSelect;

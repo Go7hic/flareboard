@@ -1,0 +1,371 @@
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useParams } from 'react-router-dom';
+import { ExternalLink, Search, UserRound } from 'lucide-react';
+import { EmptyState } from '../components/EmptyState';
+import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { api, type PeopleResponse, type PersonDetailResponse, type PersonSummary } from '../lib/api';
+import { t } from '../lib/i18n';
+import { useWebsitePermissions } from '../lib/useWebsitePermissions';
+import { useWebsiteRange } from '../lib/useWebsiteRange';
+
+function formatDate(value: string | number | null | undefined) {
+  if (value == null) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function personLabel(person: PersonSummary | null | undefined) {
+  if (!person) return '-';
+  return person.latestName || person.latestEmail || person.latestAlias || person.personId;
+}
+
+function propertiesToJson(properties: Array<{ key: string; value: string | null }>) {
+  const record: Record<string, string> = {};
+  for (const row of properties) {
+    if (row.value != null) record[row.key] = row.value;
+  }
+  return JSON.stringify(record, null, 2);
+}
+
+export default function WebsitePeoplePage() {
+  const { websiteId } = useParams<{ websiteId: string }>();
+  const { rangeQs } = useWebsiteRange(websiteId, '30d');
+  const { canEdit } = useWebsitePermissions(websiteId, 'analytics');
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [selectedPersonId, setSelectedPersonId] = useState('');
+  const [editingProperties, setEditingProperties] = useState(false);
+  const [propertiesDraft, setPropertiesDraft] = useState('');
+  const [propertiesError, setPropertiesError] = useState('');
+
+  const peopleQuery = useQuery({
+    queryKey: ['people', websiteId, rangeQs, search],
+    enabled: Boolean(websiteId),
+    queryFn: () => {
+      const params = new URLSearchParams(rangeQs);
+      if (search.trim()) params.set('q', search.trim());
+      return api<PeopleResponse>(`/api/websites/${websiteId}/people?${params.toString()}`);
+    },
+  });
+
+  const people = peopleQuery.data?.people ?? [];
+  const selectedPerson = useMemo(
+    () => people.find((person) => person.personId === selectedPersonId) ?? people[0] ?? null,
+    [people, selectedPersonId],
+  );
+
+  const detailQuery = useQuery({
+    queryKey: ['person-detail', websiteId, selectedPerson?.personId],
+    enabled: Boolean(websiteId && selectedPerson?.personId),
+    queryFn: () =>
+      api<PersonDetailResponse>(
+        `/api/websites/${websiteId}/people/${encodeURIComponent(selectedPerson!.personId)}`,
+      ),
+  });
+
+  const savePropertiesMutation = useMutation({
+    mutationFn: async (properties: Record<string, unknown>) => {
+      if (!websiteId || !selectedPerson?.personId) return;
+      return api<PersonDetailResponse>(
+        `/api/websites/${websiteId}/people/${encodeURIComponent(selectedPerson.personId)}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ properties }),
+        },
+      );
+    },
+    onSuccess: (data) => {
+      if (!websiteId || !selectedPerson?.personId) return;
+      queryClient.setQueryData(['person-detail', websiteId, selectedPerson.personId], data);
+      setEditingProperties(false);
+      setPropertiesError('');
+    },
+  });
+
+  function startEditingProperties() {
+    const rows = detailQuery.data?.properties ?? [];
+    setPropertiesDraft(propertiesToJson(rows));
+    setPropertiesError('');
+    setEditingProperties(true);
+  }
+
+  function cancelEditingProperties() {
+    setEditingProperties(false);
+    setPropertiesError('');
+  }
+
+  function saveProperties() {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(propertiesDraft);
+    } catch {
+      setPropertiesError(t('peoplePropertiesInvalid'));
+      return;
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      setPropertiesError(t('peoplePropertiesInvalid'));
+      return;
+    }
+    savePropertiesMutation.mutate(parsed as Record<string, unknown>);
+  }
+
+  return (
+    <div className="page page-people">
+      <WebsitePageShell websiteId={websiteId} />
+
+      <section className="panel section-gap">
+        <header className="panel-header">
+          <div>
+            <h2 className="section-title">{t('people')}</h2>
+            <p className="text-muted">{t('peopleLead')}</p>
+          </div>
+        </header>
+
+        <div className="cohorts-search-wrap people-search">
+          <Search className="cohorts-search-icon" size={16} strokeWidth={2} aria-hidden />
+          <Input
+            type="search"
+            className="cohorts-search"
+            value={search}
+            placeholder={t('peopleSearchPlaceholder')}
+            onChange={(event) => setSearch(event.target.value)}
+            aria-label={t('peopleSearchPlaceholder')}
+          />
+        </div>
+      </section>
+
+      <section className="panel section-gap">
+        {peopleQuery.isLoading ? (
+          <div className="skeleton skeleton-block" aria-busy />
+        ) : people.length ? (
+          <div className="surveys-layout">
+            <div className="surveys-list">
+              {people.map((person) => (
+                <button
+                  type="button"
+                  key={person.personId}
+                  className={`survey-list-item${person.personId === selectedPerson?.personId ? ' active' : ''}`}
+                  onClick={() => {
+                    setSelectedPersonId(person.personId);
+                    setEditingProperties(false);
+                  }}
+                >
+                  <span className="errors-name-cell">
+                    <UserRound size={16} strokeWidth={2} aria-hidden />
+                    <span>
+                      <span className="survey-list-title">{personLabel(person)}</span>
+                      <span className="text-muted">
+                        {person.latestAlias && person.latestAlias !== person.personId
+                          ? `${person.latestAlias} · ${person.personId}`
+                          : person.personId}
+                      </span>
+                    </span>
+                  </span>
+                  <span className="survey-list-meta">
+                    <span className="badge">
+                      {person.sessions.toLocaleString()} {t('sessions')}
+                    </span>
+                    <span className="text-muted">{formatDate(person.lastSeenAt)}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="surveys-detail">
+              {selectedPerson ? (
+                <>
+                  <header className="surveys-detail-head">
+                    <div>
+                      <h3 className="section-title experiment-title">{personLabel(selectedPerson)}</h3>
+                      <p className="text-muted">
+                        {selectedPerson.latestAlias ? (
+                          <>
+                            {t('peopleAlias')}: {selectedPerson.latestAlias} · {selectedPerson.personId}
+                          </>
+                        ) : (
+                          selectedPerson.personId
+                        )}
+                      </p>
+                    </div>
+                  </header>
+
+                  <div className="surveys-stats">
+                    <div>
+                      <span className="stat-label">{t('peopleSessions')}</span>
+                      <strong className="stat-value">{selectedPerson.sessions.toLocaleString()}</strong>
+                    </div>
+                    <div>
+                      <span className="stat-label">{t('visits')}</span>
+                      <strong className="stat-value">{selectedPerson.visits.toLocaleString()}</strong>
+                    </div>
+                    <div>
+                      <span className="stat-label">{t('pageviews')}</span>
+                      <strong className="stat-value">{selectedPerson.pageviews.toLocaleString()}</strong>
+                    </div>
+                    <div>
+                      <span className="stat-label">{t('peopleLastSeen')}</span>
+                      <strong className="stat-value">{formatDate(selectedPerson.lastSeenAt)}</strong>
+                    </div>
+                  </div>
+
+                  <div className="workflow-insights-grid">
+                    <div className="survey-breakdown">
+                      <div className="panel-header compact-panel-header">
+                        <div>
+                          <h3 className="section-title experiment-title">{t('peopleProperties')}</h3>
+                          <p className="text-muted">{t('peoplePropertiesLead')}</p>
+                        </div>
+                        {canEdit ? (
+                          <div className="page-header-actions">
+                            {editingProperties ? (
+                              <>
+                                <Button type="button" variant="ghost" size="sm" onClick={cancelEditingProperties}>
+                                  {t('cancel')}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="primary"
+                                  size="sm"
+                                  onClick={saveProperties}
+                                  disabled={savePropertiesMutation.isPending}
+                                >
+                                  {t('peopleSaveProperties')}
+                                </Button>
+                              </>
+                            ) : (
+                              <Button type="button" variant="secondary" size="sm" onClick={startEditingProperties}>
+                                {t('peopleEditProperties')}
+                              </Button>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                      {editingProperties ? (
+                        <div className="field">
+                          <label className="field-label" htmlFor="people-properties-json">
+                            {t('peoplePropertiesJson')}
+                          </label>
+                          <textarea
+                            id="people-properties-json"
+                            className="textarea"
+                            rows={8}
+                            value={propertiesDraft}
+                            onChange={(event) => setPropertiesDraft(event.target.value)}
+                          />
+                          {propertiesError ? <p className="text-danger">{propertiesError}</p> : null}
+                          {savePropertiesMutation.isSuccess && !propertiesError ? (
+                            <p className="text-muted">{t('peoplePropertiesSaved')}</p>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="table-scroll">
+                          <table className="data-table">
+                            <tbody>
+                              {(detailQuery.data?.properties ?? []).length ? (
+                                detailQuery.data!.properties.map((property) => (
+                                  <tr key={property.key}>
+                                    <th>{property.key}</th>
+                                    <td>{property.value ?? '-'}</td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr>
+                                  <td className="text-muted">{t('peopleNoProperties')}</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="survey-breakdown">
+                      <div className="panel-header compact-panel-header">
+                        <div>
+                          <h3 className="section-title experiment-title">{t('peopleSessions')}</h3>
+                          <p className="text-muted">{t('peopleSessionsLead')}</p>
+                        </div>
+                      </div>
+                      <div className="workflow-event-list">
+                        {(detailQuery.data?.sessions ?? []).slice(0, 8).map((session) => (
+                          <div key={session.id} className="workflow-event-row">
+                            <div>
+                              <Link to={`/websites/${websiteId}/sessions/${session.id}`} className="inline-link">
+                                {session.id.slice(0, 10)}
+                                <ExternalLink size={12} strokeWidth={2} aria-hidden />
+                              </Link>
+                              <p className="text-muted">
+                                {[session.browser, session.os, session.country].filter(Boolean).join(' · ') || '-'}
+                              </p>
+                            </div>
+                            <span className="badge">{session.events.toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="survey-breakdown">
+                    <div className="panel-header compact-panel-header">
+                      <div>
+                        <h3 className="section-title experiment-title">{t('peopleRecentEvents')}</h3>
+                        <p className="text-muted">{t('peopleRecentEventsLead')}</p>
+                      </div>
+                    </div>
+                    <div className="table-scroll">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>{t('event')}</th>
+                            <th>{t('page')}</th>
+                            <th>{t('session')}</th>
+                            <th>{t('created')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(detailQuery.data?.events ?? []).length ? (
+                            detailQuery.data!.events.slice(0, 25).map((event) => (
+                              <tr key={event.id}>
+                                <td>{event.eventName ?? (event.eventType === 1 ? t('pageview') : '-')}</td>
+                                <td className="text-muted">{event.urlPath ?? '-'}</td>
+                                <td>
+                                  <Link to={`/websites/${websiteId}/sessions/${event.sessionId}`} className="inline-link">
+                                    {event.sessionId.slice(0, 8)}
+                                    <ExternalLink size={12} strokeWidth={2} aria-hidden />
+                                  </Link>
+                                </td>
+                                <td className="text-muted">{formatDate(event.createdAt)}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={4} className="text-muted">
+                                {detailQuery.isLoading ? t('loading') : t('peopleNoEvents')}
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <EmptyState title={t('peopleEmptyTitle')} description={t('peopleEmptyBody')} />
+        )}
+      </section>
+    </div>
+  );
+}

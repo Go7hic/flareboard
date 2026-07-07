@@ -8,12 +8,14 @@ export type ReportSectionSkeletonPlacement = 'none' | 'below-title' | 'replace-c
  * show {@link SectionDataSkeleton} only around async data.
  */
 export function ReportSection({
+  id,
   title,
   loading = false,
   skeletonPlacement = 'replace-children',
   variant = 'panel',
   children,
 }: {
+  id?: string;
   title: string;
   loading?: boolean;
   skeletonPlacement?: ReportSectionSkeletonPlacement;
@@ -24,7 +26,11 @@ export function ReportSection({
   const replaceChildren = loading && skeletonPlacement === 'replace-children';
 
   return (
-    <section className={variant === 'flat' ? 'report-block section-gap' : 'panel section-gap'}>
+    <section
+      id={id}
+      className={variant === 'flat' ? 'report-block section-gap' : 'panel section-gap'}
+      tabIndex={id ? -1 : undefined}
+    >
       <h2 className="section-title">{title}</h2>
       {showBelowTitle ? <div className="skeleton skeleton-inline" aria-hidden /> : null}
       {replaceChildren ? <SectionDataSkeleton busy /> : children}

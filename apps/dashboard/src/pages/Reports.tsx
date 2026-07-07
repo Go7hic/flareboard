@@ -28,10 +28,41 @@ import { Skeleton } from '../components/ui/skeleton';
 import { api, getToken, type Website } from '../lib/api';
 import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/dateRange';
 import { t } from '../lib/i18n';
+
+const REPORT_SECTION_LINKS = [
+  { id: 'funnel', labelKey: 'funnel' as const },
+  { id: 'retention', labelKey: 'retentionCohorts' as const },
+  { id: 'journey', labelKey: 'userJourneys' as const },
+  { id: 'attribution', labelKey: 'attribution' as const },
+  { id: 'breakdown', labelKey: 'breakdownCountry' as const },
+  { id: 'performance', labelKey: 'webVitals' as const },
+  { id: 'utm', labelKey: 'utmBreakdown' as const },
+  { id: 'revenue', labelKey: 'revenue' as const },
+  { id: 'cohorts', labelKey: 'cohorts' as const },
+  { id: 'goals', labelKey: 'goals' as const },
+] as const;
+
+function scrollToReportSection(id: string) {
+  document.getElementById(`report-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 import { useChartColors } from '../lib/useChartColors';
 
 type AttributionModel = 'first' | 'last';
 type AttributionType = 'path' | 'event';
+type SavedReport = {
+  id: string;
+  name: string;
+  type: string;
+  websiteId: string;
+  parameters: Record<string, unknown>;
+  parameterSummary?: Array<{ label: string; value: string }>;
+};
+type ReportTemplate = {
+  type: string;
+  name: string;
+  description: string;
+  defaultParameters: Record<string, unknown>;
+};
 
 function formatPaidAdsLabel(name: string) {
   switch (name) {
@@ -84,6 +115,33 @@ function AttributionStatSkeleton() {
       <Skeleton className="mt-[0.65rem] h-7 w-full" />
     </div>
   );
+}
+
+function reportTypeLabel(type: string) {
+  switch (type) {
+    case 'funnel':
+      return t('funnel');
+    case 'retention':
+      return t('retention');
+    case 'journey':
+      return t('journey');
+    case 'attribution':
+      return t('attribution');
+    case 'breakdown':
+      return t('breakdown');
+    case 'performance':
+      return t('webVitals');
+    case 'utm':
+      return t('utmBreakdown');
+    case 'revenue':
+      return t('revenue');
+    case 'goals':
+      return t('goals');
+    case 'cohorts':
+      return t('cohorts');
+    default:
+      return type;
+  }
 }
 
 function AttributionBreakdownPanel({
@@ -178,7 +236,7 @@ export default function ReportsPage() {
     const open = openSections[id];
     if (!open) {
       return (
-        <section className="panel section-gap">
+        <section id={`report-${id}`} className="panel section-gap" tabIndex={-1}>
           <button type="button" className="section-title reports-section-toggle" onClick={() => setSectionOpen(id, true)}>
             {title}
           </button>
@@ -187,7 +245,7 @@ export default function ReportsPage() {
       );
     }
     return (
-      <ReportSection title={title} variant="flat" loading={loading}>
+      <ReportSection id={`report-${id}`} title={title} variant="flat" loading={loading}>
         {children}
       </ReportSection>
     );
@@ -230,16 +288,12 @@ export default function ReportsPage() {
 
   const savedReportsQuery = useQuery({
     queryKey: ['saved-reports'],
-    queryFn: () =>
-      api<
-        Array<{
-          id: string;
-          name: string;
-          type: string;
-          websiteId: string;
-          parameters: Record<string, unknown>;
-        }>
-      >('/api/reports'),
+    queryFn: () => api<SavedReport[]>('/api/reports'),
+  });
+
+  const reportTemplatesQuery = useQuery({
+    queryKey: ['report-templates'],
+    queryFn: () => api<ReportTemplate[]>('/api/reports/templates'),
   });
 
   const utmQuery = useQuery({
@@ -463,6 +517,85 @@ export default function ReportsPage() {
   );
 
   const noWebsite = !websitesQuery.isLoading && !(websitesQuery.data ?? []).length;
+  const reportTemplates = reportTemplatesQuery.data ?? [
+    { type: 'funnel', name: reportTypeLabel('funnel'), description: '', defaultParameters: {} },
+    { type: 'retention', name: reportTypeLabel('retention'), description: '', defaultParameters: {} },
+    { type: 'journey', name: reportTypeLabel('journey'), description: '', defaultParameters: {} },
+  ];
+  const selectedTemplate = reportTemplates.find((template) => template.type === savedType);
+  const savedReportsForWebsite = (savedReportsQuery.data ?? []).filter((r) => r.websiteId === websiteId);
+
+  function buildSavedReportParameters(type: string) {
+    const base = {
+      ...(selectedTemplate?.defaultParameters ?? {}),
+      segmentId: segmentId || null,
+    };
+    if (type === 'funnel') {
+      return { ...base, steps: funnelSteps.split(',').map((step) => step.trim()).filter(Boolean) };
+    }
+    if (type === 'attribution') {
+      return {
+        ...base,
+        model: attributionModel,
+        attributionType,
+        step: attributionStep.trim(),
+      };
+    }
+    if (type === 'breakdown') {
+      return { ...base, dimension: 'country' };
+    }
+    if (type === 'goals') {
+      return {
+        ...base,
+        event: goalEvent.trim(),
+        target: goalTarget ? Number(goalTarget) : null,
+        period: goalPeriod,
+      };
+    }
+    if (type === 'cohorts') {
+      return {
+        ...base,
+        cohortId: selectedCohortId || null,
+        compareCohortId: compareCohortId || null,
+      };
+    }
+    return base;
+  }
+
+  function loadSavedReport(report: SavedReport) {
+    const params = report.parameters ?? {};
+    setSavedType(report.type);
+    setSavedName(report.name);
+    if (typeof params.segmentId === 'string') setSegmentId(params.segmentId);
+    if (report.type === 'funnel' && Array.isArray(params.steps)) {
+      setFunnelSteps(params.steps.filter((step) => typeof step === 'string').join(','));
+      setSectionOpen('funnel', true);
+    }
+    if (report.type === 'attribution') {
+      if (params.model === 'first' || params.model === 'last') setAttributionModel(params.model);
+      if (params.attributionType === 'path' || params.attributionType === 'event') {
+        setAttributionType(params.attributionType);
+      }
+      if (typeof params.step === 'string') setAttributionStep(params.step);
+      setSectionOpen('attribution', true);
+    }
+    if (report.type === 'goals') {
+      if (typeof params.event === 'string') setGoalEvent(params.event);
+      if (typeof params.target === 'number') setGoalTarget(String(params.target));
+      if (params.period === 'daily' || params.period === 'weekly' || params.period === 'monthly') {
+        setGoalPeriod(params.period);
+      }
+      setSectionOpen('goals', true);
+    }
+    if (report.type === 'cohorts') {
+      if (typeof params.cohortId === 'string') setSelectedCohortId(params.cohortId);
+      if (typeof params.compareCohortId === 'string') setCompareCohortId(params.compareCohortId);
+      setSectionOpen('cohorts', true);
+    }
+    if (['retention', 'journey', 'breakdown', 'performance', 'utm', 'revenue'].includes(report.type)) {
+      setSectionOpen(report.type, true);
+    }
+  }
 
   return (
     <div className="page page-reports">
@@ -533,7 +666,8 @@ export default function ReportsPage() {
                       websiteId,
                       type: savedType,
                       name: savedName.trim(),
-                      parameters: { steps: funnelSteps.split(','), segmentId: segmentId || null },
+                      description: selectedTemplate?.description ?? '',
+                      parameters: buildSavedReportParameters(savedType),
                     }),
                   }).then(() => {
                     setSavedName('');
@@ -547,26 +681,47 @@ export default function ReportsPage() {
                   onChange={(e) => setSavedName(e.target.value)}
                 />
                 <select className="select" value={savedType} onChange={(e) => setSavedType(e.target.value)}>
-                  <option value="funnel">{t('funnel')}</option>
-                  <option value="retention">{t('retention')}</option>
-                  <option value="journey">{t('journey')}</option>
+                  {reportTemplates.map((template) => (
+                    <option key={template.type} value={template.type}>
+                      {template.name || reportTypeLabel(template.type)}
+                    </option>
+                  ))}
                 </select>
+                {selectedTemplate?.description ? (
+                  <p className="text-muted reports-template-desc">{selectedTemplate.description}</p>
+                ) : null}
                 <Button type="submit" variant="primary" size="sm">{t('save')}</Button>
               </form>
               <div className="section-gap">
                 {savedReportsQuery.isLoading ? (
                   <SectionDataSkeleton className="" />
-                ) : (savedReportsQuery.data ?? []).filter((r) => r.websiteId === websiteId).length === 0 ? (
+                ) : savedReportsForWebsite.length === 0 ? (
                   <EmptyState title={t('noSavedReports')} />
                 ) : (
                   <ul className="list-plain">
-                    {(savedReportsQuery.data ?? [])
-                      .filter((r) => r.websiteId === websiteId)
-                      .map((r) => (
-                        <li key={r.id} className="list-item list-row">
-                          <span>
-                            {r.name} <span className="badge">{r.type}</span>
-                          </span>
+                    {savedReportsForWebsite.map((r) => (
+                        <li key={r.id} className="list-item reports-saved-row">
+                          <div className="reports-saved-main">
+                            <strong>{r.name}</strong>
+                            <span className="badge">{reportTypeLabel(r.type)}</span>
+                            {r.parameterSummary?.length ? (
+                              <div className="reports-saved-summary">
+                                {r.parameterSummary.map((item) => (
+                                  <span key={`${r.id}-${item.label}`} className="text-muted">
+                                    {item.label}: {item.value}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => loadSavedReport(r)}
+                          >
+                            {t('load')}
+                          </Button>
                           <Button
                             type="button"
                             variant="danger"
@@ -595,11 +750,28 @@ export default function ReportsPage() {
                   placeholder={t('funnelStepsPlaceholder')}
                 />
               </div>
+
+              <nav className="reports-section-nav" aria-label={t('reportSections')}>
+                {REPORT_SECTION_LINKS.map((section) => (
+                  <a
+                    key={section.id}
+                    href={`#report-${section.id}`}
+                    className="reports-section-nav-link"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      if (!openSections[section.id]) setSectionOpen(section.id, true);
+                      requestAnimationFrame(() => scrollToReportSection(section.id));
+                    }}
+                  >
+                    {t(section.labelKey)}
+                  </a>
+                ))}
+              </nav>
             </section>
           </aside>
 
           <div className="reports-main">
-            <ReportSection title={t('funnel')} variant="flat" skeletonPlacement="none">
+            <ReportSection id="report-funnel" title={t('funnel')} variant="flat" skeletonPlacement="none">
               {funnelQuery.isLoading ? (
                 <SectionDataSkeleton busy />
               ) : funnelChartData.length === 0 || !funnelHasData ? (

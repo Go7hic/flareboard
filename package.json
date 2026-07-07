@@ -21,6 +21,7 @@
     "migrate:legacy": "tsx scripts/migrate-legacy-analytics.ts",
     "validate:migration": "tsx scripts/validate-migration.ts",
     "backfill:rollups": "tsx scripts/backfill-rollups.ts",
+    "backfill:action-tags": "tsx scripts/backfill-action-tags.ts",
     "validate:wrangler": "node scripts/validate-wrangler.mjs",
     "deploy:api": "node scripts/validate-wrangler.mjs && pnpm --filter @flareboard/api run deploy",
     "deploy:ingest": "node scripts/validate-wrangler.mjs && pnpm --filter @flareboard/ingest run deploy",

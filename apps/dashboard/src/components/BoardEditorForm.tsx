@@ -1,20 +1,27 @@
 import { FormEvent, useState } from 'react';
 import {
-  draftsToBoardParameters,
+  createBoardParameters,
+  emptyInsightWidgetDraft,
   emptyStatsWidgetDraft,
-  type StatsWidgetDraft,
-} from './BoardWidgets';
+  type BoardRangePreset,
+  type BoardWidgetDraft,
+  type BoardWidgetWidth,
+  normalizeBoardRangePreset,
+  normalizeBoardWidgetWidth,
+} from '../lib/board-config';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
-import type { Website } from '../lib/api';
+import type { Insight, Website } from '../lib/api';
 import { t } from '../lib/i18n';
 
 type BoardEditorFormProps = {
   websites: Website[];
+  insights?: Insight[];
   initialName: string;
-  initialWidgets: StatsWidgetDraft[];
+  initialWidgets: BoardWidgetDraft[];
+  initialRangePreset?: BoardRangePreset;
   submitLabel: string;
   onSubmit: (payload: { name: string; parameters: Record<string, unknown> }) => void;
   onCancel?: () => void;
@@ -27,17 +34,20 @@ function websiteLabel(w: Website): string {
 
 export function BoardEditorForm({
   websites,
+  insights = [],
   initialName,
   initialWidgets,
+  initialRangePreset = '7d',
   submitLabel,
   onSubmit,
   onCancel,
   isPending,
 }: BoardEditorFormProps) {
   const [name, setName] = useState(initialName);
-  const [widgetDrafts, setWidgetDrafts] = useState<StatsWidgetDraft[]>(
+  const [widgetDrafts, setWidgetDrafts] = useState<BoardWidgetDraft[]>(
     initialWidgets.length ? initialWidgets : [emptyStatsWidgetDraft()],
   );
+  const [rangePreset, setRangePreset] = useState<BoardRangePreset>(initialRangePreset);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [advancedJson, setAdvancedJson] = useState('');
@@ -52,12 +62,12 @@ export function BoardEditorForm({
       setValidationError(t('boardWidgetsRequired'));
       return null;
     }
-    if (widgetDrafts.some((d) => !d.websiteId)) {
+    if (widgetDrafts.some((d) => (d.type === 'stats' ? !d.websiteId : !d.insightId))) {
       setValidationError(t('boardWidgetWebsiteRequired'));
       return null;
     }
     setValidationError(null);
-    return { name: trimmedName, parameters: draftsToBoardParameters(widgetDrafts) };
+    return { name: trimmedName, parameters: createBoardParameters(widgetDrafts, rangePreset) };
   }
 
   function onFormSubmit(e: FormEvent) {
@@ -90,8 +100,16 @@ export function BoardEditorForm({
     });
   }
 
-  function updateWidget(index: number, patch: Partial<StatsWidgetDraft>) {
-    setWidgetDrafts((prev) => prev.map((w, i) => (i === index ? { ...w, ...patch } : w)));
+  function addInsightWidget() {
+    setWidgetDrafts((prev) => [...prev, emptyInsightWidgetDraft()]);
+  }
+
+  function updateWidget(index: number, widget: BoardWidgetDraft) {
+    setWidgetDrafts((prev) => prev.map((w, i) => (i === index ? widget : w)));
+  }
+
+  function updateWidgetLabel(index: number, label: string) {
+    setWidgetDrafts((prev) => prev.map((w, i) => (i === index ? { ...w, label } : w)));
   }
 
   function applyAdvancedJson() {
@@ -101,23 +119,41 @@ export function BoardEditorForm({
         setValidationError(t('invalidBoardJson'));
         return;
       }
-      const drafts: StatsWidgetDraft[] = [];
+      const drafts: BoardWidgetDraft[] = [];
       for (const item of parsed) {
         if (
           typeof item !== 'object' ||
           item === null ||
-          (item as { type?: string }).type !== 'stats' ||
-          typeof (item as { websiteId?: string }).websiteId !== 'string'
+          ((item as { type?: string }).type !== 'stats' && (item as { type?: string }).type !== 'insight')
         ) {
           setValidationError(t('invalidBoardJson'));
           return;
         }
-        const row = item as { websiteId: string; label?: string };
-        drafts.push({
-          type: 'stats',
-          websiteId: row.websiteId,
-          label: typeof row.label === 'string' ? row.label : '',
-        });
+        const row = item as {
+          type: 'stats' | 'insight';
+          websiteId?: string;
+          insightId?: string;
+          label?: string;
+          width?: string;
+        };
+        if (row.type === 'stats' && typeof row.websiteId === 'string') {
+          drafts.push({
+            type: 'stats',
+            websiteId: row.websiteId,
+            label: typeof row.label === 'string' ? row.label : '',
+            width: normalizeBoardWidgetWidth(row.width),
+          });
+        } else if (row.type === 'insight' && typeof row.insightId === 'string') {
+          drafts.push({
+            type: 'insight',
+            insightId: row.insightId,
+            label: typeof row.label === 'string' ? row.label : '',
+            width: normalizeBoardWidgetWidth(row.width),
+          });
+        } else {
+          setValidationError(t('invalidBoardJson'));
+          return;
+        }
       }
       if (!drafts.length) {
         setValidationError(t('boardWidgetsRequired'));
@@ -131,7 +167,7 @@ export function BoardEditorForm({
   }
 
   function openAdvanced() {
-    setAdvancedJson(JSON.stringify(draftsToBoardParameters(widgetDrafts).widgets ?? [], null, 2));
+    setAdvancedJson(JSON.stringify(createBoardParameters(widgetDrafts, rangePreset).widgets ?? [], null, 2));
     setAdvancedOpen(true);
   }
 
@@ -153,36 +189,112 @@ export function BoardEditorForm({
           <p className="section-lead">{t('boardWidgetsLead')}</p>
         </div>
 
-        {!websites.length ? (
+        <div className="field">
+          <Label htmlFor="board-range-preset">{t('boardRange')}</Label>
+          <select
+            id="board-range-preset"
+            className="select"
+            value={rangePreset}
+            onChange={(e) => setRangePreset(normalizeBoardRangePreset(e.target.value))}
+          >
+            <option value="24h">{t('boardWidgetPeriod24h')}</option>
+            <option value="7d">{t('boardWidgetPeriod7d')}</option>
+            <option value="30d">{t('boardWidgetPeriod30d')}</option>
+            <option value="90d">{t('boardWidgetPeriod90d')}</option>
+          </select>
+        </div>
+
+        {!websites.length && !insights.length ? (
           <p className="text-muted">{t('boardNoWebsites')}</p>
         ) : (
           <ul className="list-plain board-widget-rows">
             {widgetDrafts.map((w, index) => (
               <li key={index} className="board-widget-row">
                 <div className="field">
-                  <Label htmlFor={`board-widget-site-${index}`}>{t('widgetWebsite')}</Label>
+                  <Label htmlFor={`board-widget-type-${index}`}>{t('type')}</Label>
                   <select
-                    id={`board-widget-site-${index}`}
+                    id={`board-widget-type-${index}`}
                     className="select"
-                    value={w.websiteId}
-                    onChange={(e) => updateWidget(index, { websiteId: e.target.value })}
+                    value={w.type}
+                    onChange={(e) =>
+                      setWidgetDrafts((prev) =>
+                        prev.map((item, i) =>
+                          i === index
+                            ? e.target.value === 'insight'
+                              ? emptyInsightWidgetDraft()
+                              : emptyStatsWidgetDraft()
+                            : item,
+                        ),
+                      )
+                    }
                   >
-                    <option value="">{t('selectWebsite')}</option>
-                    {websites.map((site) => (
-                      <option key={site.id} value={site.id}>
-                        {websiteLabel(site)}
-                      </option>
-                    ))}
+                    <option value="stats">{t('boardWidgetStats')}</option>
+                    <option value="insight">{t('insight')}</option>
                   </select>
+                </div>
+                <div className="field">
+                  {w.type === 'stats' ? (
+                    <>
+                      <Label htmlFor={`board-widget-site-${index}`}>{t('widgetWebsite')}</Label>
+                      <select
+                        id={`board-widget-site-${index}`}
+                        className="select"
+                        value={w.websiteId}
+                        onChange={(e) => updateWidget(index, { ...w, websiteId: e.target.value })}
+                      >
+                        <option value="">{t('selectWebsite')}</option>
+                        {websites.map((site) => (
+                          <option key={site.id} value={site.id}>
+                            {websiteLabel(site)}
+                          </option>
+                        ))}
+                      </select>
+                    </>
+                  ) : (
+                    <>
+                      <Label htmlFor={`board-widget-insight-${index}`}>{t('insight')}</Label>
+                      <select
+                        id={`board-widget-insight-${index}`}
+                        className="select"
+                        value={w.insightId}
+                        onChange={(e) => updateWidget(index, { ...w, insightId: e.target.value })}
+                      >
+                        <option value="">{t('selectInsight')}</option>
+                        {insights.map((insight) => (
+                          <option key={insight.id} value={insight.id}>
+                            {insight.name}
+                          </option>
+                        ))}
+                      </select>
+                    </>
+                  )}
                 </div>
                 <div className="field">
                   <Label htmlFor={`board-widget-label-${index}`}>{t('widgetLabel')}</Label>
                   <Input
                     id={`board-widget-label-${index}`}
                     value={w.label}
-                    onChange={(e) => updateWidget(index, { label: e.target.value })}
+                    onChange={(e) => updateWidgetLabel(index, e.target.value)}
                     placeholder={t('widgetLabelOptional')}
                   />
+                </div>
+                <div className="field">
+                  <Label htmlFor={`board-widget-width-${index}`}>{t('boardWidgetWidth')}</Label>
+                  <select
+                    id={`board-widget-width-${index}`}
+                    className="select"
+                    value={w.width}
+                    onChange={(e) =>
+                      updateWidget(index, {
+                        ...w,
+                        width: normalizeBoardWidgetWidth(e.target.value) as BoardWidgetWidth,
+                      })
+                    }
+                  >
+                    <option value="third">{t('boardWidgetWidthThird')}</option>
+                    <option value="half">{t('boardWidgetWidthHalf')}</option>
+                    <option value="full">{t('boardWidgetWidthFull')}</option>
+                  </select>
                 </div>
                 <div className="board-widget-row-actions">
                   <Button
@@ -229,6 +341,15 @@ export function BoardEditorForm({
         >
           {t('addWidget')}
         </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={addInsightWidget}
+          disabled={!insights.length}
+        >
+          {t('addInsightWidget')}
+        </Button>
       </div>
 
       <details
@@ -258,7 +379,7 @@ export function BoardEditorForm({
       {validationError ? <p className="text-danger">{validationError}</p> : null}
 
       <div className="board-editor-actions">
-        <Button type="submit" variant="primary" disabled={isPending || !websites.length}>
+        <Button type="submit" variant="primary" disabled={isPending || (!websites.length && !insights.length)}>
           {submitLabel}
         </Button>
         {onCancel ? (

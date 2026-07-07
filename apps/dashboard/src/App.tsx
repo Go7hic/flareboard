@@ -17,6 +17,7 @@ const Teams = lazy(() => import('./pages/Teams'));
 const LinksPixels = lazy(() => import('./pages/LinksPixels'));
 const LinkAnalytics = lazy(() => import('./pages/LinkAnalytics'));
 const Reports = lazy(() => import('./pages/Reports'));
+const Insights = lazy(() => import('./pages/Insights'));
 const Boards = lazy(() => import('./pages/Boards'));
 const Admin = lazy(() => import('./pages/Admin'));
 const WebsiteStats = lazy(() => import('./pages/WebsiteStats'));
@@ -29,17 +30,32 @@ const Revenue = lazy(() => import('./pages/Revenue'));
 const Performance = lazy(() => import('./pages/Performance'));
 const WebsiteRealtime = lazy(() => import('./pages/WebsiteRealtime'));
 const WebsiteEvents = lazy(() => import('./pages/WebsiteEvents'));
+const WebsiteActions = lazy(() => import('./pages/WebsiteActions'));
 const WebsiteBreakdown = lazy(() => import('./pages/WebsiteBreakdown'));
 const WebsiteUtm = lazy(() => import('./pages/WebsiteUtm'));
 const WebsiteAttribution = lazy(() => import('./pages/WebsiteAttribution'));
+const WebsiteAnnotations = lazy(() => import('./pages/WebsiteAnnotations'));
 const WebsiteFunnel = lazy(() => import('./pages/WebsiteFunnel'));
 const WebsiteRetention = lazy(() => import('./pages/WebsiteRetention'));
+const WebsiteStickiness = lazy(() => import('./pages/WebsiteStickiness'));
 const WebsiteGoals = lazy(() => import('./pages/WebsiteGoals'));
 const WebsiteJourneys = lazy(() => import('./pages/WebsiteJourneys'));
 const WebsiteSegments = lazy(() => import('./pages/WebsiteSegments'));
 const WebsiteCohorts = lazy(() => import('./pages/WebsiteCohorts'));
+const WebsitePeople = lazy(() => import('./pages/WebsitePeople'));
+const WebsiteGroups = lazy(() => import('./pages/WebsiteGroups'));
 const WebsiteCompare = lazy(() => import('./pages/WebsiteCompare'));
 const WebsiteShareLinks = lazy(() => import('./pages/WebsiteShareLinks'));
+const WebsiteErrors = lazy(() => import('./pages/WebsiteErrors'));
+const WebsiteErrorDetail = lazy(() => import('./pages/WebsiteErrorDetail'));
+const WebsiteAiObservability = lazy(() => import('./pages/WebsiteAiObservability'));
+const WebsiteLogs = lazy(() => import('./pages/WebsiteLogs'));
+const WebsiteExperiments = lazy(() => import('./pages/WebsiteExperiments'));
+const WebsiteFeatureFlags = lazy(() => import('./pages/WebsiteFeatureFlags'));
+const WebsiteSurveys = lazy(() => import('./pages/WebsiteSurveys'));
+const WebsiteWorkflows = lazy(() => import('./pages/WebsiteWorkflows'));
+const WebsiteWarehouse = lazy(() => import('./pages/WebsiteWarehouse'));
+const WebsiteAuditLog = lazy(() => import('./pages/WebsiteAuditLog'));
 const Billing = lazy(() => import('./pages/Billing'));
 
 function LazyPage({ children }: { children: React.ReactNode }) {
@@ -103,6 +119,14 @@ export default function App() {
             element={
               <LazyPage>
                 <Reports />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="/insights"
+            element={
+              <LazyPage>
+                <Insights />
               </LazyPage>
             }
           />
@@ -227,6 +251,14 @@ export default function App() {
               }
             />
             <Route
+              path="actions"
+              element={
+                <LazyPage>
+                  <WebsiteActions />
+                </LazyPage>
+              }
+            />
+            <Route
               path="breakdown"
               element={
                 <LazyPage>
@@ -251,6 +283,14 @@ export default function App() {
               }
             />
             <Route
+              path="annotations"
+              element={
+                <LazyPage>
+                  <WebsiteAnnotations />
+                </LazyPage>
+              }
+            />
+            <Route
               path="funnel"
               element={
                 <LazyPage>
@@ -263,6 +303,14 @@ export default function App() {
               element={
                 <LazyPage>
                   <WebsiteRetention />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="stickiness"
+              element={
+                <LazyPage>
+                  <WebsiteStickiness />
                 </LazyPage>
               }
             />
@@ -303,6 +351,102 @@ export default function App() {
               element={
                 <LazyPage>
                   <WebsiteCompare />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="errors"
+              element={
+                <LazyPage>
+                  <WebsiteErrors />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="errors/:eventId"
+              element={
+                <LazyPage>
+                  <WebsiteErrorDetail />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="logs"
+              element={
+                <LazyPage>
+                  <WebsiteLogs />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="ai-observability"
+              element={
+                <LazyPage>
+                  <WebsiteAiObservability />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="feature-flags"
+              element={
+                <LazyPage>
+                  <WebsiteFeatureFlags />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="experiments"
+              element={
+                <LazyPage>
+                  <WebsiteExperiments />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="surveys"
+              element={
+                <LazyPage>
+                  <WebsiteSurveys />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="people"
+              element={
+                <LazyPage>
+                  <WebsitePeople />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="groups"
+              element={
+                <LazyPage>
+                  <WebsiteGroups />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="workflows"
+              element={
+                <LazyPage>
+                  <WebsiteWorkflows />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="warehouse"
+              element={
+                <LazyPage>
+                  <WebsiteWarehouse />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="audit"
+              element={
+                <LazyPage>
+                  <WebsiteAuditLog />
                 </LazyPage>
               }
             />

@@ -283,6 +283,7 @@ export function SidebarUserMenu({ userLabel, onLogout }: SidebarUserMenuProps) {
         aria-expanded={open}
         aria-haspopup="menu"
         aria-controls={open ? menuId : undefined}
+        aria-label={`${t('accountMenu')} — ${userLabel}`}
       >
         <span className="sidebar-user-menu-trigger-icon">
           <UserIcon />

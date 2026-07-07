@@ -30,6 +30,7 @@ export function WebsiteSidebar({ onNavigate }: WebsiteSidebarProps) {
       items: [
         { to: base, labelKey: 'navOverview', icon: 'overview', end: true },
         { to: `${base}/events`, labelKey: 'navEvents', icon: 'events' },
+        { to: `${base}/actions`, labelKey: 'actionDefinitions', icon: 'actions' },
         { to: `${base}/sessions`, labelKey: 'sessions', icon: 'sessions' },
         { to: `${base}/realtime`, labelKey: 'realtime', icon: 'realtime' },
         { to: `${base}/performance`, labelKey: 'performance', icon: 'performance' },
@@ -43,6 +44,7 @@ export function WebsiteSidebar({ onNavigate }: WebsiteSidebarProps) {
         { to: `${base}/funnel`, labelKey: 'funnel', icon: 'funnel' },
         { to: `${base}/journeys`, labelKey: 'navJourneys', icon: 'journeys' },
         { to: `${base}/retention`, labelKey: 'retention', icon: 'retention' },
+        { to: `${base}/stickiness`, labelKey: 'stickiness', icon: 'stickiness' },
         { to: `${base}/replays`, labelKey: 'sessionReplays', icon: 'replays' },
         { to: `${base}/heatmaps`, labelKey: 'heatmaps', icon: 'heatmaps' },
       ],
@@ -50,6 +52,8 @@ export function WebsiteSidebar({ onNavigate }: WebsiteSidebarProps) {
     {
       labelKey: 'navGroupAudience',
       items: [
+        { to: `${base}/people`, labelKey: 'people', icon: 'people' },
+        { to: `${base}/groups`, labelKey: 'groups', icon: 'groups' },
         { to: `${base}/segments`, labelKey: 'segments', icon: 'segments' },
         { to: `${base}/cohorts`, labelKey: 'cohorts', icon: 'cohorts' },
       ],
@@ -60,11 +64,40 @@ export function WebsiteSidebar({ onNavigate }: WebsiteSidebarProps) {
         { to: `${base}/utm`, labelKey: 'navUtm', icon: 'utm' },
         { to: `${base}/revenue`, labelKey: 'revenue', icon: 'revenue' },
         { to: `${base}/attribution`, labelKey: 'navAttribution', icon: 'attribution' },
+        { to: `${base}/annotations`, labelKey: 'annotations', icon: 'annotations' },
       ],
+    },
+    {
+      labelKey: 'navGroupExperiments',
+      items: [
+        { to: `${base}/feature-flags`, labelKey: 'featureFlags', icon: 'flags' },
+        { to: `${base}/experiments`, labelKey: 'experiments', icon: 'experiments' },
+      ],
+    },
+    {
+      labelKey: 'navGroupQuality',
+      items: [
+        { to: `${base}/errors`, labelKey: 'errors', icon: 'errors' },
+        { to: `${base}/logs`, labelKey: 'logs', icon: 'logs' },
+        { to: `${base}/ai-observability`, labelKey: 'aiObservability', icon: 'ai' },
+      ],
+    },
+    {
+      labelKey: 'navGroupFeedback',
+      items: [{ to: `${base}/surveys`, labelKey: 'surveys', icon: 'surveys' }],
+    },
+    {
+      labelKey: 'navGroupAutomation',
+      items: [{ to: `${base}/workflows`, labelKey: 'workflows', icon: 'workflows' }],
+    },
+    {
+      labelKey: 'navGroupData',
+      items: [{ to: `${base}/warehouse`, labelKey: 'dataWarehouse', icon: 'warehouse' }],
     },
     {
       items: [
         { to: `${base}/share`, labelKey: 'navShareLinks', icon: 'share' },
+        { to: `${base}/audit`, labelKey: 'auditLog', icon: 'audit' },
         { to: `${base}/settings`, labelKey: 'settings', icon: 'settings' },
       ],
     },

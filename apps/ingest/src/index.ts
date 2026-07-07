@@ -6,6 +6,7 @@ import { handleTrackerConfig } from './routes/tracker-config';
 import { handleLinkRedirect, handleLinkRedirectApi, handlePixelGif } from './routes/public';
 import { handleActiveUsers } from './routes/active';
 import { handleRecord } from './routes/record';
+import { handleSurveyResponse } from './routes/surveys';
 import { json } from './lib/response';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -24,6 +25,7 @@ app.get('/', (c) => json({ name: 'flareboard-ingest', version: '0.0.1' }));
 app.post('/api/send', (c) => handleSend(c));
 app.post('/api/batch', (c) => handleBatch(c));
 app.post('/api/record', (c) => handleRecord(c));
+app.post('/api/surveys/response', (c) => handleSurveyResponse(c));
 app.get('/api/heartbeat', (c) => handleHeartbeat(c));
 app.get('/api/tracker-config', (c) => handleTrackerConfig(c));
 app.get('/api/websites/:websiteId/active', (c) => handleActiveUsers(c));

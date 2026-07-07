@@ -58,6 +58,9 @@ export function SidebarShell() {
 
   return (
     <div className="shell">
+      <a href="#main-content" className="skip-link">
+        {t('skipToMain')}
+      </a>
       <div className="shell-body">
         <AppSidebar
           hosted={hosted}
@@ -80,7 +83,7 @@ export function SidebarShell() {
             menuOpen={mobileNavOpen}
             onMenuToggle={() => setMobileNavOpen((open) => !open)}
           />
-          <main className="shell-main">
+          <main id="main-content" className="shell-main" tabIndex={-1}>
             <div className="shell-content-inner">
               <Outlet />
             </div>

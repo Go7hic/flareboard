@@ -3,7 +3,8 @@ import { eq } from 'drizzle-orm';
 import { createDb, schema, type Website } from '@flareboard/db';
 import { createWebsiteSchema, updateWebsiteSchema, uuid } from '@flareboard/shared';
 import type { Env } from '../env';
-import { canAccessWebsite, canMutateTeam, canMutateWebsite } from '../lib/access';
+import { canAccessWebsite, canMutateTeam, canMutateWebsite, getWebsitePermissions } from '../lib/access';
+import { listEntityAuditLog, logAdminAction } from '../lib/audit';
 import { getAccessibleWebsites, getWebsiteById } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
@@ -47,6 +48,30 @@ export async function handleGet(c: Ctx) {
   return json(serializeWebsite(website));
 }
 
+export async function handlePermissions(c: Ctx) {
+  const websiteId = websiteParam(c);
+  if (!websiteId) return notFound();
+  const website = await getWebsiteById(c.env, websiteId);
+  if (!website || !(await canAccessWebsite(c.env, website, c.get('user')))) {
+    return notFound();
+  }
+  const permissions = await getWebsitePermissions(c.env, website, c.get('user'));
+  return json(permissions);
+}
+
+export async function handleAuditLog(c: Ctx) {
+  const websiteId = websiteParam(c);
+  if (!websiteId) return notFound();
+  const website = await getWebsiteById(c.env, websiteId);
+  if (!website || !(await canAccessWebsite(c.env, website, c.get('user')))) {
+    return notFound();
+  }
+  const page = Math.max(Number(c.req.query('page') ?? 1), 1);
+  const pageSize = Math.min(Math.max(Number(c.req.query('pageSize') ?? 50), 1), 100);
+  const audit = await listEntityAuditLog(c.env, 'website', website.websiteId, page, pageSize);
+  return json(audit);
+}
+
 export async function handleCreate(c: Ctx) {
   const body = await c.req.json().catch(() => null);
   const parsed = createWebsiteSchema.safeParse(body);
@@ -81,6 +106,11 @@ export async function handleCreate(c: Ctx) {
 
   await c.env.CACHE.put(`website:${websiteId}`, '1', { expirationTtl: 3600 });
   const website = await getWebsiteById(c.env, websiteId);
+  await logAdminAction(c.env, user.userId, 'create', 'website', websiteId, {
+    name: parsed.data.name,
+    domain: parsed.data.domain ?? null,
+    teamId: parsed.data.teamId ?? null,
+  });
   return json(serializeWebsite(website!), 201);
 }
 
@@ -143,6 +173,12 @@ export async function handleUpdate(c: Ctx) {
     .where(eq(schema.website.websiteId, website.websiteId));
 
   const updated = await getWebsiteById(c.env, website.websiteId);
+  await logAdminAction(c.env, c.get('user').userId, 'update', 'website', website.websiteId, {
+    name: parsed.data.name ?? website.name,
+    domain: parsed.data.domain ?? website.domain,
+    replayEnabled: parsed.data.replayEnabled ?? website.replayEnabled ?? false,
+    heatmapEnabled: parsed.data.heatmapConfig?.enabled ?? undefined,
+  });
   return json(serializeWebsite(updated!));
 }
 
@@ -164,5 +200,9 @@ export async function handleDelete(c: Ctx) {
     .where(eq(schema.website.websiteId, website.websiteId));
 
   await c.env.CACHE.delete(`website:${website.websiteId}`);
+  await logAdminAction(c.env, c.get('user').userId, 'delete', 'website', website.websiteId, {
+    name: website.name,
+    domain: website.domain ?? null,
+  });
   return json({ ok: true });
 }

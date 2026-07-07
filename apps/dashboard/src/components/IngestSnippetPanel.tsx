@@ -85,7 +85,42 @@ export function IngestSnippetPanel({
   );
 
   const advancedSnippet = `<!-- ${t('trackEventComment')} -->
-<script>flareboard.track('event_name', { key: 'value' })</script>`;
+<script>
+  flareboard.track('event_name', { key: 'value' })
+
+  // ${t('identifySnippetComment')}
+  flareboard.identify('user_123', { email: 'user@example.com', plan: 'pro' })
+  flareboard.group('account', 'acme_inc', { name: 'Acme Inc', plan: 'team' })
+  // flareboard.reset()
+
+  // ${t('featureFlagSnippetComment')}
+  flareboard.featureFlagsReady().then(function () {
+    if (flareboard.isFeatureEnabled('checkout.new_flow')) {
+      // enable your feature
+    }
+  })
+
+  // ${t('captureExceptionComment')}
+  try {
+    riskyCheckoutStep()
+  } catch (error) {
+    flareboard.captureException(error, { release: '1.0.0', environment: 'production' })
+  }
+
+  // ${t('logSnippetComment')}
+  flareboard.log('info', 'Checkout step viewed', { step: 'payment' })
+
+  // ${t('aiSnippetComment')}
+  flareboard.ai({
+    provider: 'openai',
+    model: 'gpt-4.1-mini',
+    inputTokens: 120,
+    outputTokens: 48,
+    costUsd: 0.004,
+    latencyMs: 860,
+    status: 'success'
+  })
+</script>`;
 
   const declarativeSnippet = `<!-- ${t('declarativeEvents')} -->
 <button data-flareboard-event="signup" data-flareboard-event-plan="pro">Sign up</button>

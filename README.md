@@ -1,15 +1,19 @@
 # Flareboard
 
-Privacy-first web analytics on Cloudflare Workers — pageviews, events, sessions, reports, session replay, teams, and share links. Self-hosted on D1, KV, R2, and Queues.
+Cloudflare-native product analytics for teams that want a PostHog-like operating surface without running ClickHouse or Kubernetes. Flareboard combines website analytics, session replay, feature flags, experiments, surveys, error tracking, logs, workflows, and a D1-backed warehouse on Workers, D1, KV, R2, and Queues.
 
-## Features
+## Product surface
 
-- Website stats with segments, comparisons, and CSV export
-- Realtime visitors (last 5 minutes)
-- Reports: funnel, retention, attribution, web vitals, and more
-- Session replay (rrweb → R2)
-- Custom boards and public share links
-- Teams and admin console; optional Google/GitHub login
+- Product analytics: pageviews, events, sessions, realtime, segments, cohorts, funnels, retention, journeys, attribution, revenue, web vitals, and saved insights.
+- Session UX: rrweb replay stored in R2, saved replays, heatmaps, session context, and public share links.
+- Experimentation: feature flags with targeting and evaluation, flag-linked experiments, exposure events, and winner application.
+- Feedback and automation: surveys, feedback inbox, annotations, actions, event-triggered workflows, and custom boards.
+- Quality and observability: error issues, source map metadata, error and log alert rules, log traces, services, AI observations, and session-level context.
+- Data and administration: D1 warehouse queries, saved queries, history, schedules, data source metadata, teams, website permissions, audit logs, admin console, and optional Google/GitHub login.
+
+## Current stage
+
+The repository is in a PostHog-like beta stage. Core product domains ship with routes, schema, dashboard pages, cron-driven alert and warehouse loops, workflow delivery, source map resolution, permission-aware UI, person storage with identify and alias ingest, dashboard PATCH for people properties, ingest-time action tagging with optional historical backfill, warehouse HTTP JSON and CSV import, ingest documentation, Phase 3 dashboard UX polish, and broad route tests. Remaining scope is full ETL pipelines, streaming warehouse connectors, and CRM-style person merge tooling.
 
 ## Stack
 

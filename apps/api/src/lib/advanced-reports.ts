@@ -135,6 +135,98 @@ export async function getRetentionReport(
   return { cohorts: rows.results ?? [], startAt: range.startAt, endAt: range.endAt };
 }
 
+export async function getStickinessReport(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  eventName?: string | null,
+  actor: 'person' | 'session' = 'person',
+  segment?: SegmentParams | null,
+) {
+  const range = clampReportRange(startAt, endAt);
+  const seg = buildSegmentSql(segment ?? null);
+  const joins = ` INNER JOIN session s ON s.session_id = e.session_id AND s.website_id = e.website_id`;
+  const eventFilter = seg.eventClauses.length ? ` AND ${seg.eventClauses.join(' AND ')}` : '';
+  const sessionFilter = seg.sessionClauses.length ? ` AND ${seg.sessionClauses.join(' AND ')}` : '';
+  const eventNameFilter = eventName ? ' AND e.event_name = ?' : '';
+  const actorExpr =
+    actor === 'session'
+      ? 'e.session_id'
+      : "COALESCE(NULLIF(s.distinct_id, ''), e.session_id)";
+  const binds: (string | number)[] = [websiteId, range.startAt, range.endAt];
+  if (eventName) binds.push(eventName);
+  binds.push(...seg.binds);
+
+  const rows = await env.DB.prepare(
+    `WITH daily_activity AS (
+       SELECT ${actorExpr} as actorId,
+              date(e.created_at / 1000, 'unixepoch') as activeDay,
+              COUNT(*) as events
+       FROM website_event e${joins}
+       WHERE e.website_id = ?
+         AND e.created_at >= ?
+         AND e.created_at <= ?
+         ${eventNameFilter}
+         ${eventFilter}${sessionFilter}
+       GROUP BY actorId, activeDay
+     ),
+     actor_activity AS (
+       SELECT actorId,
+              COUNT(*) as activeDays,
+              SUM(events) as events
+       FROM daily_activity
+       GROUP BY actorId
+     )
+     SELECT activeDays,
+            COUNT(*) as actors,
+            SUM(events) as events
+     FROM actor_activity
+     GROUP BY activeDays
+     ORDER BY activeDays ASC`,
+  )
+    .bind(...binds)
+    .all<{ activeDays: number; actors: number; events: number }>();
+
+  const totalRow = await env.DB.prepare(
+    `WITH daily_activity AS (
+       SELECT ${actorExpr} as actorId,
+              date(e.created_at / 1000, 'unixepoch') as activeDay
+       FROM website_event e${joins}
+       WHERE e.website_id = ?
+         AND e.created_at >= ?
+         AND e.created_at <= ?
+         ${eventNameFilter}
+         ${eventFilter}${sessionFilter}
+       GROUP BY actorId, activeDay
+     )
+     SELECT COUNT(DISTINCT actorId) as actors,
+            COUNT(*) as actorDays
+     FROM daily_activity`,
+  )
+    .bind(...binds)
+    .first<{ actors: number; actorDays: number }>();
+
+  const distribution = rows.results ?? [];
+  const totalActors = totalRow?.actors ?? 0;
+  const actorDays = totalRow?.actorDays ?? 0;
+  return {
+    event: eventName || null,
+    actor,
+    startAt: range.startAt,
+    endAt: range.endAt,
+    totalActors,
+    actorDays,
+    averageActiveDays: totalActors > 0 ? Math.round((actorDays / totalActors) * 100) / 100 : 0,
+    distribution: distribution.map((row) => ({
+      activeDays: row.activeDays,
+      actors: row.actors,
+      events: row.events,
+      percentage: totalActors > 0 ? Math.round((row.actors / totalActors) * 1000) / 10 : 0,
+    })),
+  };
+}
+
 function journeyPrefixHaving(prefixSteps: string[]) {
   if (!prefixSteps.length) return { having: '', binds: [] as string[] };
   const checks = prefixSteps.map(

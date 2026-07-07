@@ -1139,36 +1139,72 @@ export async function getPageMetrics(
 }
 
 export async function getWebsiteReplays(env: Env, websiteId: string, limit = 50) {
-  const summary = await env.DB.prepare(
-    `SELECT visit_id as visitId, session_id as sessionId,
-            started_at as startedAt, ended_at as endedAt,
-            event_count as eventCount, chunks
-     FROM session_replay_summary
-     WHERE website_id = ?1
-     ORDER BY started_at DESC LIMIT ?2`,
-  )
-    .bind(websiteId, limit)
-    .all<{
-      visitId: string;
-      sessionId: string;
-      startedAt: number;
-      endedAt: number;
-      eventCount: number;
-      chunks: number;
-    }>();
-
-  if (summary.results?.length) return summary.results;
-
   const rows = await env.DB.prepare(
-    `SELECT visit_id as visitId, session_id as sessionId,
-            MIN(started_at) as startedAt, MAX(ended_at) as endedAt,
-            SUM(event_count) as eventCount, COUNT(*) as chunks
-     FROM session_replay
-     WHERE website_id = ?1
-     GROUP BY visit_id, session_id
-     ORDER BY startedAt DESC LIMIT ?2`,
+    `WITH replay_meta AS (
+       SELECT visit_id as visitId,
+              session_id as sessionId,
+              started_at as startedAt,
+              ended_at as endedAt,
+              event_count as eventCount,
+              chunks
+       FROM session_replay_summary
+       WHERE website_id = ?1
+       UNION ALL
+       SELECT r.visit_id as visitId,
+              r.session_id as sessionId,
+              MIN(r.started_at) as startedAt,
+              MAX(r.ended_at) as endedAt,
+              SUM(r.event_count) as eventCount,
+              COUNT(*) as chunks
+       FROM session_replay r
+       WHERE r.website_id = ?1
+         AND NOT EXISTS (
+           SELECT 1
+           FROM session_replay_summary s
+           WHERE s.website_id = r.website_id AND s.visit_id = r.visit_id
+         )
+       GROUP BY r.visit_id, r.session_id
+     ),
+     context_counts AS (
+       SELECT e.visit_id as visitId,
+              SUM(CASE WHEN e.event_type = ?3 THEN 1 ELSE 0 END) as pageviews,
+              SUM(CASE WHEN e.event_type = ?4 THEN 1 ELSE 0 END) as customEvents,
+              SUM(CASE WHEN e.event_type = ?5 THEN 1 ELSE 0 END) as errors,
+              SUM(CASE WHEN e.event_type = ?6 THEN 1 ELSE 0 END) as logs,
+              SUM(CASE WHEN e.event_type = ?7 THEN 1 ELSE 0 END) as aiCalls,
+              MAX(CASE WHEN e.event_type IN (?5, ?6) THEN e.created_at ELSE NULL END) as lastIssueAt
+       FROM website_event e
+       INNER JOIN replay_meta rm ON rm.visitId = e.visit_id
+       WHERE e.website_id = ?1
+       GROUP BY e.visit_id
+     )
+     SELECT replay_meta.visitId,
+            replay_meta.sessionId,
+            replay_meta.startedAt,
+            replay_meta.endedAt,
+            replay_meta.eventCount,
+            replay_meta.chunks,
+            MAX(replay_meta.endedAt - replay_meta.startedAt, 0) as durationMs,
+            COALESCE(context_counts.pageviews, 0) as pageviews,
+            COALESCE(context_counts.customEvents, 0) as customEvents,
+            COALESCE(context_counts.errors, 0) as errors,
+            COALESCE(context_counts.logs, 0) as logs,
+            COALESCE(context_counts.aiCalls, 0) as aiCalls,
+            context_counts.lastIssueAt
+     FROM replay_meta
+     LEFT JOIN context_counts ON context_counts.visitId = replay_meta.visitId
+     ORDER BY replay_meta.startedAt DESC
+     LIMIT ?2`,
   )
-    .bind(websiteId, limit)
+    .bind(
+      websiteId,
+      limit,
+      EVENT_TYPE.pageView,
+      EVENT_TYPE.customEvent,
+      EVENT_TYPE.error,
+      EVENT_TYPE.log,
+      EVENT_TYPE.ai,
+    )
     .all<{
       visitId: string;
       sessionId: string;
@@ -1176,6 +1212,13 @@ export async function getWebsiteReplays(env: Env, websiteId: string, limit = 50)
       endedAt: number;
       eventCount: number;
       chunks: number;
+      durationMs: number;
+      pageviews: number;
+      customEvents: number;
+      errors: number;
+      logs: number;
+      aiCalls: number;
+      lastIssueAt: number | null;
     }>();
   return rows.results ?? [];
 }

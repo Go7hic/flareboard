@@ -10,10 +10,11 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { BoardWidgets, parseBoardWidgets } from '../components/BoardWidgets';
+import { BoardWidgets } from '../components/BoardWidgets';
 import { BrandLogo } from '../components/BrandLogo';
 import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { API_URL, type WebsiteStats } from '../lib/api';
+import { parseBoardConfig, type BoardRangePreset } from '../lib/board-config';
 import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/dateRange';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
@@ -36,21 +37,23 @@ type PublicBoardShare = {
 export default function SharePublic() {
   const chartColors = useChartColors();
   const { slug } = useParams<{ slug: string }>();
-  const [preset, setPreset] = useState<DateRangePreset>('7d');
-  const range = useMemo(() => presetToRange(preset), [preset]);
-  const rangeQs = rangeQueryString(range.startAt, range.endAt);
+  const [preset, setPreset] = useState<DateRangePreset | 'default'>('default');
+  const range = useMemo(() => (preset === 'default' ? null : presetToRange(preset)), [preset]);
+  const rangeQs = range ? rangeQueryString(range.startAt, range.endAt) : '';
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['public-share', slug, range],
     enabled: Boolean(slug),
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/api/share/${slug}?${rangeQs}`);
+      const res = await fetch(`${API_URL}/api/share/${slug}${rangeQs ? `?${rangeQs}` : ''}`);
       if (!res.ok) throw new Error(t('shareNotFound'));
       return res.json() as Promise<PublicWebsiteShare | PublicBoardShare>;
     },
   });
 
   const isBoard = data && 'board' in data;
+  const boardConfig = isBoard ? parseBoardConfig(data.board.parameters) : null;
+  const activePreset = preset === 'default' ? (boardConfig?.rangePreset ?? '24h') : preset;
 
   if (isLoading) {
     return (
@@ -94,11 +97,11 @@ export default function SharePublic() {
           {t('shared')}: {data.share.name}
         </p>
         <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.75rem' }}>
-          {(['24h', '7d', '30d'] as const).map((p) => (
+          {(['24h', '7d', '30d', '90d'] as const).map((p) => (
             <button
               key={p}
               type="button"
-              className={`btn btn-sm${preset === p ? ' btn-primary' : ' btn-secondary'}`}
+              className={`btn btn-sm${activePreset === p ? ' btn-primary' : ' btn-secondary'}`}
               onClick={() => setPreset(p)}
             >
               {p}
@@ -108,26 +111,30 @@ export default function SharePublic() {
       </header>
 
       {isBoard ? (
-        <BoardWidgets widgets={parseBoardWidgets(data.board.parameters)} publicMode />
+        <BoardWidgets
+          widgets={boardConfig?.widgets ?? []}
+          rangePreset={(preset === 'default' || preset === 'custom' ? boardConfig?.rangePreset : preset) as BoardRangePreset}
+          publicMode
+        />
       ) : (
         <>
           <div className="stat-grid">
             <div className="stat-card stat-card-primary">
-              <div className="stat-label">Pageviews</div>
+              <div className="stat-label">{t('pageviews')}</div>
               <div className="stat-value">{data.pageviews.value.toLocaleString()}</div>
             </div>
             <div className="stat-card">
-              <div className="stat-label">Visitors</div>
+              <div className="stat-label">{t('visitors')}</div>
               <div className="stat-value">{data.visitors.value.toLocaleString()}</div>
             </div>
             <div className="stat-card">
-              <div className="stat-label">Visits</div>
+              <div className="stat-label">{t('visits')}</div>
               <div className="stat-value">{data.visits.value.toLocaleString()}</div>
             </div>
           </div>
 
           <section className="panel chart-panel section-gap-lg">
-            <h2 className="section-title">Pageviews over time</h2>
+            <h2 className="section-title">{t('pageviewsOverTime')}</h2>
             <div className="chart-wrap">
               <ResponsiveContainer>
                 <LineChart data={data.timeseries.pageviews}>

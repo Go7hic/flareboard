@@ -137,6 +137,43 @@ describe('aggregator queue batching', () => {
     expect(d1.statementsContaining('INSERT INTO rollup_dimension_daily')).toHaveLength(0);
   });
 
+  it('stores error events without adding pageview or custom-event rollups', async () => {
+    const d1 = new FakeD1Database();
+    const errorMessage = createMessage({
+      type: 'event',
+      data: {
+        id: 'error-1',
+        websiteId: 'website-1',
+        sessionId: 'session-1',
+        visitId: 'visit-1',
+        createdAt: Date.UTC(2026, 0, 1, 12),
+        urlPath: '/checkout',
+        eventType: EVENT_TYPE.error,
+        eventName: 'Cannot read properties of undefined',
+      },
+      eventData: [
+        {
+          id: 'error-data-1',
+          websiteId: 'website-1',
+          websiteEventId: 'error-1',
+          dataKey: 'release',
+          stringValue: '1.2.3',
+          dataType: 1,
+          createdAt: Date.UTC(2026, 0, 1, 12),
+        },
+      ],
+    });
+
+    await worker.queue(createBatch([errorMessage]) as unknown as MessageBatch<QueueMessage>, {
+      DB: d1 as unknown as D1Database,
+    } satisfies Env);
+
+    expect(d1.statementsContaining('INSERT INTO website_event')).toHaveLength(1);
+    expect(d1.statementsContaining('INSERT INTO event_data')).toHaveLength(1);
+    expect(d1.statementsContaining('INSERT INTO rollup_session_day')).toHaveLength(0);
+    expect(d1.statementsContaining('INSERT INTO rollup_event_daily')).toHaveLength(0);
+  });
+
   it('keeps separate daily session rollups for separate visits in the same session', async () => {
     const d1 = new FakeD1Database();
     const firstVisit = createMessage({

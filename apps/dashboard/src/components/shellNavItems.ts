@@ -6,6 +6,7 @@ export const shellNavItems = [
   { to: '/teams', labelKey: 'teams', icon: 'teams' as SidebarNavIconName },
   { to: '/links', labelKey: 'links', icon: 'links' as SidebarNavIconName },
   { to: '/reports', labelKey: 'reports', icon: 'reports' as SidebarNavIconName },
+  { to: '/insights', labelKey: 'insights', icon: 'insights' as SidebarNavIconName },
   { to: '/boards', labelKey: 'boards', icon: 'boards' as SidebarNavIconName },
   { to: '/admin', labelKey: 'admin', icon: 'admin' as SidebarNavIconName },
   { to: '/billing', labelKey: 'billing', icon: 'billing' as SidebarNavIconName, hostedOnly: true },

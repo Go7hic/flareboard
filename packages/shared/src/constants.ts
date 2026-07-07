@@ -11,9 +11,13 @@ export const ROLES = {
 export const COLLECTION_TYPE = {
   event: 'event',
   identify: 'identify',
+  group: 'group',
   performance: 'performance',
   record: 'record',
   heatmap: 'heatmap',
+  error: 'error',
+  log: 'log',
+  ai: 'ai',
 } as const;
 
 export const EVENT_TYPE = {
@@ -24,6 +28,9 @@ export const EVENT_TYPE = {
   performance: 5,
   heatmapClick: 6,
   heatmapScroll: 7,
+  error: 8,
+  log: 9,
+  ai: 10,
 } as const;
 
 /** @deprecated Use HEATMAP_NORM_SIZE — kept for backward compat in API responses */

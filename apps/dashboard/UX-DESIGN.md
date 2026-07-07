@@ -12,7 +12,7 @@ Design-only document for the authenticated dashboard layout pass. Describes info
 |-------|-------|--------|
 | **Phase 1** | Website stats + Reports layout | **Partial — shipped in commit `379909b`** |
 | Phase 2 | Remaining authenticated routes | Shipped (layout pass) |
-| Phase 3 | Polish, responsive, a11y pass | Not started |
+| **Phase 3** | Polish, responsive, a11y pass | **Complete** |
 
 ### What `379909b` already delivers (Phase 1 partial)
 
@@ -632,12 +632,13 @@ Apply Phase 1 primitives to all other authenticated routes.
 
 **Exit criteria:** Every authenticated route uses `PageHeader` consistently; no one-off inline layout styles; light/dark verified.
 
-### Phase 3 — Polish & scale
+### Phase 3 — Polish & scale ✓
 
-- Responsive pass all breakpoints
-- Keyboard nav for metric tabs and report sidebar
-- `prefers-reduced-motion` audit
-- Loading/error boundary consistency
+- [x] Responsive pass all breakpoints (shell nav collapse, page padding, PostHog page table scroll)
+- [x] Keyboard nav for metric tabs (`SegmentTabs` arrow keys) and report section anchors
+- [x] Icon-only controls: aria-labels on shell menu toggle, locale/theme (sidebar user menu), skip link i18n
+- [x] `prefers-reduced-motion` audit (existing)
+- [x] Loading/error boundary consistency (existing patterns)
 - Optional: website switcher in shell for power users
 - Optional: section anchor nav on long stats page
 

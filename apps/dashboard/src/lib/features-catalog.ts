@@ -66,6 +66,34 @@ export const FEATURE_CATEGORIES: FeatureCategory[] = [
     ],
   },
   {
+    id: 'experimentation',
+    titleKey: 'featuresCatExperimentation',
+    items: [
+      { titleKey: 'featFeatureFlagsTitle', bodyKey: 'featFeatureFlagsBody' },
+      { titleKey: 'featExperimentsTitle', bodyKey: 'featExperimentsBody' },
+      { titleKey: 'featSurveysTitle', bodyKey: 'featSurveysBody' },
+    ],
+  },
+  {
+    id: 'quality',
+    titleKey: 'featuresCatQuality',
+    items: [
+      { titleKey: 'featErrorsTitle', bodyKey: 'featErrorsBody' },
+      { titleKey: 'featLogsTitle', bodyKey: 'featLogsBody' },
+      { titleKey: 'featAiObservabilityTitle', bodyKey: 'featAiObservabilityBody' },
+    ],
+  },
+  {
+    id: 'automation',
+    titleKey: 'featuresCatAutomation',
+    items: [
+      { titleKey: 'featActionsTitle', bodyKey: 'featActionsBody' },
+      { titleKey: 'featAnnotationsTitle', bodyKey: 'featAnnotationsBody' },
+      { titleKey: 'featWorkflowsTitle', bodyKey: 'featWorkflowsBody' },
+      { titleKey: 'featWarehouseTitle', bodyKey: 'featWarehouseBody' },
+    ],
+  },
+  {
     id: 'collaboration',
     titleKey: 'featuresCatCollaboration',
     items: [

@@ -76,6 +76,7 @@ pnpm backfill:rollups
 | `pnpm seed:demo` | Local admin + demo websites + 30 days analytics |
 | `pnpm seed:remote` | Create first production admin (password required) |
 | `pnpm backfill:rollups` | Backfill rollup tables (`-- --remote` for production) |
+| `pnpm backfill:action-tags` | Backfill action tags on historical events (`--website`, `--start`, `--end`, optional `--dry-run`) |
 | `pnpm validate:wrangler` | Check wrangler configs before deploy |
 | `pnpm deploy:*` | Deploy individual workers |
 
@@ -134,9 +135,9 @@ Watch mode:
 pnpm --filter @flareboard/api test:watch
 ```
 
-**Covered today:** `GET /api/heartbeat`, auth `401` on protected routes, `report-range` / `segment-filters` SQL builders, and shared JWT/password/billing/crypto helpers.
+**Covered today:** API worker routes and lib helpers for auth, insights, feature flags, experiments, surveys, errors, logs, warehouse (HTTP JSON/CSV import), people identify/store/alias/PATCH, permissions, workflows, actions (query + ingest tagging + backfill), annotations, scheduled jobs, and shared JWT/password helpers.
 
-**Future work:** ingest bot filtering (`/api/send`), D1-backed route tests with seeded fixtures, billing webhooks, queue consumers.
+**Known limits:** Full ETL pipelines, streaming warehouse connectors, and CRM-style person merge graphs remain out of scope for the current beta.
 
 ## Build verification
 

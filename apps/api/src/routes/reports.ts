@@ -19,6 +19,7 @@ import {
   getJourneyReport,
   getPerformanceReport,
   getRetentionReport,
+  getStickinessReport,
 } from '../lib/advanced-reports';
 import { clampReportRange } from '../lib/report-range';
 import {
@@ -31,18 +32,21 @@ import {
   getWebsiteById,
 } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
+import { REPORT_TEMPLATES, readReportParams, summarizeReport } from '../lib/report-templates';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
 
 function serializeReport(r: typeof schema.report.$inferSelect) {
+  const parameters = readReportParams(r.parameters);
   return {
     id: r.reportId,
     websiteId: r.websiteId,
     type: r.type,
     name: r.name,
     description: r.description,
-    parameters: r.parameters,
+    parameters,
+    parameterSummary: summarizeReport(r.type, parameters),
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -58,6 +62,10 @@ function parseRange(c: Ctx, clamp = false) {
 export async function handleList(c: Ctx) {
   const reports = await getUserReports(c.env, c.get('user').userId);
   return json(reports.map(serializeReport));
+}
+
+export async function handleTemplates(c: Ctx) {
+  return json(REPORT_TEMPLATES);
 }
 
 export async function handleCreate(c: Ctx) {
@@ -195,6 +203,16 @@ export async function handleRetention(c: Ctx) {
   if ('error' in ctx && ctx.error) return ctx.error;
   const { startAt, endAt } = parseRange(c, true);
   const data = await getRetentionReport(c.env, ctx.websiteId!, startAt, endAt, ctx.segment);
+  return json(data);
+}
+
+export async function handleStickiness(c: Ctx) {
+  const ctx = await requireReportWebsite(c);
+  if ('error' in ctx && ctx.error) return ctx.error;
+  const { startAt, endAt } = parseRange(c, true);
+  const event = c.req.query('event')?.trim() || null;
+  const actor = c.req.query('actor') === 'session' ? 'session' : 'person';
+  const data = await getStickinessReport(c.env, ctx.websiteId!, startAt, endAt, event, actor, ctx.segment);
   return json(data);
 }
 

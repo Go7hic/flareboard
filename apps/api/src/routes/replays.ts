@@ -3,7 +3,9 @@ import { and, eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
 import { createSavedReplaySchema, updateSavedReplaySchema, uuid } from '@flareboard/shared';
 import type { Env } from '../env';
+import { canMutateWebsite } from '../lib/access';
 import { getWebsiteReplays } from '../lib/queries';
+import { getSavedReplays } from '../lib/replays';
 import { badRequest, json, notFound } from '../lib/response';
 import { requireWebsiteOr404 } from '../lib/website';
 import type { ApiVariables } from '../middleware/auth';
@@ -67,25 +69,15 @@ export async function handleGet(c: Ctx) {
 export async function handleSavedList(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
-  const db = createDb(c.env.DB);
-  const rows = await db
-    .select()
-    .from(schema.sessionReplaySaved)
-    .where(eq(schema.sessionReplaySaved.websiteId, website!.websiteId))
-    .orderBy(schema.sessionReplaySaved.createdAt);
-  return json(
-    rows.map((r) => ({
-      id: r.savedReplayId,
-      name: r.name,
-      visitId: r.visitId,
-      createdAt: r.createdAt,
-    })),
-  );
+  return json(await getSavedReplays(c.env, website!.websiteId));
 }
 
 export async function handleSavedCreate(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
+  if (!(await canMutateWebsite(c.env, website!, c.get('user')))) {
+    return json({ message: 'Read-only access' }, 403);
+  }
   const body = await c.req.json().catch(() => null);
   const parsed = createSavedReplaySchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
@@ -102,12 +94,15 @@ export async function handleSavedCreate(c: Ctx) {
     updatedAt: now,
   });
 
-  return json({ id: savedReplayId, name: parsed.data.name, visitId: parsed.data.visitId }, 201);
+  return json({ id: savedReplayId, name: parsed.data.name, visitId: parsed.data.visitId, createdAt: now }, 201);
 }
 
 export async function handleSavedUpdate(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
+  if (!(await canMutateWebsite(c.env, website!, c.get('user')))) {
+    return json({ message: 'Read-only access' }, 403);
+  }
   const savedId = c.req.param('savedReplayId') ?? '';
   const body = await c.req.json().catch(() => null);
   const parsed = updateSavedReplaySchema.safeParse(body);
@@ -132,6 +127,9 @@ export async function handleSavedUpdate(c: Ctx) {
 export async function handleSavedDelete(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
+  if (!(await canMutateWebsite(c.env, website!, c.get('user')))) {
+    return json({ message: 'Read-only access' }, 403);
+  }
   const savedId = c.req.param('savedReplayId') ?? '';
   const db = createDb(c.env.DB);
   await db

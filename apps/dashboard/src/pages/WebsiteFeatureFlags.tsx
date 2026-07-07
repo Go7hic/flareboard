@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ExternalLink, Flag, Search } from 'lucide-react';
+import { ExternalLink, Flag } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
-import { ModalDialog } from '../components/ModalDialog';
+import { ResourceSearchField } from '../components/master-detail';
+import { ResourceEditDialog } from '../components/ResourceEditDialog';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -193,105 +194,96 @@ function FeatureFlagEditDialog({
     !saving;
 
   return (
-    <ModalDialog className="feature-flag-dialog" aria-label={t('featureFlagEdit')} onClose={onClose}>
-        <header className="dialog-header">
-          <h2 className="dialog-title">{t('featureFlagEdit')}</h2>
-        </header>
-        <div className="dialog-body feature-flag-dialog-body">
-          <div className="field">
-            <Label htmlFor="flag-dialog-key">{t('featureFlagKey')}</Label>
-            <Input
-              id="flag-dialog-key"
-              value={draft.key}
-              onChange={(event) => setDraft((prev) => ({ ...prev, key: event.target.value }))}
-            />
-          </div>
-          <div className="field">
-            <Label htmlFor="flag-dialog-name">{t('name')}</Label>
-            <Input
-              id="flag-dialog-name"
-              value={draft.name}
-              onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
-            />
-          </div>
-          <div className="field">
-            <Label htmlFor="flag-dialog-rollout">{t('featureFlagRollout')}</Label>
-            <Input
-              id="flag-dialog-rollout"
-              type="number"
-              min={0}
-              max={100}
-              value={draft.rollout}
-              onChange={(event) =>
-                setDraft((prev) => ({ ...prev, rollout: Number(event.target.value) }))
-              }
-            />
-          </div>
-          <div className="field">
-            <Label htmlFor="flag-dialog-description">{t('description')}</Label>
-            <Input
-              id="flag-dialog-description"
-              value={draft.description}
-              onChange={(event) =>
-                setDraft((prev) => ({ ...prev, description: event.target.value }))
-              }
-            />
-          </div>
-          <div className="field">
-            <Label htmlFor="flag-dialog-variants">{t('featureFlagVariants')}</Label>
-            <textarea
-              id="flag-dialog-variants"
-              className="textarea"
-              value={draft.variantsText}
-              placeholder={t('featureFlagVariantsPlaceholder')}
-              onChange={(event) =>
-                setDraft((prev) => ({ ...prev, variantsText: event.target.value }))
-              }
-            />
-            <p className={variantWeight > 100 ? 'text-danger' : 'text-muted'}>
-              {t('featureFlagVariantsHint').replace('{weight}', String(variantWeight))}
-            </p>
-          </div>
-          <div className="field">
-            <Label htmlFor="flag-dialog-targeting">{t('featureFlagTargetingRules')}</Label>
-            <textarea
-              id="flag-dialog-targeting"
-              className="textarea"
-              value={draft.targetingRulesText}
-              placeholder={t('featureFlagTargetingPlaceholder')}
-              onChange={(event) =>
-                setDraft((prev) => ({ ...prev, targetingRulesText: event.target.value }))
-              }
-            />
-            <p className={ruleLineCount === targetingRules.length ? 'text-muted' : 'text-danger'}>
-              {t('featureFlagTargetingHint').replace('{count}', String(targetingRules.length))}
-            </p>
-          </div>
-          {error ? <p className="text-danger">{error.message}</p> : null}
-        </div>
-        <footer className="dialog-footer">
-          <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
-            {t('cancel')}
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            disabled={!canSave}
-            onClick={() =>
-              onSave(flag, {
-                key: draft.key.trim(),
-                name: draft.name.trim(),
-                description: draft.description.trim(),
-                rollout: Number(draft.rollout),
-                variants,
-                targetingRules,
-              })
-            }
-          >
-            {saving ? t('saving') : t('save')}
-          </Button>
-        </footer>
-    </ModalDialog>
+    <ResourceEditDialog
+      title={t('featureFlagEdit')}
+      ariaLabel={t('featureFlagEdit')}
+      panelClassName="feature-flag-dialog"
+      bodyClassName="feature-flag-dialog-body"
+      saving={saving}
+      error={error}
+      canSave={canSave}
+      onClose={onClose}
+      onSave={() =>
+        onSave(flag, {
+          key: draft.key.trim(),
+          name: draft.name.trim(),
+          description: draft.description.trim(),
+          rollout: Number(draft.rollout),
+          variants,
+          targetingRules,
+        })
+      }
+    >
+      <div className="field">
+        <Label htmlFor="flag-dialog-key">{t('featureFlagKey')}</Label>
+        <Input
+          id="flag-dialog-key"
+          value={draft.key}
+          onChange={(event) => setDraft((prev) => ({ ...prev, key: event.target.value }))}
+        />
+      </div>
+      <div className="field">
+        <Label htmlFor="flag-dialog-name">{t('name')}</Label>
+        <Input
+          id="flag-dialog-name"
+          value={draft.name}
+          onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
+        />
+      </div>
+      <div className="field">
+        <Label htmlFor="flag-dialog-rollout">{t('featureFlagRollout')}</Label>
+        <Input
+          id="flag-dialog-rollout"
+          type="number"
+          min={0}
+          max={100}
+          value={draft.rollout}
+          onChange={(event) =>
+            setDraft((prev) => ({ ...prev, rollout: Number(event.target.value) }))
+          }
+        />
+      </div>
+      <div className="field">
+        <Label htmlFor="flag-dialog-description">{t('description')}</Label>
+        <Input
+          id="flag-dialog-description"
+          value={draft.description}
+          onChange={(event) =>
+            setDraft((prev) => ({ ...prev, description: event.target.value }))
+          }
+        />
+      </div>
+      <div className="field">
+        <Label htmlFor="flag-dialog-variants">{t('featureFlagVariants')}</Label>
+        <textarea
+          id="flag-dialog-variants"
+          className="textarea"
+          value={draft.variantsText}
+          placeholder={t('featureFlagVariantsPlaceholder')}
+          onChange={(event) =>
+            setDraft((prev) => ({ ...prev, variantsText: event.target.value }))
+          }
+        />
+        <p className={variantWeight > 100 ? 'text-danger' : 'text-muted'}>
+          {t('featureFlagVariantsHint').replace('{weight}', String(variantWeight))}
+        </p>
+      </div>
+      <div className="field">
+        <Label htmlFor="flag-dialog-targeting">{t('featureFlagTargetingRules')}</Label>
+        <textarea
+          id="flag-dialog-targeting"
+          className="textarea"
+          value={draft.targetingRulesText}
+          placeholder={t('featureFlagTargetingPlaceholder')}
+          onChange={(event) =>
+            setDraft((prev) => ({ ...prev, targetingRulesText: event.target.value }))
+          }
+        />
+        <p className={ruleLineCount === targetingRules.length ? 'text-muted' : 'text-danger'}>
+          {t('featureFlagTargetingHint').replace('{count}', String(targetingRules.length))}
+        </p>
+      </div>
+    </ResourceEditDialog>
   );
 }
 
@@ -636,26 +628,21 @@ export default function WebsiteFeatureFlagsPage() {
 
       <section className="panel section-gap">
         <header className="cohorts-panel-head">
-          <div className="cohorts-search-wrap">
-            <Search className="cohorts-search-icon" size={16} strokeWidth={2} aria-hidden />
-            <input
-              type="search"
-              className="input cohorts-search"
-              placeholder={t('featureFlagSearch')}
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                if (requestedFlagKey) {
-                  setSearchParams((current) => {
-                    const next = new URLSearchParams(current);
-                    next.delete('flag');
-                    return next;
-                  }, { replace: true });
-                }
-              }}
-              aria-label={t('featureFlagSearch')}
-            />
-          </div>
+          <ResourceSearchField
+            value={search}
+            onChange={(value) => {
+              setSearch(value);
+              if (requestedFlagKey) {
+                setSearchParams((current) => {
+                  const next = new URLSearchParams(current);
+                  next.delete('flag');
+                  return next;
+                }, { replace: true });
+              }
+            }}
+            placeholder={t('featureFlagSearch')}
+            aria-label={t('featureFlagSearch')}
+          />
         </header>
 
         {flagsQuery.isLoading ? (

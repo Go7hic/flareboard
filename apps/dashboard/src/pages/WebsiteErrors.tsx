@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { AlertTriangle, ExternalLink } from 'lucide-react';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { EmptyState } from '../components/EmptyState';
+import { MasterDetailSidePane, MasterDetailTableLayout } from '../components/master-detail';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -321,102 +322,106 @@ export default function WebsiteErrorsPage() {
         {errorsQuery.isLoading ? <div className="skeleton" style={{ height: '8rem' }} /> : null}
 
         {!errorsQuery.isLoading && issues.length ? (
-          <div className="error-issues-layout">
-            <div className="table-scroll">
-              <table className="data-table errors-table">
-                <thead>
-                  <tr>
-                    <th>{t('issue')}</th>
-                    <th>{t('events')}</th>
-                    <th>{t('sessions')}</th>
-                    <th>{t('status')}</th>
-                    <th>{t('firstSeen')}</th>
-                    <th>{t('lastSeen')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {issues.map((issue) => (
-                    <tr
-                      key={issue.fingerprint}
-                      className={issue.fingerprint === selectedIssue?.fingerprint ? 'active-row' : undefined}
-                    >
-                      <td>
-                        <button
-                          type="button"
-                          className="error-issue-button"
-                          onClick={() => setExpandedIssue(issue.fingerprint)}
-                        >
-                          <span className="errors-name-cell">
-                            <AlertTriangle size={16} strokeWidth={2} aria-hidden />
-                            <span>
-                              <span className="errors-message">
-                                {shortText(issue.message, t('unknown'))}
-                              </span>
-                              <span className="text-muted">{shortText(issue.name, t('errorNameFallback'))}</span>
-                            </span>
-                          </span>
-                        </button>
-                      </td>
-                      <td>{issue.events.toLocaleString()}</td>
-                      <td>{issue.sessions.toLocaleString()}</td>
-                      <td>
-                        <span className={`badge error-status-${issue.status}`}>
-                          {t(`errorIssueStatus_${issue.status}`)}
-                        </span>
-                      </td>
-                      <td>{formatTime(issue.firstSeenAt)}</td>
-                      <td>{formatTime(issue.lastSeenAt)}</td>
+          <MasterDetailTableLayout
+            primary={
+              <div className="table-scroll">
+                <table className="data-table errors-table">
+                  <thead>
+                    <tr>
+                      <th>{t('issue')}</th>
+                      <th>{t('events')}</th>
+                      <th>{t('sessions')}</th>
+                      <th>{t('status')}</th>
+                      <th>{t('firstSeen')}</th>
+                      <th>{t('lastSeen')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {selectedIssue ? (
-              <div className="error-issue-samples">
-                <div className="error-issue-samples-head">
-                  <div>
-                    <h3 className="section-title experiment-title">{t('errorRecentSamples')}</h3>
-                    <p className="text-muted">
-                      {t('errorIssueCurrentStatus')}: {t(`errorIssueStatus_${selectedIssue.status}`)}
-                    </p>
-                  </div>
-                  <div className="error-issue-actions">
-                    {(['open', 'resolved', 'ignored'] as const).map((status) => (
-                      <button
-                        key={status}
-                        type="button"
-                        className={status === selectedIssue.status ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
-                        disabled={updateIssueMutation.isPending || !canEdit}
-                        onClick={() => updateIssueMutation.mutate({ fingerprint: selectedIssue.fingerprint, status })}
+                  </thead>
+                  <tbody>
+                    {issues.map((issue) => (
+                      <tr
+                        key={issue.fingerprint}
+                        className={issue.fingerprint === selectedIssue?.fingerprint ? 'active-row' : undefined}
                       >
-                        {t(`errorIssueAction_${status}`)}
-                      </button>
+                        <td>
+                          <button
+                            type="button"
+                            className="error-issue-button"
+                            onClick={() => setExpandedIssue(issue.fingerprint)}
+                          >
+                            <span className="errors-name-cell">
+                              <AlertTriangle size={16} strokeWidth={2} aria-hidden />
+                              <span>
+                                <span className="errors-message">
+                                  {shortText(issue.message, t('unknown'))}
+                                </span>
+                                <span className="text-muted">{shortText(issue.name, t('errorNameFallback'))}</span>
+                              </span>
+                            </span>
+                          </button>
+                        </td>
+                        <td>{issue.events.toLocaleString()}</td>
+                        <td>{issue.sessions.toLocaleString()}</td>
+                        <td>
+                          <span className={`badge error-status-${issue.status}`}>
+                            {t(`errorIssueStatus_${issue.status}`)}
+                          </span>
+                        </td>
+                        <td>{formatTime(issue.firstSeenAt)}</td>
+                        <td>{formatTime(issue.lastSeenAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            }
+            side={
+              selectedIssue ? (
+                <MasterDetailSidePane
+                  title={t('errorRecentSamples')}
+                  description={
+                    <>
+                      {t('errorIssueCurrentStatus')}: {t(`errorIssueStatus_${selectedIssue.status}`)}
+                    </>
+                  }
+                  actions={
+                    <div className="error-issue-actions">
+                      {(['open', 'resolved', 'ignored'] as const).map((status) => (
+                        <button
+                          key={status}
+                          type="button"
+                          className={status === selectedIssue.status ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
+                          disabled={updateIssueMutation.isPending || !canEdit}
+                          onClick={() => updateIssueMutation.mutate({ fingerprint: selectedIssue.fingerprint, status })}
+                        >
+                          {t(`errorIssueAction_${status}`)}
+                        </button>
+                      ))}
+                    </div>
+                  }
+                >
+                  {selectedIssue.note ? <p className="workflow-action-note">{selectedIssue.note}</p> : null}
+                  <div className="error-sample-list">
+                    {selectedIssue.samples.map((sample) => (
+                      <div key={sample.id} className="error-sample-item">
+                        <div>
+                          <strong>{sample.urlPath || '/'}</strong>
+                          <p className="text-muted">{formatTime(sample.createdAt)}</p>
+                        </div>
+                        <Link to={`/websites/${websiteId}/sessions/${sample.sessionId}`} className="inline-link">
+                          {sample.sessionId.slice(0, 8)}
+                          <ExternalLink size={12} strokeWidth={2} aria-hidden />
+                        </Link>
+                        <Link to={`/websites/${websiteId}/errors/${sample.id}`} className="inline-link">
+                          {t('viewError')}
+                          <ExternalLink size={12} strokeWidth={2} aria-hidden />
+                        </Link>
+                      </div>
                     ))}
                   </div>
-                </div>
-                {selectedIssue.note ? <p className="workflow-action-note">{selectedIssue.note}</p> : null}
-                <div className="error-sample-list">
-                  {selectedIssue.samples.map((sample) => (
-                    <div key={sample.id} className="error-sample-item">
-                      <div>
-                        <strong>{sample.urlPath || '/'}</strong>
-                        <p className="text-muted">{formatTime(sample.createdAt)}</p>
-                      </div>
-                      <Link to={`/websites/${websiteId}/sessions/${sample.sessionId}`} className="inline-link">
-                        {sample.sessionId.slice(0, 8)}
-                        <ExternalLink size={12} strokeWidth={2} aria-hidden />
-                      </Link>
-                      <Link to={`/websites/${websiteId}/errors/${sample.id}`} className="inline-link">
-                        {t('viewError')}
-                        <ExternalLink size={12} strokeWidth={2} aria-hidden />
-                      </Link>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </div>
+                </MasterDetailSidePane>
+              ) : null
+            }
+          />
         ) : null}
 
         {!errorsQuery.isLoading && !issues.length ? (

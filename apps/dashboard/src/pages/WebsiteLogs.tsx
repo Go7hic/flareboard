@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { ExternalLink, Search, TerminalSquare } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
+import { MasterDetailSidePane, MasterDetailTableLayout } from '../components/master-detail';
 import { SegmentTabs } from '../components/SegmentTabs';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
 import { WebsitePageShell } from '../components/WebsitePageShell';
@@ -443,75 +444,78 @@ export default function WebsiteLogsPage() {
             </div>
           </header>
           {traces.length ? (
-            <div className="error-issues-layout">
-              <div className="table-scroll">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>{t('logsTraceId')}</th>
-                      <th>{t('logsTraceSpans')}</th>
-                      <th>{t('logsTraceServices')}</th>
-                      <th>{t('logsTraceDuration')}</th>
-                      <th>{t('status')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {traces.map((trace) => (
-                      <tr
-                        key={trace.traceId}
-                        className={trace.traceId === selectedTraceId ? 'active-row' : undefined}
-                      >
-                        <td>
-                          <button type="button" className="error-issue-button" onClick={() => setSelectedTraceId(trace.traceId)}>
-                            <code className="mono">{trace.traceId.slice(0, 16)}</code>
-                          </button>
-                        </td>
-                        <td>{trace.spans}</td>
-                        <td>{trace.services}</td>
-                        <td className="text-muted">{trace.durationMs != null ? `${trace.durationMs}ms` : '-'}</td>
-                        <td>
-                          <span className={`badge ${trace.hasError ? 'experiment-diagnostic-warning' : 'experiment-diagnostic-success'}`}>
-                            {trace.hasError ? t('logsTraceStatusError') : t('logsTraceStatusOk')}
-                          </span>
-                        </td>
+            <MasterDetailTableLayout
+              primary={
+                <div className="table-scroll">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>{t('logsTraceId')}</th>
+                        <th>{t('logsTraceSpans')}</th>
+                        <th>{t('logsTraceServices')}</th>
+                        <th>{t('logsTraceDuration')}</th>
+                        <th>{t('status')}</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {selectedTrace ? (
-                <div className="error-issue-samples">
-                  <header className="compact-panel-header">
-                    <h3 className="section-title experiment-title">{t('logsTraceDetail')}</h3>
-                    <p className="text-muted mono">{selectedTrace.traceId}</p>
-                  </header>
-                  <div className="table-scroll">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>{t('logAlertService')}</th>
-                          <th>{t('logsTraceSpan')}</th>
-                          <th>{t('message')}</th>
-                          <th>{t('logsTraceDuration')}</th>
-                          <th>{t('status')}</th>
+                    </thead>
+                    <tbody>
+                      {traces.map((trace) => (
+                        <tr
+                          key={trace.traceId}
+                          className={trace.traceId === selectedTraceId ? 'active-row' : undefined}
+                        >
+                          <td>
+                            <button type="button" className="error-issue-button" onClick={() => setSelectedTraceId(trace.traceId)}>
+                              <code className="mono">{trace.traceId.slice(0, 16)}</code>
+                            </button>
+                          </td>
+                          <td>{trace.spans}</td>
+                          <td>{trace.services}</td>
+                          <td className="text-muted">{trace.durationMs != null ? `${trace.durationMs}ms` : '-'}</td>
+                          <td>
+                            <span className={`badge ${trace.hasError ? 'experiment-diagnostic-warning' : 'experiment-diagnostic-success'}`}>
+                              {trace.hasError ? t('logsTraceStatusError') : t('logsTraceStatusOk')}
+                            </span>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {selectedTrace.spans.map((span) => (
-                          <tr key={span.id}>
-                            <td>{span.service}</td>
-                            <td className="mono">{span.spanId}</td>
-                            <td>{span.message ?? span.operation ?? '-'}</td>
-                            <td className="text-muted">{span.durationMs != null ? `${span.durationMs}ms` : '-'}</td>
-                            <td>{span.status ?? span.level ?? '-'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ) : null}
-            </div>
+              }
+              side={
+                selectedTrace ? (
+                  <MasterDetailSidePane
+                    title={t('logsTraceDetail')}
+                    description={<span className="mono">{selectedTrace.traceId}</span>}
+                  >
+                    <div className="table-scroll">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>{t('logAlertService')}</th>
+                            <th>{t('logsTraceSpan')}</th>
+                            <th>{t('message')}</th>
+                            <th>{t('logsTraceDuration')}</th>
+                            <th>{t('status')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedTrace.spans.map((span) => (
+                            <tr key={span.id}>
+                              <td>{span.service}</td>
+                              <td className="mono">{span.spanId}</td>
+                              <td>{span.message ?? span.operation ?? '-'}</td>
+                              <td className="text-muted">{span.durationMs != null ? `${span.durationMs}ms` : '-'}</td>
+                              <td>{span.status ?? span.level ?? '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </MasterDetailSidePane>
+                ) : null
+              }
+            />
           ) : (
             <EmptyState title={t('noTraces')} description={t('logsTracesLead')} />
           )}

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import { Database } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
+import { MasterDetailLayout } from '../components/master-detail';
 import { SegmentTabs } from '../components/SegmentTabs';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
@@ -210,7 +211,10 @@ export default function WebsiteWarehousePage() {
       </div>
 
       {tab === 'query' ? (
-        <div className="warehouse-layout section-gap">
+        <MasterDetailLayout
+          className="warehouse-layout section-gap"
+          wrapList={false}
+          list={
           <section className="panel">
             <header className="panel-header">
               <div>
@@ -251,7 +255,8 @@ export default function WebsiteWarehousePage() {
               </div>
             ) : null}
           </section>
-
+          }
+          detail={
           <aside className="panel warehouse-dictionary">
             <header className="panel-header">
               <div>
@@ -290,7 +295,8 @@ export default function WebsiteWarehousePage() {
               {schemaQuery.isLoading ? <div className="skeleton skeleton-block" aria-busy /> : null}
             </div>
           </aside>
-        </div>
+          }
+        />
       ) : null}
 
       {tab === 'saved' ? (

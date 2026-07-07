@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { EmptyState } from '../components/EmptyState';
+import { MasterDetailLayout, MasterDetailSelectableItem } from '../components/master-detail';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
@@ -230,7 +231,10 @@ export default function ReplaysPage() {
       ) : null}
 
       {replayEnabled ? (
-        <div className="replays-layout section-gap">
+        <MasterDetailLayout
+          className="replays-layout section-gap"
+          wrapList={false}
+          list={
           <section className="panel">
             <h2 className="section-title">{t('replaysVisits')}</h2>
             <p className="section-lead">{t('replaysVisitsLead')}</p>
@@ -279,24 +283,28 @@ export default function ReplaysPage() {
             {listQuery.isLoading ? <Skeleton className="h-6 w-1/2" /> : null}
             <ul className="replays-list">
               {visits.map((r) => (
-                <li
+                <MasterDetailSelectableItem
                   key={r.visitId}
-                  className={`replays-list-item${selectedVisit === r.visitId ? ' selected' : ''}`}
-                  onClick={() => setSelectedVisit(r.visitId)}
+                  as="li"
+                  className="replays-list-item"
+                  selectedClassName="selected"
+                  selected={selectedVisit === r.visitId}
+                  onSelect={() => setSelectedVisit(r.visitId)}
                 >
                   <div>{new Date(r.startedAt).toLocaleString()}</div>
                   <div className="text-muted" style={{ fontSize: '0.8125rem', marginTop: '0.2rem' }}>
                     {r.eventCount} {t('replayEventsLabel')} · {r.chunks} {t('replayChunksLabel')}
                   </div>
                   <ReplayMetaBadges replay={r} />
-                </li>
+                </MasterDetailSelectableItem>
               ))}
             </ul>
             {!listQuery.isLoading && !visits.length ? (
               <p className="text-muted">{t('noReplaysYet')}</p>
             ) : null}
           </section>
-
+          }
+          detail={
           <section className="panel replays-player-panel">
             <header className="panel-header">
               <div>
@@ -344,7 +352,8 @@ export default function ReplaysPage() {
             ) : null}
             <div ref={playerRef} className="replay-player-wrap" />
           </section>
-        </div>
+          }
+        />
       ) : null}
     </div>
   );

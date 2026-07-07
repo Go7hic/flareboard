@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { ExternalLink, FlaskConical } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
-import { ModalDialog } from '../components/ModalDialog';
+import { ResourceEditDialog } from '../components/ResourceEditDialog';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -61,97 +61,88 @@ function ExperimentEditDialog({
   const canSave = Boolean(draft.name.trim() && draft.featureFlagId && draft.goalEvent.trim()) && !saving;
 
   return (
-    <ModalDialog className="experiment-dialog" aria-label={t('experimentEdit')} onClose={onClose}>
-        <header className="dialog-header">
-          <h2 className="dialog-title">{t('experimentEdit')}</h2>
-        </header>
-        <div className="dialog-body experiment-dialog-body">
-          <div className="field">
-            <Label htmlFor="experiment-dialog-name">{t('name')}</Label>
-            <Input
-              id="experiment-dialog-name"
-              value={draft.name}
-              onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
-            />
-          </div>
-          <div className="field">
-            <Label htmlFor="experiment-dialog-flag">{t('featureFlag')}</Label>
-            <select
-              id="experiment-dialog-flag"
-              className="select"
-              value={draft.featureFlagId}
-              onChange={(event) =>
-                setDraft((prev) => ({ ...prev, featureFlagId: event.target.value }))
-              }
-            >
-              <option value="">{t('selectFeatureFlag')}</option>
-              {flags.map((flag) => (
-                <option key={flag.id} value={flag.id}>
-                  {flag.name} ({flag.key})
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <Label htmlFor="experiment-dialog-goal">{t('experimentGoalEvent')}</Label>
-            <Input
-              id="experiment-dialog-goal"
-              value={draft.goalEvent}
-              onChange={(event) =>
-                setDraft((prev) => ({ ...prev, goalEvent: event.target.value }))
-              }
-            />
-          </div>
-          <div className="field">
-            <Label htmlFor="experiment-dialog-status">{t('status')}</Label>
-            <select
-              id="experiment-dialog-status"
-              className="select"
-              value={draft.status}
-              onChange={(event) =>
-                setDraft((prev) => ({ ...prev, status: event.target.value as Experiment['status'] }))
-              }
-            >
-              <option value="draft">{t('experimentStatus_draft')}</option>
-              <option value="running">{t('experimentStatus_running')}</option>
-              <option value="paused">{t('experimentStatus_paused')}</option>
-              <option value="completed">{t('experimentStatus_completed')}</option>
-            </select>
-          </div>
-          <div className="field experiment-dialog-description">
-            <Label htmlFor="experiment-dialog-description">{t('description')}</Label>
-            <Input
-              id="experiment-dialog-description"
-              value={draft.description}
-              onChange={(event) =>
-                setDraft((prev) => ({ ...prev, description: event.target.value }))
-              }
-            />
-          </div>
-          {error ? <p className="text-danger">{error.message}</p> : null}
-        </div>
-        <footer className="dialog-footer">
-          <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
-            {t('cancel')}
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            disabled={!canSave}
-            onClick={() =>
-              onSave(experiment, {
-                name: draft.name.trim(),
-                description: draft.description.trim(),
-                featureFlagId: draft.featureFlagId,
-                goalEvent: draft.goalEvent.trim(),
-                status: draft.status,
-              })
-            }
-          >
-            {saving ? t('saving') : t('save')}
-          </Button>
-        </footer>
-    </ModalDialog>
+    <ResourceEditDialog
+      title={t('experimentEdit')}
+      ariaLabel={t('experimentEdit')}
+      panelClassName="experiment-dialog"
+      bodyClassName="experiment-dialog-body"
+      saving={saving}
+      error={error}
+      canSave={canSave}
+      onClose={onClose}
+      onSave={() =>
+        onSave(experiment, {
+          name: draft.name.trim(),
+          description: draft.description.trim(),
+          featureFlagId: draft.featureFlagId,
+          goalEvent: draft.goalEvent.trim(),
+          status: draft.status,
+        })
+      }
+    >
+      <div className="field">
+        <Label htmlFor="experiment-dialog-name">{t('name')}</Label>
+        <Input
+          id="experiment-dialog-name"
+          value={draft.name}
+          onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
+        />
+      </div>
+      <div className="field">
+        <Label htmlFor="experiment-dialog-flag">{t('featureFlag')}</Label>
+        <select
+          id="experiment-dialog-flag"
+          className="select"
+          value={draft.featureFlagId}
+          onChange={(event) =>
+            setDraft((prev) => ({ ...prev, featureFlagId: event.target.value }))
+          }
+        >
+          <option value="">{t('selectFeatureFlag')}</option>
+          {flags.map((flag) => (
+            <option key={flag.id} value={flag.id}>
+              {flag.name} ({flag.key})
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="field">
+        <Label htmlFor="experiment-dialog-goal">{t('experimentGoalEvent')}</Label>
+        <Input
+          id="experiment-dialog-goal"
+          value={draft.goalEvent}
+          onChange={(event) =>
+            setDraft((prev) => ({ ...prev, goalEvent: event.target.value }))
+          }
+        />
+      </div>
+      <div className="field">
+        <Label htmlFor="experiment-dialog-status">{t('status')}</Label>
+        <select
+          id="experiment-dialog-status"
+          className="select"
+          value={draft.status}
+          onChange={(event) =>
+            setDraft((prev) => ({ ...prev, status: event.target.value as Experiment['status'] }))
+          }
+        >
+          <option value="draft">{t('experimentStatus_draft')}</option>
+          <option value="running">{t('experimentStatus_running')}</option>
+          <option value="paused">{t('experimentStatus_paused')}</option>
+          <option value="completed">{t('experimentStatus_completed')}</option>
+        </select>
+      </div>
+      <div className="field experiment-dialog-description">
+        <Label htmlFor="experiment-dialog-description">{t('description')}</Label>
+        <Input
+          id="experiment-dialog-description"
+          value={draft.description}
+          onChange={(event) =>
+            setDraft((prev) => ({ ...prev, description: event.target.value }))
+          }
+        />
+      </div>
+    </ResourceEditDialog>
   );
 }
 

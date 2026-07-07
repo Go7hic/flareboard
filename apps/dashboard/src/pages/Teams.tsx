@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { MasterDetailLayout, MasterDetailSelectableItem } from '../components/master-detail';
 import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { PlanUpgradeBanner } from '../components/PlanUpgradeBanner';
 import { EmptyState } from '../components/EmptyState';
@@ -233,31 +234,36 @@ export default function Teams() {
       ) : null}
 
       {teams.length > 0 ? (
-        <div className="teams-layout section-gap-lg">
-          <aside className="panel teams-sidebar-panel" aria-label={t('teams')}>
-            <h2 className="section-title">{t('teams')}</h2>
-            <p className="teams-sidebar-lead">{t('selectTeamHint')}</p>
-            <div className="teams-sidebar">
-              {teams.map((team) => (
-                <button
-                  key={team.id}
-                  type="button"
-                  className={`teams-sidebar-item${selectedTeamId === team.id ? ' selected' : ''}`}
-                  onClick={() => {
-                    setSelectedTeamId(team.id);
-                    setAccessCodeCopied(false);
-                  }}
-                >
-                  <span className="teams-sidebar-item-name">{team.name}</span>
-                  <span className="teams-sidebar-item-role">
-                    {t('roleLabel')}: {formatTeamRole(team.role)}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </aside>
-
-          {selectedTeamId && teamDetailQuery.data ? (
+        <MasterDetailLayout
+          className="teams-layout section-gap-lg"
+          wrapList={false}
+          list={
+            <aside className="panel teams-sidebar-panel" aria-label={t('teams')}>
+              <h2 className="section-title">{t('teams')}</h2>
+              <p className="teams-sidebar-lead">{t('selectTeamHint')}</p>
+              <div className="teams-sidebar">
+                {teams.map((team) => (
+                  <MasterDetailSelectableItem
+                    key={team.id}
+                    className="teams-sidebar-item"
+                    selectedClassName="selected"
+                    selected={selectedTeamId === team.id}
+                    onSelect={() => {
+                      setSelectedTeamId(team.id);
+                      setAccessCodeCopied(false);
+                    }}
+                  >
+                    <span className="teams-sidebar-item-name">{team.name}</span>
+                    <span className="teams-sidebar-item-role">
+                      {t('roleLabel')}: {formatTeamRole(team.role)}
+                    </span>
+                  </MasterDetailSelectableItem>
+                ))}
+              </div>
+            </aside>
+          }
+          detail={
+            selectedTeamId && teamDetailQuery.data ? (
             <section className="panel teams-detail-panel">
               <header className="teams-detail-header">
                 <h2 className="section-title">{teamDetailQuery.data.name}</h2>
@@ -400,8 +406,9 @@ export default function Teams() {
             <section className="panel teams-detail-panel">
               <p className="text-muted">{t('selectTeamHint')}</p>
             </section>
-          )}
-        </div>
+          )
+          }
+        />
       ) : null}
     </div>
   );

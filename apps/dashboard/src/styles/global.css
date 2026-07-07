@@ -4039,7 +4039,6 @@ code {
   align-items: center;
 }
 
-.error-issues-layout,
 .master-detail-layout--table {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(18rem, 0.6fr);
@@ -4131,7 +4130,6 @@ code {
 }
 
 @media (max-width: 900px) {
-  .error-issues-layout,
   .master-detail-layout--table,
   .error-insights-grid {
     grid-template-columns: 1fr;
@@ -4209,7 +4207,6 @@ code {
   gap: 0.75rem;
 }
 
-.warehouse-layout,
 .master-detail-layout--warehouse {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(20rem, 0.6fr);
@@ -4299,7 +4296,6 @@ code {
 }
 
 @media (max-width: 960px) {
-  .warehouse-layout,
   .master-detail-layout--warehouse {
     grid-template-columns: 1fr;
   }
@@ -4480,7 +4476,6 @@ code {
   color: var(--text-muted);
 }
 
-.surveys-layout,
 .master-detail-layout {
   display: grid;
   grid-template-columns: minmax(16rem, 0.7fr) minmax(0, 1.5fr);
@@ -4488,13 +4483,11 @@ code {
   align-items: start;
 }
 
-.surveys-list,
 .master-detail-list {
   display: grid;
   gap: 0.6rem;
 }
 
-.survey-list-item,
 .master-detail-list-item {
   appearance: none;
   border: 1px solid var(--border);
@@ -4510,13 +4503,11 @@ code {
   width: 100%;
 }
 
-.survey-list-item.active,
 .master-detail-list-item.is-selected {
   border-color: var(--accent);
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
-.survey-list-title,
 .master-detail-list-title {
   display: block;
   font-weight: 700;
@@ -4524,7 +4515,6 @@ code {
   margin-bottom: 0.2rem;
 }
 
-.survey-list-meta,
 .master-detail-list-meta {
   align-items: flex-end;
   display: flex;
@@ -4533,7 +4523,6 @@ code {
   gap: 0.35rem;
 }
 
-.surveys-detail,
 .master-detail-pane {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -4541,7 +4530,6 @@ code {
   padding: 1rem;
 }
 
-.surveys-detail-head,
 .master-detail-pane-head {
   display: flex;
   justify-content: space-between;
@@ -4697,7 +4685,6 @@ code {
     grid-template-columns: 1fr;
   }
 
-  .surveys-layout,
   .master-detail-layout,
   .survey-response-filters,
   .workflow-execution-filters,
@@ -4709,14 +4696,11 @@ code {
     grid-template-columns: 1fr;
   }
 
-  .surveys-detail-head,
   .master-detail-pane-head,
-  .survey-list-item,
   .master-detail-list-item {
     flex-direction: column;
   }
 
-  .survey-list-meta,
   .master-detail-list-meta {
     align-items: flex-start;
   }
@@ -6796,7 +6780,6 @@ code {
 }
 
 /* Teams master-detail */
-.teams-layout,
 .master-detail-layout--teams {
   display: grid;
   grid-template-columns: minmax(260px, 300px) 1fr;
@@ -6976,7 +6959,6 @@ code {
 }
 
 /* Replays master-detail */
-.replays-layout,
 .master-detail-layout--replays {
   display: grid;
   grid-template-columns: minmax(240px, 300px) 1fr;
@@ -7112,9 +7094,7 @@ code {
 }
 
 @media (max-width: 900px) {
-  .teams-layout,
   .master-detail-layout--teams,
-  .replays-layout,
   .master-detail-layout--replays {
     grid-template-columns: 1fr;
   }

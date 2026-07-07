@@ -212,7 +212,7 @@ export default function WebsiteWarehousePage() {
 
       {tab === 'query' ? (
         <MasterDetailLayout
-          className="warehouse-layout section-gap"
+          className="master-detail-layout--warehouse section-gap"
           wrapList={false}
           list={
           <section className="panel">

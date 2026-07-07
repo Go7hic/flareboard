@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { PlanUpgradeBanner } from '../components/PlanUpgradeBanner';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
 import { WebsitePageShell } from '../components/WebsitePageShell';
@@ -9,7 +9,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Panel } from '../components/ui/panel';
-import { api, getToken, type Website } from '../lib/api';
+import { api, type Website } from '../lib/api';
 import { t } from '../lib/i18n';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 
@@ -41,8 +41,7 @@ function heatColor(intensity: number): string {
 
 export default function HeatmapsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
-  const navigate = useNavigate();
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
   const previewWrapRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(960);
   const [iframeBlocked, setIframeBlocked] = useState(false);
@@ -53,10 +52,6 @@ export default function HeatmapsPage() {
   const [kind, setKind] = useState<'click' | 'scroll'>('click');
   const [deviceClass, setDeviceClass] = useState('');
   const { range, setRange, rangeQs } = useWebsiteRange(websiteId, '24h');
-
-  useEffect(() => {
-    if (!getToken()) navigate('/login');
-  }, [navigate]);
 
   const billingQuery = useQuery({
     queryKey: ['billing-subscription'],

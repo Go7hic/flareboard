@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useCallback, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Area,
   AreaChart,
@@ -16,7 +16,7 @@ import { DashboardSiteRanking } from '../components/DashboardSiteRanking';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
-import { api, getToken } from '../lib/api';
+import { api } from '../lib/api';
 import { formatChartTimeLabel, isHourlyChartRange } from '../lib/chartTimeseries';
 import { t } from '../lib/i18n';
 import { useDashboardRange } from '../lib/useDashboardRange';
@@ -96,13 +96,8 @@ type AggregateMetricKey = 'pageviews' | 'visitors' | 'visits';
 const AGGREGATE_METRICS: AggregateMetricKey[] = ['pageviews', 'visitors', 'visits'];
 
 export default function DashboardHome() {
-  const navigate = useNavigate();
   const chartColors = useChartColors();
   const { range, setRange, rangeQs } = useDashboardRange('24h');
-
-  useEffect(() => {
-    if (!getToken()) navigate('/login');
-  }, [navigate]);
 
   const overviewQuery = useQuery({
     queryKey: ['dashboard-overview', range],

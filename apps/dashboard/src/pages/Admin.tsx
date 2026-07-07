@@ -5,7 +5,7 @@ import { PageHeader } from '../components/PageHeader';
 import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { api, authenticatedFetch, getToken, type AdminUser } from '../lib/api';
+import { api, authenticatedFetch, type AdminUser } from '../lib/api';
 import { t } from '../lib/i18n';
 
 interface AuditEntry {
@@ -26,18 +26,13 @@ interface AuditResponse {
 }
 
 export default function AdminPage() {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+    const queryClient = useQueryClient();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [editUserId, setEditUserId] = useState<string | null>(null);
   const [editRole, setEditRole] = useState('user');
   const [editPassword, setEditPassword] = useState('');
   const [eventsWebsiteId, setEventsWebsiteId] = useState('');
-
-  useEffect(() => {
-    if (!getToken()) navigate('/login');
-  }, [navigate]);
 
   const usersQuery = useQuery({
     queryKey: ['admin-users'],

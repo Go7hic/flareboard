@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AttributionConversionResponse, UtmReportResponse } from '@flareboard/shared/client';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   Bar,
   BarChart,
@@ -25,7 +25,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Skeleton } from '../components/ui/skeleton';
-import { api, getToken, type Website } from '../lib/api';
+import { api, type Website } from '../lib/api';
 import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/dateRange';
 import { t } from '../lib/i18n';
 
@@ -173,8 +173,7 @@ function AttributionBreakdownPanel({
 
 export default function ReportsPage() {
   const chartColors = useChartColors();
-  const navigate = useNavigate();
-  const [websiteId, setWebsiteId] = useState('');
+    const [websiteId, setWebsiteId] = useState('');
   const [segmentId, setSegmentId] = useState('');
   const [funnelSteps, setFunnelSteps] = useState('signup,purchase');
   const [savedName, setSavedName] = useState('');
@@ -250,10 +249,6 @@ export default function ReportsPage() {
       </ReportSection>
     );
   }
-
-  useEffect(() => {
-    if (!getToken()) navigate('/login');
-  }, [navigate]);
 
   const websitesQuery = useQuery({
     queryKey: ['websites'],

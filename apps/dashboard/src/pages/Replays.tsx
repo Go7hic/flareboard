@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { EmptyState } from '../components/EmptyState';
 import { MasterDetailLayout, MasterDetailSelectableItem } from '../components/master-detail';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
@@ -8,7 +8,7 @@ import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
-import { api, getToken, type Website } from '../lib/api';
+import { api, type Website } from '../lib/api';
 import { t } from '../lib/i18n';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 
@@ -85,18 +85,13 @@ function ReplayMetaBadges({ replay }: { replay: ReplayRow | SavedReplay }) {
 
 export default function ReplaysPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+    const queryClient = useQueryClient();
   const { range, setRange } = useWebsiteRange(websiteId, '24h');
   const [selectedVisit, setSelectedVisit] = useState<string | null>(null);
   const [saveName, setSaveName] = useState('');
   const [replayFilter, setReplayFilter] = useState<ReplayFilter>('all');
   const playerRef = useRef<HTMLDivElement>(null);
   const playerInstance = useRef<unknown>(null);
-
-  useEffect(() => {
-    if (!getToken()) navigate('/login');
-  }, [navigate]);
 
   const websiteQuery = useQuery({
     queryKey: ['website', websiteId],
@@ -232,7 +227,7 @@ export default function ReplaysPage() {
 
       {replayEnabled ? (
         <MasterDetailLayout
-          className="replays-layout section-gap"
+          className="master-detail-layout--replays section-gap"
           wrapList={false}
           list={
           <section className="panel">

@@ -7,7 +7,7 @@ import { CollapsibleSection } from '../components/CollapsibleSection';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { boardConfigToDrafts, emptyStatsWidgetDraft, parseBoardConfig } from '../lib/board-config';
-import { api, getToken, type Insight, type Website } from '../lib/api';
+import { api, type Insight, type Website } from '../lib/api';
 import { t } from '../lib/i18n';
 
 interface Board {
@@ -18,14 +18,9 @@ interface Board {
 }
 
 export default function BoardsPage() {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+    const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [createFormKey, setCreateFormKey] = useState(0);
-
-  useEffect(() => {
-    if (!getToken()) navigate('/login');
-  }, [navigate]);
 
   const websitesQuery = useQuery({
     queryKey: ['websites'],

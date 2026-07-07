@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { Fragment, useEffect } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { ExternalLink } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
-import { api, getToken } from '../lib/api';
+import { api } from '../lib/api';
 import { t } from '../lib/i18n';
 
 interface SessionDetail {
@@ -86,12 +86,7 @@ function sourcePath(websiteId: string | undefined, source: SessionContextItem['s
 
 export default function SessionDetailPage() {
   const { websiteId, sessionId } = useParams<{ websiteId: string; sessionId: string }>();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!getToken()) navigate('/login');
-  }, [navigate]);
-
+  
   const sessionQuery = useQuery({
     queryKey: ['session', websiteId, sessionId],
     enabled: Boolean(websiteId && sessionId),

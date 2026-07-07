@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { EmptyState } from '../components/EmptyState';
 import { SessionAvatar } from '../components/SessionAvatar';
 import { SessionTechCell } from '../components/SessionTechCell';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
 import { WebsitePageShell } from '../components/WebsitePageShell';
-import { api, getToken } from '../lib/api';
+import { api } from '../lib/api';
 import { t } from '../lib/i18n';
 import {
   countryFlagEmoji,
@@ -32,12 +32,7 @@ const PAGE_SIZE = 50;
 
 export default function SessionsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
-  const navigate = useNavigate();
-  const { range, setRange, rangeQs } = useWebsiteRange(websiteId, '24h');
-
-  useEffect(() => {
-    if (!getToken()) navigate('/login');
-  }, [navigate]);
+    const { range, setRange, rangeQs } = useWebsiteRange(websiteId, '24h');
 
   const sessionsQuery = useQuery({
     queryKey: ['sessions', websiteId, range],

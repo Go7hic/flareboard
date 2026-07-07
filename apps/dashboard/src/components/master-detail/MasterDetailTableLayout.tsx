@@ -8,7 +8,7 @@ type MasterDetailTableLayoutProps = {
 
 export function MasterDetailTableLayout({ primary, side, className }: MasterDetailTableLayoutProps) {
   return (
-    <div className={['master-detail-layout--table', 'error-issues-layout', className].filter(Boolean).join(' ')}>
+    <div className={['master-detail-layout--table', className].filter(Boolean).join(' ')}>
       {primary}
       {side}
     </div>

@@ -15,7 +15,7 @@ import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
-import { api, getToken, type LinkStats, type TrackingLink } from '../lib/api';
+import { api, type LinkStats, type TrackingLink } from '../lib/api';
 import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/dateRange';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
@@ -38,10 +38,6 @@ export default function LinkAnalyticsPage() {
     preset: '30d' as DateRangePreset,
     ...presetToRange('30d'),
   });
-
-  useEffect(() => {
-    if (!getToken()) navigate('/login');
-  }, [navigate]);
 
   const linksQuery = useQuery({
     queryKey: ['links'],

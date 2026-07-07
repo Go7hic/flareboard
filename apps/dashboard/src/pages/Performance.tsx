@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import {
   Bar,
   BarChart,
@@ -17,7 +17,7 @@ import { WebsiteDateExportControls } from '../components/WebsiteDateExportContro
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { SegmentTabs } from '../components/SegmentTabs';
 import { Skeleton } from '../components/ui/skeleton';
-import { api, getToken } from '../lib/api';
+import { api } from '../lib/api';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
@@ -214,15 +214,10 @@ function breakdownChartData(rows: PerformanceBreakdownRow[], metric: BreakdownMe
 export default function PerformancePage() {
   const chartColors = useChartColors();
   const { websiteId } = useParams<{ websiteId: string }>();
-  const navigate = useNavigate();
-  const { range, setRange, rangeQs } = useWebsiteRange(websiteId, '24h');
+    const { range, setRange, rangeQs } = useWebsiteRange(websiteId, '24h');
   const [breakdownTab, setBreakdownTab] = useState<BreakdownTab>('url');
   const [breakdownMetric, setBreakdownMetric] = useState<BreakdownMetric>('lcp');
   const [trendMetric, setTrendMetric] = useState<TrendMetric>('lcp');
-
-  useEffect(() => {
-    if (!getToken()) navigate('/login');
-  }, [navigate]);
 
   const performanceQuery = useQuery({
     queryKey: ['performance', websiteId, range],

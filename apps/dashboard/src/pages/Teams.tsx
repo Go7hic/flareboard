@@ -235,7 +235,7 @@ export default function Teams() {
 
       {teams.length > 0 ? (
         <MasterDetailLayout
-          className="teams-layout section-gap-lg"
+          className="master-detail-layout--teams section-gap-lg"
           wrapList={false}
           list={
             <aside className="panel teams-sidebar-panel" aria-label={t('teams')}>

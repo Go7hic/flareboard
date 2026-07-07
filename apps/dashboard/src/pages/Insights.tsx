@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import {
   Bar,
   BarChart,
@@ -22,7 +21,7 @@ import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { api, getToken, type Insight, type InsightQuery, type InsightResult, type InsightType, type Website } from '../lib/api';
+import { api, type Insight, type InsightQuery, type InsightResult, type InsightType, type Website } from '../lib/api';
 import { presetToRange, rangeQueryString } from '../lib/dateRange';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
@@ -174,7 +173,6 @@ function ResultPreview({ result }: { result: InsightResult | null | undefined })
 }
 
 export default function InsightsPage() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [websiteId, setWebsiteId] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -185,10 +183,6 @@ export default function InsightsPage() {
   const range = useMemo(() => presetToRange('30d'), []);
   const rangeQs = rangeQueryString(range.startAt, range.endAt);
   const { canEdit } = useWebsitePermissions(websiteId, 'analytics');
-
-  useEffect(() => {
-    if (!getToken()) navigate('/login');
-  }, [navigate]);
 
   const websitesQuery = useQuery({
     queryKey: ['websites'],

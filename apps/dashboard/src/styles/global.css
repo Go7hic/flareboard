@@ -4039,7 +4039,8 @@ code {
   align-items: center;
 }
 
-.error-issues-layout {
+.error-issues-layout,
+.master-detail-layout--table {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(18rem, 0.6fr);
   gap: 1rem;
@@ -4072,7 +4073,8 @@ code {
   cursor: pointer;
 }
 
-.error-issue-samples {
+.error-issue-samples,
+.master-detail-side-pane {
   padding: 1rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -4130,6 +4132,7 @@ code {
 
 @media (max-width: 900px) {
   .error-issues-layout,
+  .master-detail-layout--table,
   .error-insights-grid {
     grid-template-columns: 1fr;
   }
@@ -4206,7 +4209,8 @@ code {
   gap: 0.75rem;
 }
 
-.warehouse-layout {
+.warehouse-layout,
+.master-detail-layout--warehouse {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(20rem, 0.6fr);
   gap: 1rem;
@@ -4295,7 +4299,8 @@ code {
 }
 
 @media (max-width: 960px) {
-  .warehouse-layout {
+  .warehouse-layout,
+  .master-detail-layout--warehouse {
     grid-template-columns: 1fr;
   }
 }
@@ -6791,7 +6796,8 @@ code {
 }
 
 /* Teams master-detail */
-.teams-layout {
+.teams-layout,
+.master-detail-layout--teams {
   display: grid;
   grid-template-columns: minmax(260px, 300px) 1fr;
   gap: 1.35rem;
@@ -6970,7 +6976,8 @@ code {
 }
 
 /* Replays master-detail */
-.replays-layout {
+.replays-layout,
+.master-detail-layout--replays {
   display: grid;
   grid-template-columns: minmax(240px, 300px) 1fr;
   gap: 1rem;
@@ -7106,7 +7113,9 @@ code {
 
 @media (max-width: 900px) {
   .teams-layout,
-  .replays-layout {
+  .master-detail-layout--teams,
+  .replays-layout,
+  .master-detail-layout--replays {
     grid-template-columns: 1fr;
   }
 

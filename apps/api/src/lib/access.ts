@@ -50,7 +50,7 @@ function websiteModulePermissions(canView: boolean, canEdit: boolean, canManageT
   const readonlyModule = { canView, canEdit: false };
   const editableModule = { canView, canEdit };
   return {
-    analytics: editableModule,
+    analytics: readonlyModule,
     boards: editableModule,
     featureFlags: editableModule,
     experiments: editableModule,

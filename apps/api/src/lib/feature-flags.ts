@@ -1,5 +1,62 @@
-import { EVENT_TYPE } from '@flareboard/shared';
+import { DATA_TYPE, EVENT_TYPE, uuid } from '@flareboard/shared';
 import type { Env } from '../env';
+
+export type FeatureFlagEvaluationRecord = {
+  flagKey: string;
+  variant: string | null;
+  sessionId: string;
+  visitId?: string;
+  urlPath?: string;
+  release?: string;
+  environment?: string;
+};
+
+/**
+ * Persists a `$feature_flag_called` exposure event for server-side evaluations so
+ * they show up in the same call history as client-side tracker exposures.
+ */
+export async function recordFeatureFlagEvaluation(
+  env: Env,
+  websiteId: string,
+  record: FeatureFlagEvaluationRecord,
+) {
+  const now = Date.now();
+  const eventId = uuid();
+  const statements = [
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO session (session_id, website_id, created_at) VALUES (?1, ?2, ?3)`,
+    ).bind(record.sessionId, websiteId, now),
+    env.DB.prepare(
+      `INSERT INTO website_event
+         (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, '$feature_flag_called')`,
+    ).bind(
+      eventId,
+      websiteId,
+      record.sessionId,
+      record.visitId ?? uuid(),
+      now,
+      record.urlPath ?? '',
+      EVENT_TYPE.customEvent,
+    ),
+  ];
+
+  const dataEntries: Array<[string, string]> = [['$feature_flag', record.flagKey]];
+  if (record.variant) dataEntries.push(['$feature_flag_response', record.variant]);
+  if (record.release) dataEntries.push(['release', record.release]);
+  if (record.environment) dataEntries.push(['environment', record.environment]);
+  for (const [dataKey, value] of dataEntries) {
+    statements.push(
+      env.DB.prepare(
+        `INSERT INTO event_data
+           (event_data_id, website_id, website_event_id, data_key, string_value, data_type, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
+      ).bind(uuid(), websiteId, eventId, dataKey, value, DATA_TYPE.string, now),
+    );
+  }
+
+  await env.DB.batch(statements);
+}
 
 export type FeatureFlagExposureSummary = {
   exposures: number;

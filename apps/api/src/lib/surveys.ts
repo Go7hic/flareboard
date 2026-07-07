@@ -420,20 +420,20 @@ export async function getFeedbackInbox(
     return { ...row, sentiment, theme };
   });
 
+  const filtered = mapped
+    .filter((row) => !filters.sentiment || row.sentiment === filters.sentiment)
+    .filter((row) => !filters.theme || row.theme === filters.theme);
+
+  // Summary must describe the filtered view, so counts are computed after filters.
   const sentimentCounts = new Map<SurveySentiment, number>();
   const themeCounts = new Map<SurveyTheme, number>();
-  for (const item of mapped) {
+  for (const item of filtered) {
     sentimentCounts.set(item.sentiment, (sentimentCounts.get(item.sentiment) ?? 0) + 1);
     themeCounts.set(item.theme, (themeCounts.get(item.theme) ?? 0) + 1);
   }
-  const summaryTotal = mapped.length;
+  const summaryTotal = filtered.length;
 
-  const items = mapped
-    .filter((row) => !filters.sentiment || row.sentiment === filters.sentiment)
-    .filter((row) => !filters.theme || row.theme === filters.theme)
-    .slice(0, Math.min(Math.max(limit, 1), 500));
-
-  const total = items.length;
+  const items = filtered.slice(0, Math.min(Math.max(limit, 1), 500));
 
   return {
     summary: {

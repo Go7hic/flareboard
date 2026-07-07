@@ -12,7 +12,7 @@ import {
 } from '@flareboard/shared';
 import type { Env } from '../env';
 import { canMutateWebsite } from '../lib/access';
-import { getFeatureFlagExposureSummary } from '../lib/feature-flags';
+import { getFeatureFlagExposureSummary, recordFeatureFlagEvaluation } from '../lib/feature-flags';
 import { badRequest, json, notFound } from '../lib/response';
 import { requireWebsiteOr404 } from '../lib/website';
 import type { ApiVariables } from '../middleware/auth';
@@ -171,6 +171,19 @@ export async function handleEvaluate(c: Ctx) {
     },
     context,
   );
+
+  const sessionId = context.sessionId ?? context.distinctId ?? context.anonymousId;
+  if (sessionId) {
+    await recordFeatureFlagEvaluation(c.env, website!.websiteId, {
+      flagKey: row.key,
+      variant: result.variant ?? null,
+      sessionId,
+      visitId: context.visitId,
+      urlPath: context.path,
+      release: context.release,
+      environment: context.environment,
+    });
+  }
 
   return json(result);
 }

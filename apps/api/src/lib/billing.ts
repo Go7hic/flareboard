@@ -85,23 +85,6 @@ export async function getMonthlyEventUsage(env: Env, userId: string, monthKey = 
   return row?.c ?? 0;
 }
 
-export async function incrementEventUsage(env: Env, userId: string, delta = 1): Promise<number> {
-  const monthKey = currentMonthKey();
-  const kvKey = `usage:${userId}:${monthKey}`;
-  const current = await getMonthlyEventUsage(env, userId, monthKey);
-  const next = current + delta;
-  await env.CACHE.put(kvKey, String(next), { expirationTtl: 60 * 60 * 24 * 40 });
-
-  await env.DB.prepare(
-    `INSERT INTO usage_monthly (user_id, month_key, events_count) VALUES (?, ?, ?)
-     ON CONFLICT(user_id, month_key) DO UPDATE SET events_count = events_count + excluded.events_count`,
-  )
-    .bind(userId, monthKey, delta)
-    .run();
-
-  return next;
-}
-
 export async function checkWebsiteLimit(env: Env, userId: string): Promise<{ ok: true } | { ok: false; message: string }> {
   if (!isHostedMode(env)) return { ok: true };
   const sub = await getUserSubscription(env, userId);
@@ -111,23 +94,6 @@ export async function checkWebsiteLimit(env: Env, userId: string): Promise<{ ok:
     return {
       ok: false,
       message: `Website limit reached (${plan.maxWebsites} on ${plan.name} plan). Upgrade to add more.`,
-    };
-  }
-  return { ok: true };
-}
-
-export async function checkEventLimit(
-  env: Env,
-  userId: string,
-): Promise<{ ok: true } | { ok: false; message: string }> {
-  if (!isHostedMode(env)) return { ok: true };
-  const sub = await getUserSubscription(env, userId);
-  const plan = getPlan(sub.planId);
-  const used = await getMonthlyEventUsage(env, userId);
-  if (used >= plan.maxEventsPerMonth) {
-    return {
-      ok: false,
-      message: `Monthly event limit reached (${plan.maxEventsPerMonth.toLocaleString()} on ${plan.name} plan).`,
     };
   }
   return { ok: true };

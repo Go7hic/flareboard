@@ -3,6 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { ExternalLink, ListChecks, Plus, Trash2 } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
+import {
+  MasterDetailLayout,
+  MasterDetailListItem,
+  MasterDetailPane,
+} from '../components/master-detail';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -172,203 +177,198 @@ export default function WebsiteActionsPage() {
         {actionsQuery.isLoading ? (
           <div className="skeleton skeleton-block" aria-busy />
         ) : actions.length || !selectedActionId ? (
-          <div className="surveys-layout">
-            <div className="surveys-list">
-              {actions.map((action) => (
-                <button
-                  type="button"
-                  key={action.id}
-                  className={`survey-list-item${action.id === selectedAction?.id ? ' active' : ''}`}
-                  onClick={() => selectAction(action)}
-                >
-                  <span className="errors-name-cell">
-                    <ListChecks size={16} strokeWidth={2} aria-hidden />
-                    <span>
-                      <span className="survey-list-title">{action.name}</span>
-                      <span className="text-muted">{action.rules.map(ruleLabel).join(' · ')}</span>
-                    </span>
-                  </span>
-                  <span className="survey-list-meta">
-                    <span className="badge">{(action.summary?.events ?? 0).toLocaleString()}</span>
-                    <span className="text-muted">{formatDate(action.summary?.lastSeenAt)}</span>
-                  </span>
-                </button>
-              ))}
-              {!actions.length ? (
-                <EmptyState title={t('actionsEmptyTitle')} description={t('actionsEmptyBody')} />
-              ) : null}
-            </div>
-
-            <div className="surveys-detail">
-              <header className="surveys-detail-head">
-                <div>
-                  <h3 className="section-title experiment-title">
-                    {selectedActionId ? t('editActionDefinition') : t('createActionDefinition')}
-                  </h3>
-                  <p className="text-muted">{t('actionDefinitionFormLead')}</p>
-                </div>
-                {canEdit && selectedActionId ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => deleteMutation.mutate(selectedActionId)}
-                    disabled={deleteMutation.isPending}
-                    aria-label={t('delete')}
-                  >
-                    <Trash2 size={16} strokeWidth={2} aria-hidden />
-                  </Button>
+          <MasterDetailLayout
+            list={
+              <>
+                {actions.map((action) => (
+                  <MasterDetailListItem
+                    key={action.id}
+                    selected={action.id === selectedAction?.id}
+                    onSelect={() => selectAction(action)}
+                    icon={<ListChecks size={16} strokeWidth={2} aria-hidden />}
+                    title={action.name}
+                    subtitle={action.rules.map(ruleLabel).join(' · ')}
+                    meta={
+                      <>
+                        <span className="badge">{(action.summary?.events ?? 0).toLocaleString()}</span>
+                        <span className="text-muted">{formatDate(action.summary?.lastSeenAt)}</span>
+                      </>
+                    }
+                  />
+                ))}
+                {!actions.length ? (
+                  <EmptyState title={t('actionsEmptyTitle')} description={t('actionsEmptyBody')} />
                 ) : null}
-              </header>
-
-              {canEdit ? (
-                <div className="survey-breakdown">
-                  <div className="field">
-                    <Label htmlFor="action-name">{t('name')}</Label>
-                    <Input
-                      id="action-name"
-                      value={draft.name}
-                      onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
-                      placeholder="Signup completed"
-                    />
-                  </div>
-                  <div className="field">
-                    <Label htmlFor="action-description">{t('description')}</Label>
-                    <textarea
-                      id="action-description"
-                      className="textarea"
-                      rows={4}
-                      value={draft.description}
-                      onChange={(event) =>
-                        setDraft((prev) => ({ ...prev, description: event.target.value }))
-                      }
-                    />
-                  </div>
-
-                  <div className="action-rule-list">
-                    {draft.rules.map((rule, index) => (
-                      <div key={index} className="action-rule-row">
-                        <div className="field">
-                          <Label htmlFor={`action-rule-field-${index}`}>{t('field')}</Label>
-                          <select
-                            id={`action-rule-field-${index}`}
-                            className="select"
-                            value={rule.field}
-                            onChange={(event) =>
-                              updateRule(index, { field: event.target.value as ActionRule['field'] })
-                            }
-                          >
-                            <option value="event_name">{t('actionFieldEvent')}</option>
-                            <option value="url_path">{t('actionFieldPath')}</option>
-                            <option value="property">{t('actionFieldProperty')}</option>
-                          </select>
-                        </div>
-                        {rule.field === 'property' ? (
-                          <div className="field">
-                            <Label htmlFor={`action-rule-key-${index}`}>{t('key')}</Label>
-                            <Input
-                              id={`action-rule-key-${index}`}
-                              value={rule.key ?? ''}
-                              onChange={(event) => updateRule(index, { key: event.target.value })}
-                              placeholder="plan"
-                            />
-                          </div>
-                        ) : null}
-                        <div className="field">
-                          <Label htmlFor={`action-rule-operator-${index}`}>{t('actionOperator')}</Label>
-                          <select
-                            id={`action-rule-operator-${index}`}
-                            className="select"
-                            value={rule.operator}
-                            onChange={(event) =>
-                              updateRule(index, { operator: event.target.value as ActionRule['operator'] })
-                            }
-                          >
-                            <option value="equals">{t('actionOperator_equals')}</option>
-                            <option value="contains">{t('actionOperator_contains')}</option>
-                            <option value="starts_with">{t('actionOperator_starts_with')}</option>
-                            <option value="ends_with">{t('actionOperator_ends_with')}</option>
-                            <option value="not_equals">{t('actionOperator_not_equals')}</option>
-                            <option value="not_contains">{t('actionOperator_not_contains')}</option>
-                          </select>
-                        </div>
-                        <div className="field">
-                          <Label htmlFor={`action-rule-value-${index}`}>{t('value')}</Label>
-                          <Input
-                            id={`action-rule-value-${index}`}
-                            value={rule.value}
-                            onChange={(event) => updateRule(index, { value: event.target.value })}
-                            placeholder={rule.field === 'event_name' ? 'checkout_started' : '/pricing'}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="form-actions">
+              </>
+            }
+            detail={
+              <MasterDetailPane
+                title={selectedActionId ? t('editActionDefinition') : t('createActionDefinition')}
+                description={t('actionDefinitionFormLead')}
+                actions={
+                  canEdit && selectedActionId ? (
                     <Button
                       type="button"
-                      variant="secondary"
-                      onClick={() => setDraft((prev) => ({ ...prev, rules: [...prev.rules, { ...EMPTY_RULE }] }))}
+                      variant="ghost"
+                      onClick={() => deleteMutation.mutate(selectedActionId)}
+                      disabled={deleteMutation.isPending}
+                      aria-label={t('delete')}
                     >
-                      <Plus size={16} strokeWidth={2} aria-hidden />
-                      {t('addRule')}
+                      <Trash2 size={16} strokeWidth={2} aria-hidden />
                     </Button>
-                    <Button type="button" variant="primary" onClick={() => saveMutation.mutate(draft)} disabled={!canSave}>
-                      {saveMutation.isPending
-                        ? t('saving')
-                        : selectedActionId
-                          ? t('saveChanges')
-                          : t('createActionDefinition')}
-                    </Button>
-                  </div>
-                  {saveMutation.error ? <p className="text-danger">{saveMutation.error.message}</p> : null}
-                </div>
-              ) : null}
+                  ) : null
+                }
+              >
+                {canEdit ? (
+                  <div className="survey-breakdown">
+                    <div className="field">
+                      <Label htmlFor="action-name">{t('name')}</Label>
+                      <Input
+                        id="action-name"
+                        value={draft.name}
+                        onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
+                        placeholder="Signup completed"
+                      />
+                    </div>
+                    <div className="field">
+                      <Label htmlFor="action-description">{t('description')}</Label>
+                      <textarea
+                        id="action-description"
+                        className="textarea"
+                        rows={4}
+                        value={draft.description}
+                        onChange={(event) =>
+                          setDraft((prev) => ({ ...prev, description: event.target.value }))
+                        }
+                      />
+                    </div>
 
-              {selectedActionId ? (
-                <div className="action-summary-section">
-                  <div className="surveys-stats">
-                    <div>
-                      <span className="stat-label">{t('events')}</span>
-                      <strong className="stat-value">{(summary?.events ?? 0).toLocaleString()}</strong>
-                    </div>
-                    <div>
-                      <span className="stat-label">{t('sessions')}</span>
-                      <strong className="stat-value">{(summary?.sessions ?? 0).toLocaleString()}</strong>
-                    </div>
-                    <div>
-                      <span className="stat-label">{t('visits')}</span>
-                      <strong className="stat-value">{(summary?.visits ?? 0).toLocaleString()}</strong>
-                    </div>
-                    <div>
-                      <span className="stat-label">{t('lastSeen')}</span>
-                      <strong className="stat-value">{formatDate(summary?.lastSeenAt)}</strong>
-                    </div>
-                  </div>
-                  <div className="workflow-event-list">
-                    {(summary?.recent ?? []).slice(0, 8).map((event) => (
-                      <div key={event.id} className="workflow-event-row">
-                        <div>
-                          <strong>{event.eventName ?? t('pageview')}</strong>
-                          <p className="text-muted">{event.urlPath ?? '-'}</p>
+                    <div className="action-rule-list">
+                      {draft.rules.map((rule, index) => (
+                        <div key={index} className="action-rule-row">
+                          <div className="field">
+                            <Label htmlFor={`action-rule-field-${index}`}>{t('field')}</Label>
+                            <select
+                              id={`action-rule-field-${index}`}
+                              className="select"
+                              value={rule.field}
+                              onChange={(event) =>
+                                updateRule(index, { field: event.target.value as ActionRule['field'] })
+                              }
+                            >
+                              <option value="event_name">{t('actionFieldEvent')}</option>
+                              <option value="url_path">{t('actionFieldPath')}</option>
+                              <option value="property">{t('actionFieldProperty')}</option>
+                            </select>
+                          </div>
+                          {rule.field === 'property' ? (
+                            <div className="field">
+                              <Label htmlFor={`action-rule-key-${index}`}>{t('key')}</Label>
+                              <Input
+                                id={`action-rule-key-${index}`}
+                                value={rule.key ?? ''}
+                                onChange={(event) => updateRule(index, { key: event.target.value })}
+                                placeholder="plan"
+                              />
+                            </div>
+                          ) : null}
+                          <div className="field">
+                            <Label htmlFor={`action-rule-operator-${index}`}>{t('actionOperator')}</Label>
+                            <select
+                              id={`action-rule-operator-${index}`}
+                              className="select"
+                              value={rule.operator}
+                              onChange={(event) =>
+                                updateRule(index, { operator: event.target.value as ActionRule['operator'] })
+                              }
+                            >
+                              <option value="equals">{t('actionOperator_equals')}</option>
+                              <option value="contains">{t('actionOperator_contains')}</option>
+                              <option value="starts_with">{t('actionOperator_starts_with')}</option>
+                              <option value="ends_with">{t('actionOperator_ends_with')}</option>
+                              <option value="not_equals">{t('actionOperator_not_equals')}</option>
+                              <option value="not_contains">{t('actionOperator_not_contains')}</option>
+                            </select>
+                          </div>
+                          <div className="field">
+                            <Label htmlFor={`action-rule-value-${index}`}>{t('value')}</Label>
+                            <Input
+                              id={`action-rule-value-${index}`}
+                              value={rule.value}
+                              onChange={(event) => updateRule(index, { value: event.target.value })}
+                              placeholder={rule.field === 'event_name' ? 'checkout_started' : '/pricing'}
+                            />
+                          </div>
                         </div>
-                        <Link
-                          to={`/websites/${websiteId}/sessions/${event.sessionId}`}
-                          className="inline-link"
-                        >
-                          {event.sessionId.slice(0, 8)}
-                          <ExternalLink size={12} strokeWidth={2} aria-hidden />
-                        </Link>
-                      </div>
-                    ))}
-                    {!(summary?.recent ?? []).length ? (
-                      <p className="text-muted">{t('actionNoMatches')}</p>
-                    ) : null}
+                      ))}
+                    </div>
+
+                    <div className="form-actions">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setDraft((prev) => ({ ...prev, rules: [...prev.rules, { ...EMPTY_RULE }] }))}
+                      >
+                        <Plus size={16} strokeWidth={2} aria-hidden />
+                        {t('addRule')}
+                      </Button>
+                      <Button type="button" variant="primary" onClick={() => saveMutation.mutate(draft)} disabled={!canSave}>
+                        {saveMutation.isPending
+                          ? t('saving')
+                          : selectedActionId
+                            ? t('saveChanges')
+                            : t('createActionDefinition')}
+                      </Button>
+                    </div>
+                    {saveMutation.error ? <p className="text-danger">{saveMutation.error.message}</p> : null}
                   </div>
-                </div>
-              ) : null}
-            </div>
-          </div>
+                ) : null}
+
+                {selectedActionId ? (
+                  <div className="action-summary-section">
+                    <div className="surveys-stats">
+                      <div>
+                        <span className="stat-label">{t('events')}</span>
+                        <strong className="stat-value">{(summary?.events ?? 0).toLocaleString()}</strong>
+                      </div>
+                      <div>
+                        <span className="stat-label">{t('sessions')}</span>
+                        <strong className="stat-value">{(summary?.sessions ?? 0).toLocaleString()}</strong>
+                      </div>
+                      <div>
+                        <span className="stat-label">{t('visits')}</span>
+                        <strong className="stat-value">{(summary?.visits ?? 0).toLocaleString()}</strong>
+                      </div>
+                      <div>
+                        <span className="stat-label">{t('lastSeen')}</span>
+                        <strong className="stat-value">{formatDate(summary?.lastSeenAt)}</strong>
+                      </div>
+                    </div>
+                    <div className="workflow-event-list">
+                      {(summary?.recent ?? []).slice(0, 8).map((event) => (
+                        <div key={event.id} className="workflow-event-row">
+                          <div>
+                            <strong>{event.eventName ?? t('pageview')}</strong>
+                            <p className="text-muted">{event.urlPath ?? '-'}</p>
+                          </div>
+                          <Link
+                            to={`/websites/${websiteId}/sessions/${event.sessionId}`}
+                            className="inline-link"
+                          >
+                            {event.sessionId.slice(0, 8)}
+                            <ExternalLink size={12} strokeWidth={2} aria-hidden />
+                          </Link>
+                        </div>
+                      ))}
+                      {!(summary?.recent ?? []).length ? (
+                        <p className="text-muted">{t('actionNoMatches')}</p>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </MasterDetailPane>
+            }
+          />
         ) : (
           <EmptyState title={t('actionsEmptyTitle')} description={t('actionsEmptyBody')} />
         )}

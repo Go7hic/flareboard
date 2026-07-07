@@ -1,12 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { ExternalLink, MousePointerClick, Search } from 'lucide-react';
+import { ExternalLink, MousePointerClick } from 'lucide-react';
 import { EventDataPanel } from '../components/EventDataPanel';
 import { EmptyState } from '../components/EmptyState';
 import { MetricsTable } from '../components/MetricsTable';
+import {
+  MasterDetailLayout,
+  MasterDetailListItem,
+  MasterDetailPane,
+  ResourceSearchField,
+  useMasterDetailSelection,
+} from '../components/master-detail';
 import { WebsitePageShell } from '../components/WebsitePageShell';
-import { Input } from '../components/ui/input';
 import { api, type EventCatalogDetailResponse, type EventCatalogResponse, type MetricRow } from '../lib/api';
 import { t } from '../lib/i18n';
 
@@ -26,7 +32,6 @@ function formatDate(value: number | null | undefined) {
 export default function WebsiteEventsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
   const [search, setSearch] = useState('');
-  const [selectedEventName, setSelectedEventName] = useState<string | null>(null);
 
   const catalogQuery = useQuery({
     queryKey: ['event-catalog', websiteId, search],
@@ -44,10 +49,8 @@ export default function WebsiteEventsPage() {
   });
 
   const catalog = catalogQuery.data?.events ?? [];
-  const selectedEvent = useMemo(() => {
-    if (!catalog.length) return null;
-    return catalog.find((event) => event.eventName === selectedEventName) ?? catalog[0];
-  }, [catalog, selectedEventName]);
+  const { selectedId: selectedEventName, setSelectedId: setSelectedEventName, selectedItem: selectedEvent } =
+    useMasterDetailSelection(catalog, (event) => event.eventName, { defaultToFirst: true });
 
   const detailQuery = useQuery({
     queryKey: ['event-catalog-detail', websiteId, selectedEvent?.eventName],
@@ -73,65 +76,47 @@ export default function WebsiteEventsPage() {
           </div>
         </header>
 
-        <div className="cohorts-search-wrap">
-          <Search className="cohorts-search-icon" size={16} strokeWidth={2} aria-hidden />
-          <Input
-            type="search"
-            className="cohorts-search"
-            value={search}
-            placeholder={t('eventCatalogSearchPlaceholder')}
-            onChange={(event) => setSearch(event.target.value)}
-            aria-label={t('eventCatalogSearchPlaceholder')}
-          />
-        </div>
+        <ResourceSearchField
+          value={search}
+          onChange={setSearch}
+          placeholder={t('eventCatalogSearchPlaceholder')}
+          aria-label={t('eventCatalogSearchPlaceholder')}
+        />
       </section>
 
       <section className="panel section-gap">
         {catalogQuery.isLoading ? (
           <div className="skeleton skeleton-block" aria-busy />
         ) : catalog.length ? (
-          <div className="surveys-layout">
-            <div className="surveys-list">
-              {catalog.map((event) => (
-                <button
-                  type="button"
-                  key={event.eventName}
-                  className={`survey-list-item${event.eventName === selectedEvent?.eventName ? ' active' : ''}`}
-                  onClick={() => setSelectedEventName(event.eventName)}
-                >
-                  <span className="errors-name-cell">
-                    <MousePointerClick size={16} strokeWidth={2} aria-hidden />
-                    <span>
-                      <span className="survey-list-title">{event.eventName}</span>
-                      <span className="text-muted">
-                        {event.paths.toLocaleString()} {t('eventCatalogPathsCount')}
-                      </span>
-                    </span>
-                  </span>
-                  <span className="survey-list-meta">
+          <MasterDetailLayout
+            list={catalog.map((event) => (
+              <MasterDetailListItem
+                key={event.eventName}
+                selected={event.eventName === selectedEvent?.eventName}
+                onSelect={() => setSelectedEventName(event.eventName)}
+                icon={<MousePointerClick size={16} strokeWidth={2} aria-hidden />}
+                title={event.eventName}
+                subtitle={`${event.paths.toLocaleString()} ${t('eventCatalogPathsCount')}`}
+                meta={
+                  <>
                     <span className="badge">
                       {event.events.toLocaleString()} {t('events')}
                     </span>
                     <span className="text-muted">{formatDate(event.lastSeenAt)}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            <div className="surveys-detail">
-              {selectedEvent && summary ? (
-                <>
-                  <header className="surveys-detail-head">
-                    <div>
-                      <h3 className="section-title experiment-title">{selectedEvent.eventName}</h3>
-                      <p className="text-muted">
-                        {selectedEvent.propertyKeys.length
-                          ? selectedEvent.propertyKeys.slice(0, 5).join(', ')
-                          : t('eventCatalogNoProperties')}
-                      </p>
-                    </div>
-                  </header>
-
+                  </>
+                }
+              />
+            ))}
+            detail={
+              selectedEvent && summary ? (
+                <MasterDetailPane
+                  title={selectedEvent.eventName}
+                  description={
+                    selectedEvent.propertyKeys.length
+                      ? selectedEvent.propertyKeys.slice(0, 5).join(', ')
+                      : t('eventCatalogNoProperties')
+                  }
+                >
                   <div className="surveys-stats">
                     <div>
                       <span className="stat-label">{t('events')}</span>
@@ -255,10 +240,10 @@ export default function WebsiteEventsPage() {
                       </table>
                     </div>
                   </div>
-                </>
-              ) : null}
-            </div>
-          </div>
+                </MasterDetailPane>
+              ) : null
+            }
+          />
         ) : (
           <EmptyState title={t('eventCatalogEmptyTitle')} description={t('eventCatalogEmptyBody')} />
         )}

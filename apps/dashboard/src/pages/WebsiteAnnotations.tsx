@@ -3,6 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import { CalendarDays, Plus, Trash2 } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
+import {
+  MasterDetailLayout,
+  MasterDetailListItem,
+  MasterDetailPane,
+} from '../components/master-detail';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -154,114 +159,107 @@ export default function WebsiteAnnotationsPage() {
         {annotationsQuery.isLoading ? (
           <div className="skeleton skeleton-block" aria-busy />
         ) : annotations.length || !selectedId ? (
-          <div className="surveys-layout">
-            <div className="surveys-list">
-              {annotations.map((annotation) => (
-                <button
-                  type="button"
-                  key={annotation.id}
-                  className={`survey-list-item${annotation.id === selectedAnnotation?.id ? ' active' : ''}`}
-                  onClick={() => selectAnnotation(annotation)}
-                >
-                  <span className="errors-name-cell">
-                    <CalendarDays size={16} strokeWidth={2} aria-hidden />
-                    <span>
-                      <span className="survey-list-title">{annotation.title}</span>
-                      <span className="text-muted">{formatDate(annotation.happenedAt)}</span>
-                    </span>
-                  </span>
-                  <span className="survey-list-meta">
-                    <span className={`badge annotation-badge-${annotation.category}`}>
-                      {categoryLabel(annotation.category)}
-                    </span>
-                  </span>
-                </button>
-              ))}
-              {!annotations.length ? (
-                <EmptyState title={t('annotationsEmptyTitle')} description={t('annotationsEmptyBody')} />
-              ) : null}
-            </div>
-
-            <div className="surveys-detail">
-              <header className="surveys-detail-head">
-                <div>
-                  <h3 className="section-title experiment-title">
-                    {selectedId ? t('editAnnotation') : t('createAnnotation')}
-                  </h3>
-                  <p className="text-muted">{t('annotationFormLead')}</p>
-                </div>
-                {canEdit && selectedId ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => deleteMutation.mutate(selectedId)}
-                    disabled={deleteMutation.isPending}
-                    aria-label={t('delete')}
-                  >
-                    <Trash2 size={16} strokeWidth={2} aria-hidden />
-                  </Button>
+          <MasterDetailLayout
+            list={
+              <>
+                {annotations.map((annotation) => (
+                  <MasterDetailListItem
+                    key={annotation.id}
+                    selected={annotation.id === selectedAnnotation?.id}
+                    onSelect={() => selectAnnotation(annotation)}
+                    icon={<CalendarDays size={16} strokeWidth={2} aria-hidden />}
+                    title={annotation.title}
+                    subtitle={formatDate(annotation.happenedAt)}
+                    meta={
+                      <span className={`badge annotation-badge-${annotation.category}`}>
+                        {categoryLabel(annotation.category)}
+                      </span>
+                    }
+                  />
+                ))}
+                {!annotations.length ? (
+                  <EmptyState title={t('annotationsEmptyTitle')} description={t('annotationsEmptyBody')} />
                 ) : null}
-              </header>
-
-              {canEdit ? (
-              <div className="survey-breakdown">
-                <div className="field">
-                  <Label htmlFor="annotation-title">{t('title')}</Label>
-                  <Input
-                    id="annotation-title"
-                    value={draft.title}
-                    onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))}
-                    placeholder={t('annotationTitlePlaceholder')}
-                  />
-                </div>
-                <div className="field">
-                  <Label htmlFor="annotation-category">{t('category')}</Label>
-                  <select
-                    id="annotation-category"
-                    className="select"
-                    value={draft.category}
-                    onChange={(event) =>
-                      setDraft((prev) => ({ ...prev, category: event.target.value as AnnotationCategory }))
-                    }
-                  >
-                    {CATEGORIES.map((category) => (
-                      <option key={category} value={category}>
-                        {categoryLabel(category)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <Label htmlFor="annotation-time">{t('annotationHappenedAt')}</Label>
-                  <Input
-                    id="annotation-time"
-                    type="datetime-local"
-                    value={draft.happenedAt}
-                    onChange={(event) => setDraft((prev) => ({ ...prev, happenedAt: event.target.value }))}
-                  />
-                </div>
-                <div className="field">
-                  <Label htmlFor="annotation-description">{t('description')}</Label>
-                  <textarea
-                    id="annotation-description"
-                    className="textarea"
-                    rows={5}
-                    value={draft.description}
-                    onChange={(event) =>
-                      setDraft((prev) => ({ ...prev, description: event.target.value }))
-                    }
-                  />
-                </div>
-                <div className="form-actions">
-                  <Button type="button" variant="primary" onClick={() => saveMutation.mutate(draft)} disabled={!canSave}>
-                    {selectedId ? t('saveChanges') : t('createAnnotation')}
-                  </Button>
-                </div>
-                {saveMutation.error ? <p className="text-danger">{saveMutation.error.message}</p> : null}
-              </div>
-              ) : null}
-            </div>
-          </div>
+              </>
+            }
+            detail={
+              <MasterDetailPane
+                title={selectedId ? t('editAnnotation') : t('createAnnotation')}
+                description={t('annotationFormLead')}
+                actions={
+                  canEdit && selectedId ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => deleteMutation.mutate(selectedId)}
+                      disabled={deleteMutation.isPending}
+                      aria-label={t('delete')}
+                    >
+                      <Trash2 size={16} strokeWidth={2} aria-hidden />
+                    </Button>
+                  ) : null
+                }
+              >
+                {canEdit ? (
+                  <div className="survey-breakdown">
+                    <div className="field">
+                      <Label htmlFor="annotation-title">{t('title')}</Label>
+                      <Input
+                        id="annotation-title"
+                        value={draft.title}
+                        onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))}
+                        placeholder={t('annotationTitlePlaceholder')}
+                      />
+                    </div>
+                    <div className="field">
+                      <Label htmlFor="annotation-category">{t('category')}</Label>
+                      <select
+                        id="annotation-category"
+                        className="select"
+                        value={draft.category}
+                        onChange={(event) =>
+                          setDraft((prev) => ({ ...prev, category: event.target.value as AnnotationCategory }))
+                        }
+                      >
+                        {CATEGORIES.map((category) => (
+                          <option key={category} value={category}>
+                            {categoryLabel(category)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="field">
+                      <Label htmlFor="annotation-time">{t('annotationHappenedAt')}</Label>
+                      <Input
+                        id="annotation-time"
+                        type="datetime-local"
+                        value={draft.happenedAt}
+                        onChange={(event) => setDraft((prev) => ({ ...prev, happenedAt: event.target.value }))}
+                      />
+                    </div>
+                    <div className="field">
+                      <Label htmlFor="annotation-description">{t('description')}</Label>
+                      <textarea
+                        id="annotation-description"
+                        className="textarea"
+                        rows={5}
+                        value={draft.description}
+                        onChange={(event) =>
+                          setDraft((prev) => ({ ...prev, description: event.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="form-actions">
+                      <Button type="button" variant="primary" onClick={() => saveMutation.mutate(draft)} disabled={!canSave}>
+                        {selectedId ? t('saveChanges') : t('createAnnotation')}
+                      </Button>
+                    </div>
+                    {saveMutation.error ? <p className="text-danger">{saveMutation.error.message}</p> : null}
+                  </div>
+                ) : null}
+              </MasterDetailPane>
+            }
+          />
         ) : (
           <EmptyState title={t('annotationsEmptyTitle')} description={t('annotationsEmptyBody')} />
         )}

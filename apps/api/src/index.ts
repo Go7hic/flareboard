@@ -173,6 +173,7 @@ app.delete('/api/websites/:websiteId/warehouse/schedules/:scheduledQueryId', war
 app.get('/api/websites/:websiteId/warehouse/data-sources', warehouse.handleDataSourceList);
 app.post('/api/websites/:websiteId/warehouse/data-sources', warehouse.handleDataSourceCreate);
 app.patch('/api/websites/:websiteId/warehouse/data-sources/:dataSourceId', warehouse.handleDataSourceUpdate);
+app.post('/api/websites/:websiteId/warehouse/data-sources/:dataSourceId/sync', warehouse.handleDataSourceSync);
 app.delete('/api/websites/:websiteId/warehouse/data-sources/:dataSourceId', warehouse.handleDataSourceDelete);
 app.get('/api/websites/:websiteId/warehouse/saved-queries', warehouse.handleSavedQueryList);
 app.post('/api/websites/:websiteId/warehouse/saved-queries', warehouse.handleSavedQueryCreate);

@@ -147,6 +147,15 @@ export default function WebsiteWarehousePage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['warehouse-schedules', websiteId] }),
   });
 
+  const updateScheduleMutation = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<WarehouseScheduledQuery> }) =>
+      api<WarehouseScheduledQuery>(`/api/websites/${websiteId}/warehouse/schedules/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['warehouse-schedules', websiteId] }),
+  });
+
   const createSourceMutation = useMutation({
     mutationFn: () => {
       let config: Record<string, unknown> = {};
@@ -174,6 +183,12 @@ export default function WebsiteWarehousePage() {
   const deleteSourceMutation = useMutation({
     mutationFn: (id: string) =>
       api(`/api/websites/${websiteId}/warehouse/data-sources/${id}`, { method: 'DELETE' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['warehouse-sources', websiteId] }),
+  });
+
+  const syncSourceMutation = useMutation({
+    mutationFn: (id: string) =>
+      api(`/api/websites/${websiteId}/warehouse/data-sources/${id}/sync`, { method: 'POST' }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['warehouse-sources', websiteId] }),
   });
 
@@ -423,6 +438,7 @@ export default function WebsiteWarehousePage() {
             <div>
               <h2 className="section-title">{t('warehouseScheduledQueries')}</h2>
               <p className="text-muted">{t('warehouseScheduledQueriesLead')}</p>
+              <p className="text-muted">{t('warehouseAutomationCronHint')}</p>
             </div>
             {canEdit ? (
               <Button
@@ -495,15 +511,30 @@ export default function WebsiteWarehousePage() {
                       <td>{item.enabled ? t('enabled') : t('disabled')}</td>
                       {canEdit ? (
                         <td className="cohorts-actions-col">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="btn-danger-text"
-                            onClick={() => deleteScheduleMutation.mutate(item.id)}
-                          >
-                            {t('delete')}
-                          </Button>
+                          <div className="cohorts-row-actions">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                updateScheduleMutation.mutate({
+                                  id: item.id,
+                                  patch: { enabled: !item.enabled },
+                                })
+                              }
+                            >
+                              {item.enabled ? t('disable') : t('enable')}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="btn-danger-text"
+                              onClick={() => deleteScheduleMutation.mutate(item.id)}
+                            >
+                              {t('delete')}
+                            </Button>
+                          </div>
                         </td>
                       ) : null}
                     </tr>
@@ -523,6 +554,7 @@ export default function WebsiteWarehousePage() {
             <div>
               <h2 className="section-title">{t('warehouseDataSources')}</h2>
               <p className="text-muted">{t('warehouseDataSourcesLead')}</p>
+              <p className="text-muted">{t('warehouseAutomationCronHint')}</p>
             </div>
           </header>
           {canEdit ? (
@@ -585,6 +617,7 @@ export default function WebsiteWarehousePage() {
                     <th>{t('name')}</th>
                     <th>{t('warehouseDataSourceType')}</th>
                     <th>{t('status')}</th>
+                    <th>{t('warehouseLastSync')}</th>
                     <th>{t('created')}</th>
                     {canEdit ? <th className="cohorts-actions-col">{t('actions')}</th> : null}
                   </tr>
@@ -595,18 +628,33 @@ export default function WebsiteWarehousePage() {
                       <td>{item.name}</td>
                       <td className="mono">{item.type}</td>
                       <td>{item.enabled ? t('enabled') : t('disabled')}{item.lastStatus ? ` · ${item.lastStatus}` : ''}</td>
+                      <td className="text-muted">
+                        {formatTime(item.lastSyncAt)}
+                        {item.lastError ? <div className="text-danger">{item.lastError}</div> : null}
+                      </td>
                       <td className="text-muted">{formatTime(item.createdAt)}</td>
                       {canEdit ? (
                         <td className="cohorts-actions-col">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="btn-danger-text"
-                            onClick={() => deleteSourceMutation.mutate(item.id)}
-                          >
-                            {t('delete')}
-                          </Button>
+                          <div className="cohorts-row-actions">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              disabled={syncSourceMutation.isPending}
+                              onClick={() => syncSourceMutation.mutate(item.id)}
+                            >
+                              {t('warehouseSyncNow')}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="btn-danger-text"
+                              onClick={() => deleteSourceMutation.mutate(item.id)}
+                            >
+                              {t('delete')}
+                            </Button>
+                          </div>
                         </td>
                       ) : null}
                     </tr>

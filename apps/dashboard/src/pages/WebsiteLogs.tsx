@@ -50,6 +50,10 @@ const DEFAULT_ALERT = {
   level: '',
   service: '',
   search: '',
+  release: '',
+  environment: '',
+  channel: 'record' as LogAlertRule['channel'],
+  target: '',
 };
 
 export default function WebsiteLogsPage() {
@@ -143,6 +147,10 @@ export default function WebsiteLogsPage() {
           level: alertDraft.level || null,
           service: alertDraft.service.trim() || null,
           search: alertDraft.search.trim() || null,
+          release: alertDraft.release.trim() || null,
+          environment: alertDraft.environment.trim() || null,
+          channel: alertDraft.channel,
+          target: alertDraft.target.trim() || null,
           enabled: true,
         }),
       }),
@@ -662,6 +670,61 @@ export default function WebsiteLogsPage() {
                   onChange={(event) => setAlertDraft((prev) => ({ ...prev, service: event.target.value }))}
                 />
               </div>
+              <div className="field">
+                <Label htmlFor="log-alert-search">{t('search')}</Label>
+                <Input
+                  id="log-alert-search"
+                  value={alertDraft.search}
+                  onChange={(event) => setAlertDraft((prev) => ({ ...prev, search: event.target.value }))}
+                />
+              </div>
+              <div className="field">
+                <Label htmlFor="log-alert-release">{t('release')}</Label>
+                <Input
+                  id="log-alert-release"
+                  value={alertDraft.release}
+                  onChange={(event) => setAlertDraft((prev) => ({ ...prev, release: event.target.value }))}
+                />
+              </div>
+              <div className="field">
+                <Label htmlFor="log-alert-environment">{t('environment')}</Label>
+                <Input
+                  id="log-alert-environment"
+                  value={alertDraft.environment}
+                  onChange={(event) => setAlertDraft((prev) => ({ ...prev, environment: event.target.value }))}
+                />
+              </div>
+              <div className="field">
+                <Label htmlFor="log-alert-channel">{t('alertRuleChannel')}</Label>
+                <select
+                  id="log-alert-channel"
+                  className="select"
+                  value={alertDraft.channel}
+                  onChange={(event) =>
+                    setAlertDraft((prev) => ({
+                      ...prev,
+                      channel: event.target.value as LogAlertRule['channel'],
+                    }))
+                  }
+                >
+                  <option value="record">{t('alertRuleChannel_record')}</option>
+                  <option value="email">{t('alertRuleChannel_email')}</option>
+                  <option value="webhook">{t('alertRuleChannel_webhook')}</option>
+                </select>
+              </div>
+              {alertDraft.channel !== 'record' ? (
+                <div className="field">
+                  <Label htmlFor="log-alert-target">{t('alertRuleTarget')}</Label>
+                  <Input
+                    id="log-alert-target"
+                    value={alertDraft.target}
+                    placeholder={
+                      alertDraft.channel === 'email' ? 'ops@example.com' : 'https://hooks.example.com/alerts'
+                    }
+                    onChange={(event) => setAlertDraft((prev) => ({ ...prev, target: event.target.value }))}
+                  />
+                </div>
+              ) : null}
               <div className="form-actions">
                 <Button
                   type="button"
@@ -683,6 +746,7 @@ export default function WebsiteLogsPage() {
                     <th>{t('alertRuleThreshold')}</th>
                     <th>{t('alertRuleWindow')}</th>
                     <th>{t('logAlertLevel')}</th>
+                    <th>{t('alertRuleChannel')}</th>
                     <th>{t('status')}</th>
                     <th className="cohorts-actions-col">{t('actions')}</th>
                   </tr>
@@ -694,6 +758,10 @@ export default function WebsiteLogsPage() {
                       <td>{rule.threshold}</td>
                       <td>{rule.windowMinutes}</td>
                       <td>{rule.level ?? '-'}</td>
+                      <td>
+                        {t(`alertRuleChannel_${rule.channel}`)}
+                        {rule.target ? <div className="text-muted mono">{rule.target}</div> : null}
+                      </td>
                       <td>{rule.enabled ? t('enabled') : t('disabled')}</td>
                       <td className="cohorts-actions-col">
                         {canEdit ? (

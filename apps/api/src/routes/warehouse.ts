@@ -29,6 +29,7 @@ import {
   recordWarehouseQueryHistory,
   runDueWarehouseScheduledQueries,
   runWarehouseQuery,
+  syncWarehouseDataSource,
   updateWarehouseDataSource,
   updateWarehouseScheduledQuery,
   updateWarehouseSavedQuery,
@@ -204,6 +205,20 @@ export async function handleDataSourceUpdate(c: Ctx) {
   const dataSource = await updateWarehouseDataSource(c.env, website!.websiteId, dataSourceId, parsed.data);
   if (!dataSource) return notFound();
   return json(dataSource);
+}
+
+export async function handleDataSourceSync(c: Ctx) {
+  const { website, response } = await requireWebsiteOr404(c);
+  if (response) return response;
+  if (!(await canMutateWebsite(c.env, website!, c.get('user')))) {
+    return json({ message: 'Read-only access' }, 403);
+  }
+  const dataSourceId = c.req.param('dataSourceId')?.trim();
+  if (!dataSourceId) return notFound();
+  const source = await getWarehouseDataSource(c.env, website!.websiteId, dataSourceId);
+  if (!source) return notFound();
+  const result = await syncWarehouseDataSource(c.env, website!.websiteId, dataSourceId);
+  return json(result);
 }
 
 export async function handleDataSourceDelete(c: Ctx) {

@@ -188,7 +188,7 @@ Public survey responses are collected by the ingest worker at `POST /api/surveys
 | PATCH/DELETE | `/api/websites/:websiteId/logs/alerts/:alertRuleId` | Bearer |
 | GET | `/api/websites/:websiteId/ai-observability` | Bearer |
 
-Alert rule CRUD exists today. Automatic alert evaluation and email/webhook delivery are tracked production-hardening work.
+Alert rule CRUD exists today. Enabled rules are evaluated on the hourly API cron (`0 * * * *`). When a threshold is exceeded, Flareboard records an alert event and can deliver email or webhook notifications when configured on the rule.
 
 ## Warehouse
 
@@ -208,8 +208,9 @@ Query execution is capped at **1000 rows returned**, **100,000 rows scanned** (D
 | PATCH/DELETE | `/api/websites/:websiteId/warehouse/schedules/:scheduledQueryId` | Bearer |
 | GET/POST | `/api/websites/:websiteId/warehouse/data-sources` | Bearer |
 | PATCH/DELETE | `/api/websites/:websiteId/warehouse/data-sources/:dataSourceId` | Bearer |
+| POST | `/api/websites/:websiteId/warehouse/data-sources/:dataSourceId/sync` | Bearer |
 
-Scheduled query automation and external data source sync are tracked production-hardening work.
+Scheduled queries and HTTP JSON/CSV data sources can be created in the dashboard. Due schedules and enabled sources sync automatically on the hourly API cron. Use `POST .../warehouse/schedules/run-due` or `POST .../warehouse/data-sources/:dataSourceId/sync` for manual runs.
 
 ## Boards
 

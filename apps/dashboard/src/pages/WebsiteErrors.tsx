@@ -65,6 +65,9 @@ export default function WebsiteErrorsPage() {
     windowMinutes: 10,
     severity: '',
     release: '',
+    environment: '',
+    channel: 'record' as ErrorAlertRule['channel'],
+    target: '',
   });
 
   const errorsQs = useMemo(() => {
@@ -133,11 +136,23 @@ export default function WebsiteErrorsPage() {
           windowMinutes: Number(alertDraft.windowMinutes),
           severity: alertDraft.severity || null,
           release: alertDraft.release.trim() || null,
+          environment: alertDraft.environment.trim() || null,
+          channel: alertDraft.channel,
+          target: alertDraft.target.trim() || null,
           enabled: true,
         }),
       }),
     onSuccess: () => {
-      setAlertDraft({ name: '', threshold: 5, windowMinutes: 10, severity: '', release: '' });
+      setAlertDraft({
+        name: '',
+        threshold: 5,
+        windowMinutes: 10,
+        severity: '',
+        release: '',
+        environment: '',
+        channel: 'record',
+        target: '',
+      });
       queryClient.invalidateQueries({ queryKey: ['error-alert-rules', websiteId] });
     },
   });
@@ -634,6 +649,45 @@ export default function WebsiteErrorsPage() {
                 onChange={(event) => setAlertDraft((prev) => ({ ...prev, release: event.target.value }))}
               />
             </div>
+            <div className="field">
+              <Label htmlFor="error-alert-environment">{t('environment')}</Label>
+              <Input
+                id="error-alert-environment"
+                value={alertDraft.environment}
+                onChange={(event) => setAlertDraft((prev) => ({ ...prev, environment: event.target.value }))}
+              />
+            </div>
+            <div className="field">
+              <Label htmlFor="error-alert-channel">{t('alertRuleChannel')}</Label>
+              <select
+                id="error-alert-channel"
+                className="select"
+                value={alertDraft.channel}
+                onChange={(event) =>
+                  setAlertDraft((prev) => ({
+                    ...prev,
+                    channel: event.target.value as ErrorAlertRule['channel'],
+                  }))
+                }
+              >
+                <option value="record">{t('alertRuleChannel_record')}</option>
+                <option value="email">{t('alertRuleChannel_email')}</option>
+                <option value="webhook">{t('alertRuleChannel_webhook')}</option>
+              </select>
+            </div>
+            {alertDraft.channel !== 'record' ? (
+              <div className="field">
+                <Label htmlFor="error-alert-target">{t('alertRuleTarget')}</Label>
+                <Input
+                  id="error-alert-target"
+                  value={alertDraft.target}
+                  placeholder={
+                    alertDraft.channel === 'email' ? 'ops@example.com' : 'https://hooks.example.com/alerts'
+                  }
+                  onChange={(event) => setAlertDraft((prev) => ({ ...prev, target: event.target.value }))}
+                />
+              </div>
+            ) : null}
             <div className="form-actions">
               <Button
                 type="button"
@@ -655,6 +709,7 @@ export default function WebsiteErrorsPage() {
                   <th>{t('alertRuleThreshold')}</th>
                   <th>{t('alertRuleWindow')}</th>
                   <th>{t('errorAlertSeverity')}</th>
+                  <th>{t('alertRuleChannel')}</th>
                   <th>{t('status')}</th>
                   <th className="cohorts-actions-col">{t('actions')}</th>
                 </tr>
@@ -666,6 +721,10 @@ export default function WebsiteErrorsPage() {
                     <td>{rule.threshold}</td>
                     <td>{rule.windowMinutes}</td>
                     <td>{rule.severity ?? '-'}</td>
+                    <td>
+                      {t(`alertRuleChannel_${rule.channel}`)}
+                      {rule.target ? <div className="text-muted mono">{rule.target}</div> : null}
+                    </td>
                     <td>{rule.enabled ? t('enabled') : t('disabled')}</td>
                     <td className="cohorts-actions-col">
                       {canEdit ? (

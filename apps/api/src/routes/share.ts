@@ -2,6 +2,7 @@ import type { Context } from 'hono';
 import { eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
 import { ENTITY_TYPE, createShareSchema, statsQuerySchema, updateShareSchema, uuid } from '@flareboard/shared';
+import { rolling24hRange, utcCalendarDaysRange } from '@flareboard/shared/date-range';
 import type { Env } from '../env';
 import { canAccessTeamResource, canAccessWebsite, canMutateTeamResource, canMutateWebsite } from '../lib/access';
 import {
@@ -171,17 +172,20 @@ export async function handleDelete(c: Ctx) {
   return json({ ok: true });
 }
 
-function presetSpanMs(preset: unknown) {
-  if (preset === '24h') return 24 * 60 * 60 * 1000;
-  if (preset === '30d') return 30 * 24 * 60 * 60 * 1000;
-  if (preset === '90d') return 90 * 24 * 60 * 60 * 1000;
-  return 7 * 24 * 60 * 60 * 1000;
+function presetRange(preset: unknown) {
+  if (preset === '24h') return rolling24hRange();
+  if (preset === '30d') return utcCalendarDaysRange(30);
+  if (preset === '90d') return utcCalendarDaysRange(90);
+  return utcCalendarDaysRange(7);
 }
 
 function parsePublicRange(c: Context<{ Bindings: Env }>, defaultPreset?: unknown) {
   const query = statsQuerySchema.safeParse(c.req.query());
-  const endAt = query.success && query.data.endAt ? query.data.endAt : Date.now();
-  const startAt = query.success && query.data.startAt ? query.data.startAt : endAt - presetSpanMs(defaultPreset ?? '24h');
+  if (query.success && query.data.startAt != null && query.data.endAt != null) {
+    const unit = query.data.unit ?? 'day';
+    return { startAt: query.data.startAt, endAt: query.data.endAt, unit };
+  }
+  const { startAt, endAt } = presetRange(defaultPreset ?? '24h');
   const unit = query.success && query.data.unit ? query.data.unit : 'day';
   return { startAt, endAt, unit };
 }

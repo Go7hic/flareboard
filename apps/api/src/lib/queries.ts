@@ -223,6 +223,10 @@ export async function getWebsiteMetricsSeries(
   endAt: number,
   unit: string,
 ): Promise<WebsiteMetricsSeries> {
+  const { getWebsiteMetricsSeriesFromRollups } = await import('./rollups');
+  const rollupSeries = await getWebsiteMetricsSeriesFromRollups(env, websiteId, startAt, endAt, unit);
+  if (rollupSeries) return rollupSeries;
+
   const format =
     unit === 'hour'
       ? "%Y-%m-%d %H:00"
@@ -270,6 +274,10 @@ export async function getDashboardMetricsByWebsite(
 ): Promise<DashboardSiteMetric[]> {
   if (!websiteIds.length) return [];
 
+  const { getDashboardMetricsFromRollups } = await import('./rollups');
+  const rollupMetrics = await getDashboardMetricsFromRollups(env, websiteIds, startAt, endAt);
+  if (rollupMetrics) return rollupMetrics;
+
   const inClause = sqlInPlaceholders(websiteIds.length, 4);
   const { results } = await env.DB.prepare(
     `SELECT website_id as websiteId,
@@ -304,6 +312,10 @@ export async function getAggregateMetricsForWebsites(
 ): Promise<AggregateMetricsSeries> {
   const empty = { pageviews: [], visitors: [], visits: [] };
   if (!websiteIds.length) return empty;
+
+  const { getAggregateMetricsFromRollups } = await import('./rollups');
+  const rollupSeries = await getAggregateMetricsFromRollups(env, websiteIds, startAt, endAt, unit);
+  if (rollupSeries) return rollupSeries;
 
   const format =
     unit === 'hour' ? '%Y-%m-%d %H:00' : unit === 'month' ? '%Y-%m' : '%Y-%m-%d';

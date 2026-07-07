@@ -1,4 +1,5 @@
 import type { Context } from 'hono';
+import { utcCalendarDaysRange } from '@flareboard/shared/date-range';
 import type { Env } from '../env';
 import {
   getAccessibleWebsites,
@@ -27,16 +28,16 @@ function chartUnit(startAt: number, endAt: number): 'hour' | 'day' {
 function resolveRange(c: Ctx): { startAt: number; endAt: number; cacheKey: string } {
   const startRaw = c.req.query('startAt');
   const endRaw = c.req.query('endAt');
-  const startAt = startRaw ? Number(startRaw) : NaN;
-  const endAt = endRaw ? Number(endRaw) : NaN;
+  const parsedStart = startRaw ? Number(startRaw) : NaN;
+  const parsedEnd = endRaw ? Number(endRaw) : NaN;
 
-  if (Number.isFinite(startAt) && Number.isFinite(endAt) && endAt > startAt) {
-    const span = Math.min(endAt - startAt, MAX_MS);
-    const clampedStart = endAt - span;
+  if (Number.isFinite(parsedStart) && Number.isFinite(parsedEnd) && parsedEnd > parsedStart) {
+    const span = Math.min(parsedEnd - parsedStart, MAX_MS);
+    const clampedStart = parsedEnd - span;
     return {
       startAt: clampedStart,
-      endAt,
-      cacheKey: `${clampedStart}:${endAt}`,
+      endAt: parsedEnd,
+      cacheKey: `${clampedStart}:${parsedEnd}`,
     };
   }
 
@@ -44,9 +45,8 @@ function resolveRange(c: Ctx): { startAt: number; endAt: number; cacheKey: strin
   const days = Number.isFinite(daysParam)
     ? Math.min(MAX_DAYS, Math.max(1, Math.floor(daysParam)))
     : DEFAULT_DAYS;
-  const end = Date.now();
-  const start = end - days * 24 * 60 * 60 * 1000;
-  return { startAt: start, endAt: end, cacheKey: `days:${days}` };
+  const { startAt, endAt } = utcCalendarDaysRange(days);
+  return { startAt, endAt, cacheKey: `days:${days}` };
 }
 
 export async function handleDashboard(c: Ctx) {

@@ -1,4 +1,5 @@
 import { EVENT_TYPE } from '@flareboard/shared';
+import { rollupDailyRangeEligible, rollupHourlySeriesEligible } from '@flareboard/shared';
 import type { Env } from '../env';
 
 export type StatsBlock = {
@@ -47,16 +48,38 @@ function yearBucket(ms: number) {
 }
 
 export function rollupRangeEligible(startAt: number, endAt: number) {
-  const start = new Date(startAt);
-  const end = new Date(endAt);
-  return (
-    start.getUTCHours() === 0 &&
-    start.getUTCMinutes() === 0 &&
-    start.getUTCSeconds() === 0 &&
-    start.getUTCMilliseconds() === 0 &&
-    end.getUTCHours() === 23 &&
-    end.getUTCMinutes() === 59
-  );
+  return rollupDailyRangeEligible(startAt, endAt);
+}
+
+function rollupSeriesRangeEligible(startAt: number, endAt: number, unit: string) {
+  const unitKey = unit === 'hour' ? 'hour' : unit === 'month' ? 'month' : unit === 'year' ? 'year' : 'day';
+  return unitKey === 'hour'
+    ? rollupHourlySeriesEligible(startAt, endAt)
+    : rollupDailyRangeEligible(startAt, endAt);
+}
+
+function seriesUnitKey(unit: string) {
+  return unit === 'hour' ? 'hour' : unit === 'month' ? 'month' : unit === 'year' ? 'year' : 'day';
+}
+
+function seriesStartBucket(unitKey: string, startAt: number) {
+  return unitKey === 'hour'
+    ? hourBucket(startAt)
+    : unitKey === 'month'
+      ? monthBucket(startAt)
+      : unitKey === 'year'
+        ? yearBucket(startAt)
+        : dayKey(startAt);
+}
+
+function seriesEndBucket(unitKey: string, endAt: number) {
+  return unitKey === 'hour'
+    ? hourBucket(endAt)
+    : unitKey === 'month'
+      ? monthBucket(endAt)
+      : unitKey === 'year'
+        ? yearBucket(endAt)
+        : dayKey(endAt);
 }
 
 async function rollupDaysComplete(env: Env, websiteId: string, days: string[]) {
@@ -138,25 +161,16 @@ export async function getPageviewsFromRollups(
   endAt: number,
   unit: string,
 ): Promise<{ pageviews: { x: string; y: number }[] } | null> {
-  if (!rollupRangeEligible(startAt, endAt)) return null;
+  if (!rollupSeriesRangeEligible(startAt, endAt, unit)) return null;
 
-  const unitKey = unit === 'hour' ? 'hour' : unit === 'month' ? 'month' : unit === 'year' ? 'year' : 'day';
-  const startBucket =
-    unitKey === 'hour'
-      ? hourBucket(startAt)
-      : unitKey === 'month'
-        ? monthBucket(startAt)
-        : unitKey === 'year'
-          ? yearBucket(startAt)
-          : dayKey(startAt);
-  const endBucket =
-    unitKey === 'hour'
-      ? hourBucket(endAt)
-      : unitKey === 'month'
-        ? monthBucket(endAt)
-        : unitKey === 'year'
-          ? yearBucket(endAt)
-          : dayKey(endAt);
+  const unitKey = seriesUnitKey(unit);
+  const startBucket = seriesStartBucket(unitKey, startAt);
+  const endBucket = seriesEndBucket(unitKey, endAt);
+
+  if (unitKey !== 'hour') {
+    const days = daysInRange(startAt, endAt);
+    if (!(await rollupDaysComplete(env, websiteId, days))) return null;
+  }
 
   const rows = await env.DB.prepare(
     `SELECT bucket, pageviews
@@ -246,6 +260,208 @@ export async function getCustomEventsFromRollups(
   if (!rows.results?.length) return null;
 
   return rows.results.map((r) => ({ x: r.eventName ?? 'Unknown', y: r.count }));
+}
+
+export type WebsiteMetricsSeries = {
+  pageviews: { x: string; y: number }[];
+  visitors: { x: string; y: number }[];
+};
+
+async function loadSeriesIdentities(
+  env: Env,
+  websiteId: string,
+  unitKey: string,
+  startBucket: string,
+  endBucket: string,
+): Promise<{ bucket: string; visitors: number; visits: number }[]> {
+  const rows = await env.DB.prepare(
+    `SELECT bucket,
+            COUNT(DISTINCT session_id) as visitors,
+            COUNT(DISTINCT visit_id) as visits
+     FROM rollup_series_bucket
+     WHERE website_id = ?1 AND unit = ?2 AND bucket >= ?3 AND bucket <= ?4
+     GROUP BY bucket
+     ORDER BY bucket ASC`,
+  )
+    .bind(websiteId, unitKey, startBucket, endBucket)
+    .all<{ bucket: string; visitors: number; visits: number }>();
+  return rows.results ?? [];
+}
+
+async function loadDailyVisitorsFromSessionDay(
+  env: Env,
+  websiteId: string,
+  days: string[],
+): Promise<{ x: string; y: number }[]> {
+  if (!days.length) return [];
+  const placeholders = days.map(() => '?').join(',');
+  const rows = await env.DB.prepare(
+    `SELECT day as x, COUNT(DISTINCT session_id) as y
+     FROM rollup_session_day
+     WHERE website_id = ?1 AND day IN (${placeholders})
+     GROUP BY day
+     ORDER BY day ASC`,
+  )
+    .bind(websiteId, ...days)
+    .all<{ x: string; y: number }>();
+  return rows.results ?? [];
+}
+
+export async function getWebsiteMetricsSeriesFromRollups(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  unit: string,
+): Promise<WebsiteMetricsSeries | null> {
+  if (!rollupSeriesRangeEligible(startAt, endAt, unit)) return null;
+
+  const unitKey = seriesUnitKey(unit);
+  const startBucket = seriesStartBucket(unitKey, startAt);
+  const endBucket = seriesEndBucket(unitKey, endAt);
+  const days = unitKey === 'day' ? daysInRange(startAt, endAt) : [];
+
+  if (unitKey !== 'hour' && !(await rollupDaysComplete(env, websiteId, days))) return null;
+
+  const pageviewRows = await env.DB.prepare(
+    `SELECT bucket, pageviews
+     FROM rollup_pageview_series
+     WHERE website_id = ?1 AND unit = ?2 AND bucket >= ?3 AND bucket <= ?4
+     ORDER BY bucket ASC`,
+  )
+    .bind(websiteId, unitKey, startBucket, endBucket)
+    .all<{ bucket: string; pageviews: number }>();
+
+  if (!pageviewRows.results?.length) return null;
+
+  let visitors: { x: string; y: number }[];
+  if (unitKey === 'day') {
+    visitors = await loadDailyVisitorsFromSessionDay(env, websiteId, days);
+  } else {
+    const identityRows = await loadSeriesIdentities(env, websiteId, unitKey, startBucket, endBucket);
+    if (!identityRows.length) return null;
+    visitors = identityRows.map((r) => ({ x: r.bucket, y: r.visitors }));
+  }
+
+  return {
+    pageviews: pageviewRows.results.map((r) => ({ x: r.bucket, y: r.pageviews })),
+    visitors,
+  };
+}
+
+export type DashboardSiteMetric = {
+  websiteId: string;
+  pageviews: number;
+  visitors: number;
+  visits: number;
+};
+
+export async function getDashboardMetricsFromRollups(
+  env: Env,
+  websiteIds: string[],
+  startAt: number,
+  endAt: number,
+): Promise<DashboardSiteMetric[] | null> {
+  if (!websiteIds.length || !rollupDailyRangeEligible(startAt, endAt)) return null;
+
+  const days = daysInRange(startAt, endAt);
+  if (!days.length) return null;
+
+  const dayPlaceholders = days.map(() => '?').join(',');
+  const sitePlaceholders = websiteIds.map(() => '?').join(',');
+  const completeChecks = await Promise.all(
+    websiteIds.map((id) => rollupDaysComplete(env, id, days)),
+  );
+  if (!completeChecks.every(Boolean)) return null;
+
+  const statsRows = await env.DB.prepare(
+    `SELECT website_id as websiteId,
+            COALESCE(SUM(pageviews), 0) as pageviews,
+            COALESCE(SUM(visits), 0) as visits
+     FROM rollup_stats_daily
+     WHERE website_id IN (${sitePlaceholders}) AND day IN (${dayPlaceholders})
+     GROUP BY website_id`,
+  )
+    .bind(...websiteIds, ...days)
+    .all<{ websiteId: string; pageviews: number; visits: number }>();
+
+  const visitorRows = await env.DB.prepare(
+    `SELECT website_id as websiteId, COUNT(DISTINCT session_id) as visitors
+     FROM rollup_session_day
+     WHERE website_id IN (${sitePlaceholders}) AND day IN (${dayPlaceholders})
+     GROUP BY website_id`,
+  )
+    .bind(...websiteIds, ...days)
+    .all<{ websiteId: string; visitors: number }>();
+
+  if (!statsRows.results?.length) return null;
+
+  const visitorsBySite = new Map((visitorRows.results ?? []).map((r) => [r.websiteId, r.visitors]));
+  return statsRows.results.map((row) => ({
+    websiteId: row.websiteId,
+    pageviews: row.pageviews,
+    visitors: visitorsBySite.get(row.websiteId) ?? 0,
+    visits: row.visits,
+  }));
+}
+
+export type AggregateMetricsSeries = {
+  pageviews: { x: string; y: number }[];
+  visitors: { x: string; y: number }[];
+  visits: { x: string; y: number }[];
+};
+
+export async function getAggregateMetricsFromRollups(
+  env: Env,
+  websiteIds: string[],
+  startAt: number,
+  endAt: number,
+  unit: string,
+): Promise<AggregateMetricsSeries | null> {
+  if (!websiteIds.length || !rollupSeriesRangeEligible(startAt, endAt, unit)) return null;
+
+  const unitKey = seriesUnitKey(unit);
+  const startBucket = seriesStartBucket(unitKey, startAt);
+  const endBucket = seriesEndBucket(unitKey, endAt);
+  const days = unitKey === 'day' ? daysInRange(startAt, endAt) : [];
+
+  if (unitKey !== 'hour') {
+    const completeChecks = await Promise.all(
+      websiteIds.map((id) => rollupDaysComplete(env, id, days)),
+    );
+    if (!completeChecks.every(Boolean)) return null;
+  }
+
+  const sitePlaceholders = websiteIds.map(() => '?').join(',');
+  const pageviewRows = await env.DB.prepare(
+    `SELECT bucket as x, SUM(pageviews) as pageviews
+     FROM rollup_pageview_series
+     WHERE website_id IN (${sitePlaceholders}) AND unit = ?1 AND bucket >= ?2 AND bucket <= ?3
+     GROUP BY bucket
+     ORDER BY bucket ASC`,
+  )
+    .bind(...websiteIds, unitKey, startBucket, endBucket)
+    .all<{ x: string; pageviews: number }>();
+
+  const identityRows = await env.DB.prepare(
+    `SELECT bucket as x,
+            COUNT(DISTINCT session_id) as visitors,
+            COUNT(DISTINCT visit_id) as visits
+     FROM rollup_series_bucket
+     WHERE website_id IN (${sitePlaceholders}) AND unit = ?1 AND bucket >= ?2 AND bucket <= ?3
+     GROUP BY bucket
+     ORDER BY bucket ASC`,
+  )
+    .bind(...websiteIds, unitKey, startBucket, endBucket)
+    .all<{ x: string; visitors: number; visits: number }>();
+
+  if (!pageviewRows.results?.length || !identityRows.results?.length) return null;
+
+  return {
+    pageviews: pageviewRows.results.map((r) => ({ x: r.x, y: r.pageviews })),
+    visitors: identityRows.results.map((r) => ({ x: r.x, y: r.visitors })),
+    visits: identityRows.results.map((r) => ({ x: r.x, y: r.visits })),
+  };
 }
 
 /** Recompute rollup_stats_daily for one website/day from rollup_session_day. */

@@ -16,7 +16,8 @@ const configPath = 'apps/api/wrangler.jsonc';
 
 const DAY = "strftime('%Y-%m-%d', datetime(created_at / 1000, 'unixepoch'))";
 const DAY_E = "strftime('%Y-%m-%d', datetime(e.created_at / 1000, 'unixepoch'))";
-const HOUR_BUCKET = "strftime('%Y-%m-%d %H:00', datetime(created_at / 1000, 'unixepoch'))";
+const MONTH_BUCKET = "strftime('%Y-%m', datetime(created_at / 1000, 'unixepoch'))";
+const YEAR_BUCKET = "strftime('%Y', datetime(created_at / 1000, 'unixepoch'))";
 
 function parseArgs() {
   const remote = process.argv.includes('--remote');
@@ -45,6 +46,7 @@ function main() {
   run('DELETE FROM rollup_session_day;', remote);
   run('DELETE FROM rollup_stats_daily;', remote);
   run('DELETE FROM rollup_pageview_series;', remote);
+  run('DELETE FROM rollup_series_bucket;', remote);
   run('DELETE FROM rollup_dimension_daily;', remote);
   run('DELETE FROM rollup_event_daily;', remote);
 
@@ -93,6 +95,20 @@ function main() {
      GROUP BY website_id, ${HOUR_BUCKET};`,
     remote,
   );
+
+  for (const [unit, bucketExpr] of [
+    ['day', DAY],
+    ['hour', HOUR_BUCKET],
+    ['month', MONTH_BUCKET],
+    ['year', YEAR_BUCKET],
+  ] as const) {
+    run(
+      `INSERT INTO rollup_series_bucket (website_id, unit, bucket, session_id, visit_id)
+       SELECT DISTINCT website_id, '${unit}', ${bucketExpr}, session_id, visit_id
+       FROM website_event WHERE event_type = 1 ${scope};`,
+      remote,
+    );
+  }
 
   run(
     `INSERT INTO rollup_dimension_daily (website_id, day, dimension, value, count)

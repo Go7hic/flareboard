@@ -4399,26 +4399,6 @@ code {
   gap: 0.25rem;
 }
 
-.experiments-list {
-  display: grid;
-  gap: 1rem;
-}
-
-.experiment-item {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-elevated);
-  padding: 1rem;
-}
-
-.experiment-item-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
 .experiment-title {
   margin: 0 0 0.25rem;
 }
@@ -4677,10 +4657,6 @@ code {
 }
 
 @media (max-width: 900px) {
-  .experiment-item-head {
-    flex-direction: column;
-  }
-
   .experiment-summary-grid {
     grid-template-columns: 1fr;
   }

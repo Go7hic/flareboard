@@ -35,11 +35,6 @@ export function markSession(active: boolean) {
   sessionActive = active;
 }
 
-/** @deprecated Use hasSession() after bootstrapSession(). */
-export function getToken(): string | null {
-  return hasSession() ? 'session' : null;
-}
-
 export async function bootstrapSession(): Promise<boolean> {
   clearLegacyTokenStorage();
   if (sessionActive !== null) return sessionActive;

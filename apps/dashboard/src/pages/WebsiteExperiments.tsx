@@ -1,8 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ExternalLink, FlaskConical } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
+import {
+  MasterDetailLayout,
+  MasterDetailListItem,
+  MasterDetailPane,
+  useMasterDetailSelection,
+} from '../components/master-detail';
 import { ResourceEditDialog } from '../components/ResourceEditDialog';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
@@ -423,6 +429,7 @@ function ExperimentResultPanel({
 export default function WebsiteExperimentsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
   const { canEdit } = useWebsitePermissions(websiteId, 'experiments');
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState({
     name: '',
@@ -451,8 +458,17 @@ export default function WebsiteExperimentsPage() {
         method: 'POST',
         body: JSON.stringify(draft),
       }),
-    onSuccess: () => {
+    onSuccess: (experiment) => {
       setDraft({ name: '', description: '', featureFlagId: '', goalEvent: '', status: 'draft' });
+      setSelectedExperimentId(experiment.id);
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.set('experiment', experiment.id);
+          return next;
+        },
+        { replace: true },
+      );
       queryClient.invalidateQueries({ queryKey: ['experiments', websiteId] });
     },
   });
@@ -477,7 +493,40 @@ export default function WebsiteExperimentsPage() {
   });
 
   const flags = flagsQuery.data ?? [];
-  const experiments = experimentsQuery.data ?? [];
+  const experiments = useMemo(() => experimentsQuery.data ?? [], [experimentsQuery.data]);
+  const {
+    selectedId: selectedExperimentId,
+    setSelectedId: setSelectedExperimentId,
+    selectedItem: selectedExperiment,
+  } = useMasterDetailSelection(experiments, (experiment) => experiment.id);
+
+  useEffect(() => {
+    if (!experiments.length) {
+      setSelectedExperimentId(null);
+      return;
+    }
+    const requestedExperimentId = searchParams.get('experiment');
+    if (requestedExperimentId && experiments.some((experiment) => experiment.id === requestedExperimentId)) {
+      setSelectedExperimentId(requestedExperimentId);
+      return;
+    }
+    if (
+      !selectedExperimentId ||
+      !experiments.some((experiment) => experiment.id === selectedExperimentId)
+    ) {
+      const nextExperimentId = experiments[0].id;
+      setSelectedExperimentId(nextExperimentId);
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.set('experiment', nextExperimentId);
+          return next;
+        },
+        { replace: true },
+      );
+    }
+  }, [experiments, searchParams, selectedExperimentId, setSearchParams, setSelectedExperimentId]);
+
   const canCreate = Boolean(draft.name.trim() && draft.featureFlagId && draft.goalEvent.trim());
 
   return (
@@ -566,84 +615,119 @@ export default function WebsiteExperimentsPage() {
         {experimentsQuery.isLoading ? (
           <div className="skeleton skeleton-block" aria-busy />
         ) : experiments.length ? (
-          <div className="experiments-list">
-            {experiments.map((experiment) => (
-              <article key={experiment.id} className="experiment-item">
-                <header className="experiment-item-head">
-                  <div className="errors-name-cell">
-                    <FlaskConical size={16} strokeWidth={2} aria-hidden />
-                    <div>
-                      <h3 className="section-title experiment-title">{experiment.name}</h3>
-                      <p className="text-muted">
-                        {experiment.featureFlagKey} · {t('experimentGoalEvent')}: {experiment.goalEvent}
-                      </p>
-                      {experiment.description ? <p className="text-muted">{experiment.description}</p> : null}
-                    </div>
-                  </div>
-                  <div className="cohorts-row-actions">
-                    <span className="badge">{t(`experimentStatus_${experiment.status}`)}</span>
-                    {canEdit ? (
-                      <>
-                    {experiment.status !== 'running' ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          updateMutation.mutate({ id: experiment.id, patch: { status: 'running' } })
-                        }
-                      >
-                        {t('start')}
-                      </Button>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          updateMutation.mutate({ id: experiment.id, patch: { status: 'paused' } })
-                        }
-                      >
-                        {t('pause')}
-                      </Button>
-                    )}
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        updateMutation.mutate({ id: experiment.id, patch: { status: 'completed' } })
-                      }
-                    >
-                      {t('complete')}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setEditingExperiment(experiment)}
-                    >
-                      {t('edit')}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="btn-danger-text"
-                      onClick={() => deleteMutation.mutate(experiment.id)}
-                    >
-                      {t('delete')}
-                    </Button>
-                      </>
-                    ) : null}
-                  </div>
-                </header>
-                {websiteId ? (
-                  <ExperimentResultPanel websiteId={websiteId} experiment={experiment} canEdit={canEdit} />
-                ) : null}
-              </article>
+          <MasterDetailLayout
+            list={experiments.map((experiment) => (
+              <MasterDetailListItem
+                key={experiment.id}
+                selected={experiment.id === selectedExperimentId}
+                onSelect={() => {
+                  setSelectedExperimentId(experiment.id);
+                  setSearchParams((current) => {
+                    const next = new URLSearchParams(current);
+                    next.set('experiment', experiment.id);
+                    return next;
+                  });
+                }}
+                icon={<FlaskConical size={16} strokeWidth={2} aria-hidden />}
+                title={experiment.name}
+                subtitle={`${experiment.featureFlagKey} · ${experiment.goalEvent}`}
+                meta={
+                  <span className="badge">{t(`experimentStatus_${experiment.status}`)}</span>
+                }
+              />
             ))}
-          </div>
+            detail={
+              selectedExperiment && websiteId ? (
+                <MasterDetailPane
+                  title={selectedExperiment.name}
+                  description={
+                    <>
+                      <p className="text-muted">
+                        {selectedExperiment.featureFlagKey} · {t('experimentGoalEvent')}:{' '}
+                        {selectedExperiment.goalEvent}
+                      </p>
+                      {selectedExperiment.description ? (
+                        <p className="text-muted">{selectedExperiment.description}</p>
+                      ) : null}
+                    </>
+                  }
+                  actions={
+                    canEdit ? (
+                      <div className="cohorts-row-actions">
+                        {selectedExperiment.status !== 'running' ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              updateMutation.mutate({
+                                id: selectedExperiment.id,
+                                patch: { status: 'running' },
+                              })
+                            }
+                          >
+                            {t('start')}
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              updateMutation.mutate({
+                                id: selectedExperiment.id,
+                                patch: { status: 'paused' },
+                              })
+                            }
+                          >
+                            {t('pause')}
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            updateMutation.mutate({
+                              id: selectedExperiment.id,
+                              patch: { status: 'completed' },
+                            })
+                          }
+                        >
+                          {t('complete')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditingExperiment(selectedExperiment)}
+                        >
+                          {t('edit')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="btn-danger-text"
+                          onClick={() => deleteMutation.mutate(selectedExperiment.id)}
+                        >
+                          {t('delete')}
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="badge">{t(`experimentStatus_${selectedExperiment.status}`)}</span>
+                    )
+                  }
+                >
+                  <ExperimentResultPanel
+                    websiteId={websiteId}
+                    experiment={selectedExperiment}
+                    canEdit={canEdit}
+                  />
+                </MasterDetailPane>
+              ) : null
+            }
+          />
         ) : (
           <EmptyState title={t('experimentsEmptyTitle')} description={t('experimentsEmptyBody')} />
         )}

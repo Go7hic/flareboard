@@ -1,4 +1,4 @@
-import { eq, and, isNull, sql, gte, lte, count, countDistinct, inArray, desc, asc } from 'drizzle-orm';
+import { eq, and, isNull, sql, gte, lte, count, countDistinct, inArray, desc, asc, or } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
 import { EVENT_TYPE, type UtmReportResponse } from '@flareboard/shared';
 import type { Env } from '../env';
@@ -612,11 +612,26 @@ export async function getTeamByAccessCode(env: Env, accessCode: string) {
   return rows[0] ?? null;
 }
 
+export async function getAccessibleBoards(env: Env, userId: string) {
+  const db = createDb(env.DB);
+  const teams = await getUserTeams(env, userId);
+  const teamIds = teams.map((t) => t.id);
+  return db
+    .select()
+    .from(schema.board)
+    .where(
+      teamIds.length
+        ? or(eq(schema.board.userId, userId), inArray(schema.board.teamId, teamIds))
+        : eq(schema.board.userId, userId),
+    )
+    .orderBy(schema.board.createdAt);
+}
+
 export async function getUserShares(env: Env, userId: string) {
   const db = createDb(env.DB);
   const websites = await getAccessibleWebsites(env, userId);
   const websiteIds = websites.map((w) => w.websiteId);
-  const boards = await db.select().from(schema.board).where(eq(schema.board.userId, userId));
+  const boards = await getAccessibleBoards(env, userId);
   const boardIds = boards.map((b) => b.boardId);
   const entityIds = [...websiteIds, ...boardIds];
   if (!entityIds.length) return [];

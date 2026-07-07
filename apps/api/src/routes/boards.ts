@@ -1,5 +1,5 @@
 import type { Context } from 'hono';
-import { eq, inArray, or } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
 import { ENTITY_TYPE, createBoardSchema, updateBoardSchema, uuid } from '@flareboard/shared';
 import type { Env } from '../env';
@@ -8,7 +8,7 @@ import {
   parseBoardWidgets,
   validateBoardWidgetsForUser,
 } from '../lib/board-widgets';
-import { getUserTeams } from '../lib/queries';
+import { getAccessibleBoards, getUserTeams } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
 
@@ -29,19 +29,7 @@ function serializeBoard(b: typeof schema.board.$inferSelect) {
 }
 
 export async function handleList(c: Ctx) {
-  const db = createDb(c.env.DB);
-  const userId = c.get('user').userId;
-  const teams = await getUserTeams(c.env, userId);
-  const teamIds = teams.map((t) => t.id);
-  const rows = await db
-    .select()
-    .from(schema.board)
-    .where(
-      teamIds.length
-        ? or(eq(schema.board.userId, userId), inArray(schema.board.teamId, teamIds))
-        : eq(schema.board.userId, userId),
-    )
-    .orderBy(schema.board.createdAt);
+  const rows = await getAccessibleBoards(c.env, c.get('user').userId);
   return json(rows.map(serializeBoard));
 }
 

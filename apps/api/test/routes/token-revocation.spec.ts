@@ -43,4 +43,27 @@ describe('token revocation on password reset', () => {
     });
     expect(after.response.status).toBe(401);
   });
+
+  it('rejects a token after logout', async () => {
+    await env.DB.prepare(`UPDATE user SET token_version = 0 WHERE user_id = ?1`).bind(USER_ID).run();
+    await env.CACHE.put(`token-version:${USER_ID}`, '0');
+
+    const token = await mintToken(0);
+
+    const before = await fetchWorkerJson('/api/me', {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+    expect(before.response.status).toBe(200);
+
+    const logout = await fetchWorkerJson('/api/auth/logout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+    expect(logout.response.status).toBe(200);
+
+    const after = await fetchWorkerJson('/api/me', {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+    expect(after.response.status).toBe(401);
+  });
 });

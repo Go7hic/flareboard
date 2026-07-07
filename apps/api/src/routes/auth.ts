@@ -16,7 +16,7 @@ import {
   verifySsoToken,
 } from '@flareboard/shared';
 import type { Env } from '../env';
-import { bumpTokenVersion, issueAuthToken } from '../lib/auth-token';
+import { bumpTokenVersion, getTokenVersion, issueAuthToken } from '../lib/auth-token';
 import {
   buildOAuthAuthorizeUrl,
   consumeOAuthState,
@@ -153,7 +153,19 @@ export async function handleLogin(c: Ctx) {
   return json({ token, user: { id: user.userId, username: user.username, role: user.role } });
 }
 
-export async function handleLogout(_c: Ctx) {
+export async function handleLogout(c: Ctx) {
+  const header = c.req.header('Authorization');
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
+  if (token) {
+    const payload = await parseSecureToken(token, getAppSecret(c));
+    if (payload?.userId) {
+      const userId = String(payload.userId);
+      const tokenVersion = typeof payload.tv === 'number' ? payload.tv : 0;
+      if ((await getTokenVersion(c.env, userId)) === tokenVersion) {
+        await bumpTokenVersion(c.env, userId);
+      }
+    }
+  }
   return json({ ok: true });
 }
 

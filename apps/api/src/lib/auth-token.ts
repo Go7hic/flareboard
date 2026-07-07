@@ -25,7 +25,7 @@ export async function getTokenVersion(env: Env, userId: string): Promise<number>
   return version;
 }
 
-/** Invalidates every outstanding token for a user (used on password change). */
+/** Invalidates every outstanding token for a user (password change, logout). */
 export async function bumpTokenVersion(env: Env, userId: string): Promise<void> {
   const db = createDb(env.DB);
   await db

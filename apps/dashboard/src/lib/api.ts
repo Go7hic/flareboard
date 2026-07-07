@@ -25,6 +25,24 @@ export function setToken(token: string | null) {
   }
 }
 
+export async function logoutSession(): Promise<void> {
+  const token = getToken();
+  if (token && API_URL) {
+    try {
+      await fetch(`${API_URL}/api/auth/logout`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+    } catch {
+      // Network errors should not block local sign-out.
+    }
+  }
+  setToken(null);
+}
+
 export type ApiInit = RequestInit & { token?: string };
 
 /** Paths where 401 means invalid credentials, not an expired session. */
@@ -34,6 +52,7 @@ const AUTH_FORM_PATHS = new Set([
   '/api/auth/verify-email',
   '/api/auth/forgot-password',
   '/api/auth/reset-password',
+  '/api/auth/logout',
 ]);
 
 let sessionRedirectPending = false;

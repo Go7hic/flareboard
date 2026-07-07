@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { api, getToken, setToken } from '../lib/api';
+import { api, getToken, logoutSession } from '../lib/api';
 import { t } from '../lib/i18n';
 import { AppSidebar } from './AppSidebar';
 import { AppTopBar } from './AppTopBar';
@@ -47,8 +47,8 @@ export function SidebarShell() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [mobileNavOpen]);
 
-  function logout() {
-    setToken(null);
+  async function logout() {
+    await logoutSession();
     navigate('/login');
   }
 

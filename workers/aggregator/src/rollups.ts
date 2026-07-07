@@ -38,6 +38,24 @@ async function bumpPageviewSeries(db: D1Database, websiteId: string, unit: strin
     .run();
 }
 
+async function recordSeriesBucket(
+  db: D1Database,
+  websiteId: string,
+  unit: string,
+  bucket: string,
+  sessionId: string,
+  visitId: string,
+) {
+  await db
+    .prepare(
+      `INSERT INTO rollup_series_bucket (website_id, unit, bucket, session_id, visit_id)
+       VALUES (?1, ?2, ?3, ?4, ?5)
+       ON CONFLICT(website_id, unit, bucket, session_id, visit_id) DO NOTHING`,
+    )
+    .bind(websiteId, unit, bucket, sessionId, visitId)
+    .run();
+}
+
 async function bumpDimension(
   db: D1Database,
   websiteId: string,
@@ -119,6 +137,11 @@ export async function maintainRollupsForEvent(
     await bumpPageviewSeries(db, websiteId, 'month', monthBucket(createdAt));
     await bumpPageviewSeries(db, websiteId, 'year', yearBucket(createdAt));
 
+    await recordSeriesBucket(db, websiteId, 'day', day, event.sessionId, event.visitId);
+    await recordSeriesBucket(db, websiteId, 'hour', hourBucket(createdAt), event.sessionId, event.visitId);
+    await recordSeriesBucket(db, websiteId, 'month', monthBucket(createdAt), event.sessionId, event.visitId);
+    await recordSeriesBucket(db, websiteId, 'year', yearBucket(createdAt), event.sessionId, event.visitId);
+
     await bumpDimension(db, websiteId, day, 'path', event.urlPath || '');
     await bumpDimension(db, websiteId, day, 'referrer', event.referrerDomain || 'Direct');
     if (sessionMeta) {
@@ -165,6 +188,14 @@ export interface SeriesAgg {
   unit: string;
   bucket: string;
   count: number;
+}
+
+export interface SeriesBucketAgg {
+  websiteId: string;
+  unit: string;
+  bucket: string;
+  sessionId: string;
+  visitId: string;
 }
 
 export interface DimensionAgg {
@@ -225,6 +256,21 @@ export function buildPageviewSeriesStatements(
          ON CONFLICT(website_id, unit, bucket) DO UPDATE SET pageviews = pageviews + ?4`,
       )
       .bind(s.websiteId, s.unit, s.bucket, s.count),
+  );
+}
+
+export function buildSeriesBucketStatements(
+  db: D1Database,
+  items: SeriesBucketAgg[],
+): D1PreparedStatement[] {
+  return items.map((s) =>
+    db
+      .prepare(
+        `INSERT INTO rollup_series_bucket (website_id, unit, bucket, session_id, visit_id)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(website_id, unit, bucket, session_id, visit_id) DO NOTHING`,
+      )
+      .bind(s.websiteId, s.unit, s.bucket, s.sessionId, s.visitId),
   );
 }
 

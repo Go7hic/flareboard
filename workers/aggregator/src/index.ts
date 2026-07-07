@@ -6,6 +6,7 @@ import {
   buildEventDailyStatements,
   buildHeatmapStatements,
   buildPageviewSeriesStatements,
+  buildSeriesBucketStatements,
   buildSessionDayStatements,
   buildStatsRefreshStatements,
   dayKey,
@@ -17,6 +18,7 @@ import {
   type EventDailyAgg,
   type HeatmapAgg,
   type SeriesAgg,
+  type SeriesBucketAgg,
   type SessionDayAgg,
 } from './rollups';
 
@@ -655,6 +657,7 @@ async function processBatchOptimized(
     // ── Phase 4: aggregate rollups in memory ──
     const sessionDay = new Map<string, SessionDayAgg>();
     const series = new Map<string, SeriesAgg>();
+    const seriesBuckets = new Map<string, SeriesBucketAgg>();
     const dimension = new Map<string, DimensionAgg>();
     const eventDaily = new Map<string, EventDailyAgg>();
     const heatmap = new Map<string, HeatmapAgg>();
@@ -666,6 +669,18 @@ async function processBatchOptimized(
       const cur = series.get(key);
       if (cur) cur.count += 1;
       else series.set(key, { websiteId, unit, bucket, count: 1 });
+    };
+    const addSeriesBucket = (
+      websiteId: string,
+      unit: string,
+      bucket: string,
+      sessionId: string,
+      visitId: string,
+    ) => {
+      const key = `${websiteId}${SEP}${unit}${SEP}${bucket}${SEP}${sessionId}${SEP}${visitId}`;
+      if (!seriesBuckets.has(key)) {
+        seriesBuckets.set(key, { websiteId, unit, bucket, sessionId, visitId });
+      }
     };
     const addDim = (websiteId: string, day: string, dim: string, value: string) => {
       const key = `${websiteId}${SEP}${day}${SEP}${dim}${SEP}${value}`;
@@ -702,6 +717,11 @@ async function processBatchOptimized(
         addSeries(d.websiteId, 'hour', hourBucket(d.createdAt));
         addSeries(d.websiteId, 'month', monthBucket(d.createdAt));
         addSeries(d.websiteId, 'year', yearBucket(d.createdAt));
+
+        addSeriesBucket(d.websiteId, 'day', day, d.sessionId, d.visitId);
+        addSeriesBucket(d.websiteId, 'hour', hourBucket(d.createdAt), d.sessionId, d.visitId);
+        addSeriesBucket(d.websiteId, 'month', monthBucket(d.createdAt), d.sessionId, d.visitId);
+        addSeriesBucket(d.websiteId, 'year', yearBucket(d.createdAt), d.sessionId, d.visitId);
 
         addDim(d.websiteId, day, 'path', d.urlPath || '');
         addDim(d.websiteId, day, 'referrer', d.referrerDomain || 'Direct');
@@ -755,6 +775,7 @@ async function processBatchOptimized(
     await runBatched(db, [
       ...buildSessionDayStatements(db, [...sessionDay.values()]),
       ...buildPageviewSeriesStatements(db, [...series.values()]),
+      ...buildSeriesBucketStatements(db, [...seriesBuckets.values()]),
       ...buildDimensionDailyStatements(db, [...dimension.values()]),
       ...buildEventDailyStatements(db, [...eventDaily.values()]),
       ...buildHeatmapStatements(db, [...heatmap.values()]),

@@ -36,6 +36,7 @@ import { assertEventAllowed, recordEventUsageKv } from '../lib/hosted-limits';
 import { checkIpRateLimit, checkRateLimit, getTrustedClientIp } from '../lib/rate-limit';
 
 const SEND_BODY_MAX_BYTES = 65_536;
+const WORKFLOW_DELIVERIES_PER_HOUR = 60;
 
 type LogEventDataInput = {
   data?: Record<string, unknown>;
@@ -134,7 +135,25 @@ async function recordWorkflowExecutions(
   for (const workflow of workflows.results ?? []) {
     const executionId = crypto.randomUUID();
     const actionConfig = parseWorkflowActionConfig(workflow.actionConfig);
-    const actionState = getWorkflowActionState(workflow.actionType, actionConfig);
+    let actionState: { status: 'recorded' | 'queued' | 'failed' | 'throttled'; error: string | null } =
+      getWorkflowActionState(workflow.actionType, actionConfig);
+
+    // Public event injection can trigger victim-configured webhooks/emails, so
+    // outbound deliveries are throttled per website. The execution row is
+    // still recorded (with a throttled status) for visibility.
+    if (actionState.status === 'queued') {
+      const throttle = await checkIpRateLimit(
+        env,
+        'workflow-delivery',
+        args.websiteId,
+        WORKFLOW_DELIVERIES_PER_HOUR,
+        3600,
+      );
+      if (!throttle.allowed) {
+        actionState = { status: 'throttled', error: 'Delivery throttled: website exceeded hourly workflow delivery limit' };
+      }
+    }
+
     await env.DB.prepare(
       `INSERT INTO workflow_execution
        (execution_id, workflow_id, website_id, session_id, visit_id, event_id, event_name, status, error, created_at)
@@ -325,13 +344,6 @@ function applyCacheToken(
   return cache;
 }
 
-function resolveUserAgent(
-  req: Request,
-  payload: { userAgent?: string },
-): string {
-  return payload.userAgent?.trim() || req.headers.get('user-agent') || '';
-}
-
 function parseEventTimestamp(timestamp: unknown): Date | null {
   if (timestamp == null) return null;
   if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) return null;
@@ -350,11 +362,9 @@ async function processSend(
 ): Promise<Response> {
   try {
     const { type, payload } = body;
-    const userAgent =
-      type === COLLECTION_TYPE.heatmap
-        ? req.headers.get('user-agent') ?? ''
-        : resolveUserAgent(req, payload);
-    if (isBot(userAgent)) return json({ beep: 'boop' });
+    // Bot detection must use the trusted request header; payload.userAgent is
+    // client-controlled and only used for device/browser display parsing.
+    if (isBot(req.headers.get('user-agent') ?? '')) return json({ beep: 'boop' });
 
     const defer = (fn: () => Promise<void>) => deferWrite(opts.waitUntil, fn);
 
@@ -380,6 +390,12 @@ async function processSend(
           headers: { 'Content-Type': 'application/json' },
         });
       }
+      const cachedWebsite = await env.CACHE.get(`website:${websiteId}`);
+      if (!cachedWebsite) {
+        const website = await getWebsiteById(env, websiteId);
+        if (!website) return badRequest('Website not found.');
+        await env.CACHE.put(`website:${websiteId}`, '1', { expirationTtl: 3600 });
+      }
       const client = getClientInfoFromRequest(req, {});
 
       const createdAt = parseEventTimestamp(payload.timestamp) ?? new Date();
@@ -404,6 +420,10 @@ async function processSend(
         },
       };
       await env.EVENT_QUEUE.send(msg);
+      if (quota.userId) {
+        const billingUserId = quota.userId;
+        defer(() => recordEventUsageKv(env, billingUserId, 1));
+      }
       return json({ ok: true });
     }
 
@@ -871,9 +891,15 @@ async function processSend(
       getSecret(appSecret),
     );
 
-    if (billingUserId && messages.length) {
-      const billable = messages.filter((m) => m.type === 'event' || m.type === 'revenue').length;
-      if (billable > 1) defer(() => recordEventUsageKv(env, billingUserId, billable - 1));
+    // Usage is charged only once the event is accepted for processing (rate
+    // limit and quota checks passed, payload validated, messages built).
+    if (billingUserId) {
+      const usageUserId = billingUserId;
+      const billable = Math.max(
+        1,
+        messages.filter((m) => m.type === 'event' || m.type === 'revenue').length,
+      );
+      defer(() => recordEventUsageKv(env, usageUserId, billable));
     }
 
     try {
@@ -940,18 +966,15 @@ export async function handleSend(c: Context<{ Bindings: Env }>) {
     return badRequest('Payload too large');
   }
 
-  const contentType = c.req.header('content-type') ?? '';
+  // Read as text regardless of content type so the size limit is enforced on
+  // the actual body, not the client-controlled Content-Length header.
+  const text = await c.req.text().catch(() => '');
+  if (text.length > SEND_BODY_MAX_BYTES) return badRequest('Payload too large');
   let raw: unknown;
-  if (contentType.includes('application/json')) {
-    raw = await c.req.json().catch(() => null);
-  } else {
-    const text = await c.req.text().catch(() => '');
-    if (text.length > SEND_BODY_MAX_BYTES) return badRequest('Payload too large');
-    try {
-      raw = text ? JSON.parse(text) : null;
-    } catch {
-      return badRequest('Invalid JSON');
-    }
+  try {
+    raw = text ? JSON.parse(text) : null;
+  } catch {
+    return badRequest('Invalid JSON');
   }
 
   const parsed = parseSendRequest(raw);
@@ -995,6 +1018,13 @@ export async function handleBatch(c: Context<{ Bindings: Env }>) {
     let cache: string | null = null;
 
     for (const data of body) {
+      const serialized = JSON.stringify(data);
+      if (serialized.length > SEND_BODY_MAX_BYTES) {
+        errors.push({ index, response: { message: 'Payload too large' } });
+        index++;
+        continue;
+      }
+
       const parsed = sendSchema.safeParse(data);
       if (!parsed.success) {
         errors.push({ index, response: { message: parsed.error.message } });
@@ -1006,7 +1036,7 @@ export async function handleBatch(c: Context<{ Bindings: Env }>) {
       headers.set('content-type', 'application/json');
       headers.delete('content-length');
 
-      const req = new Request(c.req.url, { method: 'POST', headers, body: JSON.stringify(data) });
+      const req = new Request(c.req.url, { method: 'POST', headers, body: serialized });
       const waitUntil = (promise: Promise<void>) => {
         c.executionCtx.waitUntil(promise);
       };
@@ -1108,8 +1138,8 @@ function applyCfg(cfg,w){if(cfg&&typeof cfg.heatmapSampleRate==='number')hmRate=
 function loadHmConfig(a){var el=a||scriptEl(),attr=el&&el.getAttribute('data-heatmap-sample-rate');if(attr!=null){var rv=parseFloat(attr);if(!isNaN(rv))hmRate=Math.min(1,Math.max(0,rv))}var w=websiteId(el);if(!w)return Promise.resolve(featureFlags);var cfgKey=hmCfgKey(w),raw=s.getItem(cfgKey);if(raw){try{var c=JSON.parse(raw);if(c.exp>Date.now()){hmRate=c.rate;hmOn=c.on;featureFlags=Array.isArray(c.flags)?c.flags:[];surveys=Array.isArray(c.surveys)?c.surveys:[];flagReady=Promise.resolve(featureFlags);return flagReady}}catch(_){}}flagReady=fetch(ingestOrigin()+'/api/tracker-config?website='+encodeURIComponent(w)).then(function(x){return x.json()}).then(function(cfg){applyCfg(cfg,w);return featureFlags}).catch(function(){return featureFlags});return flagReady}
 function hashFlag(str){var h=2166136261,i;for(i=0;i<str.length;i++){h^=str.charCodeAt(i);h+=(h<<1)+(h<<4)+(h<<7)+(h<<8)+(h<<24)}return Math.abs(h>>>0)%100}
 function flagByKey(key){for(var i=0;i<featureFlags.length;i++)if(featureFlags[i].key===key)return featureFlags[i];return null}
-function flagValue(field){if(field==='path')return appPath();if(field==='url')return l.href;if(field==='hostname')return l.hostname;if(field==='referrer')return d.referrer;if(field==='language')return navigator.language||'';if(field==='userAgent')return navigator.userAgent||'';return ''}
-function matchRule(rule){if(!rule||!rule.field||!rule.operator||rule.value==null)return true;var left=String(flagValue(rule.field)).toLowerCase(),right=String(rule.value).toLowerCase(),op=rule.operator;if(op==='equals')return left===right;if(op==='contains')return left.indexOf(right)>=0;if(op==='starts_with')return left.indexOf(right)===0;if(op==='ends_with')return left.slice(-right.length)===right;if(op==='not_equals')return left!==right;if(op==='not_contains')return left.indexOf(right)<0;return true}
+function flagValue(field){if(field==='path')return appPath();if(field==='url')return l.href;if(field==='hostname')return l.hostname;if(field==='referrer')return d.referrer;if(field==='language')return navigator.language||'';if(field==='userAgent')return navigator.userAgent||'';return null}
+function matchRule(rule){if(!rule||!rule.field||!rule.operator||rule.value==null)return false;var v=flagValue(rule.field);if(v==null)return false;var left=String(v).toLowerCase(),right=String(rule.value).toLowerCase(),op=rule.operator;if(op==='equals')return left===right;if(op==='contains')return left.indexOf(right)>=0;if(op==='starts_with')return left.indexOf(right)===0;if(op==='ends_with')return left.slice(-right.length)===right;if(op==='not_equals')return left!==right;if(op==='not_contains')return left.indexOf(right)<0;return false}
 function flagMatches(f){var rules=Array.isArray(f.targetingRules)?f.targetingRules:[];for(var i=0;i<rules.length;i++)if(!matchRule(rules[i]))return false;return true}
 function featureVariant(key,fallback){var f=flagByKey(key);if(!f)return fallback===undefined?false:fallback;if(!f.enabled||!flagMatches(f))return 'control';var pct=typeof f.rollout==='number'?f.rollout:100,sid=s.getItem('flareboard.sid')||s.getItem('flareboard.vid')||navigator.userAgent||'anonymous';if(pct<=0)return 'control';if(pct<100&&hashFlag(key+':'+sid)>=pct)return 'control';var vars=Array.isArray(f.variants)?f.variants:[];if(vars.length){var b=hashFlag(key+':variant:'+sid),sum=0,last='control';for(var i=0;i<vars.length;i++){var v=vars[i],w=Math.max(0,Math.min(100,Number(v.weight||0)));if(v&&v.key)last=String(v.key);sum+=w;if(b<sum)return last}return sum>=100?last:'control'}return 'test'}
 function exposeFlag(key,variant){if(flagExposures[key])return;flagExposures[key]=String(variant);var data={'$feature_flag':key,'$feature_flag_response':String(variant)};data['$feature/'+key]=String(variant);trackEvent(scriptEl(),{name:'$feature_flag_called',data:data,tag:'feature_flag'})}
@@ -1118,7 +1148,8 @@ function isFeatureEnabled(key,fallback){var v=getFeatureFlag(key,fallback);retur
 function surveyStorageKey(id){return 'flareboard.survey:'+id}
 function surveySeen(id){try{if(t.localStorage&&t.localStorage.getItem(surveyStorageKey(id)))return true}catch(_){}try{return!!s.getItem(surveyStorageKey(id))}catch(_){return false}}
 function markSurvey(id){try{if(t.localStorage)t.localStorage.setItem(surveyStorageKey(id),'1')}catch(_){}try{s.setItem(surveyStorageKey(id),'1')}catch(_){}}
-function surveyMatches(sv,eventName){var pth=appPath(),tr=sv&&sv.triggerPath,ev=sv&&sv.triggerEvent;if(ev&&ev!==eventName)return false;if(!ev&&eventName)return false;if(tr&&!(pth===tr||pth.indexOf(tr+'?')===0||pth.indexOf(tr+'/')===0))return false;return true}
+function surveyRuleMatches(rule){if(!rule||!rule.field||!rule.operator)return false;var v=flagValue(rule.field);if(v==null)return false;var left=String(v).toLowerCase(),right=String(rule.value==null?'':rule.value).toLowerCase(),op=rule.operator;if(op==='equals')return left===right;if(op==='not_equals')return left!==right;if(op==='contains')return left.indexOf(right)>=0;if(op==='not_contains')return left.indexOf(right)<0;return false}
+function surveyMatches(sv,eventName){var pth=appPath(),tr=sv&&sv.triggerPath,ev=sv&&sv.triggerEvent;if(ev&&ev!==eventName)return false;if(!ev&&eventName)return false;if(tr&&!(pth===tr||pth.indexOf(tr+'?')===0||pth.indexOf(tr+'/')===0))return false;var rules=sv&&Array.isArray(sv.displayRules)?sv.displayRules:[];for(var i=0;i<rules.length;i++)if(!surveyRuleMatches(rules[i]))return false;return true}
 function pickSurvey(eventName){for(var i=0;i<surveys.length;i++){if(surveys[i]&&surveys[i].id&&!surveySeen(surveys[i].id)&&surveyMatches(surveys[i],eventName))return surveys[i]}return null}
 function submitSurvey(sv,answer){var w=websiteId();if(!w)return Promise.resolve();return fetch(ingestOrigin()+'/api/surveys/response',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({website:w,surveyId:sv.id,sessionId:s.getItem('flareboard.sid'),visitId:s.getItem('flareboard.vid'),answer:answer,urlPath:appPath()}),keepalive:true})}
 function showSurvey(eventName){if(d.getElementById('flareboard-survey'))return;var sv=pickSurvey(eventName);if(!sv)return;var delay=Math.min(60,Math.max(0,Number(sv.displayDelaySeconds||0)));if(delay>0){sv.displayDelaySeconds=0;setTimeout(function(){showSurvey(eventName)},delay*1000);return}var box=d.createElement('div'),q=d.createElement('div'),inputWrap=d.createElement('div'),ta=null,selected='',actions=d.createElement('div'),sendBtn=d.createElement('button'),closeBtn=d.createElement('button');box.id='flareboard-survey';box.style.cssText='position:fixed;right:18px;bottom:18px;z-index:2147483647;width:min(340px,calc(100vw - 36px));box-sizing:border-box;padding:16px;border:1px solid rgba(148,163,184,.45);border-radius:10px;background:#fff;color:#111827;box-shadow:0 14px 32px rgba(15,23,42,.18);font:14px/1.45 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif';q.textContent=sv.question||sv.name||'Feedback';q.style.cssText='font-weight:700;margin-bottom:10px';inputWrap.style.cssText='display:grid;gap:8px';function chooseButton(btns,b,value){selected=value;for(var bi=0;bi<btns.length;bi++){btns[bi].style.borderColor='rgba(148,163,184,.65)';btns[bi].style.background='#fff';btns[bi].style.color='#111827'}b.style.borderColor='#0d9488';b.style.background='rgba(13,148,136,.1)';b.style.color='#0f766e'}if(sv.type==='choice'&&Array.isArray(sv.options)&&sv.options.length){for(var oi=0;oi<sv.options.length;oi++){var opt=d.createElement('button');opt.type='button';opt.textContent=String(sv.options[oi]);opt.style.cssText='box-sizing:border-box;width:100%;text-align:left;border:1px solid rgba(148,163,184,.65);border-radius:8px;background:#fff;color:#111827;padding:9px 10px;font:inherit;cursor:pointer';inputWrap.appendChild(opt);opt.onclick=function(){chooseButton(inputWrap.querySelectorAll('button'),this,this.textContent||'')}}}else if(sv.type==='rating'){var rating=d.createElement('div');rating.style.cssText='display:grid;grid-template-columns:repeat(5,1fr);gap:6px';inputWrap.appendChild(rating);for(var ri=1;ri<=5;ri++){(function(n){var rb=d.createElement('button');rb.type='button';rb.textContent=String(n);rb.style.cssText='border:1px solid rgba(148,163,184,.65);border-radius:8px;background:#fff;color:#111827;padding:9px 0;font:inherit;font-weight:700;cursor:pointer';rating.appendChild(rb);rb.onclick=function(){chooseButton(rating.querySelectorAll('button'),rb,String(n))}})(ri)}}else{ta=d.createElement('textarea');ta.rows=4;ta.placeholder='Share your feedback';ta.style.cssText='box-sizing:border-box;width:100%;resize:vertical;border:1px solid rgba(148,163,184,.65);border-radius:8px;padding:9px 10px;font:inherit;color:inherit;background:#fff';inputWrap.appendChild(ta)}actions.style.cssText='display:flex;justify-content:flex-end;gap:8px;margin-top:10px';sendBtn.type='button';sendBtn.textContent='Send';sendBtn.style.cssText='border:0;border-radius:8px;background:#0d9488;color:#fff;padding:8px 12px;font-weight:700;cursor:pointer';closeBtn.type='button';closeBtn.textContent='Close';closeBtn.style.cssText='border:1px solid rgba(148,163,184,.65);border-radius:8px;background:#fff;color:#374151;padding:8px 12px;cursor:pointer';closeBtn.onclick=function(){markSurvey(sv.id);box.remove()};sendBtn.onclick=function(){var v=ta?ta.value.trim():selected;if(!v){if(ta)ta.focus();return}sendBtn.disabled=true;submitSurvey(sv,v).then(function(){markSurvey(sv.id);box.remove();trackEvent(scriptEl(),{name:'survey_response',data:{surveyId:sv.id},tag:'survey'})}).catch(function(){sendBtn.disabled=false})};actions.appendChild(closeBtn);actions.appendChild(sendBtn);box.appendChild(q);box.appendChild(inputWrap);box.appendChild(actions);d.body&&d.body.appendChild(box)}

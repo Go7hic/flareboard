@@ -13,7 +13,22 @@ type CachedActions = {
 
 const CACHE_TTL_MS = 10_000;
 const MAX_ACTION_DEFINITIONS = 500;
+const MAX_CACHE_ENTRIES = 500;
 const actionCache = new Map<string, CachedActions>();
+
+function setActionCache(websiteId: string, cacheKey: string, value: CachedActions) {
+  // Drop stale version entries for the same website so old versions don't accumulate.
+  for (const key of actionCache.keys()) {
+    if (key !== cacheKey && key.startsWith(`${websiteId}:`)) actionCache.delete(key);
+  }
+  actionCache.set(cacheKey, value);
+  // Evict oldest entries (Map preserves insertion order) to bound memory.
+  while (actionCache.size > MAX_CACHE_ENTRIES) {
+    const oldest = actionCache.keys().next().value;
+    if (oldest === undefined) break;
+    actionCache.delete(oldest);
+  }
+}
 
 async function getActionDefinitionsVersion(env: Env, websiteId: string) {
   return (await env.CACHE.get(`action-definitions-version:${websiteId}`)) ?? '0';
@@ -36,13 +51,24 @@ export async function loadWebsiteActionDefinitions(env: Env, websiteId: string) 
     .bind(websiteId, MAX_ACTION_DEFINITIONS)
     .all<{ id: string; name: string; rules: string | ActionRule[] }>();
 
-  const definitions = (rows.results ?? []).map((row) => ({
-    id: row.id,
-    name: row.name,
-    rules: typeof row.rules === 'string' ? (JSON.parse(row.rules) as ActionRule[]) : row.rules,
-  }));
+  const definitions: ActionDefinitionLike[] = [];
+  for (const row of rows.results ?? []) {
+    let rules: ActionRule[];
+    if (typeof row.rules === 'string') {
+      try {
+        rules = JSON.parse(row.rules) as ActionRule[];
+      } catch {
+        // Skip definitions with corrupt rules instead of failing event ingestion.
+        continue;
+      }
+    } else {
+      rules = row.rules;
+    }
+    if (!Array.isArray(rules)) continue;
+    definitions.push({ id: row.id, name: row.name, rules });
+  }
 
-  actionCache.set(cacheKey, { loadedAt: now, definitions });
+  setActionCache(websiteId, cacheKey, { loadedAt: now, definitions });
   return definitions;
 }
 
@@ -68,6 +94,11 @@ export async function appendMatchedActionTags(
 }
 
 export function clearWebsiteActionCache(websiteId?: string) {
-  if (websiteId) actionCache.delete(websiteId);
-  else actionCache.clear();
+  if (!websiteId) {
+    actionCache.clear();
+    return;
+  }
+  for (const key of actionCache.keys()) {
+    if (key.startsWith(`${websiteId}:`)) actionCache.delete(key);
+  }
 }

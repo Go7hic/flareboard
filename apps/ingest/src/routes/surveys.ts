@@ -16,6 +16,15 @@ export async function handleSurveyResponse(c: Ctx) {
   const parsed = submitSurveyResponseSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
 
+  const perSurveyLimit = await checkIpRateLimit(
+    c.env,
+    `survey-response:${parsed.data.website}:${parsed.data.surveyId}`,
+    trustedIp,
+    5,
+    3600,
+  );
+  if (!perSurveyLimit.allowed) return json({ message: 'Rate limit exceeded' }, 429);
+
   const website = await getWebsiteById(c.env, parsed.data.website);
   if (!website) return badRequest('Website not found.');
 

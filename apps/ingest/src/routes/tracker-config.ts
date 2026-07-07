@@ -27,7 +27,7 @@ export async function handleTrackerConfig(c: Context<{ Bindings: Env }>) {
   const flags = await c.env.DB.prepare(
     `SELECT key, enabled, rollout, variants, targeting_rules as targetingRules
      FROM feature_flag
-     WHERE website_id = ?1
+     WHERE website_id = ?1 AND enabled = 1
      ORDER BY created_at ASC`,
   )
     .bind(websiteId)

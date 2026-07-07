@@ -57,6 +57,11 @@ async function getMonthlyUsage(env: Env, userId: string): Promise<number> {
   return Math.max(kvCount, d1Count);
 }
 
+/**
+ * Checks the monthly quota without consuming it. Callers must invoke
+ * `recordEventUsageKv` once the event is actually accepted for processing,
+ * so rate-limited or otherwise rejected requests never charge the quota.
+ */
 export async function assertEventAllowed(
   env: Env,
   websiteId: string,
@@ -72,7 +77,6 @@ export async function assertEventAllowed(
     return { ok: false, message: 'Monthly event limit exceeded.' };
   }
 
-  await recordEventUsageKv(env, userId, 1);
   return { ok: true, userId };
 }
 

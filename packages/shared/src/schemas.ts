@@ -50,23 +50,28 @@ export const sendPayloadSchema = z
     website: z.string().uuid().optional(),
     link: z.string().uuid().optional(),
     pixel: z.string().uuid().optional(),
-    data: z.record(z.unknown()).optional(),
+    data: z
+      .record(z.unknown())
+      .refine((value) => Object.keys(value).length <= 100, {
+        message: 'data must have at most 100 keys',
+      })
+      .optional(),
     hostname: z.string().max(100).optional(),
     language: z.string().max(35).optional(),
     referrer: urlOrPathParam.optional(),
     screen: z.string().max(11).optional(),
     width: z.string().max(20).optional(),
-    title: z.string().optional(),
+    title: z.string().max(500).optional(),
     url: urlOrPathParam.optional(),
     name: z.string().max(50).optional(),
     tag: z.string().max(50).optional(),
-    ip: z.string().optional(),
-    userAgent: z.string().optional(),
+    ip: z.string().max(45).optional(),
+    userAgent: z.string().max(500).optional(),
     timestamp: z.coerce.number().int().optional(),
-    id: z.string().optional(),
-    browser: z.string().optional(),
-    os: z.string().optional(),
-    device: z.string().optional(),
+    id: z.string().max(128).optional(),
+    browser: z.string().max(100).optional(),
+    os: z.string().max(100).optional(),
+    device: z.string().max(100).optional(),
     lcp: vitalMetric(60000),
     inp: vitalMetric(60000),
     cls: vitalMetric(100),
@@ -1011,6 +1016,9 @@ export type QueueMessage =
   | QueueRevenueMessage
   | QueueHeatmapMessage;
 
+const EVENT_DATA_MAX_KEYS = 100;
+const EVENT_DATA_MAX_STRING_LENGTH = 2000;
+
 export function flattenEventData(
   websiteId: string,
   websiteEventId: string,
@@ -1019,6 +1027,7 @@ export function flattenEventData(
 ): QueueEventMessage['eventData'] {
   const result: NonNullable<QueueEventMessage['eventData']> = [];
   for (const [key, value] of Object.entries(data)) {
+    if (result.length >= EVENT_DATA_MAX_KEYS) break;
     const id = crypto.randomUUID();
     if (typeof value === 'string') {
       result.push({
@@ -1026,7 +1035,7 @@ export function flattenEventData(
         websiteId,
         websiteEventId,
         dataKey: key,
-        stringValue: value,
+        stringValue: value.slice(0, EVENT_DATA_MAX_STRING_LENGTH),
         dataType: 1,
         createdAt,
       });

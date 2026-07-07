@@ -82,7 +82,7 @@ function stableHash(value: string) {
   return Math.abs(hash >>> 0) % 100;
 }
 
-function bucketKey(flagKey: string, context: FeatureFlagEvaluationContext) {
+function bucketId(context: FeatureFlagEvaluationContext) {
   return (
     context.userId ||
     context.distinctId ||
@@ -91,7 +91,17 @@ function bucketKey(flagKey: string, context: FeatureFlagEvaluationContext) {
     context.anonymousId ||
     context.userAgent ||
     'anonymous'
-  ) + `:${flagKey}`;
+  );
+}
+
+/** Canonical rollout bucket string. Must stay in sync with the embedded tracker script (`hashFlag(key+':'+id)`). */
+function rolloutBucketString(flagKey: string, context: FeatureFlagEvaluationContext) {
+  return `${flagKey}:${bucketId(context)}`;
+}
+
+/** Canonical variant bucket string. Must stay in sync with the embedded tracker script (`hashFlag(key+':variant:'+id)`). */
+function variantBucketString(flagKey: string, context: FeatureFlagEvaluationContext) {
+  return `${flagKey}:variant:${bucketId(context)}`;
 }
 
 function readRuleValue(rule: FeatureFlagRule, context: FeatureFlagEvaluationContext): unknown {
@@ -138,14 +148,15 @@ export function matchFeatureFlagRule(rule: FeatureFlagRule, context: FeatureFlag
   if (rule.operator === 'ends_with') return left.endsWith(right);
   if (rule.operator === 'not_equals') return left !== right;
   if (rule.operator === 'not_contains') return !left.includes(right);
-  return true;
+  // Unknown operators fail closed, matching the embedded tracker script.
+  return false;
 }
 
 function pickVariant(flag: FeatureFlagConfigForEvaluation, context: FeatureFlagEvaluationContext) {
   const variants = Array.isArray(flag.variants) ? flag.variants : [];
   if (!variants.length) return 'test';
 
-  const bucket = stableHash(`${flag.key}:variant:${bucketKey(flag.key, context)}`);
+  const bucket = stableHash(variantBucketString(flag.key, context));
   let sum = 0;
   let last = 'control';
   for (const variant of variants) {
@@ -175,7 +186,7 @@ export function evaluateFeatureFlag(
   if (rollout <= 0) {
     return { key: flag.key, enabled: false, matched: true, variant: 'control', reason: 'rollout_miss' };
   }
-  if (rollout < 100 && stableHash(bucketKey(flag.key, context)) >= rollout) {
+  if (rollout < 100 && stableHash(rolloutBucketString(flag.key, context)) >= rollout) {
     return { key: flag.key, enabled: false, matched: true, variant: 'control', reason: 'rollout_miss' };
   }
   return { key: flag.key, enabled: true, matched: true, variant: pickVariant(flag, context), reason: 'match' };

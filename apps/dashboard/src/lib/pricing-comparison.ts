@@ -101,6 +101,14 @@ export const PRICING_COMPARE_ENTRIES: CompareEntry[] = [
   { kind: 'feature', labelKey: 'featCohortsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
   { kind: 'feature', labelKey: 'featJourneysTitle', free: { type: 'included' }, cloud: { type: 'included' } },
 
+  { kind: 'section', labelKey: 'pricingCompareSectionProduct' },
+  { kind: 'feature', labelKey: 'featFeatureFlagsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featExperimentsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featSurveysTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featErrorsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featLogsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featWarehouseTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+
   { kind: 'section', labelKey: 'pricingCompareSectionSessions' },
   { kind: 'feature', labelKey: 'featHeatmapsTitle', free: { type: 'yesNo', field: 'heatmapsEnabled' }, cloud: { type: 'yesNo', field: 'heatmapsEnabled' } },
   {

@@ -8,6 +8,6 @@ export const DEPLOY_DOCS_URL = `${GITHUB_URL}/blob/main/docs/deployment.md`;
 export const SITE = {
   title: 'Flareboard Blog',
   description:
-    'Privacy-first web analytics on Cloudflare Workers — product updates, guides, and comparisons.',
+    'Product analytics on Cloudflare Workers — updates, guides, and comparisons for flags, experiments, replay, and warehouse workflows.',
   author: 'Flareboard',
 } as const;

@@ -4,8 +4,9 @@ description: Why teams choose a PostHog-like analytics stack on Workers, D1, KV,
 pubDate: 2026-06-01
 author: Flareboard
 tags:
+  - product-analytics
+  - posthog
   - privacy
-  - google-analytics
   - cloudflare
 ---
 
@@ -37,4 +38,5 @@ Flareboard fits teams that already use Cloudflare and want analytics they contro
 
 - Explore the [feature overview](https://flareboard.dev/features)
 - See [how we compare](https://flareboard.dev/compare) to GA, Umami, Plausible, Cloudflare Web Analytics, and PostHog
+- Read [Flareboard vs PostHog](https://flareboard.dev/blog/flareboard-vs-posthog) or [Flareboard vs Umami](https://flareboard.dev/blog/flareboard-vs-umami)
 - [Get started free](https://flareboard.dev/register) on Flareboard Cloud

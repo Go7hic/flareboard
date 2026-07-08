@@ -1,0 +1,30 @@
+# Flareboard
+
+> Flareboard is a PostHog-like product analytics platform built on Cloudflare Workers, D1, R2, KV, Queues, and Durable Objects. It offers a hosted Cloud plan and noncommercial self-hosting.
+
+## Primary Links
+
+- [Homepage](https://flareboard.dev/): Product overview and hosted/self-hosted paths.
+- [Features](https://flareboard.dev/features): Full capability list.
+- [Pricing](https://flareboard.dev/pricing): Free and Cloud plan comparison.
+- [Compare](https://flareboard.dev/compare): Comparison with Google Analytics, Umami, Plausible, Cloudflare Web Analytics, Vercel Analytics, Matomo, and PostHog.
+- [GitHub](https://github.com/Go7hic/flareboard): Source repository.
+- [Deployment docs](https://github.com/Go7hic/flareboard/blob/main/docs/deployment.md): Self-hosting and deployment guide.
+
+## Markdown Alternates
+
+- [Overview Markdown](https://flareboard.dev/index.md)
+- [Features Markdown](https://flareboard.dev/features.md)
+- [Pricing Markdown](https://flareboard.dev/pricing.md)
+- [Comparison Markdown](https://flareboard.dev/compare.md)
+
+## Structured Data
+
+- [Product facts JSON](https://flareboard.dev/product.json): Product, pricing, features, and official links.
+- [Sitemap](https://flareboard.dev/sitemap.xml)
+
+## About
+
+Flareboard is for teams and builders who want product analytics on Cloudflare rather than a traditional third-party analytics stack. It covers core traffic analytics, realtime sessions, event catalogs, segments, funnels, retention, cohorts, journeys, attribution, revenue, session replay, heatmaps, feature flags, experiments, surveys, error tracking, logs, AI observability, teams, share links, boards, CSV import/export, and D1 warehouse workflows.
+
+The Free Cloud plan covers one website and core product analytics. The Cloud plan is $15/month and unlocks higher limits plus paid capabilities such as session replay, heatmaps, teams, email reports, CSV import/export, feature flags, experiments, surveys, and warehouse workflows. Personal and noncommercial self-hosting is available under the project license; commercial organizations can purchase a license separately.

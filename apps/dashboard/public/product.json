@@ -1,0 +1,59 @@
+{
+  "name": "Flareboard",
+  "url": "https://flareboard.dev/",
+  "type": "web_application",
+  "category": "product_analytics",
+  "description": "Flareboard is a PostHog-like product analytics platform built on Cloudflare Workers, D1, R2, KV, Queues, and Durable Objects.",
+  "repository": "https://github.com/Go7hic/flareboard",
+  "docs": "https://github.com/Go7hic/flareboard#readme",
+  "deploymentDocs": "https://github.com/Go7hic/flareboard/blob/main/docs/deployment.md",
+  "contact": "hello@flareboard.dev",
+  "plans": [
+    {
+      "id": "free",
+      "name": "Free",
+      "monthlyPriceUsd": 0,
+      "maxWebsites": 1,
+      "maxEventsPerMonth": 100000,
+      "included": [
+        "core analytics",
+        "realtime analytics",
+        "segments",
+        "custom events",
+        "funnels",
+        "retention",
+        "attribution",
+        "cohorts",
+        "journeys",
+        "people",
+        "groups",
+        "stickiness"
+      ]
+    },
+    {
+      "id": "cloud",
+      "name": "Cloud",
+      "monthlyPriceUsd": 15,
+      "maxWebsites": 10,
+      "maxEventsPerMonth": 1000000,
+      "included": [
+        "core analytics",
+        "realtime analytics",
+        "session replay",
+        "heatmaps",
+        "teams",
+        "email reports",
+        "CSV import and export",
+        "feature flags",
+        "experiments",
+        "surveys",
+        "D1 warehouse workflows"
+      ]
+    }
+  ],
+  "selfHosting": {
+    "personalAndNoncommercial": true,
+    "commercialLicenseAvailable": true
+  },
+  "lastUpdated": "2026-07-08"
+}

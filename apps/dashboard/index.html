@@ -7,13 +7,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Flareboard - Product analytics on Cloudflare</title>
     <meta name="description" content="Flareboard — PostHog-like product analytics on Workers, D1, R2, KV, Queues, and Durable Objects. Flags, experiments, replay, errors, logs, and warehouse views. Cloud or self-host." />
-    <link rel="canonical" href="%VITE_SITE_URL%/" />
+    <link rel="canonical" href="https://flareboard.dev/" />
+    <link rel="sitemap" type="application/xml" href="https://flareboard.dev/sitemap.xml" />
+    <link rel="alternate" type="text/markdown" href="https://flareboard.dev/index.md" title="Flareboard overview in Markdown" />
+    <link rel="alternate" type="text/markdown" href="https://flareboard.dev/features.md" title="Flareboard features in Markdown" />
+    <link rel="alternate" type="text/markdown" href="https://flareboard.dev/pricing.md" title="Flareboard pricing in Markdown" />
+    <link rel="alternate" type="text/markdown" href="https://flareboard.dev/compare.md" title="Flareboard comparisons in Markdown" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Flareboard" />
     <meta property="og:title" content="Flareboard - Product analytics on Cloudflare" />
     <meta property="og:description" content="Flareboard — PostHog-like product analytics on Workers, D1, R2, KV, Queues, and Durable Objects. Flags, experiments, replay, errors, logs, and warehouse views. Cloud or self-host." />
-    <meta property="og:url" content="%VITE_SITE_URL%/" />
-    <meta property="og:image" content="%VITE_SITE_URL%/ogimg.webp" />
+    <meta property="og:url" content="https://flareboard.dev/" />
+    <meta property="og:image" content="https://flareboard.dev/og-image.webp" />
     <meta property="og:image:type" content="image/webp" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -21,8 +26,65 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Flareboard - Product analytics on Cloudflare" />
     <meta name="twitter:description" content="Flareboard — PostHog-like product analytics on Workers, D1, R2, KV, Queues, and Durable Objects. Flags, experiments, replay, errors, logs, and warehouse views. Cloud or self-host." />
-    <meta name="twitter:image" content="%VITE_SITE_URL%/ogimg.webp" />
+    <meta name="twitter:image" content="https://flareboard.dev/og-image.webp" />
     <meta name="twitter:image:alt" content="Flareboard — real-time analytics on Cloudflare Workers, D1, R2, KV, Queues, and Durable Objects" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://flareboard.dev/#organization",
+            "name": "Flareboard",
+            "url": "https://flareboard.dev/",
+            "logo": "https://flareboard.dev/logo.avif",
+            "sameAs": ["https://github.com/Go7hic/flareboard"],
+            "contactPoint": {
+              "@type": "ContactPoint",
+              "email": "hello@flareboard.dev",
+              "contactType": "sales"
+            }
+          },
+          {
+            "@type": "WebApplication",
+            "@id": "https://flareboard.dev/#webapplication",
+            "name": "Flareboard",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Web",
+            "url": "https://flareboard.dev/",
+            "description": "PostHog-like product analytics on Cloudflare Workers, D1, R2, KV, Queues, and Durable Objects. Flareboard includes privacy-friendly analytics, session replay, heatmaps, feature flags, experiments, surveys, errors, logs, warehouse queries, teams, and self-hosting.",
+            "isAccessibleForFree": true,
+            "publisher": { "@id": "https://flareboard.dev/#organization" },
+            "offers": [
+              {
+                "@type": "Offer",
+                "name": "Free",
+                "price": "0",
+                "priceCurrency": "USD",
+                "url": "https://flareboard.dev/pricing"
+              },
+              {
+                "@type": "Offer",
+                "name": "Cloud",
+                "price": "15",
+                "priceCurrency": "USD",
+                "url": "https://flareboard.dev/pricing"
+              }
+            ],
+            "softwareHelp": "https://github.com/Go7hic/flareboard#readme",
+            "codeRepository": "https://github.com/Go7hic/flareboard"
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://flareboard.dev/#website",
+            "name": "Flareboard",
+            "url": "https://flareboard.dev/",
+            "description": "Cloudflare-native product analytics and self-hostable PostHog-like analytics.",
+            "publisher": { "@id": "https://flareboard.dev/#organization" }
+          }
+        ]
+      }
+    </script>
     <script>
       (function () {
         try {

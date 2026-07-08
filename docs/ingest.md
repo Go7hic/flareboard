@@ -15,7 +15,7 @@ The ingest worker handles public collection from browsers and server-side SDKs. 
 | GET | `/script.js` | Browser tracker |
 | GET | `/recorder.js` | rrweb recorder bundle |
 
-Rate limit: **100 requests/min per IP per website** (KV). Returns `429` when exceeded.
+Rate limit: **100 requests/min per IP per website** (Durable Objects). Returns `429` when exceeded.
 
 ## `/api/send` payload types
 

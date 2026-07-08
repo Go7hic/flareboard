@@ -34,6 +34,7 @@ const stackKeys = [
   { titleKey: 'landingStackD1', bodyKey: 'landingStackD1Body', slug: 'cloudflare' },
   { titleKey: 'landingStackR2', bodyKey: 'landingStackR2Body', slug: 'cloudflare' },
   { titleKey: 'landingStackKv', bodyKey: 'landingStackKvBody', slug: 'cloudflare' },
+  { titleKey: 'landingStackDo', bodyKey: 'landingStackDoBody', slug: 'cloudflare' },
 ] as const;
 
 const featureKeys = [

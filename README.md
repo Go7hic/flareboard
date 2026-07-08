@@ -1,6 +1,6 @@
 # Flareboard
 
-Cloudflare-native product analytics for teams that want a PostHog-like operating surface without running ClickHouse or Kubernetes. Flareboard combines website analytics, session replay, feature flags, experiments, surveys, error tracking, logs, workflows, and a D1-backed warehouse on Workers, D1, KV, R2, and Queues.
+Cloudflare-native product analytics for teams that want a PostHog-like operating surface without running ClickHouse or Kubernetes. Flareboard combines website analytics, session replay, feature flags, experiments, surveys, error tracking, logs, workflows, and a D1-backed warehouse on Workers, D1, R2, KV, Queues, and Durable Objects.
 
 ## Product surface
 
@@ -24,7 +24,9 @@ The repository is in a PostHog-like beta stage. Core product domains ship with r
 | `workers/aggregator` | — | Queue consumer → D1 |
 | `apps/dashboard` | 5173 | React dashboard |
 
-Monorepo packages: `@flareboard/db`, `@flareboard/shared`.
+**Cloudflare bindings:** D1 (analytics + warehouse), R2 (session replay), KV (realtime counters + API cache), Queues with aggregator (spike buffering and rollups), Durable Objects (edge rate limiting on API and ingest).
+
+Monorepo packages: `@flareboard/db`, `@flareboard/shared`, `@flareboard/rate-limiter` (Durable Object).
 
 ## Quick start
 
@@ -55,7 +57,7 @@ Open http://localhost:5173 and sign in with the credentials from `pnpm seed` (`s
 
 Production setup (Cloudflare resources, secrets, custom domains): **[Deployment guide](docs/deployment.md)**.
 
-Forkers: replace D1/KV IDs in each app's `wrangler.jsonc` with your own resources before deploying.
+Forkers: replace D1, KV, R2, Queues, and Durable Object bindings in each app's `wrangler.jsonc` with your own resources before deploying.
 
 ## Docs
 

@@ -250,13 +250,13 @@ Served from the ingest worker (e.g. `https://t.your-domain.com`).
 | GET | `/recorder.js` | Replay recorder (requires `rrweb` on page) |
 | GET | `/l/:slug`, `/p/:slug.gif` | Links & pixels |
 
-Rate limit: **100 requests/min per IP per website** (KV); returns 429 when exceeded.
+Rate limit: **100 requests/min per IP per website** (Durable Objects); returns 429 when exceeded.
 
 See [Ingest reference](./ingest.md) for payload fields, identify/group semantics, and tracker-config details.
 
 ## Capability boundaries
 
-Flareboard targets a PostHog-like surface on Cloudflare D1, R2, KV, and Workers. The following limits are intentional for the current beta:
+Flareboard targets a PostHog-like surface on Cloudflare Workers, D1, R2, KV, Queues, and Durable Objects. The following limits are intentional for the current beta:
 
 | Area | Supported today | Not yet supported |
 |------|-----------------|-------------------|

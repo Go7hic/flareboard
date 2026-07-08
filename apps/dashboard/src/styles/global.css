@@ -7785,14 +7785,6 @@ code {
     box-shadow var(--transition);
 }
 
-.landing-stack-card:nth-child(4) {
-  grid-column: span 3;
-}
-
-.landing-stack-card:nth-child(5) {
-  grid-column: span 3;
-}
-
 .landing-stack-card:hover {
   transform: translateY(-2px);
   border-color: color-mix(in srgb, var(--cf-orange) 35%, var(--border));
@@ -9181,14 +9173,8 @@ code {
     grid-template-columns: 1fr 1fr;
   }
 
-  .landing-stack-card,
-  .landing-stack-card:nth-child(4),
-  .landing-stack-card:nth-child(5) {
+  .landing-stack-card {
     grid-column: span 1;
-  }
-
-  .landing-stack-card:last-child {
-    grid-column: span 2;
   }
 
   .landing-path-grid,

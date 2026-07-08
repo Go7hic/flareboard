@@ -1,6 +1,6 @@
 # Deployment
 
-Flareboard runs as four Cloudflare Workers plus D1, KV, R2, and Queues.
+Flareboard runs as four Cloudflare Workers plus D1, R2, KV, Queues, and Durable Objects.
 
 ## Prerequisites
 
@@ -18,7 +18,7 @@ wrangler d1 create flareboard-db
 pnpm db:migrate:remote
 pnpm seed:remote -- --username myadmin --password 'secret'   # first admin (password required)
 
-# KV (cache, rate limits, realtime)
+# KV (realtime counters + API response cache)
 wrangler kv namespace create flareboard-cache
 
 # R2 (session replay chunks)
@@ -30,6 +30,8 @@ wrangler queues create flareboard-events-dlq
 ```
 
 The DLQ is declared in `workers/aggregator/wrangler.jsonc`. Create it once before deploying the aggregator.
+
+**Durable Objects:** API and ingest each export a `RateLimiter` Durable Object (`@flareboard/rate-limiter`) for edge rate limiting on login, ingest, and other public endpoints. Bindings and the SQLite DO migration (`new_sqlite_classes: ["RateLimiter"]`) are already in `apps/api/wrangler.jsonc` and `apps/ingest/wrangler.jsonc`. No separate resource to create — deploy those workers and Wrangler provisions the class.
 
 Update `REPLACE_WITH_D1_ID` and `REPLACE_WITH_KV_ID` in:
 
@@ -163,6 +165,7 @@ wrangler d1 migrations apply flareboard-db --remote --env production --config ap
 
 - [ ] All five workers healthy (api, ingest, aggregator, dashboard, blog)
 - [ ] D1 migrations applied
+- [ ] API and ingest workers deployed (RateLimiter Durable Object active)
 - [ ] DLQ queue exists
 - [ ] CORS allows dashboard → API
 - [ ] Test site receives `/api/send` responses

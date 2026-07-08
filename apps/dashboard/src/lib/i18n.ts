@@ -1112,7 +1112,7 @@ const enUS: Record<string, string> = {
   landingHeroBadge: 'Cloudflare-native · Cloud or self-host',
   landingHeadline: 'Product analytics on the edge',
   landingLead:
-    'A PostHog-like product analytics suite on Workers, D1, KV, R2, and Queues. Run Flareboard Cloud or deploy on your own Cloudflare account.',
+    'A PostHog-like product analytics suite on Workers, D1, R2, KV, Queues, and Durable Objects. Run Flareboard Cloud or deploy on your own Cloudflare account.',
   landingCreateFreeAccount: 'Create free account',
   landingViewGithub: 'View on GitHub',
   landingNavHome: 'Home',
@@ -1148,7 +1148,7 @@ const enUS: Record<string, string> = {
     'Register with email, add a website, paste the tracking snippet. Billing and limits are built in.',
   landingPathSelfTitle: 'Self-host',
   landingPathSelfBody:
-    'Clone the repo, wire D1/KV/R2/Queues, and deploy four Workers. No subscription required.',
+    'Clone the repo, wire D1, R2, KV, Queues, and Durable Objects, then deploy four Workers. No subscription required.',
   landingPathDeployGuide: 'Deployment guide',
   landingStackWorkers: 'Edge Workers',
   landingStackWorkersBody:
@@ -1161,7 +1161,10 @@ const enUS: Record<string, string> = {
   landingStackR2: 'R2 storage',
   landingStackR2Body: 'Session replay chunks in your bucket — not a third-party video stack.',
   landingStackKv: 'KV cache',
-  landingStackKvBody: 'Live visitor counters, rate limits, and cached API responses.',
+  landingStackKvBody: 'Live visitor counters and cached API responses.',
+  landingStackDo: 'Durable Objects',
+  landingStackDoBody:
+    'Strongly consistent rate limiting for login, ingest, and public endpoints — one counter per IP or site at the edge.',
   landingFeatureAdvancedTitle: 'Advanced reports',
   landingFeatureAdvancedBody:
     'Funnel, retention, attribution, journeys, and web vitals without another BI tool.',
@@ -2798,7 +2801,7 @@ const zhCN: Partial<Record<string, string>> = {
   landingHeroBadge: 'Cloudflare 原生 · 云端或自托管',
   landingHeadline: '边缘上的产品分析平台',
   landingLead:
-    '运行在 Workers、D1、KV、R2 与 Queues 上的 PostHog-like 产品分析套件。使用 Flareboard Cloud，或部署到你自己的 Cloudflare 账户。',
+    '运行在 Workers、D1、R2、KV、Queues 与 Durable Objects 上的 PostHog-like 产品分析套件。使用 Flareboard Cloud，或部署到你自己的 Cloudflare 账户。',
   landingCreateFreeAccount: '创建免费账户',
   landingViewGithub: '在 GitHub 查看',
   landingNavHome: '首页',
@@ -2831,7 +2834,7 @@ const zhCN: Partial<Record<string, string>> = {
   landingPathCloudTitle: 'Flareboard Cloud',
   landingPathCloudBody: '邮箱注册、添加网站、粘贴采集代码。计费与限额已内置。',
   landingPathSelfTitle: '自托管',
-  landingPathSelfBody: '克隆仓库，配置 D1/KV/R2/Queues，部署四个 Worker。无需订阅。',
+  landingPathSelfBody: '克隆仓库，配置 D1、R2、KV、Queues 与 Durable Objects，部署四个 Worker。无需订阅。',
   landingPathDeployGuide: '部署指南',
   landingStackWorkers: 'Edge Workers',
   landingStackWorkersBody: '边缘采集事件；API 提供控制台、报表与实时流。',
@@ -2842,7 +2845,9 @@ const zhCN: Partial<Record<string, string>> = {
   landingStackR2: 'R2 存储',
   landingStackR2Body: '会话回放分片在你的桶中 — 非第三方视频栈。',
   landingStackKv: 'KV 缓存',
-  landingStackKvBody: '实时访客计数、限流与 API 响应缓存。',
+  landingStackKvBody: '实时访客计数与 API 响应缓存。',
+  landingStackDo: 'Durable Objects',
+  landingStackDoBody: '登录、采集等公开接口的精确边缘限流 — 按 IP 或站点维护强一致计数。',
   landingFeatureAdvancedTitle: '高级报表',
   landingFeatureAdvancedBody: '漏斗、留存、归因、路径与 Web Vitals，无需额外 BI 工具。',
   landingFeatureTeamsTitle: '团队与分享链接',

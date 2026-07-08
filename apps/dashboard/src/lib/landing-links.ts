@@ -4,7 +4,7 @@ export const FLAREBOARD_DEPLOY_DOCS = `${FLAREBOARD_GITHUB}/blob/main/docs/deplo
 export const FLAREBOARD_ENTERPRISE_EMAIL = 'hello@flareboard.dev';
 
 /** Display price for Cloud plan (USD). Stripe is source of truth at checkout. */
-export const CLOUD_MONTHLY_USD = 12;
+export const CLOUD_MONTHLY_USD = 15;
 /** Pre-promo list price shown struck through on marketing surfaces. */
 export const CLOUD_ORIGINAL_MONTHLY_USD = 20;
 export const CLOUD_PROMO_LABEL = 'Limited-time launch pricing';
@@ -18,6 +18,10 @@ export type LandingPlan = {
   emailReportsEnabled: boolean;
   heatmapsEnabled: boolean;
   teamsEnabled: boolean;
+  dataPortabilityEnabled: boolean;
+  warehouseEnabled: boolean;
+  experimentationEnabled: boolean;
+  surveysEnabled: boolean;
   monthlyPriceUsd?: number | null;
 };
 
@@ -32,6 +36,10 @@ export const LANDING_PLANS: LandingPlan[] = [
     emailReportsEnabled: false,
     heatmapsEnabled: false,
     teamsEnabled: false,
+    dataPortabilityEnabled: false,
+    warehouseEnabled: false,
+    experimentationEnabled: false,
+    surveysEnabled: false,
     monthlyPriceUsd: 0,
   },
   {
@@ -43,6 +51,10 @@ export const LANDING_PLANS: LandingPlan[] = [
     emailReportsEnabled: true,
     heatmapsEnabled: true,
     teamsEnabled: true,
+    dataPortabilityEnabled: true,
+    warehouseEnabled: true,
+    experimentationEnabled: true,
+    surveysEnabled: true,
     monthlyPriceUsd: CLOUD_MONTHLY_USD,
   },
 ];

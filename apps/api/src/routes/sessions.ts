@@ -1,5 +1,7 @@
 import type { Context } from 'hono';
+import { getPlan } from '@flareboard/shared';
 import type { Env } from '../env';
+import { getUserSubscription, isHostedMode } from '../lib/billing';
 import { parseStatsRange } from '../lib/parse-range';
 import {
   exportEventsCsv,
@@ -99,6 +101,12 @@ export async function handleSessionReplays(c: Ctx) {
 export async function handleExport(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
+  if (isHostedMode(c.env)) {
+    const sub = await getUserSubscription(c.env, c.get('user').userId);
+    if (!getPlan(sub.planId).dataPortabilityEnabled) {
+      return json({ message: 'CSV export requires a paid plan.' }, 403);
+    }
+  }
   const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
   const type = c.req.query('type') === 'pageviews' ? 'pageviews' : 'events';
   const csv = await exportEventsCsv(c.env, website!.websiteId, startAt, endAt, type);

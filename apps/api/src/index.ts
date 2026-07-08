@@ -1,5 +1,6 @@
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
+import { getPlan, type PlanDefinition } from '@flareboard/shared';
 import type { Env } from './env';
 import { resolveCorsOrigin } from './lib/cors';
 import { jwtAuth, type ApiVariables } from './middleware/auth';
@@ -45,9 +46,30 @@ import * as emailReports from './routes/email-reports';
 import * as dataImport from './routes/import';
 import internalRoutes from './routes/internal';
 import { runScheduledMaintenance } from './lib/scheduled-jobs';
+import { getUserSubscription, isHostedMode } from './lib/billing';
 import { json } from './lib/response';
 
 const app = new Hono<{ Bindings: Env; Variables: ApiVariables }>();
+
+type PaidFeatureFlag = keyof Pick<
+  PlanDefinition,
+  'warehouseEnabled' | 'experimentationEnabled' | 'surveysEnabled'
+>;
+
+function requirePaidFeature(field: PaidFeatureFlag, message: string) {
+  const middleware: MiddlewareHandler<{ Bindings: Env; Variables: ApiVariables }> = async (c, next) => {
+    if (!isHostedMode(c.env)) {
+      await next();
+      return;
+    }
+    const sub = await getUserSubscription(c.env, c.get('user').userId);
+    if (!getPlan(sub.planId)[field]) {
+      return json({ message }, 403);
+    }
+    await next();
+  };
+  return middleware;
+}
 
 app.use('*', (c, next) => {
   return cors({
@@ -135,6 +157,34 @@ app.get('/api/insights/:insightId/run', insights.handleRun);
 
 app.use('/api/websites/*', jwtAuth);
 app.use('/api/websites', jwtAuth);
+app.use(
+  '/api/websites/:websiteId/warehouse/*',
+  requirePaidFeature('warehouseEnabled', 'Warehouse requires a paid plan.'),
+);
+app.use(
+  '/api/websites/:websiteId/feature-flags',
+  requirePaidFeature('experimentationEnabled', 'Feature flags require a paid plan.'),
+);
+app.use(
+  '/api/websites/:websiteId/feature-flags/*',
+  requirePaidFeature('experimentationEnabled', 'Feature flags require a paid plan.'),
+);
+app.use(
+  '/api/websites/:websiteId/experiments',
+  requirePaidFeature('experimentationEnabled', 'Experiments require a paid plan.'),
+);
+app.use(
+  '/api/websites/:websiteId/experiments/*',
+  requirePaidFeature('experimentationEnabled', 'Experiments require a paid plan.'),
+);
+app.use(
+  '/api/websites/:websiteId/surveys',
+  requirePaidFeature('surveysEnabled', 'Surveys require a paid plan.'),
+);
+app.use(
+  '/api/websites/:websiteId/surveys/*',
+  requirePaidFeature('surveysEnabled', 'Surveys require a paid plan.'),
+);
 
 app.get('/api/websites', websites.handleList);
 app.post('/api/websites', websites.handleCreate);

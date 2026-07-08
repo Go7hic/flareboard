@@ -18,6 +18,9 @@ type Plan = {
   emailReportsEnabled: boolean;
   heatmapsEnabled: boolean;
   teamsEnabled: boolean;
+  warehouseEnabled: boolean;
+  experimentationEnabled: boolean;
+  surveysEnabled: boolean;
   monthlyPriceUsd?: number | null;
 };
 
@@ -96,7 +99,10 @@ export default function Billing() {
             {t('websiteLimit')}: {plan.maxWebsites} · {t('replay')}: {plan.replayEnabled ? t('yes') : t('no')} ·{' '}
             {t('emailReports')}: {plan.emailReportsEnabled ? t('yes') : t('no')} · {t('heatmaps')}:{' '}
             {plan.heatmapsEnabled ? t('yes') : t('no')} · {t('teams')}:{' '}
-            {plan.teamsEnabled ? t('yes') : t('no')}
+            {plan.teamsEnabled ? t('yes') : t('no')} · {t('featureFlags')}:{' '}
+            {plan.experimentationEnabled ? t('yes') : t('no')} · {t('surveys')}:{' '}
+            {plan.surveysEnabled ? t('yes') : t('no')} · {t('dataWarehouse')}:{' '}
+            {plan.warehouseEnabled ? t('yes') : t('no')}
             {plan.monthlyPriceUsd != null && plan.monthlyPriceUsd > 0
               ? ` · $${plan.monthlyPriceUsd}/mo`
               : plan.id === 'free'

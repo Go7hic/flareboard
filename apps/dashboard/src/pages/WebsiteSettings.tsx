@@ -60,7 +60,11 @@ export default function WebsiteSettingsPage() {
     queryFn: () =>
       api<{
         hosted: boolean;
-        plan?: { emailReportsEnabled?: boolean; heatmapsEnabled?: boolean };
+        plan?: {
+          emailReportsEnabled?: boolean;
+          heatmapsEnabled?: boolean;
+          dataPortabilityEnabled?: boolean;
+        };
       }>('/api/billing/subscription'),
   });
 
@@ -69,6 +73,9 @@ export default function WebsiteSettingsPage() {
 
   const heatmapsAllowed =
     !billingQuery.data?.hosted || Boolean(billingQuery.data?.plan?.heatmapsEnabled);
+
+  const dataPortabilityAllowed =
+    !billingQuery.data?.hosted || Boolean(billingQuery.data?.plan?.dataPortabilityEnabled);
 
   const emailReportQuery = useQuery({
     queryKey: ['email-report', websiteId],
@@ -355,53 +362,61 @@ export default function WebsiteSettingsPage() {
               <Panel>
                 <h2 className="section-title">{t('dataImport')}</h2>
                 <p className="section-lead">{t('dataImportLead')}</p>
+                {!dataPortabilityAllowed ? (
+                  <PlanUpgradeBanner message={t('dataPortabilityRequiresUpgrade')} />
+                ) : null}
                 <p className="text-muted" style={{ fontSize: '0.8125rem' }}>{t('importFormatsDoc')}</p>
                 <p className="text-muted" style={{ fontSize: '0.8125rem' }}>{t('importMultipartHint')}</p>
-                <div className="field">
-                  <Label htmlFor="import-format">{t('importFormat')}</Label>
-                  <select
-                    id="import-format"
-                    className="select"
-                    value={importFormat}
-                    onChange={(e) =>
-                      setImportFormat(e.target.value as 'flareboard' | 'ga4' | 'plausible' | 'matomo')
-                    }
-                  >
-                    <option value="ga4">Google Analytics 4 CSV</option>
-                    <option value="plausible">Plausible CSV</option>
-                    <option value="matomo">Matomo CSV</option>
-                    <option value="flareboard">Flareboard CSV</option>
-                  </select>
-                </div>
-                <div className="field">
-                  <Label htmlFor="import-file">{t('importUpload')}</Label>
-                  <input
-                    id="import-file"
-                    type="file"
-                    accept=".csv,.tsv,.txt"
-                    className="input"
-                    onChange={(e) => onImportFile(e.target.files?.[0] ?? null)}
-                  />
-                </div>
-                <div className="field">
-                  <Label htmlFor="import-csv">{t('importData')}</Label>
-                  <Textarea
-                    id="import-csv"
-                    className="textarea-mono"
-                    value={importCsv}
-                    onChange={(e) => setImportCsv(e.target.value)}
-                    placeholder={t('importCsvPlaceholder')}
-                    rows={8}
-                  />
-                </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={!importCsv.trim() || importMutation.isPending}
-                  onClick={() => importMutation.mutate(null)}
+                <fieldset
+                  disabled={!dataPortabilityAllowed}
+                  style={{ border: 'none', margin: 0, padding: 0, opacity: dataPortabilityAllowed ? 1 : 0.6 }}
                 >
-                  {t('importData')}
-                </Button>
+                  <div className="field">
+                    <Label htmlFor="import-format">{t('importFormat')}</Label>
+                    <select
+                      id="import-format"
+                      className="select"
+                      value={importFormat}
+                      onChange={(e) =>
+                        setImportFormat(e.target.value as 'flareboard' | 'ga4' | 'plausible' | 'matomo')
+                      }
+                    >
+                      <option value="ga4">Google Analytics 4 CSV</option>
+                      <option value="plausible">Plausible CSV</option>
+                      <option value="matomo">Matomo CSV</option>
+                      <option value="flareboard">Flareboard CSV</option>
+                    </select>
+                  </div>
+                  <div className="field">
+                    <Label htmlFor="import-file">{t('importUpload')}</Label>
+                    <input
+                      id="import-file"
+                      type="file"
+                      accept=".csv,.tsv,.txt"
+                      className="input"
+                      onChange={(e) => onImportFile(e.target.files?.[0] ?? null)}
+                    />
+                  </div>
+                  <div className="field">
+                    <Label htmlFor="import-csv">{t('importData')}</Label>
+                    <Textarea
+                      id="import-csv"
+                      className="textarea-mono"
+                      value={importCsv}
+                      onChange={(e) => setImportCsv(e.target.value)}
+                      placeholder={t('importCsvPlaceholder')}
+                      rows={8}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={!dataPortabilityAllowed || !importCsv.trim() || importMutation.isPending}
+                    onClick={() => importMutation.mutate(null)}
+                  >
+                    {t('importData')}
+                  </Button>
+                </fieldset>
                 {importMessage ? <p className="text-muted">{importMessage}</p> : null}
                 {importErrors.length > 0 ? (
                   <div>

@@ -1,7 +1,8 @@
 import type { Context } from 'hono';
-import { importCsvSchema } from '@flareboard/shared';
+import { getPlan, importCsvSchema } from '@flareboard/shared';
 import type { Env } from '../env';
 import { canAccessWebsite, canMutateWebsite } from '../lib/access';
+import { getUserSubscription, isHostedMode } from '../lib/billing';
 import { importCsv } from '../lib/import-data';
 import { getWebsiteById } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
@@ -49,6 +50,12 @@ export async function handleImport(c: Ctx) {
   }
   if (!(await canMutateWebsite(c.env, website, c.get('user')))) {
     return json({ message: 'Read-only access' }, 403);
+  }
+  if (isHostedMode(c.env)) {
+    const sub = await getUserSubscription(c.env, c.get('user').userId);
+    if (!getPlan(sub.planId).dataPortabilityEnabled) {
+      return json({ message: 'Data import requires a paid plan.' }, 403);
+    }
   }
 
   const raw = await parseImportBody(c);

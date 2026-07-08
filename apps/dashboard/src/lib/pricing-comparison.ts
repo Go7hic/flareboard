@@ -19,7 +19,18 @@ export type ResolvedCompareRow = {
 
 type CompareCellSpec =
   | { type: 'included' }
-  | { type: 'yesNo'; field: 'replayEnabled' | 'emailReportsEnabled' | 'heatmapsEnabled' | 'teamsEnabled' }
+  | {
+      type: 'yesNo';
+      field:
+        | 'replayEnabled'
+        | 'emailReportsEnabled'
+        | 'heatmapsEnabled'
+        | 'teamsEnabled'
+        | 'dataPortabilityEnabled'
+        | 'warehouseEnabled'
+        | 'experimentationEnabled'
+        | 'surveysEnabled';
+    }
   | { type: 'websites' }
   | { type: 'events' }
   | { type: 'price' }
@@ -50,22 +61,39 @@ export const PRICING_COMPARE_ENTRIES: CompareEntry[] = [
     free: { type: 'events' },
     cloud: { type: 'events' },
   },
-  { kind: 'feature', labelKey: 'featCsvExportTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  {
+    kind: 'feature',
+    labelKey: 'featCsvExportTitle',
+    free: { type: 'yesNo', field: 'dataPortabilityEnabled' },
+    cloud: { type: 'yesNo', field: 'dataPortabilityEnabled' },
+  },
   {
     kind: 'feature',
     labelKey: 'featDataImportTitle',
-    free: { type: 'included' },
-    cloud: { type: 'included' },
+    free: { type: 'yesNo', field: 'dataPortabilityEnabled' },
+    cloud: { type: 'yesNo', field: 'dataPortabilityEnabled' },
   },
 
   { kind: 'section', labelKey: 'pricingCompareSectionPlatform' },
   { kind: 'feature', labelKey: 'featEdgeIngestTitle', free: { type: 'included' }, cloud: { type: 'included' } },
   { kind: 'feature', labelKey: 'featCfStackTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  {
+    kind: 'feature',
+    labelKey: 'featPrivacyDefaultTitle',
+    free: { type: 'included' },
+    cloud: { type: 'included' },
+  },
+  {
+    kind: 'feature',
+    labelKey: 'featDataOwnershipTitle',
+    free: { type: 'included' },
+    cloud: { type: 'included' },
+  },
 
   { kind: 'section', labelKey: 'pricingCompareSectionAnalytics' },
   {
     kind: 'feature',
-    labelKey: 'pricingComparePageviews',
+    labelKey: 'featWebsiteStatsTitle',
     free: { type: 'included' },
     cloud: { type: 'included' },
   },
@@ -83,6 +111,9 @@ export const PRICING_COMPARE_ENTRIES: CompareEntry[] = [
   },
   { kind: 'feature', labelKey: 'featRealtimeTitle', free: { type: 'included' }, cloud: { type: 'included' } },
   { kind: 'feature', labelKey: 'featSegmentsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'people', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'groups', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'stickiness', free: { type: 'included' }, cloud: { type: 'included' } },
   {
     kind: 'feature',
     labelKey: 'pricingComparePeriodCompare',
@@ -102,18 +133,42 @@ export const PRICING_COMPARE_ENTRIES: CompareEntry[] = [
   { kind: 'feature', labelKey: 'featJourneysTitle', free: { type: 'included' }, cloud: { type: 'included' } },
 
   { kind: 'section', labelKey: 'pricingCompareSectionProduct' },
-  { kind: 'feature', labelKey: 'featFeatureFlagsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featExperimentsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featSurveysTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  {
+    kind: 'feature',
+    labelKey: 'featFeatureFlagsTitle',
+    free: { type: 'yesNo', field: 'experimentationEnabled' },
+    cloud: { type: 'yesNo', field: 'experimentationEnabled' },
+  },
+  {
+    kind: 'feature',
+    labelKey: 'featExperimentsTitle',
+    free: { type: 'yesNo', field: 'experimentationEnabled' },
+    cloud: { type: 'yesNo', field: 'experimentationEnabled' },
+  },
+  {
+    kind: 'feature',
+    labelKey: 'featSurveysTitle',
+    free: { type: 'yesNo', field: 'surveysEnabled' },
+    cloud: { type: 'yesNo', field: 'surveysEnabled' },
+  },
+  { kind: 'feature', labelKey: 'featActionsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
   { kind: 'feature', labelKey: 'featErrorsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
   { kind: 'feature', labelKey: 'featLogsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featWarehouseTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featAiObservabilityTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featAnnotationsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featWorkflowsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  {
+    kind: 'feature',
+    labelKey: 'featWarehouseTitle',
+    free: { type: 'yesNo', field: 'warehouseEnabled' },
+    cloud: { type: 'yesNo', field: 'warehouseEnabled' },
+  },
 
   { kind: 'section', labelKey: 'pricingCompareSectionSessions' },
   { kind: 'feature', labelKey: 'featHeatmapsTitle', free: { type: 'yesNo', field: 'heatmapsEnabled' }, cloud: { type: 'yesNo', field: 'heatmapsEnabled' } },
   {
     kind: 'feature',
-    labelKey: 'pricingCompareReplay',
+    labelKey: 'featReplayTitle',
     free: { type: 'yesNo', field: 'replayEnabled' },
     cloud: { type: 'yesNo', field: 'replayEnabled' },
   },
@@ -144,6 +199,7 @@ export const PRICING_COMPARE_ENTRIES: CompareEntry[] = [
     cloud: { type: 'yesNo', field: 'emailReportsEnabled' },
   },
   { kind: 'feature', labelKey: 'featRevenueTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'auditLog', free: { type: 'included' }, cloud: { type: 'included' } },
   {
     kind: 'feature',
     labelKey: 'featAdminTitle',
@@ -166,7 +222,19 @@ export const PRICING_COMPARE_ENTRIES: CompareEntry[] = [
     free: { type: 'text', freeKey: 'pricingCompareValueSelfHost', cloudKey: 'pricingCompareValueSelfHost' },
     cloud: { type: 'text', freeKey: 'pricingCompareValueSelfHost', cloudKey: 'pricingCompareValueSelfHost' },
   },
+  {
+    kind: 'feature',
+    labelKey: 'featCloudBillingTitle',
+    free: { type: 'text', freeKey: 'pricingCompareValueNoSubscription', cloudKey: 'pricingCompareValueStripeSubscription' },
+    cloud: { type: 'text', freeKey: 'pricingCompareValueNoSubscription', cloudKey: 'pricingCompareValueStripeSubscription' },
+  },
   { kind: 'feature', labelKey: 'featOAuthTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  {
+    kind: 'feature',
+    labelKey: 'featEnterpriseTitle',
+    free: { type: 'text', freeKey: 'pricingCompareValueNoncommercial', cloudKey: 'pricingCompareValueCommercialSeparate' },
+    cloud: { type: 'text', freeKey: 'pricingCompareValueNoncommercial', cloudKey: 'pricingCompareValueCommercialSeparate' },
+  },
   {
     kind: 'feature',
     labelKey: 'featCookielessTitle',

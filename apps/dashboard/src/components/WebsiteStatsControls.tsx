@@ -3,6 +3,7 @@ import { ExportMenu } from './ExportMenu';
 import { RealtimeOnlineKpi } from './RealtimeOnlineKpi';
 import { SegmentFilterMenu } from './SegmentFilterMenu';
 import { type DateRangePreset } from '../lib/dateRange';
+import { t } from '../lib/i18n';
 
 interface Segment {
   id: string;
@@ -15,6 +16,7 @@ export function WebsiteStatsControls({
   range,
   onRangeChange,
   onExport,
+  exportAllowed = true,
   segmentId,
   onSegmentChange,
   segments,
@@ -25,6 +27,7 @@ export function WebsiteStatsControls({
   range: { preset: DateRangePreset; startAt: number; endAt: number };
   onRangeChange: (next: { preset: DateRangePreset; startAt: number; endAt: number }) => void;
   onExport: (type: 'pageviews' | 'events') => void;
+  exportAllowed?: boolean;
   segmentId: string;
   onSegmentChange: (id: string) => void;
   segments: Segment[];
@@ -43,7 +46,11 @@ export function WebsiteStatsControls({
           onCompareChange={onCompareChange}
         />
         <DateRangePicker value={range} onChange={onRangeChange} popover />
-        <ExportMenu onExport={onExport} />
+        <ExportMenu
+          onExport={onExport}
+          disabled={!exportAllowed}
+          disabledReason={t('dataPortabilityRequiresUpgrade')}
+        />
       </div>
     </div>
   );

@@ -14,6 +14,10 @@ export type PlanDefinition = {
   emailReportsEnabled: boolean;
   heatmapsEnabled: boolean;
   teamsEnabled: boolean;
+  dataPortabilityEnabled: boolean;
+  warehouseEnabled: boolean;
+  experimentationEnabled: boolean;
+  surveysEnabled: boolean;
   /** Display price on marketing / billing UI (USD). Null = free. */
   monthlyPriceUsd: number | null;
   /** Env var name for Stripe Price ID (hosted checkout). */
@@ -30,6 +34,10 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     emailReportsEnabled: false,
     heatmapsEnabled: false,
     teamsEnabled: false,
+    dataPortabilityEnabled: false,
+    warehouseEnabled: false,
+    experimentationEnabled: false,
+    surveysEnabled: false,
     monthlyPriceUsd: 0,
     stripePriceEnvKey: null,
   },
@@ -42,7 +50,11 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     emailReportsEnabled: true,
     heatmapsEnabled: true,
     teamsEnabled: true,
-    monthlyPriceUsd: 12,
+    dataPortabilityEnabled: true,
+    warehouseEnabled: true,
+    experimentationEnabled: true,
+    surveysEnabled: true,
+    monthlyPriceUsd: 15,
     stripePriceEnvKey: 'STRIPE_PRICE_CLOUD',
   },
 };
@@ -73,6 +85,10 @@ export function planForPublic(plan: PlanDefinition) {
     emailReportsEnabled: plan.emailReportsEnabled,
     heatmapsEnabled: plan.heatmapsEnabled,
     teamsEnabled: plan.teamsEnabled,
+    dataPortabilityEnabled: plan.dataPortabilityEnabled,
+    warehouseEnabled: plan.warehouseEnabled,
+    experimentationEnabled: plan.experimentationEnabled,
+    surveysEnabled: plan.surveysEnabled,
     monthlyPriceUsd: plan.monthlyPriceUsd,
   };
 }

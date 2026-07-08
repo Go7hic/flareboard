@@ -15,12 +15,20 @@ describe('billing helpers', () => {
     expect(free.emailReportsEnabled).toBe(false);
     expect(free.heatmapsEnabled).toBe(false);
     expect(free.teamsEnabled).toBe(false);
+    expect(free.dataPortabilityEnabled).toBe(false);
+    expect(free.warehouseEnabled).toBe(false);
+    expect(free.experimentationEnabled).toBe(false);
+    expect(free.surveysEnabled).toBe(false);
     expect(free.maxWebsites).toBe(1);
     expect(cloud.maxWebsites).toBe(10);
     expect(cloud.replayEnabled).toBe(true);
     expect(cloud.emailReportsEnabled).toBe(true);
     expect(cloud.heatmapsEnabled).toBe(true);
     expect(cloud.teamsEnabled).toBe(true);
+    expect(cloud.dataPortabilityEnabled).toBe(true);
+    expect(cloud.warehouseEnabled).toBe(true);
+    expect(cloud.experimentationEnabled).toBe(true);
+    expect(cloud.surveysEnabled).toBe(true);
   });
 
   it('formats current month key in UTC', () => {
@@ -39,7 +47,11 @@ describe('billing helpers', () => {
       emailReportsEnabled: true,
       heatmapsEnabled: true,
       teamsEnabled: true,
-      monthlyPriceUsd: 12,
+      dataPortabilityEnabled: true,
+      warehouseEnabled: true,
+      experimentationEnabled: true,
+      surveysEnabled: true,
+      monthlyPriceUsd: 15,
     });
     expect('stripePriceEnvKey' in pub).toBe(false);
   });

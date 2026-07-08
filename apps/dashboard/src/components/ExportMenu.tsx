@@ -3,8 +3,12 @@ import { t } from '../lib/i18n';
 
 export function ExportMenu({
   onExport,
+  disabled = false,
+  disabledReason,
 }: {
   onExport: (type: 'pageviews' | 'events') => void;
+  disabled?: boolean;
+  disabledReason?: string;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -29,6 +33,7 @@ export function ExportMenu({
   }, [open]);
 
   function pick(type: 'pageviews' | 'events') {
+    if (disabled) return;
     setOpen(false);
     onExport(type);
   }
@@ -38,10 +43,12 @@ export function ExportMenu({
       <button
         type="button"
         className="export-menu-trigger"
+        disabled={disabled}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="menu"
         aria-controls={listId}
+        title={disabled ? disabledReason : undefined}
       >
         <svg
           className="export-menu-icon"

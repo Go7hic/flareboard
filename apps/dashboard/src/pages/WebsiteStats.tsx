@@ -140,6 +140,18 @@ export default function WebsiteStatsPage() {
     queryFn: () => api<MetricRow[]>(`/api/websites/${websiteId}/events`),
   });
 
+  const billingQuery = useQuery({
+    queryKey: ['billing-subscription'],
+    queryFn: () =>
+      api<{
+        hosted: boolean;
+        plan?: { dataPortabilityEnabled?: boolean };
+      }>('/api/billing/subscription'),
+  });
+
+  const exportAllowed =
+    !billingQuery.data?.hosted || Boolean(billingQuery.data?.plan?.dataPortabilityEnabled);
+
   const stats = overviewQuery.data?.stats;
   const chartData = useMemo(
     () => mergePageviewsVisitors(overviewQuery.data?.timeseries, hourly),
@@ -183,6 +195,7 @@ export default function WebsiteStatsPage() {
               range={range}
               onRangeChange={setRange}
               onExport={exportCsv}
+              exportAllowed={exportAllowed}
               segmentId={activeSegmentId}
               onSegmentChange={handleSegmentChange}
               segments={segmentsQuery.data ?? []}

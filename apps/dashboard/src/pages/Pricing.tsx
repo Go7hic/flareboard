@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { LandingPlanCard } from '../components/landing/LandingPlanCards';
+import { LandingPlanCard, useLandingPlanActions } from '../components/landing/LandingPlanCards';
 import { LandingChrome, useLandingStartHref } from '../components/landing/LandingChrome';
 import { Button } from '../components/ui/button';
 import { t } from '../lib/i18n';
@@ -12,6 +12,7 @@ import { buildPricingCompareRows } from '../lib/pricing-comparison';
 
 export default function Pricing() {
   const startHref = useLandingStartHref();
+  const planActions = useLandingPlanActions();
   const compareRows = buildPricingCompareRows();
 
   return (
@@ -43,6 +44,10 @@ export default function Pricing() {
                 plan={plan}
                 featured={plan.id === 'cloud'}
                 startHref={startHref}
+                isLoggedIn={planActions.isLoggedIn}
+                isCheckoutPending={planActions.isCheckoutPending}
+                checkoutError={planActions.checkoutError}
+                onCloudCheckout={planActions.startCloudCheckout}
               />
             ))}
           </div>

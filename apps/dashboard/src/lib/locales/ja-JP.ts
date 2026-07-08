@@ -1150,6 +1150,7 @@ export const jaJPLocale: Record<string, string> = {
   landingPlanRecommended: "おすすめ",
   landingPlanFreeCta: "無料で開始",
   landingPlanCloudCta: "アカウント作成",
+  landingPlanCloudSubscribeCta: "サブスクリプションを開始",
   landingPlanFreeTagline: "実トラフィックで Flareboard を無料で試せます。",
   landingPlanCloudTagline: "リプレイとより大きなボリュームが必要な成長サイト向け。",
   landingPlanPerMonth: "/ 月",

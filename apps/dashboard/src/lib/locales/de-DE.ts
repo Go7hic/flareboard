@@ -1150,6 +1150,7 @@ export const deDELocale: Record<string, string> = {
   landingPlanRecommended: "Empfohlen",
   landingPlanFreeCta: "Kostenlos starten",
   landingPlanCloudCta: "Konto erstellen",
+  landingPlanCloudSubscribeCta: "Abo starten",
   landingPlanFreeTagline: "Flareboard mit echtem Traffic kostenlos testen.",
   landingPlanCloudTagline: "Für wachsende Sites mit Replay und mehr Volumen.",
   landingPlanPerMonth: "pro Monat",

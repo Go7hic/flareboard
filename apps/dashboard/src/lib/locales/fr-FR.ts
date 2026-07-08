@@ -1150,6 +1150,7 @@ export const frFRLocale: Record<string, string> = {
   landingPlanRecommended: "Recommandé",
   landingPlanFreeCta: "Commencer gratuitement",
   landingPlanCloudCta: "Créer un compte",
+  landingPlanCloudSubscribeCta: "Démarrer l’abonnement",
   landingPlanFreeTagline: "Essayez Flareboard avec du trafic réel sans frais.",
   landingPlanCloudTagline: "Pour les sites en croissance qui ont besoin de replay et plus de volume.",
   landingPlanPerMonth: "par mois",

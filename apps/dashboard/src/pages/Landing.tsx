@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { DataClaritySection, HeroDashboardPreview } from '../components/landing/LandingCharts';
-import { LandingPlanCard } from '../components/landing/LandingPlanCards';
+import { LandingPlanCard, useLandingPlanActions } from '../components/landing/LandingPlanCards';
 import { LandingChrome } from '../components/landing/LandingChrome';
 import { Button } from '../components/ui/button';
 import { api } from '../lib/api';
@@ -129,6 +129,7 @@ export default function Landing() {
   }, [location.hash, location.state]);
 
   const startHref = config.registrationEnabled ? '/register' : '/login';
+  const planActions = useLandingPlanActions();
   const plans = (config.plans?.length ? config.plans : LANDING_PLANS).filter(
     (p) => p.id === 'free' || p.id === 'cloud',
   );
@@ -288,6 +289,10 @@ export default function Landing() {
               plan={plan}
               featured={plan.id === 'cloud'}
               startHref={startHref}
+              isLoggedIn={planActions.isLoggedIn}
+              isCheckoutPending={planActions.isCheckoutPending}
+              checkoutError={planActions.checkoutError}
+              onCloudCheckout={planActions.startCloudCheckout}
             />
           ))}
         </div>

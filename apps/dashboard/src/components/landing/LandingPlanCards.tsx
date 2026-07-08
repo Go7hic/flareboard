@@ -1,5 +1,8 @@
+import { useMutation } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '../ui/button';
+import { api, bootstrapSession, hasSession } from '../../lib/api';
 import { t } from '../../lib/i18n';
 import {
   CLOUD_MONTHLY_USD,
@@ -7,6 +10,40 @@ import {
   formatEventLimit,
   type LandingPlan,
 } from '../../lib/landing-links';
+
+type CheckoutResponse = {
+  url: string;
+};
+
+export function useLandingPlanActions() {
+  const [isLoggedIn, setIsLoggedIn] = useState(hasSession());
+
+  useEffect(() => {
+    void bootstrapSession().then(setIsLoggedIn);
+  }, []);
+
+  const checkout = useMutation({
+    mutationFn: (planId: string) =>
+      api<CheckoutResponse>('/api/billing/checkout', {
+        method: 'POST',
+        body: JSON.stringify({ planId }),
+      }),
+    onSuccess: (res) => {
+      if (res.url) window.location.href = res.url;
+    },
+  });
+
+  return {
+    isLoggedIn,
+    startCloudCheckout: checkout.mutate,
+    isCheckoutPending: checkout.isPending,
+    checkoutError: checkout.isError
+      ? checkout.error instanceof Error
+        ? checkout.error.message
+        : t('requestFailed')
+      : null,
+  };
+}
 
 function PlanCheckIcon() {
   return (
@@ -50,12 +87,31 @@ type LandingPlanCardProps = {
   plan: LandingPlan;
   featured?: boolean;
   startHref: string;
+  isLoggedIn?: boolean;
+  isCheckoutPending?: boolean;
+  checkoutError?: string | null;
+  onCloudCheckout?: (planId: string) => void;
 };
 
-export function LandingPlanCard({ plan, featured, startHref }: LandingPlanCardProps) {
+export function LandingPlanCard({
+  plan,
+  featured,
+  startHref,
+  isLoggedIn = false,
+  isCheckoutPending = false,
+  checkoutError,
+  onCloudCheckout,
+}: LandingPlanCardProps) {
   const priceUsd = plan.monthlyPriceUsd ?? (plan.id === 'cloud' ? CLOUD_MONTHLY_USD : 0);
   const tagline =
     plan.id === 'cloud' ? t('landingPlanCloudTagline') : t('landingPlanFreeTagline');
+  const ctaHref = isLoggedIn && plan.id === 'free' ? '/dashboard' : startHref;
+  const ctaLabel =
+    isLoggedIn && plan.id === 'cloud'
+      ? t('landingPlanCloudSubscribeCta')
+      : plan.id === 'free'
+        ? t('landingPlanFreeCta')
+        : t('landingPlanCloudCta');
   const priceAria =
     plan.id === 'cloud'
       ? t('landingPlanPriceAriaCloud')
@@ -100,11 +156,28 @@ export function LandingPlanCard({ plan, featured, startHref }: LandingPlanCardPr
           </li>
         ))}
       </ul>
-      <Button asChild variant={featured ? 'primary' : 'secondary'} className="landing-plan-cta">
-        <Link to={startHref}>
-          {plan.id === 'free' ? t('landingPlanFreeCta') : t('landingPlanCloudCta')}
-        </Link>
-      </Button>
+      {isLoggedIn && plan.id === 'cloud' ? (
+        <>
+          <Button
+            type="button"
+            variant={featured ? 'primary' : 'secondary'}
+            className="landing-plan-cta"
+            disabled={isCheckoutPending}
+            onClick={() => onCloudCheckout?.(plan.id)}
+          >
+            {ctaLabel}
+          </Button>
+          {checkoutError ? (
+            <p className="text-danger" style={{ marginTop: '0.75rem' }}>
+              {checkoutError}
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <Button asChild variant={featured ? 'primary' : 'secondary'} className="landing-plan-cta">
+          <Link to={ctaHref}>{ctaLabel}</Link>
+        </Button>
+      )}
     </article>
   );
 }

@@ -39,4 +39,4 @@ worker-configuration.d.ts
 local-docs/
 
 *.plan.md
-
+/decisions.tsv

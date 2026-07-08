@@ -114,7 +114,7 @@ async function processEvent(
 ) {
   const d = msg.data;
   await ensureSessionRow(db, d.sessionId, d.websiteId, d.createdAt);
-  await db
+  const inserted = await db
     .insert(schema.websiteEvent)
     .values({
       eventId: d.id,
@@ -149,7 +149,10 @@ async function processEvent(
       fcp: d.fcp ?? null,
       ttfb: d.ttfb ?? null,
     })
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ eventId: schema.websiteEvent.eventId });
+
+  if (!inserted.length) return;
 
   if (msg.eventData?.length) {
     await db
@@ -207,6 +210,16 @@ async function processSessionData(
 
 async function processHeatmap(d1: D1Database, msg: Extract<QueueMessage, { type: 'heatmap' }>) {
   const d = msg.data;
+  if (d.id) {
+    const dedup = await d1
+      .prepare(
+        `INSERT INTO heatmap_ingest_dedup (id, website_id, created_at) VALUES (?1, ?2, ?3) ON CONFLICT(id) DO NOTHING`,
+      )
+      .bind(d.id, d.websiteId, d.createdAt)
+      .run();
+    if (!dedup.meta.changes) return;
+  }
+
   const day = dayKey(d.createdAt);
   await d1
     .prepare(
@@ -654,6 +667,27 @@ async function processBatchOptimized(
     }
     await runBatched(db, relatedCoreStmts);
 
+    const heatmapWithIds = heatmapMsgs.filter((m) => m.data.id);
+    const heatmapDedupResults = await runBatched(
+      db,
+      heatmapWithIds.map((m) =>
+        db
+          .prepare(
+            `INSERT INTO heatmap_ingest_dedup (id, website_id, created_at) VALUES (?, ?, ?) ON CONFLICT(id) DO NOTHING`,
+          )
+          .bind(m.data.id, m.data.websiteId, m.data.createdAt),
+      ),
+    );
+    const dedupedHeatmapIds = new Set<string>();
+    for (let i = 0; i < heatmapWithIds.length; i++) {
+      if (statementChanged(heatmapDedupResults[i]) && heatmapWithIds[i].data.id) {
+        dedupedHeatmapIds.add(heatmapWithIds[i].data.id!);
+      }
+    }
+    const dedupedHeatmapMsgs = heatmapMsgs.filter(
+      (m) => !m.data.id || dedupedHeatmapIds.has(m.data.id),
+    );
+
     // ── Phase 4: aggregate rollups in memory ──
     const sessionDay = new Map<string, SessionDayAgg>();
     const series = new Map<string, SeriesAgg>();
@@ -743,7 +777,7 @@ async function processBatchOptimized(
       }
     }
 
-    for (const m of heatmapMsgs) {
+    for (const m of dedupedHeatmapMsgs) {
       const d = m.data;
       const day = dayKey(d.createdAt);
       const deviceClass = d.deviceClass ?? '';

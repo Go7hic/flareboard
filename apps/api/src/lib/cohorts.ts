@@ -37,7 +37,6 @@ function conditionSql(
   let windowClause = '';
   if (windowStart != null && windowEnd != null) {
     windowClause = ' AND created_at >= ? AND created_at <= ?';
-    binds.push(windowStart, windowEnd);
   }
 
   if (cond.field === 'event_name') {
@@ -46,6 +45,9 @@ function conditionSql(
         ? `event_type = ${EVENT_TYPE.customEvent} AND event_name = ?`
         : `event_type = ${EVENT_TYPE.customEvent} AND event_name LIKE '%' || ? || '%'`;
     binds.push(cond.value);
+    if (windowStart != null && windowEnd != null) {
+      binds.push(windowStart, windowEnd);
+    }
     return {
       sql: `SELECT session_id FROM website_event WHERE website_id = ? AND ${nameClause}${windowClause} GROUP BY session_id`,
       binds,
@@ -57,6 +59,9 @@ function conditionSql(
       ? `event_type = ${EVENT_TYPE.pageView} AND url_path = ?`
       : `event_type = ${EVENT_TYPE.pageView} AND url_path LIKE '%' || ? || '%'`;
   binds.push(cond.value);
+  if (windowStart != null && windowEnd != null) {
+    binds.push(windowStart, windowEnd);
+  }
   return {
     sql: `SELECT session_id FROM website_event WHERE website_id = ? AND ${pathClause}${windowClause} GROUP BY session_id`,
     binds,

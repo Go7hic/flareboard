@@ -1,5 +1,6 @@
 import { EVENT_TYPE } from '@flareboard/shared';
 import type { Env } from '../env';
+import { invalidateDailyRollups } from './rollups';
 
 export type ImportFormat = 'flareboard' | 'ga4' | 'plausible' | 'matomo';
 
@@ -263,6 +264,10 @@ async function flushBatch(env: Env, websiteId: string, batch: ImportRow[]) {
   return { imported, batches };
 }
 
+function importDayKey(ms: number) {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
 export async function importCsv(
   env: Env,
   websiteId: string,
@@ -279,5 +284,7 @@ export async function importCsv(
   }
 
   const { imported, batches } = await flushBatch(env, websiteId, batch);
+  const affectedDays = [...new Set(batch.map((row) => importDayKey(row.createdAt)))];
+  await invalidateDailyRollups(env, websiteId, affectedDays);
   return { imported, skipped, errors: errors.slice(0, 50), batches };
 }

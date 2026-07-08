@@ -1000,6 +1000,7 @@ export interface QueueRevenueMessage {
 export interface QueueHeatmapMessage {
   type: 'heatmap';
   data: {
+    id?: string;
     websiteId: string;
     urlPath: string;
     kind: 'click' | 'scroll';

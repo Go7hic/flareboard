@@ -1,9 +1,9 @@
 import type { Context } from 'hono';
 import type { Website } from '@flareboard/db';
 import type { Env } from '../env';
-import { canAccessWebsite } from './access';
+import { canAccessWebsite, canMutateWebsite } from './access';
 import { getWebsiteById } from './queries';
-import { notFound } from './response';
+import { json, notFound } from './response';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
@@ -25,5 +25,14 @@ export async function requireWebsiteById(c: Ctx, websiteId: string): Promise<Web
 export async function requireWebsiteOr404(c: Ctx) {
   const website = await requireWebsite(c);
   if (!website) return { website: null, response: notFound() };
+  return { website, response: null };
+}
+
+export async function requireMutateWebsiteOr404(c: Ctx) {
+  const { website, response } = await requireWebsiteOr404(c);
+  if (response) return { website: null, response };
+  if (!(await canMutateWebsite(c.env, website!, c.get('user')))) {
+    return { website: null, response: json({ message: 'Read-only access' }, 403) };
+  }
   return { website, response: null };
 }

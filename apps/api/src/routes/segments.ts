@@ -5,7 +5,7 @@ import { createSegmentSchema, updateSegmentSchema, uuid } from '@flareboard/shar
 import type { Env } from '../env';
 import { getSegmentById, getWebsiteSegments } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
-import { requireWebsiteOr404 } from '../lib/website';
+import { requireMutateWebsiteOr404, requireWebsiteOr404 } from '../lib/website';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
@@ -30,7 +30,7 @@ export async function handleList(c: Ctx) {
 }
 
 export async function handleCreate(c: Ctx) {
-  const { website, response } = await requireWebsiteOr404(c);
+  const { website, response } = await requireMutateWebsiteOr404(c);
   if (response) return response;
   const body = await c.req.json().catch(() => null);
   const parsed = createSegmentSchema.safeParse(body);
@@ -62,7 +62,7 @@ export async function handleGet(c: Ctx) {
 }
 
 export async function handleUpdate(c: Ctx) {
-  const { website, response } = await requireWebsiteOr404(c);
+  const { website, response } = await requireMutateWebsiteOr404(c);
   if (response) return response;
   const segment = await getSegmentById(c.env, c.req.param('segmentId') ?? '');
   if (!segment || segment.websiteId !== website!.websiteId) return notFound();
@@ -87,7 +87,7 @@ export async function handleUpdate(c: Ctx) {
 }
 
 export async function handleDelete(c: Ctx) {
-  const { website, response } = await requireWebsiteOr404(c);
+  const { website, response } = await requireMutateWebsiteOr404(c);
   if (response) return response;
   const segment = await getSegmentById(c.env, c.req.param('segmentId') ?? '');
   if (!segment || segment.websiteId !== website!.websiteId) return notFound();

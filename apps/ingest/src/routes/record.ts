@@ -1,5 +1,6 @@
 import type { Context } from 'hono';
 import { isbot } from 'isbot';
+import { and, eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
 import { recordSchema, uuid } from '@flareboard/shared';
 import type { Env } from '../env';
@@ -47,9 +48,26 @@ export async function handleRecord(c: Ctx) {
     return json({ message: 'Rate limit exceeded' }, 429);
   }
 
-  const replayId = uuid();
   const chunkBytes = new TextEncoder().encode(JSON.stringify(events));
   const r2Key = `${website}/${visitId}/${chunkIndex}`;
+
+  const db = createDb(c.env.DB);
+  const [existingChunk] = await db
+    .select({ replayId: schema.sessionReplay.replayId })
+    .from(schema.sessionReplay)
+    .where(
+      and(
+        eq(schema.sessionReplay.websiteId, website),
+        eq(schema.sessionReplay.visitId, visitId),
+        eq(schema.sessionReplay.chunkIndex, chunkIndex),
+      ),
+    )
+    .limit(1);
+  if (existingChunk) {
+    return json({ ok: true, replayId: existingChunk.replayId, deduped: true });
+  }
+
+  const replayId = uuid();
 
   if (c.env.REPLAY_BUCKET) {
     await c.env.REPLAY_BUCKET.put(r2Key, chunkBytes, {
@@ -57,7 +75,6 @@ export async function handleRecord(c: Ctx) {
     });
   }
 
-  const db = createDb(c.env.DB);
   await db.insert(schema.sessionReplay).values({
     replayId,
     websiteId: website,

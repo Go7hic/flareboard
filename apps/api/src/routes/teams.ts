@@ -34,11 +34,20 @@ function randomAccessCode() {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 8);
 }
 
-function serializeTeam(team: { teamId: string; name: string; accessCode: string | null; createdAt?: Date | null }, role?: string) {
+function canSeeTeamAccessCode(teamRole: string | undefined, globalRole: string) {
+  if (globalRole === ROLES.admin) return true;
+  return teamRole === ROLES.teamOwner || teamRole === ROLES.teamManager;
+}
+
+function serializeTeam(
+  team: { teamId: string; name: string; accessCode: string | null; createdAt?: Date | null },
+  role?: string,
+  globalRole = '',
+) {
   return {
     id: team.teamId,
     name: team.name,
-    accessCode: team.accessCode ?? undefined,
+    accessCode: canSeeTeamAccessCode(role, globalRole) ? (team.accessCode ?? undefined) : undefined,
     role,
     createdAt: team.createdAt,
   };
@@ -47,7 +56,15 @@ function serializeTeam(team: { teamId: string; name: string; accessCode: string 
 export async function handleList(c: Ctx) {
   const user = c.get('user');
   const teams = await getUserTeams(c.env, user.userId);
-  return json(teams.map((t) => serializeTeam({ teamId: t.id, name: t.name, accessCode: t.accessCode, createdAt: t.createdAt }, t.role)));
+  return json(
+    teams.map((t) =>
+      serializeTeam(
+        { teamId: t.id, name: t.name, accessCode: t.accessCode, createdAt: t.createdAt },
+        t.role,
+        user.role,
+      ),
+    ),
+  );
 }
 
 export async function handleCreate(c: Ctx) {
@@ -82,7 +99,7 @@ export async function handleCreate(c: Ctx) {
   });
 
   const team = await getTeamById(c.env, teamId);
-  return json(serializeTeam(team!, ROLES.teamOwner), 201);
+  return json(serializeTeam(team!, ROLES.teamOwner, user.role), 201);
 }
 
 export async function handleGet(c: Ctx) {
@@ -98,7 +115,7 @@ export async function handleGet(c: Ctx) {
 
   const websites = await getTeamWebsites(c.env, teamId);
   return json({
-    ...serializeTeam(team, membership?.role),
+    ...serializeTeam(team, membership?.role, c.get('user').role),
     websites: websites.map((w) => ({
       id: w.websiteId,
       name: w.name,
@@ -184,7 +201,7 @@ export async function handleUpdate(c: Ctx) {
     .where(eq(schema.team.teamId, teamId));
 
   const updated = await getTeamById(c.env, teamId);
-  return json(serializeTeam(updated!, membership.role));
+  return json(serializeTeam(updated!, membership.role, c.get('user').role));
 }
 
 export async function handleDelete(c: Ctx) {
@@ -227,7 +244,7 @@ export async function handleJoin(c: Ctx) {
   const user = c.get('user');
   const existing = await userHasTeamAccess(c.env, user.userId, team.teamId);
   if (existing) {
-    return json(serializeTeam(team, existing.role));
+    return json(serializeTeam(team, existing.role, user.role));
   }
 
   const db = createDb(c.env.DB);
@@ -236,12 +253,12 @@ export async function handleJoin(c: Ctx) {
     teamUserId: uuid(),
     teamId: team.teamId,
     userId: user.userId,
-    role: ROLES.teamMember,
+    role: ROLES.teamViewOnly,
     createdAt: now,
     updatedAt: now,
   });
 
-  return json(serializeTeam(team, ROLES.teamMember), 201);
+  return json(serializeTeam(team, ROLES.teamViewOnly, user.role), 201);
 }
 
 export async function handleCreateWebsite(c: Ctx) {

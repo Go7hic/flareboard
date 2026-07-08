@@ -10,6 +10,7 @@ import {
   uuid,
 } from '@flareboard/shared';
 import type { Env } from '../env';
+import { bumpTokenVersion } from '../lib/auth-token';
 import { logAdminAction, listAuditLog } from '../lib/audit';
 import { getAllTeamsAdmin, getAllUsers, getAllWebsitesAdmin } from '../lib/queries';
 import { badRequest, forbidden, json } from '../lib/response';
@@ -161,15 +162,23 @@ export async function handleUpdateUser(c: Ctx) {
   const [user] = await db.select().from(schema.user).where(eq(schema.user.userId, userId)).limit(1);
   if (!user) return json({ message: 'User not found' }, 404);
 
+  const nextRole = parsed.data.role ?? user.role;
+  const passwordChanged = Boolean(parsed.data.password);
+  const roleChanged = nextRole !== user.role;
+
   await db
     .update(schema.user)
     .set({
       username: parsed.data.username ?? user.username,
-      role: parsed.data.role ?? user.role,
-      password: parsed.data.password ? hashPassword(parsed.data.password) : user.password,
+      role: nextRole,
+      password: passwordChanged ? hashPassword(parsed.data.password!) : user.password,
       updatedAt: new Date(),
     })
     .where(eq(schema.user.userId, userId));
+
+  if (passwordChanged || roleChanged) {
+    await bumpTokenVersion(c.env, userId);
+  }
 
   await logAdminAction(c.env, c.get('user').userId, 'update', 'user', userId, {
     username: parsed.data.username,
@@ -199,6 +208,8 @@ export async function handleDeleteUser(c: Ctx) {
     .update(schema.user)
     .set({ deletedAt: new Date(), updatedAt: new Date() })
     .where(eq(schema.user.userId, userId));
+
+  await bumpTokenVersion(c.env, userId);
 
   await logAdminAction(c.env, c.get('user').userId, 'delete', 'user', userId, {
     username: user.username,

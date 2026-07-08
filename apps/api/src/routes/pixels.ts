@@ -4,9 +4,9 @@ import { createDb, schema } from '@flareboard/db';
 import { createPixelSchema, updatePixelSchema, uuid } from '@flareboard/shared';
 import type { Env } from '../env';
 import { ROLES } from '@flareboard/shared';
-import { canAccessPixel, userHasTeamAccess } from '../lib/access';
+import { canAccessPixel, canMutatePixel, canMutateTeamResource, userHasTeamAccess } from '../lib/access';
 import { getAccessiblePixels, getPixelById } from '../lib/queries';
-import { badRequest, json, notFound } from '../lib/response';
+import { badRequest, forbidden, json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
@@ -50,8 +50,15 @@ export async function handleCreate(c: Ctx) {
 
   const user = c.get('user');
   if (parsed.data.teamId) {
-    const membership = await userHasTeamAccess(c.env, user.userId, parsed.data.teamId);
-    if (!membership && user.role !== ROLES.admin) return notFound();
+    if (
+      !(await canMutateTeamResource(
+        c.env,
+        { userId: user.userId, teamId: parsed.data.teamId },
+        user,
+      ))
+    ) {
+      return forbidden('Read-only access');
+    }
   }
 
   const pixelId = uuid();
@@ -86,6 +93,7 @@ export async function handleGet(c: Ctx) {
 export async function handleUpdate(c: Ctx) {
   const pixel = await getPixelById(c.env, c.req.param('pixelId') ?? '');
   if (!pixel || !(await canAccessPixel(c.env, pixel, c.get('user')))) return notFound();
+  if (!(await canMutatePixel(c.env, pixel, c.get('user')))) return forbidden('Read-only access');
 
   const body = await c.req.json().catch(() => null);
   const parsed = updatePixelSchema.safeParse(body);
@@ -112,6 +120,7 @@ export async function handleUpdate(c: Ctx) {
 export async function handleDelete(c: Ctx) {
   const pixel = await getPixelById(c.env, c.req.param('pixelId') ?? '');
   if (!pixel || !(await canAccessPixel(c.env, pixel, c.get('user')))) return notFound();
+  if (!(await canMutatePixel(c.env, pixel, c.get('user')))) return forbidden('Read-only access');
 
   const db = createDb(c.env.DB);
   await db

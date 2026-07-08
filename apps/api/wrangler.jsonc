@@ -67,7 +67,8 @@
         "HOSTED_MODE": "true",
         "EMAIL_FROM": "noreply@flareboard.dev",
         "EMAIL_FROM_NAME": "Flareboard",
-        "DASHBOARD_URL": "https://flareboard.dev"
+        "DASHBOARD_URL": "https://flareboard.dev",
+        "CORS_ORIGINS": "https://flareboard.dev"
       },
       "d1_databases": [
         {

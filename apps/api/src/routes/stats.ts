@@ -206,14 +206,15 @@ export async function handleCompare(c: Ctx) {
   const segment = await segmentParams(c, website.websiteId);
   const cohort = await cohortJoin(c, website.websiteId);
   const unit = compareChartUnit(startAt, endAt);
+  const useFiltered = Boolean(segment || cohort);
 
   const load = (from: number, to: number) =>
-    segment
-      ? getWebsiteStatsFiltered(c.env, website.websiteId, from, to, segment)
+    useFiltered
+      ? getWebsiteStatsFiltered(c.env, website.websiteId, from, to, segment, cohort)
       : getWebsiteStats(c.env, website.websiteId, from, to);
 
   const loadSeries = (from: number, to: number) =>
-    segment
+    useFiltered
       ? getWebsiteMetricsSeriesFiltered(c.env, website.websiteId, from, to, unit, segment, cohort)
       : getWebsiteMetricsSeries(c.env, website.websiteId, from, to, unit);
 

@@ -191,7 +191,7 @@ export async function getWebsiteMetricsSeries(
   const { results } = await env.DB.prepare(
     `SELECT strftime('${format}', datetime(created_at / 1000, 'unixepoch')) as x,
             SUM(CASE WHEN event_type = ?4 THEN 1 ELSE 0 END) as pageviews,
-            COUNT(DISTINCT session_id) as visitors
+            COUNT(DISTINCT CASE WHEN event_type = ?4 THEN session_id END) as visitors
      FROM website_event
      WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3
      GROUP BY x

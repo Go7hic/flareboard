@@ -3,6 +3,7 @@ import { ROLES, parseSecureToken, type AuthUser } from '@flareboard/shared';
 import type { Env } from '../env';
 import { getTokenVersion } from '../lib/auth-token';
 import { readAuthToken } from '../lib/auth-credentials';
+import { csrfOriginAllowed } from '../lib/csrf';
 import { forbidden, getAppSecret, unauthorized } from '../lib/response';
 
 export type ApiVariables = {
@@ -34,6 +35,10 @@ export const jwtAuth = createMiddleware<{ Bindings: Env; Variables: ApiVariables
 
   const role = String(payload.role);
   c.set('user', { userId, role });
+
+  if (!csrfOriginAllowed(c)) {
+    return forbidden('Invalid origin');
+  }
 
   if (
     MUTATING_METHODS.has(c.req.method) &&

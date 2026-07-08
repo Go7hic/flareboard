@@ -25,6 +25,16 @@ describe('getCorsOrigins', () => {
     const origins = getCorsOrigins(envWithCors('http://localhost:5173'));
     expect(origins.filter((o) => o === 'http://localhost:5173')).toHaveLength(1);
   });
+
+  it('omits local dev origins in production', () => {
+    const origins = getCorsOrigins({
+      ENVIRONMENT: 'production',
+      DASHBOARD_URL: 'https://flareboard.dev',
+      CORS_ORIGINS: 'https://flareboard.dev',
+    } as Env);
+    expect(origins).not.toContain('http://localhost:5173');
+    expect(origins).toContain('https://flareboard.dev');
+  });
 });
 
 describe('resolveCorsOrigin', () => {

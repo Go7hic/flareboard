@@ -76,17 +76,20 @@ describe('getWebsiteStatsFromRollups', () => {
 
   it('returns stats when rollup days are complete', async () => {
     const { startAt, endAt } = utcCalendarDaysRange(2);
-    const days = ['2026-07-06', '2026-07-07'];
     const env = mockEnv([
       { sql: 'COUNT(*) as count FROM rollup_stats_daily', result: { count: 2 } },
       {
-        sql: 'FROM rollup_stats_daily',
-        result: { pageviews: 10, visitors: 4, visits: 5, bounces: 1, totaltime_sec: 100 },
+        sql: 'COALESCE(SUM(pageviews), 0) as pageviews',
+        result: { pageviews: 10, visits: 5, bounces: 1, totaltime_sec: 100 },
+      },
+      {
+        sql: 'COUNT(DISTINCT session_id) as visitors',
+        result: { visitors: 4 },
       },
     ]);
     const result = await getWebsiteStatsFromRollups(env, 'site-1', startAt, endAt);
     expect(result?.pageviews.value).toBe(10);
-    expect(days.length).toBeGreaterThan(0);
+    expect(result?.visitors.value).toBe(4);
   });
 });
 
@@ -97,6 +100,10 @@ describe('getPageviewsFromRollups', () => {
       {
         sql: 'FROM rollup_pageview_series',
         result: [{ bucket: '2026-07-07 11:00', pageviews: 3 }],
+      },
+      {
+        sql: 'FROM rollup_series_bucket',
+        result: [{ bucket: '2026-07-07 11:00', visitors: 1, visits: 1 }],
       },
     ]);
     const result = await getPageviewsFromRollups(env, 'site-1', startAt, endAt, 'hour');

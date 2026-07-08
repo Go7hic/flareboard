@@ -429,6 +429,7 @@ async function processSend(
       const msg: QueueMessage = {
         type: 'heatmap',
         data: {
+          id: crypto.randomUUID(),
           websiteId,
           urlPath: safeDecodeURI(urlPath) ?? urlPath,
           kind: payload.kind,

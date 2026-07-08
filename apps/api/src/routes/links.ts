@@ -3,10 +3,10 @@ import { eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
 import { ROLES, createLinkSchema, statsQuerySchema, updateLinkSchema, uuid } from '@flareboard/shared';
 import type { Env } from '../env';
-import { canAccessLink, userHasTeamAccess } from '../lib/access';
+import { canAccessLink, canMutateLink, canMutateTeamResource, userHasTeamAccess } from '../lib/access';
 import { getAccessibleLinks, getLinkById, getLinkStats } from '../lib/queries';
 import { clampReportRange } from '../lib/report-range';
-import { badRequest, json, notFound } from '../lib/response';
+import { badRequest, forbidden, json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
@@ -51,8 +51,15 @@ export async function handleCreate(c: Ctx) {
 
   const user = c.get('user');
   if (parsed.data.teamId) {
-    const membership = await userHasTeamAccess(c.env, user.userId, parsed.data.teamId);
-    if (!membership && user.role !== ROLES.admin) return notFound();
+    if (
+      !(await canMutateTeamResource(
+        c.env,
+        { userId: user.userId, teamId: parsed.data.teamId },
+        user,
+      ))
+    ) {
+      return forbidden('Read-only access');
+    }
   }
 
   const linkId = uuid();
@@ -101,6 +108,7 @@ export async function handleStats(c: Ctx) {
 export async function handleUpdate(c: Ctx) {
   const link = await getLinkById(c.env, c.req.param('linkId') ?? '');
   if (!link || !(await canAccessLink(c.env, link, c.get('user')))) return notFound();
+  if (!(await canMutateLink(c.env, link, c.get('user')))) return forbidden('Read-only access');
 
   const body = await c.req.json().catch(() => null);
   const parsed = updateLinkSchema.safeParse(body);
@@ -128,6 +136,7 @@ export async function handleUpdate(c: Ctx) {
 export async function handleDelete(c: Ctx) {
   const link = await getLinkById(c.env, c.req.param('linkId') ?? '');
   if (!link || !(await canAccessLink(c.env, link, c.get('user')))) return notFound();
+  if (!(await canMutateLink(c.env, link, c.get('user')))) return forbidden('Read-only access');
 
   const db = createDb(c.env.DB);
   await db

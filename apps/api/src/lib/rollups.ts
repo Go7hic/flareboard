@@ -111,19 +111,19 @@ export async function getWebsiteStatsFromRollups(
 
   const period = endAt - startAt;
   const prevStart = startAt - period;
-  const prevEnd = startAt;
+  const prevEnd = startAt - 1;
   const prevDays = daysInRange(prevStart, prevEnd);
+  if (!(await rollupDaysComplete(env, websiteId, prevDays))) return null;
 
-  const sumDays = async (targetDays: string[]) => {
+  const sumDailyStats = async (targetDays: string[]) => {
     if (!targetDays.length) {
-      return { pageviews: 0, visitors: 0, visits: 0, bounces: 0, totaltime_sec: 0 };
+      return { pageviews: 0, visits: 0, bounces: 0, totaltime_sec: 0 };
     }
     const dayPlaceholders = sqlInPlaceholders(targetDays.length, 2);
     return (
       (await env.DB.prepare(
         `SELECT
            COALESCE(SUM(pageviews), 0) as pageviews,
-           COALESCE(SUM(visitors), 0) as visitors,
            COALESCE(SUM(visits), 0) as visits,
            COALESCE(SUM(bounces), 0) as bounces,
            COALESCE(SUM(totaltime_sec), 0) as totaltime_sec
@@ -133,13 +133,11 @@ export async function getWebsiteStatsFromRollups(
         .bind(websiteId, ...targetDays)
         .first<{
           pageviews: number;
-          visitors: number;
           visits: number;
           bounces: number;
           totaltime_sec: number;
         }>()) ?? {
         pageviews: 0,
-        visitors: 0,
         visits: 0,
         bounces: 0,
         totaltime_sec: 0,
@@ -147,15 +145,43 @@ export async function getWebsiteStatsFromRollups(
     );
   };
 
-  const [current, previous] = await Promise.all([sumDays(days), sumDays(prevDays)]);
+  const countDistinctVisitors = async (targetDays: string[]) => {
+    if (!targetDays.length) return 0;
+    const dayPlaceholders = sqlInPlaceholders(targetDays.length, 2);
+    const row = await env.DB.prepare(
+      `SELECT COUNT(DISTINCT session_id) as visitors
+       FROM rollup_session_day
+       WHERE website_id = ?1 AND day IN (${dayPlaceholders})`,
+    )
+      .bind(websiteId, ...targetDays)
+      .first<{ visitors: number }>();
+    return row?.visitors ?? 0;
+  };
+
+  const [currentStats, previousStats, currentVisitors, previousVisitors] = await Promise.all([
+    sumDailyStats(days),
+    sumDailyStats(prevDays),
+    countDistinctVisitors(days),
+    countDistinctVisitors(prevDays),
+  ]);
 
   return {
-    pageviews: statChange(current.pageviews, previous.pageviews),
-    visitors: statChange(current.visitors, previous.visitors),
-    visits: statChange(current.visits, previous.visits),
-    bounces: statChange(current.bounces, previous.bounces),
-    totaltime: statChange(current.totaltime_sec, previous.totaltime_sec),
+    pageviews: statChange(currentStats.pageviews, previousStats.pageviews),
+    visitors: statChange(currentVisitors, previousVisitors),
+    visits: statChange(currentStats.visits, previousStats.visits),
+    bounces: statChange(currentStats.bounces, previousStats.bounces),
+    totaltime: statChange(currentStats.totaltime_sec, previousStats.totaltime_sec),
   };
+}
+
+function hourSeriesBucketsAligned(
+  pageviewRows: { bucket: string }[],
+  identityRows: { bucket: string }[],
+) {
+  if (!pageviewRows.length || !identityRows.length) return false;
+  if (pageviewRows.length !== identityRows.length) return false;
+  const identityBuckets = new Set(identityRows.map((r) => r.bucket));
+  return pageviewRows.every((r) => identityBuckets.has(r.bucket));
 }
 
 export async function getPageviewsFromRollups(
@@ -186,6 +212,11 @@ export async function getPageviewsFromRollups(
     .all<{ bucket: string; pageviews: number }>();
 
   if (!rows.results?.length) return null;
+
+  if (unitKey === 'hour') {
+    const identityRows = await loadSeriesIdentities(env, websiteId, unitKey, startBucket, endBucket);
+    if (!hourSeriesBucketsAligned(rows.results, identityRows)) return null;
+  }
 
   return {
     pageviews: rows.results.map((r) => ({ x: r.bucket, y: r.pageviews })),
@@ -344,6 +375,7 @@ export async function getWebsiteMetricsSeriesFromRollups(
     visitors = await loadDailyVisitorsFromSessionDay(env, websiteId, days);
   } else {
     const identityRows = await loadSeriesIdentities(env, websiteId, unitKey, startBucket, endBucket);
+    if (unitKey === 'hour' && !hourSeriesBucketsAligned(pageviewRows.results, identityRows)) return null;
     if (!identityRows.length) return null;
     visitors = identityRows.map((r) => ({ x: r.bucket, y: r.visitors }));
   }
@@ -466,6 +498,16 @@ export async function getAggregateMetricsFromRollups(
 
   if (!pageviewRows.results?.length || !identityRows.results?.length) return null;
 
+  if (
+    unitKey === 'hour' &&
+    !hourSeriesBucketsAligned(
+      pageviewRows.results.map((r) => ({ bucket: r.x })),
+      identityRows.results.map((r) => ({ bucket: r.x })),
+    )
+  ) {
+    return null;
+  }
+
   return {
     pageviews: pageviewRows.results.map((r) => ({ x: r.x, y: r.pageviews })),
     visitors: identityRows.results.map((r) => ({ x: r.x, y: r.visitors })),
@@ -474,6 +516,33 @@ export async function getAggregateMetricsFromRollups(
 }
 
 /** Recompute rollup_stats_daily for one website/day from rollup_session_day. */
+export async function invalidateDailyRollups(env: Env, websiteId: string, days: string[]) {
+  if (!days.length) return;
+  const dayPlaceholders = sqlInPlaceholders(days.length, 2);
+  const binds = [websiteId, ...days];
+  const dayTables = [
+    'rollup_stats_daily',
+    'rollup_session_day',
+    'rollup_event_daily',
+    'rollup_dimension_daily',
+  ];
+  for (const table of dayTables) {
+    await env.DB.prepare(`DELETE FROM ${table} WHERE website_id = ?1 AND day IN (${dayPlaceholders})`)
+      .bind(...binds)
+      .run();
+  }
+  await env.DB.prepare(
+    `DELETE FROM rollup_pageview_series WHERE website_id = ?1 AND unit = 'day' AND bucket IN (${dayPlaceholders})`,
+  )
+    .bind(...binds)
+    .run();
+  await env.DB.prepare(
+    `DELETE FROM rollup_series_bucket WHERE website_id = ?1 AND unit = 'day' AND bucket IN (${dayPlaceholders})`,
+  )
+    .bind(...binds)
+    .run();
+}
+
 export async function refreshRollupStatsDaily(env: Env, websiteId: string, day: string) {
   await env.DB.prepare(
     `INSERT INTO rollup_stats_daily (website_id, day, pageviews, visitors, visits, bounces, totaltime_sec)

@@ -1,4 +1,5 @@
 import type { WebsiteStats } from './api';
+import { formatChartTimeLabel } from './chartTimeseries';
 
 export type CompareMode = 'previous' | 'year';
 
@@ -79,15 +80,7 @@ export function mergeCompareChartData(
 }
 
 function formatChartBucketLabel(raw: string, unit: string) {
-  if (unit === 'hour') {
-    const match = raw.match(/(\d{2}):00$/);
-    if (match) {
-      const hour = Number.parseInt(match[1] ?? '0', 10);
-      const d = new Date();
-      d.setHours(hour, 0, 0, 0);
-      return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-    }
-  }
+  if (unit === 'hour') return formatChartTimeLabel(raw, true);
   if (unit === 'day') {
     const match = raw.match(/^\d{4}-\d{2}-(\d{2})$/);
     if (match) return match[1] ?? raw;

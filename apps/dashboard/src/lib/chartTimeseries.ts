@@ -3,6 +3,14 @@ export type MetricsSeries = {
   visitors: { x: string; y: number }[];
 };
 
+/** Hour buckets from the API are UTC: `YYYY-MM-DD HH:00`. */
+export function parseUtcHourBucket(x: string): number | null {
+  const trimmed = x.trim();
+  if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(trimmed)) return null;
+  const ms = Date.parse(`${trimmed.replace(' ', 'T')}:00.000Z`);
+  return Number.isNaN(ms) ? null : ms;
+}
+
 export function isHourlyChartRange(startAt: number, endAt: number): boolean {
   return endAt - startAt <= 48 * 60 * 60 * 1000;
 }
@@ -16,9 +24,17 @@ export function chartUnitForRange(startAt: number, endAt: number): 'hour' | 'day
 }
 
 export function formatChartTimeLabel(x: string, hourly: boolean): string {
-  if (hourly && x.includes(' ')) {
-    const [, time] = x.split(' ');
-    return time?.slice(0, 5) ?? x;
+  if (hourly) {
+    const ms = parseUtcHourBucket(x);
+    if (ms != null) {
+      return new Date(ms).toLocaleString(undefined, {
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+    }
   }
   const parts = x.split('-');
   if (parts.length >= 3) return `${parts[1]}/${parts[2]}`;

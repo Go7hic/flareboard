@@ -22,7 +22,7 @@ const {
 
 const pageTitle = title ? `${title} - Flareboard Blog` : SITE.title;
 const canonical = new URL(Astro.url.pathname, Astro.site);
-const ogImage = new URL('/ogimg.webp', MARKETING_ORIGIN).href;
+const ogImage = new URL('/og-image.webp', MARKETING_ORIGIN).href;
 ---
 
 <!doctype html>

@@ -8,7 +8,7 @@ import { websiteReportUrl } from '../lib/websiteReportApi';
 
 export function useWebsiteReportContext(fallbackPreset: DateRangePreset = '30d') {
   const { websiteId } = useParams<{ websiteId: string }>();
-  const { range, setRange, rangeQs } = useWebsiteRange(websiteId, fallbackPreset);
+  const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, fallbackPreset);
   const [segmentId, setSegmentId] = useState('');
 
   const segmentsQuery = useQuery({
@@ -34,5 +34,6 @@ export function useWebsiteReportContext(fallbackPreset: DateRangePreset = '30d')
     segmentQs,
     segments: segmentsQuery.data ?? [],
     reportUrl,
+    timezone,
   };
 }

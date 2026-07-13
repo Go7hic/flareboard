@@ -32,7 +32,7 @@ const PAGE_SIZE = 50;
 
 export default function SessionsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
-    const { range, setRange, rangeQs } = useWebsiteRange(websiteId, '24h');
+    const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
 
   const sessionsQuery = useQuery({
     queryKey: ['sessions', websiteId, range],
@@ -51,7 +51,7 @@ export default function SessionsPage() {
       <WebsitePageShell
         websiteId={websiteId}
         pageActions={
-          <WebsiteDateExportControls range={range} onRangeChange={setRange} />
+          <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
         }
       />
 

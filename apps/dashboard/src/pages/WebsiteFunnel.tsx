@@ -12,7 +12,7 @@ import { useChartColors } from '../lib/useChartColors';
 
 export default function WebsiteFunnelPage() {
   const chartColors = useChartColors();
-  const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl } =
+  const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl, timezone } =
     useWebsiteReportContext('30d');
   const [funnelSteps, setFunnelSteps] = useState('signup,purchase');
 
@@ -46,6 +46,7 @@ export default function WebsiteFunnelPage() {
             segmentId={segmentId}
             onSegmentChange={setSegmentId}
             segments={segments}
+            timezone={timezone}
           />
         }
       />

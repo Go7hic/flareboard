@@ -15,6 +15,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Panel } from '../components/ui/panel';
+import { SITE_TIMEZONE_OPTIONS } from '@flareboard/shared/timezone';
 import { api, authenticatedFetch, type Website } from '../lib/api';
 import { t } from '../lib/i18n';
 
@@ -38,7 +39,7 @@ export default function WebsiteSettingsPage() {
   const [emailEnabled, setEmailEnabled] = useState(false);
   const [emailFrequency, setEmailFrequency] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
   const [recipientEmail, setRecipientEmail] = useState('');
-  const [emailTimezone, setEmailTimezone] = useState('UTC');
+  const [siteTimezone, setSiteTimezone] = useState('UTC');
   const [heatmapConfigJson, setHeatmapConfigJson] = useState('{"sampleRate":0.1,"enabled":true}');
   const [heatmapPreviewUrl, setHeatmapPreviewUrl] = useState('');
   const [importFormat, setImportFormat] = useState<'flareboard' | 'ga4' | 'plausible' | 'matomo'>('ga4');
@@ -95,7 +96,6 @@ export default function WebsiteSettingsPage() {
     setEmailEnabled(e.enabled);
     setEmailFrequency(e.frequency);
     setRecipientEmail(e.recipientEmail ?? '');
-    setEmailTimezone(e.timezone ?? 'UTC');
   }, [emailReportQuery.data]);
 
   useEffect(() => {
@@ -103,6 +103,7 @@ export default function WebsiteSettingsPage() {
     if (!w) return;
     setReplayEnabled(Boolean(w.replayEnabled));
     if (w.replayConfig) setReplayConfig(replayConfigFromJson(w.replayConfig));
+    setSiteTimezone(w.timezone ?? 'UTC');
     const heatmapConfig = (w as { heatmapConfig?: HeatmapConfig }).heatmapConfig;
     if (heatmapConfig) {
       setHeatmapConfigJson(JSON.stringify(heatmapConfig, null, 2));
@@ -133,12 +134,14 @@ export default function WebsiteSettingsPage() {
           replayEnabled,
           replayConfig: replayConfigToJson(replayConfig),
           heatmapConfig,
+          timezone: siteTimezone || 'UTC',
           resetAt: resetAt ? new Date(resetAt).toISOString() : undefined,
         }),
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['website', websiteId] });
+      queryClient.invalidateQueries({ queryKey: ['email-report', websiteId] });
     },
   });
 
@@ -150,7 +153,6 @@ export default function WebsiteSettingsPage() {
           enabled: emailEnabled,
           frequency: emailFrequency,
           recipientEmail: recipientEmail || undefined,
-          timezone: emailTimezone || 'UTC',
         }),
       }),
     onSuccess: () => {
@@ -245,6 +247,29 @@ export default function WebsiteSettingsPage() {
           <Panel variant="flush" className="page-settings-group">
             <form className="page-settings-form" onSubmit={onSubmit}>
               <Panel variant="accent-rail">
+                <h2 className="section-title">{t('siteTimezone')}</h2>
+                <p className="section-lead">{t('siteTimezoneHint')}</p>
+                <div className="field">
+                  <Label htmlFor="site-timezone">{t('siteTimezone')}</Label>
+                  <select
+                    id="site-timezone"
+                    className="select"
+                    value={siteTimezone}
+                    onChange={(e) => setSiteTimezone(e.target.value)}
+                  >
+                    {SITE_TIMEZONE_OPTIONS.map((tz) => (
+                      <option key={tz} value={tz}>
+                        {tz}
+                      </option>
+                    ))}
+                    {!SITE_TIMEZONE_OPTIONS.includes(siteTimezone as (typeof SITE_TIMEZONE_OPTIONS)[number]) ? (
+                      <option value={siteTimezone}>{siteTimezone}</option>
+                    ) : null}
+                  </select>
+                </div>
+              </Panel>
+
+              <Panel variant="accent-rail">
                 <h2 className="section-title">{t('sessionReplay')}</h2>
                 <label className="field" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                   <input
@@ -327,15 +352,9 @@ export default function WebsiteSettingsPage() {
                       <option value="monthly">{t('emailMonthly')}</option>
                     </select>
                   </div>
-                  <div className="field">
-                    <Label htmlFor="email-timezone">{t('emailTimezone')}</Label>
-                    <Input
-                      id="email-timezone"
-                      value={emailTimezone}
-                      onChange={(e) => setEmailTimezone(e.target.value)}
-                      placeholder="UTC"
-                    />
-                  </div>
+                  <p className="text-muted" style={{ fontSize: '0.8125rem' }}>
+                    {t('emailUsesSiteTimezone').replace('{timezone}', siteTimezone)}
+                  </p>
                   <div className="field">
                     <Label htmlFor="recipient-email">{t('recipientEmail')}</Label>
                     <Input

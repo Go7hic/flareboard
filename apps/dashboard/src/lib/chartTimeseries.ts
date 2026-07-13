@@ -1,3 +1,9 @@
+import {
+  formatDayBucketLabel,
+  formatHourBucketLabel,
+  type SiteTimezone,
+} from '@flareboard/shared/timezone';
+
 export type MetricsSeries = {
   pageviews: { x: string; y: number }[];
   visitors: { x: string; y: number }[];
@@ -23,27 +29,20 @@ export function chartUnitForRange(startAt: number, endAt: number): 'hour' | 'day
   return 'month';
 }
 
-export function formatChartTimeLabel(x: string, hourly: boolean): string {
-  if (hourly) {
-    const ms = parseUtcHourBucket(x);
-    if (ms != null) {
-      return new Date(ms).toLocaleString(undefined, {
-        month: 'numeric',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      });
-    }
-  }
-  const parts = x.split('-');
-  if (parts.length >= 3) return `${parts[1]}/${parts[2]}`;
+export function formatChartTimeLabel(
+  x: string,
+  hourly: boolean,
+  timezone: SiteTimezone = 'UTC',
+): string {
+  if (hourly) return formatHourBucketLabel(x, timezone);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(x)) return formatDayBucketLabel(x, timezone);
   return x;
 }
 
 export function mergePageviewsVisitors(
   series: MetricsSeries | undefined,
   hourly: boolean,
+  timezone: SiteTimezone = 'UTC',
 ): Array<{ x: string; pageviews: number; visitors: number }> {
   if (!series) return [];
 
@@ -63,7 +62,7 @@ export function mergePageviewsVisitors(
   return Array.from(byKey.values())
     .sort((a, b) => a.rawX.localeCompare(b.rawX))
     .map(({ rawX, pageviews, visitors }) => ({
-      x: formatChartTimeLabel(rawX, hourly),
+      x: formatChartTimeLabel(rawX, hourly, timezone),
       pageviews,
       visitors,
     }));

@@ -47,7 +47,7 @@ function AiStatCard({ label, value }: { label: string; value: string | number })
 
 export default function WebsiteAiObservabilityPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
-  const { range, setRange, rangeQs } = useWebsiteRange(websiteId, '24h');
+  const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
   const [model, setModel] = useState('');
   const [status, setStatus] = useState('');
   const [provider, setProvider] = useState('');
@@ -116,7 +116,7 @@ export default function WebsiteAiObservabilityPage() {
           <h2 className="page-title">{t('aiObservability')}</h2>
           <p className="text-muted">{t('aiObservabilityLead')}</p>
         </div>
-        <WebsiteDateExportControls range={range} onRangeChange={setRange} />
+        <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
       </div>
 
       <section className="analytics-hero-stats section-gap" aria-label={t('aiObservability')}>

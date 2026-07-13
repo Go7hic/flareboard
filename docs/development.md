@@ -146,3 +146,13 @@ pnpm typecheck
 pnpm test
 pnpm --filter @flareboard/dashboard build
 ```
+
+## Planned work
+
+Scoped features **not yet implemented**. Align here before opening implementation PRs.
+
+_No open items._
+
+### Site-wide timezone (Umami-style) — shipped
+
+One IANA timezone per website (`website.timezone`, default `UTC`). Calendar presets and chart labels use the site zone; stats API requests carry `startAt`/`endAt` UTC ms only. Email digests mirror the site timezone. Account-level dashboard overview stays UTC. Helpers live in `@flareboard/shared/timezone`.

@@ -22,7 +22,7 @@ import { useChartColors } from '../lib/useChartColors';
 export default function RevenuePage() {
   const chartColors = useChartColors();
   const { websiteId } = useParams<{ websiteId: string }>();
-    const { range, setRange, rangeQs } = useWebsiteRange(websiteId, '24h');
+    const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
 
   const revenueQuery = useQuery({
     queryKey: ['revenue-page', websiteId, range.startAt, range.endAt],
@@ -50,7 +50,7 @@ export default function RevenuePage() {
       <WebsitePageShell
         websiteId={websiteId}
         pageActions={
-          <WebsiteDateExportControls range={range} onRangeChange={setRange} />
+          <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
         }
       />
 

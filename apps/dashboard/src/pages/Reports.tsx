@@ -270,6 +270,19 @@ export default function ReportsPage() {
       >(`/api/websites/${websiteId}`),
   });
 
+  const timezone = websiteQuery.data?.timezone ?? 'UTC';
+
+  useEffect(() => {
+    setRange((prev) => {
+      if (prev.preset === 'custom') return prev;
+      return { preset: prev.preset, ...presetToRange(prev.preset, undefined, undefined, timezone) };
+    });
+    setCohortWindow((prev) => {
+      if (prev.preset === 'custom') return prev;
+      return { preset: prev.preset, ...presetToRange(prev.preset, undefined, undefined, timezone) };
+    });
+  }, [timezone]);
+
   const rangeQs = rangeQueryString(range.startAt, range.endAt);
   const segmentQs = segmentId ? `&segmentId=${encodeURIComponent(segmentId)}` : '';
   const q = (path: string) =>
@@ -613,7 +626,7 @@ export default function ReportsPage() {
               <h2 className="section-title">{t('reportConfig')}</h2>
               <div className="field">
                 <Label>{t('dateRange')}</Label>
-                <DateRangePicker value={range} onChange={setRange} popover />
+                <DateRangePicker value={range} onChange={setRange} popover timezone={timezone} />
               </div>
               <div className="field">
                 <Label htmlFor="report-website">{t('website')}</Label>
@@ -1187,7 +1200,7 @@ export default function ReportsPage() {
                 <p className="text-muted">{t('cohortConditions')}</p>
                 <div className="field">
                   <Label>{t('cohortDateWindow')}</Label>
-                  <DateRangePicker value={cohortWindow} onChange={setCohortWindow} />
+                  <DateRangePicker value={cohortWindow} onChange={setCohortWindow} timezone={timezone} />
                 </div>
                 {cohortConditions.map((cond, idx) => (
                   <div key={idx} className="stats-toolbar" style={{ flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>

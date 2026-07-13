@@ -51,7 +51,7 @@ export default function HeatmapsPage() {
   const [urlPath, setUrlPath] = useState('/');
   const [kind, setKind] = useState<'click' | 'scroll'>('click');
   const [deviceClass, setDeviceClass] = useState('');
-  const { range, setRange, rangeQs } = useWebsiteRange(websiteId, '24h');
+  const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
 
   const billingQuery = useQuery({
     queryKey: ['billing-subscription'],
@@ -198,7 +198,7 @@ export default function HeatmapsPage() {
       <WebsitePageShell
         websiteId={websiteId}
         pageActions={
-          <WebsiteDateExportControls range={range} onRangeChange={setRange} />
+          <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
         }
       />
 

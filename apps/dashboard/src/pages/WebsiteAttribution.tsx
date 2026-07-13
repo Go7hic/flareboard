@@ -86,7 +86,7 @@ function BreakdownPanel({
 }
 
 export default function WebsiteAttributionPage() {
-  const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl } =
+  const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl, timezone } =
     useWebsiteReportContext('30d');
   const [searchParams] = useSearchParams();
   const initialModel = searchParams.get('model') === 'first' ? 'first' : 'last';
@@ -125,6 +125,7 @@ export default function WebsiteAttributionPage() {
             segmentId={segmentId}
             onSegmentChange={setSegmentId}
             segments={segments}
+            timezone={timezone}
           />
         }
       />

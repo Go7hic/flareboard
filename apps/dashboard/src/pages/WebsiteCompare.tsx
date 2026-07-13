@@ -81,7 +81,7 @@ function KpiSkeleton() {
 
 export default function WebsiteComparePage() {
   const chartColors = useChartColors();
-  const { websiteId, range, setRange, segmentId, setSegmentId, segmentQs, segments, rangeQs } =
+  const { websiteId, range, setRange, segmentId, setSegmentId, segmentQs, segments, rangeQs, timezone } =
     useWebsiteReportContext('24h');
   const [compareMode, setCompareMode] = useState<CompareMode>('previous');
   const [metricTab, setMetricTab] = useState<MetricTab>('path');
@@ -126,8 +126,9 @@ export default function WebsiteComparePage() {
       compareQuery.data.series.primary,
       compareQuery.data.series.compare,
       compareQuery.data.unit,
+      timezone,
     );
-  }, [compareQuery.data]);
+  }, [compareQuery.data, timezone]);
 
   const kpiMetrics = useMemo(() => {
     if (!compareQuery.data) return null;
@@ -178,6 +179,7 @@ export default function WebsiteComparePage() {
             segmentId={segmentId}
             onSegmentChange={setSegmentId}
             segments={segments}
+            timezone={timezone}
           />
         }
       />

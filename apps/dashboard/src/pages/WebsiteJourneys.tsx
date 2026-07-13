@@ -18,7 +18,7 @@ import {
 } from '../lib/journey-utils';
 
 export default function WebsiteJourneysPage() {
-  const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl } =
+  const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl, timezone } =
     useWebsiteReportContext('30d');
   const [displayDepth, setDisplayDepth] = useState(DEFAULT_JOURNEY_DEPTH);
   const [selectedColumns, setSelectedColumns] = useState<JourneyColumnSelection>(() =>
@@ -64,8 +64,9 @@ export default function WebsiteJourneysPage() {
               onRangeChange={setRange}
               segmentId={segmentId}
               onSegmentChange={setSegmentId}
-              segments={segments}
-              leading={
+            segments={segments}
+            timezone={timezone}
+            leading={
                 hasData ? (
                   <SegmentTabs
                     tabs={depthTabs}

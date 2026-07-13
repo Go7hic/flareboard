@@ -8,7 +8,7 @@ import { api } from '../lib/api';
 import { t } from '../lib/i18n';
 
 export default function WebsiteRetentionPage() {
-  const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl } =
+  const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl, timezone } =
     useWebsiteReportContext('30d');
 
   const retentionQuery = useQuery({
@@ -31,6 +31,7 @@ export default function WebsiteRetentionPage() {
             segmentId={segmentId}
             onSegmentChange={setSegmentId}
             segments={segments}
+            timezone={timezone}
           />
         }
       />

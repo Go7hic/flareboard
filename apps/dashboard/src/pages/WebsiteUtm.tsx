@@ -45,7 +45,7 @@ const UTM_SECTIONS: Array<{ key: keyof Omit<UtmReportResponse, 'segmentId' | 'st
 ];
 
 export default function WebsiteUtmPage() {
-  const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl } =
+  const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl, timezone } =
     useWebsiteReportContext('30d');
 
   const utmQuery = useQuery({
@@ -68,6 +68,7 @@ export default function WebsiteUtmPage() {
             segmentId={segmentId}
             onSegmentChange={setSegmentId}
             segments={segments}
+            timezone={timezone}
           />
         }
       />

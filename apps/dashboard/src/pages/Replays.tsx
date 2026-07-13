@@ -86,7 +86,7 @@ function ReplayMetaBadges({ replay }: { replay: ReplayRow | SavedReplay }) {
 export default function ReplaysPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
     const queryClient = useQueryClient();
-  const { range, setRange } = useWebsiteRange(websiteId, '24h');
+  const { range, setRange, timezone } = useWebsiteRange(websiteId, '24h');
   const [selectedVisit, setSelectedVisit] = useState<string | null>(null);
   const [saveName, setSaveName] = useState('');
   const [replayFilter, setReplayFilter] = useState<ReplayFilter>('all');
@@ -211,7 +211,7 @@ export default function ReplaysPage() {
       <WebsitePageShell
         websiteId={websiteId}
         pageActions={
-          <WebsiteDateExportControls range={range} onRangeChange={setRange} />
+          <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
         }
       />
 

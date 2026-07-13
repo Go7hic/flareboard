@@ -5,7 +5,7 @@ import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
 import { t } from '../lib/i18n';
 
 export default function WebsiteGoalsPage() {
-  const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl } =
+  const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl, timezone } =
     useWebsiteReportContext('30d');
 
   return (
@@ -21,6 +21,7 @@ export default function WebsiteGoalsPage() {
               segmentId={segmentId}
               onSegmentChange={setSegmentId}
               segments={segments}
+              timezone={timezone}
             />
           </div>
         }

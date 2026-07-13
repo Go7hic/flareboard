@@ -63,7 +63,7 @@ Forkers: replace D1, KV, R2, Queues, and Durable Object bindings in each app's `
 
 | | |
 |---|---|
-| [Development](docs/development.md) | Local dev, scripts, smoke tests |
+| [Development](docs/development.md) | Local dev, scripts, smoke tests, planned work |
 | [API reference](docs/api.md) | REST and ingest endpoints |
 | [Database](packages/db/README.md) | Schema and migrations |
 | [Security](SECURITY.md) | Vulnerability reporting |

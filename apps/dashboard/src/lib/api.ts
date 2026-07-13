@@ -182,6 +182,7 @@ export interface Website {
   createdAt?: string | number;
   replayEnabled?: boolean;
   goalConfig?: { goals: Array<{ event: string; target: number; period: string }> };
+  timezone?: string;
 }
 
 export interface StatValue {

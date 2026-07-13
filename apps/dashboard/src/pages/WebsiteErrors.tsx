@@ -53,7 +53,7 @@ export default function WebsiteErrorsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
   const queryClient = useQueryClient();
   const { canEdit } = useWebsitePermissions(websiteId, 'errors');
-  const { range, setRange, rangeQs } = useWebsiteRange(websiteId, '24h');
+  const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
   const [expandedIssue, setExpandedIssue] = useState<string | null>(null);
   const [releaseFilter, setReleaseFilter] = useState('');
   const [environmentFilter, setEnvironmentFilter] = useState('');
@@ -250,7 +250,7 @@ export default function WebsiteErrorsPage() {
                   {t('reset')}
                 </Button>
               ) : null}
-              <DateRangePicker value={range} onChange={setRange} popover />
+              <DateRangePicker value={range} onChange={setRange} popover timezone={timezone} />
             </div>
           </div>
         }

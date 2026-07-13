@@ -62,6 +62,7 @@ export function mergeCompareChartData(
   primary: MetricsSeries,
   compare: MetricsSeries,
   unit: 'hour' | 'day' | 'month' | 'year' | string,
+  timezone = 'UTC',
 ) {
   const len = Math.max(primary.pageviews.length, compare.pageviews.length, 1);
   const rows = [];
@@ -69,7 +70,7 @@ export function mergeCompareChartData(
     const currentPv = primary.pageviews[i];
     const label = currentPv?.x ?? compare.pageviews[i]?.x ?? String(i);
     rows.push({
-      x: formatChartBucketLabel(label, unit),
+      x: formatChartBucketLabel(label, unit, timezone),
       pageviews: currentPv?.y ?? 0,
       visitors: primary.visitors[i]?.y ?? 0,
       pageviewsPrev: compare.pageviews[i]?.y ?? 0,
@@ -79,12 +80,9 @@ export function mergeCompareChartData(
   return rows;
 }
 
-function formatChartBucketLabel(raw: string, unit: string) {
-  if (unit === 'hour') return formatChartTimeLabel(raw, true);
-  if (unit === 'day') {
-    const match = raw.match(/^\d{4}-\d{2}-(\d{2})$/);
-    if (match) return match[1] ?? raw;
-  }
+function formatChartBucketLabel(raw: string, unit: string, timezone: string) {
+  if (unit === 'hour') return formatChartTimeLabel(raw, true, timezone);
+  if (unit === 'day') return formatChartTimeLabel(raw, false, timezone);
   if (unit === 'month') return raw;
   return raw;
 }

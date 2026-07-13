@@ -2,7 +2,8 @@ import type { Context } from 'hono';
 import { eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
 import { ENTITY_TYPE, createShareSchema, statsQuerySchema, updateShareSchema, uuid } from '@flareboard/shared';
-import { rolling24hRange, utcCalendarDaysRange } from '@flareboard/shared/date-range';
+import { rolling24hRange } from '@flareboard/shared/date-range';
+import { siteCalendarDaysRange } from '@flareboard/shared/timezone';
 import type { Env } from '../env';
 import { canAccessTeamResource, canAccessWebsite, canMutateTeamResource, canMutateWebsite } from '../lib/access';
 import {
@@ -172,20 +173,24 @@ export async function handleDelete(c: Ctx) {
   return json({ ok: true });
 }
 
-function presetRange(preset: unknown) {
+function presetRange(preset: unknown, timezone: string) {
   if (preset === '24h') return rolling24hRange();
-  if (preset === '30d') return utcCalendarDaysRange(30);
-  if (preset === '90d') return utcCalendarDaysRange(90);
-  return utcCalendarDaysRange(7);
+  if (preset === '30d') return siteCalendarDaysRange(30, timezone);
+  if (preset === '90d') return siteCalendarDaysRange(90, timezone);
+  return siteCalendarDaysRange(7, timezone);
 }
 
-function parsePublicRange(c: Context<{ Bindings: Env }>, defaultPreset?: unknown) {
+function parsePublicRange(
+  c: Context<{ Bindings: Env }>,
+  defaultPreset?: unknown,
+  timezone = 'UTC',
+) {
   const query = statsQuerySchema.safeParse(c.req.query());
   if (query.success && query.data.startAt != null && query.data.endAt != null) {
     const unit = query.data.unit ?? 'day';
     return { startAt: query.data.startAt, endAt: query.data.endAt, unit };
   }
-  const { startAt, endAt } = presetRange(defaultPreset ?? '24h');
+  const { startAt, endAt } = presetRange(defaultPreset ?? '24h', timezone);
   const unit = query.success && query.data.unit ? query.data.unit : 'day';
   return { startAt, endAt, unit };
 }
@@ -256,7 +261,7 @@ export async function handlePublicGet(c: Context<{ Bindings: Env }>) {
   const website = await getWebsiteById(c.env, params.websiteId);
   if (!website) return notFound();
 
-  const { startAt, endAt, unit } = parsePublicRange(c);
+  const { startAt, endAt, unit } = parsePublicRange(c, undefined, website.timezone ?? 'UTC');
   const type = c.req.query('type');
 
   if (type) {
@@ -287,7 +292,7 @@ export async function handlePublicGet(c: Context<{ Bindings: Env }>) {
       const stats = await getWebsiteStats(c.env, website.websiteId, startAt, endAt);
       const series = await getPageviews(c.env, website.websiteId, startAt, endAt, unit);
       return {
-        website: { id: website.websiteId, name: website.name, domain: website.domain },
+        website: { id: website.websiteId, name: website.name, domain: website.domain, timezone: website.timezone ?? 'UTC' },
         share: { name: share.name, slug: share.slug },
         ...stats,
         timeseries: series,

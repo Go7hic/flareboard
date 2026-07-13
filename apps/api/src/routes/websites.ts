@@ -28,6 +28,7 @@ function serializeWebsite(website: Website) {
     replayConfig: website.replayConfig ?? undefined,
     heatmapConfig: website.heatmapConfig ?? undefined,
     goalConfig: website.goalConfig ?? undefined,
+    timezone: website.timezone ?? 'UTC',
     createdAt: website.createdAt,
   };
 }
@@ -170,9 +171,17 @@ export async function handleUpdate(c: Ctx) {
         parsed.data.goalConfig !== undefined ? parsed.data.goalConfig : website.goalConfig,
       retentionDays:
         parsed.data.retentionDays !== undefined ? parsed.data.retentionDays : website.retentionDays,
+      timezone: parsed.data.timezone ?? website.timezone,
       updatedAt: new Date(),
     })
     .where(eq(schema.website.websiteId, website.websiteId));
+
+  if (parsed.data.timezone) {
+    await db
+      .update(schema.websiteEmailReport)
+      .set({ timezone: parsed.data.timezone, updatedAt: new Date() })
+      .where(eq(schema.websiteEmailReport.websiteId, website.websiteId));
+  }
 
   const updated = await getWebsiteById(c.env, website.websiteId);
   await logAdminAction(c.env, c.get('user').userId, 'update', 'website', website.websiteId, {

@@ -30,7 +30,7 @@ export async function handleGet(c: Ctx) {
     enabled: row?.enabled ?? false,
     frequency: row?.frequency ?? 'weekly',
     recipientEmail: row?.recipientEmail ?? undefined,
-    timezone: row?.timezone ?? 'UTC',
+    timezone: website.timezone ?? row?.timezone ?? 'UTC',
     lastSentAt: row?.lastSentAt ?? undefined,
   });
 }
@@ -67,6 +67,8 @@ export async function handleUpdate(c: Ctx) {
     .where(eq(schema.websiteEmailReport.websiteId, websiteId))
     .limit(1);
 
+  const siteTimezone = website.timezone ?? 'UTC';
+
   if (existing) {
     await db
       .update(schema.websiteEmailReport)
@@ -74,7 +76,7 @@ export async function handleUpdate(c: Ctx) {
         enabled: parsed.data.enabled,
         frequency: parsed.data.frequency,
         recipientEmail: parsed.data.recipientEmail ?? null,
-        timezone: parsed.data.timezone ?? existing.timezone ?? 'UTC',
+        timezone: siteTimezone,
         updatedAt: now,
       })
       .where(eq(schema.websiteEmailReport.websiteId, websiteId));
@@ -84,7 +86,7 @@ export async function handleUpdate(c: Ctx) {
       enabled: parsed.data.enabled,
       frequency: parsed.data.frequency,
       recipientEmail: parsed.data.recipientEmail ?? null,
-      timezone: parsed.data.timezone ?? 'UTC',
+      timezone: siteTimezone,
       createdAt: now,
       updatedAt: now,
     });

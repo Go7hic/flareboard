@@ -1,4 +1,5 @@
 import { EVENT_TYPE, getPlan } from '@flareboard/shared';
+import { siteCalendarDaysRange } from '@flareboard/shared/timezone';
 import type { Env } from '../env';
 import { isHostedMode } from './billing';
 import { sendEmail } from './email';
@@ -74,13 +75,12 @@ async function websiteDigest(env: Env, websiteId: string, startAt: number, endAt
   };
 }
 
-function periodForFrequency(frequency: string) {
-  const endAt = Date.now();
-  const days = frequency === 'daily' ? 1 : frequency === 'monthly' ? 30 : 7;
-  const startAt = endAt - days * 24 * 60 * 60 * 1000;
+function periodForFrequency(frequency: string, timezone: string) {
+  const dayCount = frequency === 'daily' ? 1 : frequency === 'monthly' ? 30 : 7;
+  const { startAt, endAt } = siteCalendarDaysRange(dayCount, timezone);
   const label =
     frequency === 'daily' ? 'Daily' : frequency === 'monthly' ? 'Monthly' : 'Weekly';
-  return { startAt, endAt, label, days };
+  return { startAt, endAt, label, days: dayCount };
 }
 
 function formatDigest(
@@ -208,7 +208,7 @@ export async function runScheduledEmailReports(env: Env, cron: string) {
     `SELECT r.website_id as websiteId, w.name as websiteName, w.user_id as userId,
             s.plan_id as planId, r.frequency,
             COALESCE(r.recipient_email, u.email) as recipientEmail,
-            COALESCE(r.timezone, 'UTC') as timezone,
+            COALESCE(w.timezone, r.timezone, 'UTC') as timezone,
             r.last_sent_at as lastSentAt
      FROM website_email_report r
      INNER JOIN website w ON w.website_id = r.website_id
@@ -252,7 +252,7 @@ export async function runScheduledEmailReports(env: Env, cron: string) {
     }
 
     try {
-      const { startAt, endAt, label, days } = periodForFrequency(row.frequency);
+      const { startAt, endAt, label, days } = periodForFrequency(row.frequency, row.timezone);
       const digest = await websiteDigest(env, row.websiteId, startAt, endAt);
 
       if (digest.pageviews === 0 && digest.sessions === 0) {

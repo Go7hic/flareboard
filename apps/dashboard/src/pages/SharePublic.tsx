@@ -13,10 +13,10 @@ import {
 import { BoardWidgets } from '../components/BoardWidgets';
 import { BrandLogo } from '../components/BrandLogo';
 import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
+import { formatChartTimeLabel, isHourlyChartRange } from '../lib/chartTimeseries';
 import { API_URL, type WebsiteStats } from '../lib/api';
 import { parseBoardConfig, type BoardRangePreset } from '../lib/board-config';
 import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/dateRange';
-import { formatChartTimeLabel, isHourlyChartRange } from '../lib/chartTimeseries';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
 

@@ -92,14 +92,6 @@ export function CohortFormDialog({
   }, [open, cohortQuery.data, isEdit, timezone]);
 
   useEffect(() => {
-    if (!open || dateWindow.preset === 'custom') return;
-    setDateWindow((prev) => {
-      if (prev.preset === 'custom') return prev;
-      return { preset: prev.preset, ...presetToRange(prev.preset, undefined, undefined, timezone) };
-    });
-  }, [open, timezone, dateWindow.preset]);
-
-  useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -209,7 +201,7 @@ export function CohortFormDialog({
 
             <div className="field">
               <Label>{t('cohortDateWindow')}</Label>
-              <DateRangePicker value={dateWindow} onChange={setDateWindow} />
+              <DateRangePicker value={dateWindow} onChange={setDateWindow} timezone={timezone} />
             </div>
 
             {conditions.length > 1 ? (

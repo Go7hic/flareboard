@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isValidSiteTimezone } from './timezone';
 
 export const urlOrPathParam = z.string().max(500);
 
@@ -557,6 +558,11 @@ export const updateWebsiteSchema = z.object({
   heatmapConfig: heatmapConfigSchema.nullable().optional(),
   goalConfig: goalConfigSchema.nullable().optional(),
   retentionDays: z.number().int().min(1).max(3650).nullable().optional(),
+  timezone: z
+    .string()
+    .max(64)
+    .refine(isValidSiteTimezone, { message: 'Invalid IANA timezone' })
+    .optional(),
 });
 
 export const updateProfileSchema = z.object({

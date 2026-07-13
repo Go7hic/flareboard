@@ -92,6 +92,7 @@ export const website = sqliteTable(
     goalConfig: text('goal_config', { mode: 'json' }),
     // Null keeps raw event data forever; a positive value purges rows older than N days.
     retentionDays: integer('retention_days'),
+    timezone: text('timezone').notNull().default('UTC'),
   },
   (t) => [
     index('website_user_idx').on(t.userId),

@@ -30,7 +30,7 @@ type StickinessResponse = {
 
 export default function WebsiteStickinessPage() {
   const chartColors = useChartColors();
-  const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl } =
+  const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl, timezone } =
     useWebsiteReportContext('30d');
   const [eventName, setEventName] = useState('');
   const [actor, setActor] = useState<'person' | 'session'>('person');
@@ -70,6 +70,7 @@ export default function WebsiteStickinessPage() {
             segmentId={segmentId}
             onSegmentChange={setSegmentId}
             segments={segments}
+            timezone={timezone}
           />
         }
       />

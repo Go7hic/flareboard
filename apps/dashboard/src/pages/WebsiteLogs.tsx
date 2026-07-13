@@ -60,7 +60,7 @@ export default function WebsiteLogsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
   const queryClient = useQueryClient();
   const { canEdit } = useWebsitePermissions(websiteId, 'logs');
-  const { range, setRange, rangeQs } = useWebsiteRange(websiteId, '24h');
+  const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
   const [tab, setTab] = useState<LogsTab>('events');
   const [level, setLevel] = useState('');
   const [search, setSearch] = useState('');
@@ -213,7 +213,7 @@ export default function WebsiteLogsPage() {
           <h2 className="page-title">{t('logs')}</h2>
           <p className="text-muted">{t('logsLead')}</p>
         </div>
-        <WebsiteDateExportControls range={range} onRangeChange={setRange} />
+        <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
       </div>
 
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}

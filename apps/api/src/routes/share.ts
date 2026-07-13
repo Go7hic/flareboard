@@ -292,7 +292,7 @@ export async function handlePublicGet(c: Context<{ Bindings: Env }>) {
       const stats = await getWebsiteStats(c.env, website.websiteId, startAt, endAt);
       const series = await getPageviews(c.env, website.websiteId, startAt, endAt, unit);
       return {
-        website: { id: website.websiteId, name: website.name, domain: website.domain },
+        website: { id: website.websiteId, name: website.name, domain: website.domain, timezone: website.timezone ?? 'UTC' },
         share: { name: share.name, slug: share.slug },
         ...stats,
         timeseries: series,

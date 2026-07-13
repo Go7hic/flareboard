@@ -17,6 +17,7 @@ export function CompareReportControls({
   segmentId,
   onSegmentChange,
   segments,
+  timezone = 'UTC',
 }: {
   range: { preset: DateRangePreset; startAt: number; endAt: number };
   onRangeChange: (next: { preset: DateRangePreset; startAt: number; endAt: number }) => void;
@@ -25,6 +26,7 @@ export function CompareReportControls({
   segmentId?: string;
   onSegmentChange?: (id: string) => void;
   segments?: Segment[];
+  timezone?: string;
 }) {
   return (
     <div className="stats-header-controls compare-report-controls">
@@ -37,7 +39,7 @@ export function CompareReportControls({
           onCompareChange={() => {}}
         />
       ) : null}
-      <DateRangePicker value={range} onChange={onRangeChange} popover />
+      <DateRangePicker value={range} onChange={onRangeChange} popover timezone={timezone} />
       <span className="compare-vs-label" aria-hidden>
         {t('compareVs')}
       </span>

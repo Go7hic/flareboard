@@ -13,19 +13,39 @@ const PRESET_LABEL_KEYS: Record<(typeof PRESET_ORDER)[number], string> = {
   '90d': 'datePreset90d',
 };
 
-function toDatetimeLocal(ms: number): string {
-  const d = new Date(ms);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function toDatetimeLocal(ms: number, timezone: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(ms));
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? '00';
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
 }
 
-function formatRangeLabel(startAt: number, endAt: number): string {
-  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+function formatRangeLabel(startAt: number, endAt: number, timezone: string): string {
+  const opts: Intl.DateTimeFormatOptions = {
+    timeZone: timezone,
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  };
   return `${new Date(startAt).toLocaleString(undefined, opts)} – ${new Date(endAt).toLocaleString(undefined, opts)}`;
 }
 
-function presetLabel(preset: DateRangePreset, startAt: number, endAt: number): string {
-  if (preset === 'custom') return formatRangeLabel(startAt, endAt);
+function presetLabel(
+  preset: DateRangePreset,
+  startAt: number,
+  endAt: number,
+  timezone: string,
+): string {
+  if (preset === 'custom') return formatRangeLabel(startAt, endAt, timezone);
   return t(PRESET_LABEL_KEYS[preset]);
 }
 
@@ -34,11 +54,13 @@ export function DateRangePicker({
   onChange,
   compact = false,
   popover = false,
+  timezone = 'UTC',
 }: {
   value: { preset: DateRangePreset; startAt: number; endAt: number };
   onChange: (next: { preset: DateRangePreset; startAt: number; endAt: number }) => void;
   compact?: boolean;
   popover?: boolean;
+  timezone?: string;
 }) {
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
@@ -50,10 +72,10 @@ export function DateRangePicker({
 
   useEffect(() => {
     if (value.preset === 'custom') {
-      setCustomStart(toDatetimeLocal(value.startAt));
-      setCustomEnd(toDatetimeLocal(value.endAt));
+      setCustomStart(toDatetimeLocal(value.startAt, timezone));
+      setCustomEnd(toDatetimeLocal(value.endAt, timezone));
     }
-  }, [value.preset, value.startAt, value.endAt]);
+  }, [value.preset, value.startAt, value.endAt, timezone]);
 
   useEffect(() => {
     if (!popover || !popoverOpen) return;
@@ -80,7 +102,7 @@ export function DateRangePicker({
   }
 
   function applyPreset(preset: DateRangePreset, closePopover = false) {
-    const { startAt, endAt } = presetToRange(preset, customStart, customEnd);
+    const { startAt, endAt } = presetToRange(preset, customStart, customEnd, timezone);
     onChange({ preset, startAt, endAt });
     if (preset !== 'custom') {
       setDetailsOpen(false);
@@ -91,8 +113,8 @@ export function DateRangePicker({
 
   function prefillCustomFromValue() {
     if (value.preset !== 'custom') {
-      setCustomStart(toDatetimeLocal(value.startAt));
-      setCustomEnd(toDatetimeLocal(value.endAt));
+      setCustomStart(toDatetimeLocal(value.startAt, timezone));
+      setCustomEnd(toDatetimeLocal(value.endAt, timezone));
     }
   }
 
@@ -176,7 +198,7 @@ export function DateRangePicker({
             <line x1="3" y1="10" x2="21" y2="10" />
           </svg>
           <span className="date-range-picker-trigger-label">
-            {presetLabel(value.preset, value.startAt, value.endAt)}
+            {presetLabel(value.preset, value.startAt, value.endAt, timezone)}
           </span>
           <svg
             className="date-range-picker-trigger-chevron"

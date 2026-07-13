@@ -30,10 +30,10 @@ See [SSO](sso.md) for token exchange details.
 | Method | Path | Auth |
 |--------|------|------|
 | GET/POST | `/api/websites` | Bearer |
-| GET/PATCH/DELETE | `/api/websites/:websiteId` | Bearer |
+| GET/PATCH/DELETE | `/api/websites/:websiteId` | Bearer — PATCH may include `timezone` (IANA); responses include `timezone` |
 | GET | `/api/websites/:websiteId/permissions` | Bearer |
 | GET | `/api/websites/:websiteId/audit` | Bearer |
-| GET | `/api/websites/:websiteId/stats` | Bearer — optional `segmentId` |
+| GET | `/api/websites/:websiteId/stats` | Bearer — optional `segmentId`; ranges are `startAt`/`endAt` UTC ms (dashboard resolves site-local calendar presets client-side) |
 | GET | `/api/websites/:websiteId/stats/overview` | Bearer — fused KPIs + series; optional `segmentId`, `type` |
 | GET | `/api/websites/:websiteId/stats/compare` | Bearer — optional `segmentId` |
 | GET | `/api/websites/:websiteId/pageviews` | Bearer — optional `segmentId` |

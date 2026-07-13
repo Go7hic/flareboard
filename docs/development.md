@@ -153,7 +153,7 @@ Scoped features **not yet implemented**. Align here before opening implementatio
 
 | Item | Status | Decision date |
 |------|--------|---------------|
-| [Site-wide timezone (Umami-style)](#site-wide-timezone-umami-style) | Planned | 2026-07-09 |
+| [Site-wide timezone (Umami-style)](#site-wide-timezone-umami-style) | Shipped | 2026-07-09 |
 
 ### Site-wide timezone (Umami-style)
 
@@ -170,18 +170,18 @@ Adopt **one timezone per website** for analytics display and calendar date range
 - Stats API queries pass `timezone` (or read it from the website record).
 - Presets like **Today**, **Last 7 days**, and chart axes use that **single site timezone**, not the viewer's `Intl` default.
 
-#### Current state (interim)
+#### Current state
 
-| Layer | Today |
-|-------|-------|
+| Layer | Behavior |
+|-------|----------|
 | **Ingest / storage** | `website_event.created_at` and session timestamps are UTC ms. |
-| **Rollups** | Hour and day buckets are **UTC-aligned** (`YYYY-MM-DD HH:00` for hours). |
-| **Calendar presets (7d / 30d / 90d)** | `utcCalendarDaysRange()` in `@flareboard/shared/date-range` — UTC midnight boundaries. |
+| **Rollups** | Hour and day buckets remain **UTC-aligned**. Site-local calendar presets may miss the daily-rollup fast path and fall back to raw queries (correct totals). |
+| **Calendar presets (7d / 30d / 90d)** | `siteCalendarDaysRange()` in `@flareboard/shared/timezone` — site-local midnights → UTC ms. |
 | **Rolling 24h** | Absolute `now - 24h` → `now` (`rolling24hRange`). |
-| **Chart labels** | Browser-local formatting via `formatChartTimeLabel()` (dashboard interim fix, commit `967fbee`). |
-| **Site timezone setting** | **None on `website`.** Only `website_email_report.timezone` exists for scheduled email send hour. |
+| **Chart labels** | Site timezone via `formatChartTimeLabel(..., website.timezone)`. |
+| **Site timezone setting** | `website.timezone` (IANA), editable under Website settings. Mirrored to `website_email_report.timezone` for digests. |
 
-Known gap: a UTC+8 team can see calendar presets that do not match "today" in their business timezone, while hourly labels follow each viewer's laptop clock — inconsistent and confusing for shared dashboards.
+Account-level dashboard overview stays UTC (no single site timezone).
 
 #### Target state
 

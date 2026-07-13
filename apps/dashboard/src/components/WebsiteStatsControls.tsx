@@ -22,6 +22,7 @@ export function WebsiteStatsControls({
   segments,
   compareEnabled,
   onCompareChange,
+  timezone = 'UTC',
 }: {
   websiteId: string;
   range: { preset: DateRangePreset; startAt: number; endAt: number };
@@ -33,6 +34,7 @@ export function WebsiteStatsControls({
   segments: Segment[];
   compareEnabled: boolean;
   onCompareChange: (enabled: boolean) => void;
+  timezone?: string;
 }) {
   return (
     <div className="stats-header-row">
@@ -45,7 +47,7 @@ export function WebsiteStatsControls({
           compareEnabled={compareEnabled}
           onCompareChange={onCompareChange}
         />
-        <DateRangePicker value={range} onChange={onRangeChange} popover />
+        <DateRangePicker value={range} onChange={onRangeChange} popover timezone={timezone} />
         <ExportMenu
           onExport={onExport}
           disabled={!exportAllowed}

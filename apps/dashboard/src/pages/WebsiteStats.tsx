@@ -76,7 +76,7 @@ export default function WebsiteStatsPage() {
   const segmentFromUrl = searchParams.get('segment') ?? '';
   const activeSegmentId = segmentFromUrl || segmentId;
   const cohortId = searchParams.get('cohort') ?? '';
-  const { range, setRange, rangeQs } = useWebsiteRange(websiteId, '24h');
+  const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
   const exportCsv = useWebsiteExport(websiteId, rangeQs);
   const segmentQs = activeSegmentId ? `&segmentId=${encodeURIComponent(activeSegmentId)}` : '';
   const cohortQs = cohortId ? `&cohort=${encodeURIComponent(cohortId)}` : '';
@@ -154,8 +154,8 @@ export default function WebsiteStatsPage() {
 
   const stats = overviewQuery.data?.stats;
   const chartData = useMemo(
-    () => mergePageviewsVisitors(overviewQuery.data?.timeseries, hourly),
-    [overviewQuery.data?.timeseries, hourly],
+    () => mergePageviewsVisitors(overviewQuery.data?.timeseries, hourly, timezone),
+    [overviewQuery.data?.timeseries, hourly, timezone],
   );
   const chartLoading = overviewQuery.isLoading;
   const statsLoading = overviewQuery.isLoading && !stats;
@@ -201,6 +201,7 @@ export default function WebsiteStatsPage() {
               segments={segmentsQuery.data ?? []}
               compareEnabled={compareEnabled}
               onCompareChange={setCompareEnabled}
+              timezone={timezone}
             />
           ) : null
         }

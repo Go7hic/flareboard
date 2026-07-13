@@ -180,9 +180,6 @@ export default function InsightsPage() {
   const [description, setDescription] = useState('');
   const [type, setType] = useState<InsightType>('trend');
   const [query, setQuery] = useState<InsightQuery>(DEFAULT_QUERY);
-  const range = useMemo(() => presetToRange('30d'), []);
-  const rangeQs = rangeQueryString(range.startAt, range.endAt);
-  const { canEdit } = useWebsitePermissions(websiteId, 'analytics');
 
   const websitesQuery = useQuery({
     queryKey: ['websites'],
@@ -190,6 +187,11 @@ export default function InsightsPage() {
   });
 
   const websites = websitesQuery.data ?? [];
+  const timezone = websites.find((w) => w.id === websiteId)?.timezone ?? 'UTC';
+  const range = useMemo(() => presetToRange('30d', undefined, undefined, timezone), [timezone]);
+  const rangeQs = rangeQueryString(range.startAt, range.endAt);
+  const { canEdit } = useWebsitePermissions(websiteId, 'analytics');
+
   useEffect(() => {
     if (!websiteId && websites.length) {
       setWebsiteId(websites[0].id);

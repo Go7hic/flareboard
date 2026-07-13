@@ -2,9 +2,14 @@ export type DateRangePreset = '24h' | '7d' | '30d' | '90d' | 'custom';
 
 import {
   rolling24hRange,
-  utcCalendarDaysRange,
   type UtcCalendarPreset,
 } from '@flareboard/shared/date-range';
+import {
+  DEFAULT_SITE_TIMEZONE,
+  siteCalendarDaysRange,
+  siteCustomRange,
+  type SiteTimezone,
+} from '@flareboard/shared/timezone';
 
 const CALENDAR_PRESETS: Record<UtcCalendarPreset, number> = {
   '7d': 7,
@@ -12,13 +17,18 @@ const CALENDAR_PRESETS: Record<UtcCalendarPreset, number> = {
   '90d': 90,
 };
 
-export function presetToRange(preset: DateRangePreset, customStart?: string, customEnd?: string) {
+export function presetToRange(
+  preset: DateRangePreset,
+  customStart?: string,
+  customEnd?: string,
+  timezone: SiteTimezone = DEFAULT_SITE_TIMEZONE,
+) {
   if (preset === 'custom' && customStart && customEnd) {
-    return { startAt: new Date(customStart).getTime(), endAt: new Date(customEnd).getTime() };
+    return siteCustomRange(customStart, customEnd, timezone);
   }
   if (preset === '24h') return rolling24hRange();
   if (preset in CALENDAR_PRESETS) {
-    return utcCalendarDaysRange(CALENDAR_PRESETS[preset as UtcCalendarPreset]);
+    return siteCalendarDaysRange(CALENDAR_PRESETS[preset as UtcCalendarPreset], timezone);
   }
   return rolling24hRange();
 }

@@ -30,7 +30,7 @@ export function saveWebsiteRange(websiteId: string, range: StoredRange) {
   }
 }
 
-export function defaultRange(preset: DateRangePreset = '7d'): StoredRange {
-  const { startAt, endAt } = presetToRange(preset);
+export function defaultRange(preset: DateRangePreset = '7d', timezone = 'UTC'): StoredRange {
+  const { startAt, endAt } = presetToRange(preset, undefined, undefined, timezone);
   return { preset, startAt, endAt };
 }

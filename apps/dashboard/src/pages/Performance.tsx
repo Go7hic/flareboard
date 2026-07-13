@@ -214,7 +214,7 @@ function breakdownChartData(rows: PerformanceBreakdownRow[], metric: BreakdownMe
 export default function PerformancePage() {
   const chartColors = useChartColors();
   const { websiteId } = useParams<{ websiteId: string }>();
-    const { range, setRange, rangeQs } = useWebsiteRange(websiteId, '24h');
+    const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
   const [breakdownTab, setBreakdownTab] = useState<BreakdownTab>('url');
   const [breakdownMetric, setBreakdownMetric] = useState<BreakdownMetric>('lcp');
   const [trendMetric, setTrendMetric] = useState<TrendMetric>('lcp');
@@ -261,7 +261,7 @@ export default function PerformancePage() {
       <WebsitePageShell
         websiteId={websiteId}
         pageActions={
-          <WebsiteDateExportControls range={range} onRangeChange={setRange} />
+          <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
         }
       />
 

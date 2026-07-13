@@ -17,6 +17,7 @@ export function WebsiteReportControls({
   segments,
   showSegment = true,
   leading,
+  timezone = 'UTC',
 }: {
   range: { preset: DateRangePreset; startAt: number; endAt: number };
   onRangeChange: (next: { preset: DateRangePreset; startAt: number; endAt: number }) => void;
@@ -26,6 +27,7 @@ export function WebsiteReportControls({
   showSegment?: boolean;
   /** Controls rendered before segment / date filters (e.g. journey depth). */
   leading?: ReactNode;
+  timezone?: string;
 }) {
   return (
     <div className="stats-header-controls">
@@ -39,7 +41,7 @@ export function WebsiteReportControls({
           onCompareChange={() => {}}
         />
       ) : null}
-      <DateRangePicker value={range} onChange={onRangeChange} popover />
+      <DateRangePicker value={range} onChange={onRangeChange} popover timezone={timezone} />
     </div>
   );
 }

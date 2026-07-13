@@ -5,7 +5,7 @@ import { DateRangePicker } from './DateRangePicker';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { api } from '../lib/api';
+import { api, type Website } from '../lib/api';
 import { type DateRangePreset, presetToRange } from '../lib/dateRange';
 import { t } from '../lib/i18n';
 
@@ -25,8 +25,8 @@ type CohortRow = {
   };
 };
 
-function defaultWindow() {
-  return { preset: '30d' as DateRangePreset, ...presetToRange('30d') };
+function defaultWindow(timezone = 'UTC') {
+  return { preset: '30d' as DateRangePreset, ...presetToRange('30d', undefined, undefined, timezone) };
 }
 
 export function CohortFormDialog({
@@ -42,11 +42,20 @@ export function CohortFormDialog({
 }) {
   const queryClient = useQueryClient();
   const isEdit = Boolean(cohortId);
+
+  const websiteQuery = useQuery({
+    queryKey: ['website', websiteId],
+    enabled: Boolean(websiteId),
+    queryFn: () => api<Website>(`/api/websites/${websiteId}`),
+    staleTime: 60_000,
+  });
+  const timezone = websiteQuery.data?.timezone ?? 'UTC';
+
   const [name, setName] = useState('');
   const [conditions, setConditions] = useState<CohortCondition[]>([
     { field: 'event_name', operator: 'equals', value: '' },
   ]);
-  const [dateWindow, setDateWindow] = useState(defaultWindow);
+  const [dateWindow, setDateWindow] = useState(() => defaultWindow());
 
   const cohortQuery = useQuery({
     queryKey: ['cohort', websiteId, cohortId],
@@ -71,16 +80,24 @@ export function CohortFormDialog({
           endAt: row.definition.windowEnd,
         });
       } else {
-        setDateWindow(defaultWindow());
+        setDateWindow(defaultWindow(timezone));
       }
       return;
     }
     if (!isEdit) {
       setName('');
       setConditions([{ field: 'event_name', operator: 'equals', value: '' }]);
-      setDateWindow(defaultWindow());
+      setDateWindow(defaultWindow(timezone));
     }
-  }, [open, cohortQuery.data, isEdit]);
+  }, [open, cohortQuery.data, isEdit, timezone]);
+
+  useEffect(() => {
+    if (!open || dateWindow.preset === 'custom') return;
+    setDateWindow((prev) => {
+      if (prev.preset === 'custom') return prev;
+      return { preset: prev.preset, ...presetToRange(prev.preset, undefined, undefined, timezone) };
+    });
+  }, [open, timezone, dateWindow.preset]);
 
   useEffect(() => {
     if (!open) return;

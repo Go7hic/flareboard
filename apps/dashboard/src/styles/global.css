@@ -6099,13 +6099,13 @@ code {
 }
 
 .dashboard-aggregate-legend-swatch--visitors {
-  border-color: var(--chart-axis);
-  background: color-mix(in srgb, var(--chart-axis) 14%, transparent);
+  border-color: var(--geist-amber-800);
+  background: color-mix(in srgb, var(--geist-amber-800) 14%, transparent);
 }
 
 .dashboard-aggregate-legend-swatch--visits {
-  border-color: var(--chart-axis, var(--text-muted));
-  background: color-mix(in srgb, var(--chart-axis, var(--text-muted)) 14%, transparent);
+  border-color: var(--chart-axis);
+  background: color-mix(in srgb, var(--chart-axis) 14%, transparent);
 }
 
 .dashboard-site-ranking-panel {

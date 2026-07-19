@@ -19,6 +19,7 @@ import { api, type LinkStats, type TrackingLink } from '../lib/api';
 import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/dateRange';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
+import { chartTooltipStyle } from '../lib/chartStyles';
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
@@ -148,15 +149,7 @@ export default function LinkAnalyticsPage() {
                       tick={{ fontSize: 11, fill: chartColors.muted }}
                       stroke={chartColors.border}
                     />
-                    <Tooltip
-                      contentStyle={{
-                        background: chartColors.panel,
-                        border: `1px solid ${chartColors.border}`,
-                        borderRadius: 8,
-                        fontSize: 13,
-                        color: chartColors.text,
-                      }}
-                    />
+                    <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 13 })} />
                     <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>

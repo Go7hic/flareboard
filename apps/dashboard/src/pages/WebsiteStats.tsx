@@ -34,6 +34,7 @@ import { t } from '../lib/i18n';
 import { useWebsiteExport } from '../lib/useWebsiteExport';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 import { useChartColors } from '../lib/useChartColors';
+import { chartTooltipStyle } from '../lib/chartStyles';
 
 function cssVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -287,15 +288,7 @@ export default function WebsiteStatsPage() {
                       tick={{ fontSize: 11, fill: chartColors.muted }}
                       stroke={chartColors.border}
                     />
-                    <Tooltip
-                      contentStyle={{
-                        background: chartColors.panel,
-                        border: `1px solid ${chartColors.border}`,
-                        borderRadius: 8,
-                        fontSize: 13,
-                        color: chartColors.text,
-                      }}
-                    />
+                    <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 13 })} />
                     <Line
                       type="monotone"
                       dataKey="pageviews"

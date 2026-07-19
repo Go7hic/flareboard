@@ -46,6 +46,7 @@ function scrollToReportSection(id: string) {
   document.getElementById(`report-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 import { useChartColors } from '../lib/useChartColors';
+import { chartTooltipStyle } from '../lib/chartStyles';
 
 type AttributionModel = 'first' | 'last';
 type AttributionType = 'path' | 'event';
@@ -801,15 +802,7 @@ export default function ReportsPage() {
                           tick={{ fontSize: 11, fill: chartColors.muted }}
                           stroke={chartColors.border}
                         />
-                        <Tooltip
-                          contentStyle={{
-                            background: chartColors.panel,
-                            border: `1px solid ${chartColors.border}`,
-                            borderRadius: 8,
-                            fontSize: 13,
-                            color: chartColors.text,
-                          }}
-                        />
+                        <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 13 })} />
                         <Bar dataKey="count" fill={chartColors.accent} radius={[0, 4, 4, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -1144,15 +1137,7 @@ export default function ReportsPage() {
                           <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} />
                           <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
                           <YAxis tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-                          <Tooltip
-                            contentStyle={{
-                              background: chartColors.panel,
-                              border: `1px solid ${chartColors.border}`,
-                              borderRadius: 8,
-                              fontSize: 13,
-                              color: chartColors.text,
-                            }}
-                          />
+                          <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 13 })} />
                           <Line
                             type="monotone"
                             dataKey="a"
@@ -1173,15 +1158,7 @@ export default function ReportsPage() {
                           <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} />
                           <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
                           <YAxis tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-                          <Tooltip
-                            contentStyle={{
-                              background: chartColors.panel,
-                              border: `1px solid ${chartColors.border}`,
-                              borderRadius: 8,
-                              fontSize: 13,
-                              color: chartColors.text,
-                            }}
-                          />
+                          <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 13 })} />
                           <Line type="monotone" dataKey="users" name={t('cohortActiveDaily')} stroke={chartColors.accent} dot={false} />
                         </LineChart>
                       )}

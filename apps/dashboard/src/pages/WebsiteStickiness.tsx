@@ -10,6 +10,7 @@ import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
 import { api } from '../lib/api';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
+import { chartTooltipStyle } from '../lib/chartStyles';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 
 type StickinessResponse = {
@@ -143,13 +144,7 @@ export default function WebsiteStickinessPage() {
                     formatter={(value, name) =>
                       name === 'percentage' ? [`${value}%`, t('percentage')] : [value, t('stickinessActors')]
                     }
-                    contentStyle={{
-                      background: chartColors.panel,
-                      border: `1px solid ${chartColors.border}`,
-                      borderRadius: 8,
-                      fontSize: 13,
-                      color: chartColors.text,
-                    }}
+                    contentStyle={chartTooltipStyle(chartColors, { fontSize: 13 })}
                   />
                   <Bar dataKey="actors" fill={chartColors.accent} radius={[4, 4, 0, 0]} />
                 </BarChart>

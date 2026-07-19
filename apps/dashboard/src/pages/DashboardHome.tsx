@@ -21,6 +21,7 @@ import { formatChartTimeLabel, isHourlyChartRange } from '../lib/chartTimeseries
 import { t } from '../lib/i18n';
 import { useDashboardRange } from '../lib/useDashboardRange';
 import { useChartColors } from '../lib/useChartColors';
+import { chartTooltipStyle } from '../lib/chartStyles';
 
 interface SeriesPoint {
   x: string;
@@ -209,15 +210,7 @@ export default function DashboardHome() {
                           tickLine={false}
                           axisLine={false}
                         />
-                        <Tooltip
-                          contentStyle={{
-                            background: chartColors.panel,
-                            border: `1px solid ${chartColors.border}`,
-                            borderRadius: 8,
-                            fontSize: 12,
-                            color: chartColors.text,
-                          }}
-                        />
+                        <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 12 })} />
                         <Area
                           type="monotone"
                           dataKey="pageviews"
@@ -351,15 +344,7 @@ export default function DashboardHome() {
                             axisLine={false}
                           />
                           <YAxis hide allowDecimals={false} />
-                          <Tooltip
-                            contentStyle={{
-                              background: chartColors.panel,
-                              border: `1px solid ${chartColors.border}`,
-                              borderRadius: 8,
-                              fontSize: 12,
-                              color: chartColors.text,
-                            }}
-                          />
+                          <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 12 })} />
                           <Area
                             type="monotone"
                             dataKey="y"

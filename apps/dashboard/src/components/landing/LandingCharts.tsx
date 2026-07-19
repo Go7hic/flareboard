@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import { t } from '../../lib/i18n';
 import { useChartColors } from '../../lib/useChartColors';
+import { chartTooltipStyle } from '../../lib/chartStyles';
 
 export const DEMO_PAGEVIEWS = [
   { x: 'Mon', y: 842 },
@@ -35,16 +36,6 @@ export const DEMO_REFERRERS = [
   { name: 'github.com', pct: 14 },
   { name: 'Direct', pct: 26 },
 ];
-
-function chartTooltipStyle(chartColors: ReturnType<typeof useChartColors>) {
-  return {
-    background: chartColors.panel,
-    border: `1px solid ${chartColors.border}`,
-    borderRadius: 8,
-    fontSize: 12,
-    color: chartColors.text,
-  };
-}
 
 function LandingLineChart({
   data,
@@ -75,7 +66,7 @@ function LandingLineChart({
           axisLine={false}
           width={compact ? 28 : 36}
         />
-        <Tooltip contentStyle={chartTooltipStyle(chartColors)} />
+        <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 12 })} />
         <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} activeDot={{ r: 3 }} />
       </LineChart>
     </ResponsiveContainer>
@@ -107,7 +98,7 @@ function LandingBarChart({
           tickLine={false}
           axisLine={false}
         />
-        <Tooltip contentStyle={chartTooltipStyle(chartColors)} formatter={(v) => [Number(v).toLocaleString(), viewsLabel]} />
+        <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 12 })} formatter={(v) => [Number(v).toLocaleString(), viewsLabel]} />
         <Bar
           dataKey="views"
           fill={barColor}

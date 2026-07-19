@@ -20,6 +20,7 @@ import {
 import { presetToRange, rangeQueryString } from '../lib/dateRange';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
+import { chartTooltipStyle } from '../lib/chartStyles';
 
 type Widget = BoardWidget;
 
@@ -143,15 +144,7 @@ function BoardWidget({
                     tickLine={false}
                     axisLine={false}
                   />
-                  <Tooltip
-                    contentStyle={{
-                      background: chartColors.panel,
-                      border: `1px solid ${chartColors.border}`,
-                      borderRadius: 8,
-                      fontSize: 12,
-                      color: chartColors.text,
-                    }}
-                  />
+                  <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 12 })} />
                   <Line
                     type="monotone"
                     dataKey="y"
@@ -205,7 +198,7 @@ function InsightBoardWidget({
                 <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
                 <XAxis dataKey="x" tick={{ fontSize: 10, fill: chartColors.muted }} stroke={chartColors.border} />
                 <YAxis allowDecimals={false} width={40} tick={{ fontSize: 10, fill: chartColors.muted }} stroke={chartColors.border} />
-                <Tooltip contentStyle={{ background: chartColors.panel, border: `1px solid ${chartColors.border}`, borderRadius: 8, fontSize: 12, color: chartColors.text }} />
+                <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 12 })} />
                 <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
@@ -215,7 +208,7 @@ function InsightBoardWidget({
                 <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 10, fill: chartColors.muted }} stroke={chartColors.border} />
                 <YAxis type="category" dataKey="x" width={80} tick={{ fontSize: 10, fill: chartColors.muted }} stroke={chartColors.border} />
-                <Tooltip contentStyle={{ background: chartColors.panel, border: `1px solid ${chartColors.border}`, borderRadius: 8, fontSize: 12, color: chartColors.text }} />
+                <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 12 })} />
                 <Bar dataKey="y" fill={chartColors.accent} radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>

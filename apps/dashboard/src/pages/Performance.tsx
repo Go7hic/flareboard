@@ -20,6 +20,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { api } from '../lib/api';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
+import { chartTooltipStyle } from '../lib/chartStyles';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 
 type VitalDistribution = {
@@ -248,13 +249,7 @@ export default function PerformancePage() {
     [chartColors],
   );
 
-  const tooltipStyle = {
-    background: chartColors.panel,
-    border: `1px solid ${chartColors.border}`,
-    borderRadius: 8,
-    fontSize: 12,
-    color: chartColors.text,
-  };
+  const tooltipStyle = chartTooltipStyle(chartColors, { fontSize: 12 });
 
   return (
     <div className="page page-performance">

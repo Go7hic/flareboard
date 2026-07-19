@@ -26,6 +26,7 @@ import { presetToRange, rangeQueryString } from '../lib/dateRange';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { useChartColors } from '../lib/useChartColors';
+import { chartTooltipStyle } from '../lib/chartStyles';
 
 const DEFAULT_QUERY: InsightQuery = {
   metric: 'pageviews',
@@ -78,7 +79,7 @@ function ResultPreview({ result }: { result: InsightResult | null | undefined })
             <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
             <XAxis dataKey="x" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
             <YAxis tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-            <Tooltip contentStyle={{ background: chartColors.panel, border: `1px solid ${chartColors.border}`, borderRadius: 8, color: chartColors.text }} />
+            <Tooltip contentStyle={chartTooltipStyle(chartColors)} />
             <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} />
           </LineChart>
         </ResponsiveContainer>
@@ -96,7 +97,7 @@ function ResultPreview({ result }: { result: InsightResult | null | undefined })
               <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} horizontal={false} />
               <XAxis type="number" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
               <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-              <Tooltip contentStyle={{ background: chartColors.panel, border: `1px solid ${chartColors.border}`, borderRadius: 8, color: chartColors.text }} />
+              <Tooltip contentStyle={chartTooltipStyle(chartColors)} />
               <Bar dataKey="count" fill={chartColors.accent} radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -115,7 +116,7 @@ function ResultPreview({ result }: { result: InsightResult | null | undefined })
             <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
             <XAxis dataKey="name" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
             <YAxis tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-            <Tooltip contentStyle={{ background: chartColors.panel, border: `1px solid ${chartColors.border}`, borderRadius: 8, color: chartColors.text }} />
+            <Tooltip contentStyle={chartTooltipStyle(chartColors)} />
             <Bar dataKey="actors" fill={chartColors.accent} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>

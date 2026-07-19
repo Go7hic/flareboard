@@ -18,6 +18,7 @@ import { api } from '../lib/api';
 import { t } from '../lib/i18n';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 import { useChartColors } from '../lib/useChartColors';
+import { chartTooltipStyle } from '../lib/chartStyles';
 
 export default function RevenuePage() {
   const chartColors = useChartColors();
@@ -70,15 +71,7 @@ export default function RevenuePage() {
                     <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} />
                     <XAxis dataKey="date" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
                     <YAxis tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-                    <Tooltip
-                      contentStyle={{
-                        background: chartColors.panel,
-                        border: `1px solid ${chartColors.border}`,
-                        borderRadius: 8,
-                        fontSize: 13,
-                        color: chartColors.text,
-                      }}
-                    />
+                    <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 13 })} />
                     <Bar dataKey="total" fill={chartColors.accent} radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>

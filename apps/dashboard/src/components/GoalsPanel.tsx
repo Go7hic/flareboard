@@ -9,6 +9,7 @@ import { Skeleton } from './ui/skeleton';
 import { api, type Website } from '../lib/api';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
+import { chartTooltipStyle } from '../lib/chartStyles';
 
 export type GoalReportRow = {
   event: string;
@@ -200,15 +201,7 @@ export function GoalsPanel({
                   tick={{ fontSize: 11, fill: chartColors.muted }}
                   stroke={chartColors.border}
                 />
-                <Tooltip
-                  contentStyle={{
-                    background: chartColors.panel,
-                    border: `1px solid ${chartColors.border}`,
-                    borderRadius: 8,
-                    fontSize: 12,
-                    color: chartColors.text,
-                  }}
-                />
+                <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 12 })} />
                 <Bar dataKey="count" fill={chartColors.accent} radius={[0, 4, 4, 0]} maxBarSize={28} />
               </BarChart>
             </ResponsiveContainer>

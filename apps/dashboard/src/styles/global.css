@@ -1,4 +1,6 @@
-@import url('https://fonts.bunny.net/css?family=outfit:400,500,600,700|jetbrains-mono:400,500');
+@import url('https://cdn.jsdelivr.net/npm/geist@1.3.1/dist/fonts/geist-sans/style.css');
+@import url('https://cdn.jsdelivr.net/npm/geist@1.3.1/dist/fonts/geist-mono/style.css');
+@import './geist-tokens.css';
 @import "tailwindcss";
 @source "../../index.html";
 @source "../**/*.{html,js,ts,jsx,tsx}";
@@ -8,33 +10,35 @@
 
 /* ── Tailwind theme: static design tokens (non-circular values) ── */
 @theme {
-  /* Radii — static values */
   --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-pill: 999px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 9999px;
 
-  /* Typography */
-  --font-sans: 'Outfit', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+  --font-sans: 'Geist', 'Geist Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', monospace;
 
-  /* Nav/layout constants */
-  --nav-height: 60px;
-  --sidebar-width: 220px;
-  --container-max: 1240px;
-  --transition: 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  --nav-height: 64px;
+  --sidebar-width: 240px;
+  --container-max: 1200px;
+  --transition: 150ms cubic-bezier(0.175, 0.885, 0.32, 1.1);
 }
 
 /* ── Tailwind color aliases (reference design tokens set per-theme below) ── */
 @layer base {
   a {
-    color: var(--accent);
+    color: var(--link);
     text-decoration: none;
     transition: color var(--transition);
   }
 
   a:hover {
-    color: var(--accent-hover);
+    color: var(--link-hover);
+  }
+
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--focus-ring-gap), 0 0 0 4px var(--focus-ring-color);
   }
 
   :root {
@@ -63,156 +67,25 @@
   }
 }
 
-/* ── Light theme (default) ── */
-:root,
-[data-theme='light'] {
-  color-scheme: light;
-
-  --bg: #f4f6fa;
-  --bg-elevated: #ffffff;
-  --bg-subtle: #eef1f6;
-  --bg-hover: #e4e9f2;
-  --border: #d8dee9;
-  --border-subtle: #e8ecf3;
-  --border-strong: #c2cad8;
-
-  --text: #12151c;
-  --text-muted: #5a6478;
-  --text-faint: #8b95a8;
-
-  --accent: #0d9488;
-  --accent-hover: #0f766e;
-  --accent-muted: rgba(13, 148, 136, 0.1);
-  --accent-on: #ffffff;
-
-  --success: #059669;
-  --danger: #dc2626;
-  --warning: #d97706;
-
-  --shadow-sm: 0 1px 2px rgba(18, 21, 28, 0.06);
-  --shadow-md: 0 8px 28px rgba(18, 21, 28, 0.08);
-  --shadow-lg: 0 20px 50px rgba(18, 21, 28, 0.1);
-
-  --shell-bg: rgba(244, 246, 250, 0.88);
+/* Colors/shadows/fonts: apps/dashboard/src/styles/geist-tokens.css */
+:root {
   --grain-opacity: 0.02;
-
-  --chart-grid: #e2e8f0;
-  --chart-axis: #64748b;
-  --chart-line: #0d9488;
-  --chart-tooltip-bg: #ffffff;
-
-  --map-tooltip-bg: #1a1f2b;
-  --map-tooltip-text: #f8fafc;
-  --map-tooltip-border: rgba(255, 255, 255, 0.1);
-
-  --cf-orange: #e85d04;
-  --cf-orange-muted: rgba(232, 93, 4, 0.12);
-
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --font-sans: 'Outfit', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
-  --nav-height: 60px;
-  --sidebar-width: 220px;
-  --container-max: 1240px;
-  --transition: 200ms cubic-bezier(0.16, 1, 0.3, 1);
-
-  /* Header row: locale + theme toggle (matched outer box) */
+  --map-tooltip-bg: var(--geist-gray-1000);
+  --map-tooltip-text: var(--geist-background-100);
+  --map-tooltip-border: var(--geist-gray-alpha-400);
   --shell-control-padding-y: 0.35rem;
   --shell-control-inner-h: 22px;
   --shell-control-height: calc(
     var(--shell-control-inner-h) + 2 * var(--shell-control-padding-y) + 2px
   );
-
-  /* Form controls — matches .segment-tabs outer height */
-  --control-height: calc(0.5rem + 0.7rem + 0.8125rem * 1.25 + 2px);
-  --control-font-size: 0.8125rem;
+  --control-height: 40px;
+  --control-font-size: 0.875rem;
   --control-line-height: 1.25;
-  --control-padding-x: 0.65rem;
+  --control-padding-x: 0.75rem;
 }
 
-/* ── Dark theme ── */
 [data-theme='dark'] {
-  color-scheme: dark;
-
-  --bg: #0a0d12;
-  --bg-elevated: #12161f;
-  --bg-subtle: #181d28;
-  --bg-hover: #1f2633;
-  --border: #2a3344;
-  --border-subtle: #1e2430;
-  --border-strong: #3d4a5f;
-
-  --text: #eef1f6;
-  --text-muted: #94a0b8;
-  --text-faint: #64708a;
-
-  --accent: #2dd4bf;
-  --accent-hover: #5eead4;
-  --accent-muted: rgba(45, 212, 191, 0.14);
-  --accent-on: #042f2e;
-
-  --success: #34d399;
-  --danger: #f87171;
-  --warning: #fbbf24;
-
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
-  --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.45);
-  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.55);
-
-  --shell-bg: rgba(10, 13, 18, 0.9);
   --grain-opacity: 0.04;
-
-  --chart-grid: #2a3344;
-  --chart-axis: #94a0b8;
-  --chart-line: #2dd4bf;
-  --chart-tooltip-bg: #12161f;
-
-  --cf-orange: #f6821a;
-  --cf-orange-muted: rgba(246, 130, 26, 0.16);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    color-scheme: dark;
-
-    --bg: #0a0d12;
-    --bg-elevated: #12161f;
-    --bg-subtle: #181d28;
-    --bg-hover: #1f2633;
-    --border: #2a3344;
-    --border-subtle: #1e2430;
-    --border-strong: #3d4a5f;
-
-    --text: #eef1f6;
-    --text-muted: #94a0b8;
-    --text-faint: #64708a;
-
-    --accent: #2dd4bf;
-    --accent-hover: #5eead4;
-    --accent-muted: rgba(45, 212, 191, 0.14);
-    --accent-on: #042f2e;
-
-    --success: #34d399;
-    --danger: #f87171;
-    --warning: #fbbf24;
-
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
-    --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.45);
-    --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.55);
-
-    --shell-bg: rgba(10, 13, 18, 0.9);
-    --grain-opacity: 0.04;
-
-    --chart-grid: #2a3344;
-    --chart-axis: #94a0b8;
-    --chart-line: #2dd4bf;
-    --chart-tooltip-bg: #12161f;
-
-    --cf-orange: #f6821a;
-    --cf-orange-muted: rgba(246, 130, 26, 0.16);
-  }
 }
 
 *,

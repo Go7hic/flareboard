@@ -1,0 +1,3 @@
+ts	phase	decision	why	evidence	result
+2026-07-19T12:50:43Z	frame	Use shadcn Base UI for primitives; include blog; strict Geist near-black primary and blue focus	User chose Base UI over hand-rolled buttons; blog must match; Experience First favors Geist CTAs	user-reply	open
+2026-07-19T12:52:26Z	U0	Generated geist-tokens.css for dashboard and blog from Vercel design YAML	Build the lever: one generated token file instead of hand-editing hex	apps/dashboard/src/styles/geist-tokens.css	open

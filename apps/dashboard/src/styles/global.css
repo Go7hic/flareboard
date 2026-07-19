@@ -3487,7 +3487,7 @@ code {
   padding: 0.25rem;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
 }
 
 .segment-tab {
@@ -3500,7 +3500,7 @@ code {
   font-weight: 500;
   line-height: 1.25;
   padding: 0.35rem 0.65rem;
-  border-radius: calc(var(--radius-md) - 2px);
+  border-radius: calc(var(--radius-sm) - 2px);
   cursor: pointer;
   white-space: nowrap;
   transition:
@@ -6064,8 +6064,8 @@ code {
 }
 
 .dashboard-aggregate-legend-item:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus-ring-gap), 0 0 0 4px var(--focus-ring-color);
 }
 
 .dashboard-aggregate-legend-item.is-hidden {
@@ -6431,7 +6431,7 @@ code {
 }
 
 .sessions-row-link:hover {
-  color: var(--accent);
+  color: var(--link);
 }
 
 .sessions-location-cell {
@@ -6498,8 +6498,8 @@ code {
 
 .realtime-map-avatar-marker .session-avatar,
 .realtime-globe-avatar-marker .session-avatar {
-  border: 2px solid #fff;
-  box-shadow: 0 1px 6px rgba(15, 23, 42, 0.18);
+  border: 2px solid var(--geist-background-100);
+  box-shadow: var(--shadow-sm);
 }
 
 
@@ -7347,7 +7347,7 @@ code {
 
 .metrics-table-bar-inner {
   height: 100%;
-  background: var(--accent);
+  background: var(--chart-line);
   border-radius: 2px;
   transition: width var(--transition);
 }

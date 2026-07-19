@@ -120,7 +120,7 @@ export default function DashboardHome() {
   const metricColors = useMemo(
     () => ({
       pageviews: chartColors.accent,
-      visitors: cssVar('--cf-orange') || chartColors.muted,
+      visitors: cssVar('--geist-amber-800') || chartColors.muted,
       visits: cssVar('--chart-axis') || chartColors.muted,
     }),
     [chartColors],

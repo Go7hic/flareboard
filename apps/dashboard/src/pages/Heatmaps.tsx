@@ -173,7 +173,9 @@ export default function HeatmapsPage() {
     ctx.clearRect(0, 0, displayW, displayH);
 
     const accent =
-      getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0d9488';
+      getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() ||
+      getComputedStyle(document.documentElement).getPropertyValue('--geist-gray-1000').trim() ||
+      '#171717';
 
     for (const cell of overlay.cells) {
       const intensity = cell.count / overlay.max;

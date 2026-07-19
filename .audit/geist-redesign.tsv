@@ -10,3 +10,4 @@ ts	phase	decision	why	evidence	result
 2026-07-19T15:00:09Z	U4	Analytics chrome CSS (toolbar/sub-nav/explorer/hero) + amber visitor series	CSS lever for Stats/Sessions/Realtime family; cf-orange reserved for CF callouts	global.css;WebsiteStats;DashboardHome;pnpm typecheck	pass
 2026-07-19T15:00:09Z	U5	Remaining app status/warn colors to --warning/--danger; heatmap accent fallback	Migrate Callers: stop using CF orange as generic warn/error chrome	global.css errors/logs/experiments;Heatmaps.tsx	pass
 2026-07-19T15:00:09Z	U7	Rewrote AGENTS.md and DESIGN-NOTE for Geist + shadcn Base UI	Docs must match shipped system before PR	AGENTS.md;apps/dashboard/DESIGN-NOTE.md	pass
+2026-07-19T15:03:18Z	E	Opened PR #8 for Geist redesign units U0-U7	Never Block / Sequence Units: land auditable trail with the PR	https://github.com/Go7hic/flareboard/pull/8	pass

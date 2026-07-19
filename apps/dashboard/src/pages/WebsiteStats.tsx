@@ -86,7 +86,7 @@ export default function WebsiteStatsPage() {
   const metricColors = useMemo(
     () => ({
       pageviews: chartColors.accent,
-      visitors: cssVar('--geist-amber-800') || chartColors.muted,
+      visitors: cssVar('--chart-axis') || chartColors.muted,
     }),
     [chartColors],
   );

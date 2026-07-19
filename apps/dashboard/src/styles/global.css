@@ -2679,7 +2679,7 @@ code {
   max-width: 11rem;
   padding: var(--shell-control-padding-y) 0.65rem;
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--bg-elevated);
   color: var(--text);
   font-family: inherit;
@@ -2696,7 +2696,7 @@ code {
 }
 
 .segment-filter-menu.is-open .segment-filter-menu-trigger {
-  border-color: var(--accent);
+  border-color: var(--border-strong);
   background: var(--bg-subtle);
 }
 
@@ -2706,7 +2706,7 @@ code {
 }
 
 .segment-filter-menu.is-open .segment-filter-menu-icon {
-  color: var(--accent);
+  color: var(--text-muted);
 }
 
 .segment-filter-menu-label {
@@ -2724,7 +2724,7 @@ code {
 
 .segment-filter-menu.is-open .segment-filter-menu-chevron {
   transform: rotate(180deg);
-  color: var(--accent);
+  color: var(--text-muted);
 }
 
 .segment-filter-menu-panel {
@@ -2768,8 +2768,9 @@ code {
 }
 
 .segment-filter-menu-option.is-active {
-  background: var(--accent-muted);
-  color: var(--accent);
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-weight: 600;
 }
 
 .segment-filter-menu-compare {
@@ -3358,7 +3359,7 @@ code {
 
 .country-map-skeleton {
   min-height: 420px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--bg-subtle);
 }
 
@@ -5291,6 +5292,10 @@ code {
   background: var(--bg-subtle);
 }
 
+.realtime-activity-btn.is-selected {
+  box-shadow: inset 2px 0 0 var(--geist-gray-1000);
+}
+
 .realtime-activity-avatar {
   flex-shrink: 0;
   margin-top: 0.05rem;
@@ -5465,7 +5470,7 @@ code {
 
 .country-map-wrap--pan {
   overflow: hidden;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   touch-action: none;
   cursor: grab;
 }
@@ -6089,13 +6094,13 @@ code {
 }
 
 .dashboard-aggregate-legend-swatch--pageviews {
-  border-color: var(--accent);
-  background: var(--accent-muted);
+  border-color: var(--chart-line);
+  background: color-mix(in srgb, var(--chart-line) 14%, transparent);
 }
 
 .dashboard-aggregate-legend-swatch--visitors {
-  border-color: var(--geist-amber-800);
-  background: color-mix(in srgb, var(--geist-amber-800) 14%, transparent);
+  border-color: var(--chart-axis);
+  background: color-mix(in srgb, var(--chart-axis) 14%, transparent);
 }
 
 .dashboard-aggregate-legend-swatch--visits {
@@ -7331,6 +7336,10 @@ code {
 
 .chart-panel .section-title {
   margin-bottom: 1rem;
+}
+
+.chart-panel {
+  border-radius: var(--radius-sm);
 }
 
 .metrics-table-bar {

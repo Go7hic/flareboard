@@ -1,3 +1,6 @@
 ts	phase	decision	why	evidence	result
 2026-07-19T12:50:43Z	frame	Use shadcn Base UI for primitives; include blog; strict Geist near-black primary and blue focus	User chose Base UI over hand-rolled buttons; blog must match; Experience First favors Geist CTAs	user-reply	open
 2026-07-19T12:52:26Z	U0	Generated geist-tokens.css for dashboard and blog from Vercel design YAML	Build the lever: one generated token file instead of hand-editing hex	apps/dashboard/src/styles/geist-tokens.css	open
+2026-07-19T12:56:40Z	U0	Committed Geist tokens for dashboard and blog	Scaffold before primitives; Foundational Thinking	3266acf	tests pending
+2026-07-19T12:58:27Z	B	Wrote docs/geist-redesign-playbook.md with U0-U7 units	Phase B artifact for human review after long run	docs/geist-redesign-playbook.md	open
+2026-07-19T13:21:59Z	U1	Installed shadcn base-nova primitives on @base-ui/react; Button maps primary/danger/asChild; typecheck clean	Build the lever: one CLI install + thin compat layer vs 200 call-site edits	apps/dashboard/src/components/ui/*;pnpm typecheck	pass

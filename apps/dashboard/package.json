@@ -12,6 +12,7 @@
     "deploy": "pnpm build && wrangler deploy"
   },
   "dependencies": {
+    "@base-ui/react": "^1.6.0",
     "@dicebear/collection": "^9.4.2",
     "@dicebear/core": "^9.4.2",
     "@geoql/maplibre-gl-starfield": "^0.1.1",

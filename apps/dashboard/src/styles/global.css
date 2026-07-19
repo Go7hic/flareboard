@@ -156,8 +156,8 @@ textarea {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus-ring-gap), 0 0 0 4px var(--focus-ring-color);
 }
 
 .skip-link {
@@ -183,8 +183,8 @@ textarea {
 .sidebar-link:focus-visible,
 .shell-link:focus-visible,
 .shell-menu-toggle:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus-ring-gap), 0 0 0 4px var(--focus-ring-color);
 }
 
 /* Theme toggle */
@@ -5515,7 +5515,7 @@ code {
 .realtime-vector-map-wrap {
   height: min(72vh, 680px);
   min-height: 580px;
-  background-color: #c8e3f2;
+  background-color: var(--geist-blue-400);
 }
 
 .realtime-vector-map-sky {
@@ -5524,7 +5524,7 @@ code {
   z-index: 0;
   pointer-events: none;
   /* Flat solid matching .realtime-vector-map-wrap's map water color. */
-  background: #c8e3f2;
+  background: var(--geist-blue-400);
 }
 
 .realtime-vector-map-sky.is-hidden {
@@ -5560,13 +5560,13 @@ code {
 
 /* Light card on dark globe canvas — fixed palette regardless of app theme */
 .realtime-globe-overlay {
-  --rt-overlay-bg: #ffffff;
-  --rt-overlay-text: #0f172a;
-  --rt-overlay-muted: #64748b;
-  --rt-overlay-border: #e2e8f0;
-  --rt-overlay-pill-bg: #f1f5f9;
-  --rt-overlay-action-bg: #ffffff;
-  --rt-overlay-action-hover: #f8fafc;
+  --rt-overlay-bg: var(--geist-background-100);
+  --rt-overlay-text: var(--geist-gray-1000);
+  --rt-overlay-muted: var(--geist-gray-900);
+  --rt-overlay-border: var(--geist-gray-alpha-400);
+  --rt-overlay-pill-bg: var(--geist-gray-100);
+  --rt-overlay-action-bg: var(--geist-background-100);
+  --rt-overlay-action-hover: var(--geist-gray-100);
   position: absolute;
   top: 0.75rem;
   left: 0.75rem;
@@ -5653,7 +5653,7 @@ code {
 .realtime-globe-overlay-action:hover {
   background: var(--rt-overlay-action-hover);
   color: var(--rt-overlay-text);
-  border-color: #cbd5e1;
+  border-color: var(--geist-gray-500);
 }
 
 .realtime-globe-overlay-action.is-active {

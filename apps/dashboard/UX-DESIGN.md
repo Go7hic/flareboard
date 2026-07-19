@@ -31,7 +31,7 @@ Phase 2 should **reuse these primitives** on other routes rather than inventing 
 
 1. **Operator-first density** — stat grids, tables, mono numerics; predictable nav; minimal decoration (VISUAL_DENSITY 7 per `DESIGN-NOTE.md`).
 2. **Flat solids only** — no gradients; hierarchy via typography, spacing, 1px borders, accent rails, light shadows.
-3. **Teal accent, Cloudflare trust** — `--accent` for primary actions and chart lines; `--cf-orange` for CF callouts only.
+3. **Geist gray primary, blue focus** — `--accent` / `--primary` for CTAs (gray-1000); `--link` / focus rings for Geist blue; `--cf-orange` for CF callouts only.
 4. **Consistent shell** — every authenticated view shares `AppShell` header; sub-routes use `PageHeader` with optional back link, actions, and toolbar.
 5. **Progressive disclosure** — hero metrics and charts above the fold; advanced config (share links, segments, admin) in collapsible or secondary panels.
 6. **i18n-ready** — all copy via `t(key)`; five locales (`en-US`, `zh-CN`, `ja-JP`, `de-DE`, `fr-FR`).
@@ -147,7 +147,7 @@ Slots: `backTo` / `backLabel`, `actions` (btn-sm secondary cluster), `toolbar` (
 |-----------|-------------------|-----|
 | Page container | `.page` | All authenticated content |
 | Panel | `.panel` | Form blocks, tables, config |
-| Stat card | `.stat-card`, `.stat-card-primary` | KPI strip; primary = teal tint |
+| Stat card | `.stat-card`, `.stat-card-primary` | KPI strip; primary uses gray accent rail |
 | Section title | `.section-title` | H2 within panels |
 | Data table | `.data-table` + `.table-scroll` | Tabular metrics |
 | Empty state | `.empty-state-rich` | Numbered steps or CTA |

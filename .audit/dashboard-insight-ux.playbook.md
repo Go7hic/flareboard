@@ -1,26 +1,34 @@
-# Dashboard insight UX — figure-it-out playbook
+# Dashboard insight UX — figure-it-out playbook (course-corrected)
 
-Source inventories: shared-display audit `e6377522`, route inventory `462a566e`.
+Original goal: product design + interaction + data display for the whole dashboard as an insight tool. Shared format/StatCard/chart levers (U0–U13) are foundation only.
 
-## Predicate (Phase A)
+## Predicate (falsifiable)
 
-Core analysis paths show locale-consistent numbers, durations, percents, and compare deltas; shared StatCard / chart / table / DataViewState levers land on ≥8 analytics pages; overview reads as hero metrics → chart → dimensions → drill; each unit has evidence in `.audit/dashboard-insight-ux.tsv`.
+An operator can, without hunting chrome:
 
-## Units (Phase B → C)
+1. Scan overview (KPI → chart → dimensions → drill) in light and dark.
+2. Debug live traffic: Realtime shows explicit empty/live state and drills to a session.
+3. Investigate sessions with filters (not only load-more).
+4. Compare periods with one mental model (Overview toggle vs `/compare` agree).
+5. Triage errors/logs with a readable IA (primary issue list first; secondary tabs quieter).
+6. Know where custom analytics live: Insights build → Boards save/share → Reports hub links out.
+7. Every user-visible count/time in app chrome uses `lib/format.ts` via `getLocale()` (landing marketing optional).
 
-| Unit | Hypothesis | Verify |
-|------|------------|--------|
-| U0 format | One `lib/format.ts` via `getLocale()` ends ad-hoc `toLocaleString` / `%` / duration drift | typecheck; WebsiteStats + Compare + Replays use helpers |
-| U0.5 overview | WebsiteStats hierarchy: hero KPIs → chart → ranked dimensions → explorer drill | light/dark smoke; fewer equal-weight panels |
-| U0.6 report chrome | One website control bar pattern (range, segment, compare, export) | Stats + Funnel + Retention + UTM share one control component API |
-| U1 StatCard | Promote `ui/StatCard` + `StatChangeDelta`; retire page-local KPI shells | ≥5 pages import shared StatCard |
-| U2 AnalyticsChart | Recharts shell with colors, tooltip, tick formatters | Stats + Funnel + Reports use wrapper |
-| U3 Sortable table | MetricsTable optional column sort + Sessions load-more | Breakdown + Errors + Sessions |
-| U4 DataViewState | loading / error / empty / children | failed query shows retry on Stats + Sessions |
-| U5 Core paths | Apply levers on realtime, sessions, funnel, retention, errors, insights, breakdown | TSV VERIFIED per page |
-| U6 Reports IA | Resolve `/reports` vs dedicated website routes (link-out or thin hub) | no duplicate funnel/retention UX drift |
-| U7 Event picker | Catalog autocomplete for funnel / stickiness / insights | bad free-text empty charts drop |
+Evidence in `.audit/dashboard-insight-ux.tsv`. Verdict VERIFIED only with real artifact checks, not typecheck alone for interaction units.
 
-## Out of scope (for now)
+## Units remaining
 
-Marketing landing polish, billing copy, accent-rail revival, new metrics backends, warehouse/admin power-user redesign (later phase G).
+| Unit | Focus | Verify |
+|------|-------|--------|
+| U14 | Component-layer format cleanup | no `toLocaleString` under `src/components` except via format.ts |
+| U15 | Realtime empty + session drill | empty copy + link to `/sessions/:id` |
+| U16 | Compare model unification | Overview compare + `/compare` share labels/controls semantics | VERIFIED |
+| U17 | Sessions filters | path/referrer or segment filter + clear empty |
+| U18 | Errors IA | Issues tab primary; secondary tabs demoted |
+| U19 | Logs IA | Events primary; traces/filters/alerts secondary |
+| U20 | Insights/Boards/Reports line | cross-links + role copy on each surface |
+| U21 | Auth visual smoke | checklist on core paths light/dark |
+
+## Out of scope
+
+New metrics backends, warehouse SQL redesign, marketing landing rewrite, accent rails.

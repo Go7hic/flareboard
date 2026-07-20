@@ -1,4 +1,5 @@
 import { WebsiteAnalyticsControls } from './WebsiteAnalyticsControls';
+import { type CompareMode } from '../lib/compare-utils';
 import { type DateRangePreset } from '../lib/dateRange';
 
 interface Segment {
@@ -18,6 +19,8 @@ export function WebsiteStatsControls({
   segments,
   compareEnabled,
   onCompareChange,
+  compareMode,
+  onCompareModeChange,
   timezone = 'UTC',
 }: {
   websiteId: string;
@@ -30,6 +33,8 @@ export function WebsiteStatsControls({
   segments: Segment[];
   compareEnabled: boolean;
   onCompareChange: (enabled: boolean) => void;
+  compareMode: CompareMode;
+  onCompareModeChange: (mode: CompareMode) => void;
   timezone?: string;
 }) {
   return (
@@ -47,6 +52,9 @@ export function WebsiteStatsControls({
       showCompareToggle
       compareEnabled={compareEnabled}
       onCompareChange={onCompareChange}
+      showCompareMode={compareEnabled}
+      compareMode={compareMode}
+      onCompareModeChange={onCompareModeChange}
       showExport
       onExport={onExport}
       exportAllowed={exportAllowed}

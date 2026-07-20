@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Line, LineChart } from 'recharts';
 import { AnalyticsChart } from '../components/AnalyticsChart';
 import { DataViewState } from '../components/DataViewState';
@@ -24,6 +24,7 @@ import {
   mergePageviewsVisitors,
   type MetricsSeries,
 } from '../lib/chartTimeseries';
+import { computeCompareRange, type CompareMode } from '../lib/compare-utils';
 import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsiteExport } from '../lib/useWebsiteExport';
@@ -60,6 +61,7 @@ export default function WebsiteStatsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [segmentId, setSegmentId] = useState('');
   const [compareEnabled, setCompareEnabled] = useState(false);
+  const [compareMode, setCompareMode] = useState<CompareMode>('previous');
   const segmentFromUrl = searchParams.get('segment') ?? '';
   const activeSegmentId = segmentFromUrl || segmentId;
   const cohortId = searchParams.get('cohort') ?? '';
@@ -68,6 +70,22 @@ export default function WebsiteStatsPage() {
   const segmentQs = activeSegmentId ? `&segmentId=${encodeURIComponent(activeSegmentId)}` : '';
   const cohortQs = cohortId ? `&cohort=${encodeURIComponent(cohortId)}` : '';
   const qs = `${rangeQs}${segmentQs}${cohortQs}`;
+  const compareRange = useMemo(
+    () => computeCompareRange(range.startAt, range.endAt, compareMode),
+    [range.startAt, range.endAt, compareMode],
+  );
+  const compareQs = `${qs}&compareStartAt=${compareRange.compareStartAt}&compareEndAt=${compareRange.compareEndAt}`;
+  const compareModeLabel =
+    compareMode === 'year' ? t('compareModeYear') : t('compareModePrevious');
+  const comparePageTo = useMemo(() => {
+    if (!websiteId) return '';
+    const params = new URLSearchParams();
+    if (activeSegmentId) params.set('segment', activeSegmentId);
+    if (cohortId) params.set('cohort', cohortId);
+    params.set('compare', compareMode);
+    const q = params.toString();
+    return `/websites/${websiteId}/compare${q ? `?${q}` : ''}`;
+  }, [websiteId, activeSegmentId, cohortId, compareMode]);
   const hourly = isHourlyChartRange(range.startAt, range.endAt);
 
   const metricColors = useMemo(
@@ -112,13 +130,13 @@ export default function WebsiteStatsPage() {
   });
 
   const compareQuery = useQuery({
-    queryKey: ['stats-compare', websiteId, activeSegmentId, cohortId, range, compareEnabled],
+    queryKey: ['stats-compare', websiteId, activeSegmentId, cohortId, range, compareMode, compareEnabled],
     enabled: Boolean(websiteId) && compareEnabled,
     queryFn: () =>
       api<{
         primary: { stats: WebsiteStats };
         compare: { stats: WebsiteStats };
-      }>(`/api/websites/${websiteId}/stats/compare?${qs}`),
+      }>(`/api/websites/${websiteId}/stats/compare?${compareQs}`),
   });
 
   const eventsQuery = useQuery({
@@ -210,6 +228,8 @@ export default function WebsiteStatsPage() {
               segments={segmentsQuery.data ?? []}
               compareEnabled={compareEnabled}
               onCompareChange={setCompareEnabled}
+              compareMode={compareMode}
+              onCompareModeChange={setCompareMode}
               timezone={timezone}
             />
           ) : null
@@ -284,6 +304,12 @@ export default function WebsiteStatsPage() {
 
           {compareEnabled && compareQuery.data ? (
             <div className="analytics-compare-strip">
+              <div className="analytics-compare-strip-head">
+                <span className="text-muted">{compareModeLabel}</span>
+                <Link className="shell-link analytics-compare-deep-link" to={comparePageTo}>
+                  {t('overviewCompareOpenFull')}
+                </Link>
+              </div>
               <OverviewKpi
                 label={t('comparePageviews')}
                 stat={compareQuery.data.compare.stats.pageviews}

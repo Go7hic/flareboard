@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Bar, BarChart, Legend } from 'recharts';
 import { AnalyticsChart } from '../components/AnalyticsChart';
 import { CompareReportControls } from '../components/CompareReportControls';
@@ -46,10 +47,25 @@ type CompareResponse = {
 
 export default function WebsiteComparePage() {
   const chartColors = useChartColors();
+  const [searchParams] = useSearchParams();
+  const compareFromUrl = searchParams.get('compare');
+  const segmentFromUrl = searchParams.get('segment') ?? '';
   const { websiteId, range, setRange, segmentId, setSegmentId, segmentQs, segments, rangeQs, timezone } =
     useWebsiteReportContext('24h');
-  const [compareMode, setCompareMode] = useState<CompareMode>('previous');
+  const [compareMode, setCompareMode] = useState<CompareMode>(() =>
+    compareFromUrl === 'year' ? 'year' : 'previous',
+  );
   const [metricTab, setMetricTab] = useState<MetricTab>('path');
+
+  useEffect(() => {
+    if (segmentFromUrl) setSegmentId(segmentFromUrl);
+  }, [segmentFromUrl, setSegmentId]);
+
+  useEffect(() => {
+    if (compareFromUrl === 'year' || compareFromUrl === 'previous') {
+      setCompareMode(compareFromUrl);
+    }
+  }, [compareFromUrl]);
 
   const compareRange = useMemo(
     () => computeCompareRange(range.startAt, range.endAt, compareMode),
@@ -148,6 +164,8 @@ export default function WebsiteComparePage() {
           />
         }
       />
+
+      <p className="section-lead text-muted compare-page-lead">{t('websiteComparePageLead')}</p>
 
       <section className="panel section-gap compare-panel">
         {compareQuery.isLoading ? (

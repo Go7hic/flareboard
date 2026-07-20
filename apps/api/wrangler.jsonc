@@ -4,6 +4,12 @@
   "main": "src/index.ts",
   "compatibility_date": "2025-06-01",
   "compatibility_flags": ["nodejs_compat_v2"],
+  // Monorepo workspace packages — helps Wrangler resolve when node_modules links are missing
+  "alias": {
+    "@flareboard/rate-limiter": "../../packages/rate-limiter/src/index.ts",
+    "@flareboard/shared": "../../packages/shared/src/index.ts",
+    "@flareboard/db": "../../packages/db/src/index.ts"
+  },
   "vars": {
     "ENVIRONMENT": "development"
   },

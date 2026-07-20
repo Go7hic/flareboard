@@ -1,0 +1,61 @@
+# panel nesting triage — full dashboard
+# columns: route	file	verdict	why	scan_smells	spot_note
+# verdict: keep | subtract | maybe
+# scan_smells: from node .audit/scan-panel-nesting.mjs (wrappers noted on thin pages)
+# generated: 2026-07-20; Audit Log already subtracted in 15a1f6d
+
+/	Landing.tsx	keep	Marketing hero; no panel soup	-	
+/features	Features.tsx	keep	Marketing; no panel soup	-	
+/compare	Compare.tsx	keep	Marketing compare; no app panel nest	-	
+/pricing	Pricing.tsx	keep	Marketing; no panel soup	-	
+/login	Login.tsx	keep	Auth form; no decorative nest	-	
+/register	Register.tsx	keep	Auth form; no decorative nest	-	
+/share/:slug	SharePublic.tsx	keep	Public share chrome; empty-state-rich is rare message card	panel_empty_state_rich	allowlisted public frame
+/dashboard	DashboardHome.tsx	keep	Site ranking / empty card occupies grid slot	panel_empty_state_rich	spot: empty-rich without EmptyState component
+/websites	Websites.tsx	keep	Website cards are content surfaces	panel_empty_state_rich	empty card in list = card pattern
+/teams	Teams.tsx	subtract	Empty: solid panel wraps EmptyState; drop outer panel on empty path	panel_empty_state_rich,panel_wraps_empty_sole,panel_wraps_master_detail	populated MD uses panel as list/detail chrome (keep that); fix empty only
+/links	LinksPixels.tsx	keep	Form/list panels with real fields	-	
+/links/analytics	LinkAnalytics.tsx	subtract	panel empty-state-rich wraps EmptyState (solid+dashed)	panel_empty_state_rich,panel_wraps_empty_sole	
+/reports	Reports.tsx	keep	Hub cards + DVS; empty-rich is hub empty card	panel_empty_state_rich	
+/insights	Insights.tsx	subtract	Outer .panel wraps MasterDetail (list+pane already bordered)	panel_wraps_master_detail	same as pre-fix Audit Log
+/boards	Boards.tsx	maybe	Empty board is a grid card slot; optional flatten later	panel_empty_state_rich	
+/billing	Billing.tsx	keep	Plan/form sections; content chrome	-	
+/admin	Admin.tsx	maybe	Forbidden path uses single empty-rich panel; rare	panel_empty_state_rich	
+/websites/:websiteId	WebsiteStats.tsx	keep	KPI + primary chart panel; chart EmptyState is chart body	panel_wraps_empty_sole	FP for subtract: keep chart-in-panel
+/websites/:websiteId/sessions	Sessions.tsx	keep	Filter row + table panel; empty under filters is required (U17.1)	-	dashed-in-solid when empty is acceptable until empty chrome softens globally
+/websites/:websiteId/sessions/:sessionId	SessionDetail.tsx	keep	Detail sections are content panels	-	
+/websites/:websiteId/settings	WebsiteSettings.tsx	keep	Settings form / ingest rails	-	via IngestSnippetPanel; no nest smell
+/websites/:websiteId/share	WebsiteShareLinks.tsx	keep	Single form panel	-	
+/websites/:websiteId/replays	Replays.tsx	subtract	Disabled path: panel wraps EmptyState; drop outer panel	panel_empty_state_rich,panel_wraps_empty_sole,panel_wraps_master_detail	populated MD list/detail panels stay
+/websites/:websiteId/heatmaps	Heatmaps.tsx	keep	No page-level panel nest	-	
+/websites/:websiteId/revenue	Revenue.tsx	keep	DVS without outer decorative panel wrap	-	
+/websites/:websiteId/performance	Performance.tsx	maybe	empty-state-rich empty path; polish later if noisy	panel_empty_state_rich,panel_wraps_empty_sole	lower traffic than core ops
+/websites/:websiteId/realtime	WebsiteRealtime.tsx	keep	No panel soup at page level	-	
+/websites/:websiteId/events	WebsiteEvents.tsx	subtract	Outer panel wraps MasterDetail	panel_wraps_master_detail	EventDataPanel table chrome separate
+/websites/:websiteId/actions	WebsiteActions.tsx	subtract	Outer panel wraps MasterDetail + empty	panel_wraps_master_detail	
+/websites/:websiteId/breakdown	WebsiteBreakdown.tsx	keep	Dimension breakdown panel is content chrome	-	via WebsiteBreakdownPanel
+/websites/:websiteId/utm	WebsiteUtm.tsx	maybe	Result panel wraps DataViewState (empty → dashed-in-solid)	panel_wraps_dvs	
+/websites/:websiteId/attribution	WebsiteAttribution.tsx	keep	Dimension-style panels; EmptyState not sole panel child	-	scan FN on empty outside cards is fine
+/websites/:websiteId/annotations	WebsiteAnnotations.tsx	subtract	Outer panel wraps MasterDetail + EmptyState	panel_wraps_master_detail	create-button panel can stay
+/websites/:websiteId/funnel	WebsiteFunnel.tsx	maybe	Result panel wraps DataViewState empty path	panel_wraps_dvs	
+/websites/:websiteId/retention	WebsiteRetention.tsx	maybe	Result panel wraps DataViewState empty path	panel_wraps_dvs	
+/websites/:websiteId/stickiness	WebsiteStickiness.tsx	maybe	Form panel keep; result panel wraps DVS empty	panel_wraps_dvs	spot: form panel ≠ smell
+/websites/:websiteId/goals	WebsiteGoals.tsx	maybe	GoalsPanel list panel has toolbar+EmptyState; soften empty border later	panel_wraps_empty_sole (GoalsPanel)	chart panel keep
+/websites/:websiteId/journeys	WebsiteJourneys.tsx	subtract	Panel wraps EmptyState as primary empty chrome	panel_wraps_empty_sole	
+/websites/:websiteId/segments	WebsiteSegments.tsx	subtract	SegmentsPanel: outer panel wraps MD + EmptyState	panel_wraps_empty_sole,panel_wraps_master_detail (SegmentsPanel)	
+/websites/:websiteId/cohorts	WebsiteCohorts.tsx	subtract	CohortsPanel: outer panel wraps MD + EmptyState	panel_wraps_empty_sole,panel_wraps_master_detail (CohortsPanel)	
+/websites/:websiteId/compare	WebsiteCompare.tsx	maybe	EmptyState inside compare panel when no data (scan FN)	-	spot FN; optional flatten empty path
+/websites/:websiteId/errors	WebsiteErrors.tsx	keep	Primary issues table-in-panel is content chrome	panel_wraps_master_detail	secondary More panels → see maybe row note
+/websites/:websiteId/errors#secondary	WebsiteErrors.tsx	maybe	Source maps / alert-rules empty panels are intentional secondary	(secondary empties)	do not promote into subtract wave
+/websites/:websiteId/errors/:eventId	WebsiteErrorDetail.tsx	maybe	Header+empty sections; polish if triple-frame shows up	empty_after_panel_header_only	
+/websites/:websiteId/logs	WebsiteLogs.tsx	keep	Primary events stream chrome stays	panel_wraps_master_detail (traces secondary)	primary keep
+/websites/:websiteId/logs#secondary	WebsiteLogs.tsx	maybe	Traces/filters/alerts panels are intentional More IA	panel_wraps_master_detail	same as Errors secondary
+/websites/:websiteId/ai-observability	WebsiteAiObservability.tsx	maybe	Dense section panels with occasional empty headers	empty_after_panel_header_only	later polish
+/websites/:websiteId/feature-flags	WebsiteFeatureFlags.tsx	subtract	List section panel wraps MasterDetail + EmptyState	panel_wraps_master_detail	create form panels keep
+/websites/:websiteId/experiments	WebsiteExperiments.tsx	subtract	Outer panel wraps MasterDetail via DataViewState	panel_wraps_master_detail	
+/websites/:websiteId/surveys	WebsiteSurveys.tsx	subtract	Outer panel wraps MasterDetail + EmptyState	panel_wraps_master_detail	
+/websites/:websiteId/people	WebsitePeople.tsx	subtract	Outer panel wraps MasterDetail	panel_wraps_master_detail	
+/websites/:websiteId/groups	WebsiteGroups.tsx	subtract	Outer panel wraps MasterDetail + EmptyState	panel_wraps_master_detail	
+/websites/:websiteId/workflows	WebsiteWorkflows.tsx	subtract	Outer panel wraps MasterDetail + EmptyState	panel_wraps_master_detail	
+/websites/:websiteId/warehouse	WebsiteWarehouse.tsx	maybe	Titled section empties after tools; not empty-first page frame	empty_after_panel_header_only	
+/websites/:websiteId/audit	WebsiteAuditLog.tsx	keep	Already flattened (15a1f6d); MD + empty without outer panel	-	gold standard

@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { RealtimeSession } from '../lib/api';
+import { formatNumber } from '../lib/format';
 import { BrandLogo } from './BrandLogo';
 import { t } from '../lib/i18n';
 import { getCountryLabel } from '../lib/map-format';
@@ -144,11 +145,12 @@ export function RealtimeGlobeOverlay({
   const countries = useMemo(() => topCountries(sessions, TOP_LIMIT), [sessions]);
   const devices = useMemo(() => topDevices(sessions, TOP_LIMIT), [sessions]);
 
+  const visitorCount = formatNumber(visitors);
   const statusLine = siteName
     ? t('realtimeGlobeVisitorsOn')
-        .replace('{count}', visitors.toLocaleString())
+        .replace('{count}', visitorCount)
         .replace('{siteName}', siteName)
-    : t('realtimeGlobeVisitorsCount').replace('{count}', visitors.toLocaleString());
+    : t('realtimeGlobeVisitorsCount').replace('{count}', visitorCount);
 
   const onShare = useCallback(async () => {
     try {

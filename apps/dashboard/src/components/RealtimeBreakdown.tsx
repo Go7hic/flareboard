@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Bar, BarChart, Legend } from 'recharts';
 import type { RealtimeSession, RealtimeWindow30 } from '../lib/api';
-import { formatDateTime, formatNumber, formatPercent } from '../lib/format';
+import { formatDateTime, formatNumber, formatPercent, formatTimeOfDay } from '../lib/format';
 import { t } from '../lib/i18n';
 import { getCountryLabel } from '../lib/map-format';
 import { formatRelativeTime } from '../lib/session-display';
@@ -83,10 +83,7 @@ function buildTimeBuckets(
     const bucketStart = start + i * BUCKET_MS;
     return {
       ts: bucketStart,
-      label: new Date(bucketStart).toLocaleTimeString(undefined, {
-        hour: 'numeric',
-        minute: '2-digit',
-      }),
+      label: formatTimeOfDay(bucketStart),
       visitors: 0,
       pageviews: 0,
     };

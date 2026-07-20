@@ -79,3 +79,17 @@ export function formatDateOnly(value: string | number | null | undefined): strin
     day: 'numeric',
   });
 }
+
+export function formatTimeOfDay(
+  value: string | number | Date | null | undefined,
+  opts?: { timeZone?: string },
+): string {
+  if (value == null) return EMPTY;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return EMPTY;
+  return date.toLocaleTimeString(getLocale(), {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: opts?.timeZone,
+  });
+}

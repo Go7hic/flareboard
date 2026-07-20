@@ -4387,6 +4387,10 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   width: 10rem;
 }
 
+.page-logs-hero .section-title {
+  font-size: 1.0625rem;
+}
+
 .page-logs .logs-secondary {
   margin-top: 2rem;
   padding-top: 1.5rem;

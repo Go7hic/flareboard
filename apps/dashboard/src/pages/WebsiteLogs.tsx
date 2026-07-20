@@ -27,8 +27,8 @@ import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 
 const LEVELS = ['', 'trace', 'debug', 'info', 'warn', 'error', 'fatal'];
-const LOG_TABS = ['events', 'traces', 'filters', 'alerts'] as const;
-type LogsTab = (typeof LOG_TABS)[number];
+const LOG_SECONDARY_TABS = ['traces', 'filters', 'alerts'] as const;
+type LogsSecondaryTab = (typeof LOG_SECONDARY_TABS)[number];
 
 function formatTrendDate(value: string) {
   return formatDateOnly(`${value}T00:00:00Z`);
@@ -52,7 +52,7 @@ export default function WebsiteLogsPage() {
   const queryClient = useQueryClient();
   const { canEdit } = useWebsitePermissions(websiteId, 'logs');
   const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
-  const [tab, setTab] = useState<LogsTab>('events');
+  const [secondaryTab, setSecondaryTab] = useState<LogsSecondaryTab | ''>('');
   const [level, setLevel] = useState('');
   const [search, setSearch] = useState('');
   const [releaseFilter, setReleaseFilter] = useState('');
@@ -74,13 +74,13 @@ export default function WebsiteLogsPage() {
 
   const logsQuery = useQuery({
     queryKey: ['logs', websiteId, range, level, debouncedSearch, releaseFilter, environmentFilter],
-    enabled: Boolean(websiteId) && tab === 'events',
+    enabled: Boolean(websiteId),
     queryFn: () => api<LogEventsResponse>(`/api/websites/${websiteId}/logs?${qs}`),
   });
 
   const tracesQuery = useQuery({
     queryKey: ['log-traces', websiteId, range, level, debouncedSearch, releaseFilter, environmentFilter],
-    enabled: Boolean(websiteId) && tab === 'traces',
+    enabled: Boolean(websiteId) && secondaryTab === 'traces',
     queryFn: () => api<{ traces: LogTraceSummary[] }>(`/api/websites/${websiteId}/logs/traces?${qs}`),
   });
 
@@ -92,13 +92,13 @@ export default function WebsiteLogsPage() {
 
   const savedFiltersQuery = useQuery({
     queryKey: ['log-filters', websiteId],
-    enabled: Boolean(websiteId) && tab === 'filters',
+    enabled: Boolean(websiteId) && secondaryTab === 'filters',
     queryFn: () => api<{ filters: LogSavedFilter[] }>(`/api/websites/${websiteId}/logs/filters`),
   });
 
   const alertRulesQuery = useQuery({
     queryKey: ['log-alerts', websiteId],
-    enabled: Boolean(websiteId) && tab === 'alerts',
+    enabled: Boolean(websiteId) && secondaryTab === 'alerts',
     queryFn: () => api<{ alertRules: LogAlertRule[] }>(`/api/websites/${websiteId}/logs/alerts`),
   });
 
@@ -192,7 +192,7 @@ export default function WebsiteLogsPage() {
     setSearch(filter.filters.search ?? '');
     setReleaseFilter(filter.filters.release ?? '');
     setEnvironmentFilter(filter.filters.environment ?? '');
-    setTab('events');
+    setSecondaryTab('');
   }
 
   return (
@@ -209,28 +209,22 @@ export default function WebsiteLogsPage() {
 
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
-      <div className="section-gap">
-        <SegmentTabs
-          aria-label={t('logs')}
-          value={tab}
-          onChange={(id) => setTab(id as LogsTab)}
-          tabs={[
-            { id: 'events', label: t('logsTabEvents') },
-            { id: 'traces', label: t('logsTabTraces') },
-            { id: 'filters', label: t('logsTabFilters') },
-            { id: 'alerts', label: t('logsTabAlerts') },
-          ]}
-        />
-      </div>
-
-      {tab === 'events' ? (
-        <DataViewState
-          loading={logsQuery.isLoading && !logsQuery.data}
-          error={logsQuery.isError ? logsQuery.error : null}
-          onRetry={() => logsQuery.refetch()}
-        >
-        <>
-          <section className="stat-grid section-gap" aria-label={t('logs')}>
+      <DataViewState
+        loading={logsQuery.isLoading && !logsQuery.data}
+        error={logsQuery.isError ? logsQuery.error : null}
+        onRetry={() => logsQuery.refetch()}
+        loadingFallback={
+          <>
+            <section className="analytics-hero-stats section-gap">
+              <div className="skeleton" style={{ height: '5.5rem' }} />
+            </section>
+            <section className="panel section-gap">
+              <div className="skeleton" style={{ height: '14rem' }} />
+            </section>
+          </>
+        }
+      >
+          <section className="analytics-hero-stats section-gap" aria-label={t('logsTabEvents')}>
             <StatCard label={t('logsTotal')} value={formatNumber(stats?.logs ?? 0)} />
             <StatCard label={t('logsAffectedSessions')} value={formatNumber(stats?.sessions ?? 0)} />
             <StatCard
@@ -298,7 +292,7 @@ export default function WebsiteLogsPage() {
             </section>
           ) : null}
 
-          <section className="panel section-gap">
+          <section className="panel section-gap page-logs-hero">
             <header className="panel-header">
               <div>
                 <h2 className="section-title">{t('logsRecent')}</h2>
@@ -428,12 +422,31 @@ export default function WebsiteLogsPage() {
               <EmptyState title={t('logsEmptyTitle')} description={t('logsEmptyBody')} />
             ) : null}
           </section>
-        </>
-        </DataViewState>
-      ) : null}
+      </DataViewState>
 
-      {tab === 'traces' ? (
-        <section className="panel section-gap">
+      <section className="logs-secondary section-gap" aria-labelledby="logs-secondary-title">
+        <header className="logs-secondary-head">
+          <div>
+            <h2 id="logs-secondary-title" className="logs-secondary-title">
+              {t('overviewMore')}
+            </h2>
+            <p className="text-muted">{t('logsSecondaryLead')}</p>
+          </div>
+          <SegmentTabs
+            aria-label={t('overviewMore')}
+            size="sm"
+            value={secondaryTab}
+            onChange={(id) => setSecondaryTab(id as LogsSecondaryTab)}
+            tabs={[
+              { id: 'traces', label: t('logsTabTraces') },
+              { id: 'filters', label: t('logsTabFilters') },
+              { id: 'alerts', label: t('logsTabAlerts') },
+            ]}
+          />
+        </header>
+
+      {secondaryTab === 'traces' ? (
+        <section className="panel">
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('logsTraces')}</h2>
@@ -519,8 +532,8 @@ export default function WebsiteLogsPage() {
         </section>
       ) : null}
 
-      {tab === 'filters' ? (
-        <section className="panel section-gap">
+      {secondaryTab === 'filters' ? (
+        <section className="panel">
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('logsSavedFilters')}</h2>
@@ -595,8 +608,8 @@ export default function WebsiteLogsPage() {
         </section>
       ) : null}
 
-      {tab === 'alerts' ? (
-        <section className="panel section-gap">
+      {secondaryTab === 'alerts' ? (
+        <section className="panel">
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('logsAlertRules')}</h2>
@@ -785,6 +798,7 @@ export default function WebsiteLogsPage() {
           )}
         </section>
       ) : null}
+      </section>
     </div>
   );
 }

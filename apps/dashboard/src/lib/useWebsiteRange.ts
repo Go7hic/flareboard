@@ -4,6 +4,7 @@ import { api, type Website } from './api';
 import { type DateRangePreset, presetToRange, rangeQueryString } from './dateRange';
 import { defaultRange, loadWebsiteRange, saveWebsiteRange, type StoredRange } from './websiteRangeStorage';
 
+/** Default `24h`: overview / realtime pulse. Report pages pass `30d` via useWebsiteReportContext. */
 export function useWebsiteRange(websiteId: string | undefined, fallbackPreset: DateRangePreset = '24h') {
   const websiteQuery = useQuery({
     queryKey: ['website', websiteId],

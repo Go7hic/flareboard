@@ -1,15 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Bar, BarChart, Legend } from 'recharts';
+import { AnalyticsChart } from '../components/AnalyticsChart';
 import { CompareReportControls } from '../components/CompareReportControls';
 import { StatChangeDelta } from '../components/StatChangeDelta';
 import { EmptyState } from '../components/EmptyState';
@@ -209,72 +201,63 @@ export default function WebsiteComparePage() {
             <div className="compare-chart">
               {chartData.length > 0 ? (
                 <div className="chart-wrap chart-wrap-hero">
-                  <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                      <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" vertical={false} />
-                      <XAxis
-                        dataKey="x"
-                        tick={{ fill: chartColors.muted, fontSize: 11 }}
-                        tickLine={false}
-                        axisLine={{ stroke: chartColors.border }}
-                        interval="preserveStartEnd"
-                        minTickGap={20}
-                      />
-                      <YAxis
-                        allowDecimals={false}
-                        tick={{ fill: chartColors.muted, fontSize: 11 }}
-                        tickLine={false}
-                        axisLine={false}
-                        width={32}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          background: chartColors.panel,
-                          border: `1px solid ${chartColors.border}`,
-                          borderRadius: 'var(--radius-sm)',
-                          fontSize: '0.8125rem',
-                        }}
-                        labelStyle={{ color: chartColors.text }}
-                      />
-                      <Legend
-                        verticalAlign="bottom"
-                        height={32}
-                        iconType="circle"
-                        iconSize={8}
-                        wrapperStyle={{ fontSize: '0.8125rem', color: chartColors.muted }}
-                      />
-                      <Bar
-                        dataKey="visitorsPrev"
-                        name={t('compareChartVisitorsPrev')}
-                        stackId="previous"
-                        fill={visitorsPrevFill}
-                        maxBarSize={24}
-                      />
-                      <Bar
-                        dataKey="pageviewsPrev"
-                        name={t('compareChartPageviewsPrev')}
-                        stackId="previous"
-                        fill={pageviewsPrevFill}
-                        radius={[2, 2, 0, 0]}
-                        maxBarSize={24}
-                      />
-                      <Bar
-                        dataKey="visitors"
-                        name={t('compareChartVisitorsCurrent')}
-                        stackId="current"
-                        fill={chartColors.accent}
-                        maxBarSize={24}
-                      />
-                      <Bar
-                        dataKey="pageviews"
-                        name={t('compareChartPageviewsCurrent')}
-                        stackId="current"
-                        fill={visitorsCurrentFill}
-                        radius={[2, 2, 0, 0]}
-                        maxBarSize={24}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <AnalyticsChart
+                    Chart={BarChart}
+                    data={chartData}
+                    margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                    responsive={{ width: '100%', height: 280 }}
+                    xAxis={{
+                      dataKey: 'x',
+                      tickLine: false,
+                      axisLine: { stroke: chartColors.border },
+                      interval: 'preserveStartEnd',
+                      minTickGap: 20,
+                    }}
+                    yAxis={{
+                      tickLine: false,
+                      axisLine: false,
+                      width: 32,
+                    }}
+                    tooltip={{ labelStyle: { color: chartColors.text } }}
+                  >
+                    <Legend
+                      verticalAlign="bottom"
+                      height={32}
+                      iconType="circle"
+                      iconSize={8}
+                      wrapperStyle={{ fontSize: '0.8125rem', color: chartColors.muted }}
+                    />
+                    <Bar
+                      dataKey="visitorsPrev"
+                      name={t('compareChartVisitorsPrev')}
+                      stackId="previous"
+                      fill={visitorsPrevFill}
+                      maxBarSize={24}
+                    />
+                    <Bar
+                      dataKey="pageviewsPrev"
+                      name={t('compareChartPageviewsPrev')}
+                      stackId="previous"
+                      fill={pageviewsPrevFill}
+                      radius={[2, 2, 0, 0]}
+                      maxBarSize={24}
+                    />
+                    <Bar
+                      dataKey="visitors"
+                      name={t('compareChartVisitorsCurrent')}
+                      stackId="current"
+                      fill={chartColors.accent}
+                      maxBarSize={24}
+                    />
+                    <Bar
+                      dataKey="pageviews"
+                      name={t('compareChartPageviewsCurrent')}
+                      stackId="current"
+                      fill={visitorsCurrentFill}
+                      radius={[2, 2, 0, 0]}
+                      maxBarSize={24}
+                    />
+                  </AnalyticsChart>
                 </div>
               ) : (
                 <EmptyState title={t('chartNoData')} description={t('noDataInPeriodHint')} />

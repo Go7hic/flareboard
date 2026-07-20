@@ -1,15 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Line, LineChart } from 'recharts';
+import { AnalyticsChart } from '../components/AnalyticsChart';
 import { EmptyState } from '../components/EmptyState';
 import { StatChangeDelta } from '../components/StatChangeDelta';
 import { MetricsTable } from '../components/MetricsTable';
@@ -35,7 +28,6 @@ import { t } from '../lib/i18n';
 import { useWebsiteExport } from '../lib/useWebsiteExport';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 import { useChartColors } from '../lib/useChartColors';
-import { chartTooltipStyle } from '../lib/chartStyles';
 
 function cssVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -288,40 +280,32 @@ export default function WebsiteStatsPage() {
         ) : chartData.length > 0 ? (
           <>
             <div className="chart-wrap chart-wrap-hero">
-              <ResponsiveContainer>
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
-                  <XAxis
-                    dataKey="x"
-                    tick={{ fontSize: 11, fill: chartColors.muted }}
-                    stroke={chartColors.border}
-                    interval={hourly ? 'preserveStartEnd' : undefined}
-                    minTickGap={hourly ? 24 : 8}
-                  />
-                  <YAxis
-                    allowDecimals={false}
-                    tick={{ fontSize: 11, fill: chartColors.muted }}
-                    stroke={chartColors.border}
-                  />
-                  <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 13 })} />
-                  <Line
-                    type="monotone"
-                    dataKey="pageviews"
-                    name={t('pageviews')}
-                    stroke={metricColors.pageviews}
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="visitors"
-                    name={t('visitors')}
-                    stroke={metricColors.visitors}
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              <AnalyticsChart
+                Chart={LineChart}
+                data={chartData}
+                xAxis={{
+                  dataKey: 'x',
+                  interval: hourly ? 'preserveStartEnd' : undefined,
+                  minTickGap: hourly ? 24 : 8,
+                }}
+              >
+                <Line
+                  type="monotone"
+                  dataKey="pageviews"
+                  name={t('pageviews')}
+                  stroke={metricColors.pageviews}
+                  strokeWidth={2}
+                  dot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="visitors"
+                  name={t('visitors')}
+                  stroke={metricColors.visitors}
+                  strokeWidth={2}
+                  dot={false}
+                />
+              </AnalyticsChart>
             </div>
             <div className="dashboard-aggregate-legend analytics-chart-legend" aria-hidden>
               <span className="dashboard-aggregate-legend-item">

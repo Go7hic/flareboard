@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart } from 'recharts';
+import { AnalyticsChart } from '../components/AnalyticsChart';
 import { EmptyState } from '../components/EmptyState';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';
@@ -9,7 +10,6 @@ import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
 import { api } from '../lib/api';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
-import { chartTooltipStyle } from '../lib/chartStyles';
 
 export default function WebsiteFunnelPage() {
   const chartColors = useChartColors();
@@ -70,21 +70,17 @@ export default function WebsiteFunnelPage() {
         ) : (
           <>
             <div className="chart-wrap chart-wrap-compact">
-              <ResponsiveContainer>
-                <BarChart data={funnelChartData} layout="vertical" margin={{ left: 8, right: 16 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    width={100}
-                    tick={{ fontSize: 11, fill: chartColors.muted }}
-                    stroke={chartColors.border}
-                  />
-                  <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 13 })} />
-                  <Bar dataKey="count" fill={chartColors.accent} radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <AnalyticsChart
+                Chart={BarChart}
+                data={funnelChartData}
+                layout="vertical"
+                margin={{ left: 8, right: 16 }}
+                grid={{ horizontal: false }}
+                xAxis={{ type: 'number' }}
+                yAxis={{ type: 'category', dataKey: 'name', width: 100 }}
+              >
+                <Bar dataKey="count" fill={chartColors.accent} radius={[0, 4, 4, 0]} />
+              </AnalyticsChart>
             </div>
             <ul className="list-plain">
               {(funnelQuery.data?.steps ?? []).map((s) => (

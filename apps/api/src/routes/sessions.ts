@@ -20,13 +20,25 @@ import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
 
+function normalizeOptionalParam(value: string | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed.slice(0, 120) : undefined;
+}
+
 export async function handleList(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
   const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
   const page = Number(c.req.query('page') || 1);
   const pageSize = Math.min(Number(c.req.query('pageSize') || 20), 100);
-  const data = await listSessions(c.env, website!.websiteId, startAt, endAt, page, pageSize);
+  const filters = {
+    country: normalizeOptionalParam(c.req.query('country')),
+    device: normalizeOptionalParam(c.req.query('device')),
+    browser: normalizeOptionalParam(c.req.query('browser')),
+    path: normalizeOptionalParam(c.req.query('path')),
+    referrer: normalizeOptionalParam(c.req.query('referrer')),
+  };
+  const data = await listSessions(c.env, website!.websiteId, startAt, endAt, page, pageSize, filters);
   return json(data);
 }
 

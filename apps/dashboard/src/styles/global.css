@@ -6712,6 +6712,32 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   overflow: hidden;
 }
 
+.sessions-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 1.15rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.sessions-filter-input {
+  flex: 1 1 10rem;
+  min-width: 8rem;
+  height: 2.25rem;
+}
+
+.sessions-filter-input--narrow {
+  flex: 0 1 7rem;
+  min-width: 6rem;
+}
+
+.sessions-filter-select {
+  flex: 0 1 8rem;
+  min-width: 7rem;
+  height: 2.25rem;
+}
+
 .sessions-table-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;

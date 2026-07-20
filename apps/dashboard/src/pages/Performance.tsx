@@ -5,8 +5,9 @@ import { Bar, BarChart, Line, LineChart } from 'recharts';
 import { AnalyticsChart } from '../components/AnalyticsChart';
 import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
-import { WebsitePageShell } from '../components/WebsitePageShell';
 import { SegmentTabs } from '../components/SegmentTabs';
 import { Skeleton } from '../components/ui/skeleton';
 import { api } from '../lib/api';
@@ -242,14 +243,16 @@ export default function PerformancePage() {
   );
 
   return (
-    <div className="page page-performance">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page className="page-performance">
+      <PageHeader
+        title={t('performance')}
+        lead={t('performancePageLead')}
+        actions={
           <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
         }
       />
 
+      <PageBody>
       <DataViewState
         loading={performanceQuery.isLoading && !performanceQuery.data}
         error={performanceQuery.isError ? performanceQuery.error : null}
@@ -259,7 +262,6 @@ export default function PerformancePage() {
         <h2 id="performance-overview" className="visually-hidden">
           {t('performance')}
         </h2>
-        <p className="section-lead">{t('performancePageLead')}</p>
 
         <div className="cwv-dist-global-legend" aria-hidden={loading}>
           <span className="cwv-dist-legend-item">
@@ -496,6 +498,7 @@ export default function PerformancePage() {
         </section>
       ) : null}
       </DataViewState>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

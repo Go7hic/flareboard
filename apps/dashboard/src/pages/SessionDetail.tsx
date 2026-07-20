@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Fragment, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ExternalLink } from 'lucide-react';
+import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { api } from '../lib/api';
@@ -127,9 +128,10 @@ export default function SessionDetailPage() {
       : '—';
 
   return (
-    <div className="page page-session-detail">
-      <PageHeader title={t('session')} subtitle={sessionId?.slice(0, 12)} />
+    <Page className="page-session-detail">
+      <PageHeader title={t('session')} lead={sessionId?.slice(0, 12)} />
 
+      <PageBody>
       {s ? (
         <section className="panel panel-accent-rail section-gap">
           <h2 className="section-title">{t('session')}</h2>
@@ -223,6 +225,7 @@ export default function SessionDetailPage() {
           </dl>
         </section>
       ) : null}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

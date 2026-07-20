@@ -7,6 +7,7 @@ import { DataViewState } from '../components/DataViewState';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { DashboardSiteRanking } from '../components/DashboardSiteRanking';
+import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
@@ -137,13 +138,14 @@ export default function DashboardHome() {
   }, []);
 
   return (
-    <div className="page page-dashboard">
+    <Page className="page-dashboard">
       <PageHeader
         title={t('dashboard')}
-        subtitle={t('dashboardAllSitesLead')}
+        lead={t('dashboardAllSitesLead')}
         actions={<DateRangePicker value={range} onChange={setRange} popover />}
       />
 
+      <PageBody>
       <DataViewState
         loading={overviewQuery.isLoading}
         error={overviewQuery.isError ? overviewQuery.error : null}
@@ -358,6 +360,7 @@ export default function DashboardHome() {
           </>
         )}
       </DataViewState>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

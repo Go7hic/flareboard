@@ -5,6 +5,7 @@ import { MasterDetailLayout, MasterDetailSelectableItem } from '../components/ma
 import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { PlanUpgradeBanner } from '../components/PlanUpgradeBanner';
 import { EmptyState } from '../components/EmptyState';
+import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -176,9 +177,10 @@ export default function Teams() {
   const members = membersQuery.data ?? [];
 
   return (
-    <div className="page page-teams">
-      <PageHeader title={t('teams')} subtitle={t('teamsSubtitle')} />
+    <Page className="page-teams">
+      <PageHeader title={t('teams')} lead={t('teamsSubtitle')} />
 
+      <PageBody>
       {!teamsAllowed && billingQuery.data ? (
         <PlanUpgradeBanner message={t('teamsRequiresUpgrade')} className="section-gap" />
       ) : null}
@@ -410,6 +412,7 @@ export default function Teams() {
           }
         />
       ) : null}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

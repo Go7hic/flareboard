@@ -3,6 +3,7 @@ import { Pencil } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CollapsibleSection } from '../components/CollapsibleSection';
+import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { PlanUpgradeBanner } from '../components/PlanUpgradeBanner';
 import { WebsiteFormDialog } from '../components/WebsiteFormDialog';
@@ -110,9 +111,10 @@ export default function Websites() {
   }
 
   return (
-    <div className="page page-websites">
-      <PageHeader title={t('websites')} subtitle={t('websitesSubtitle')} />
+    <Page className="page-websites">
+      <PageHeader title={t('websites')} lead={t('websitesSubtitle')} />
 
+      <PageBody>
       {hasSites ? (
         <CollapsibleSection title={t('collapseAddWebsite')} summary={t('addWebsiteLead')}>
           {renderAddWebsite()}
@@ -186,6 +188,7 @@ export default function Websites() {
         website={editingSite}
         onClose={() => setEditingSite(null)}
       />
-    </div>
+      </PageBody>
+    </Page>
   );
 }

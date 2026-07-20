@@ -13,6 +13,7 @@ An operator can, without hunting chrome:
 5. Triage errors/logs with a readable IA (primary issue list first; secondary tabs quieter).
 6. Know where custom analytics live: Insights build → Boards save/share → Reports hub links out.
 7. Every user-visible count/time in app chrome uses `lib/format.ts` via `getLocale()` (landing marketing optional).
+8. Critical app routes share one outer page frame (`Page` + `PageHeader` title/lead/actions + content gutter).
 
 Evidence in `.audit/dashboard-insight-ux.tsv`. Verdict VERIFIED only with real artifact checks, not typecheck alone for interaction units.
 
@@ -28,7 +29,19 @@ Evidence in `.audit/dashboard-insight-ux.tsv`. Verdict VERIFIED only with real a
 | U19 | Logs IA | Events primary; traces/filters/alerts secondary |
 | U20 | Insights/Boards/Reports line | cross-links + role copy on each surface | VERIFIED |
 | U21 | Auth visual smoke | checklist on core paths light/dark |
+| U22 | Unified page frame | `Page` + `PageHeader` + `PageBody` on critical routes; leftover list via `.audit/check-page-frame.sh` |
+
+## U22 page frame (layout chrome)
+
+**Problem.** Insight UX improved IA inside pages, but outer chrome still drifted: global routes used `PageHeader`, website routes often used actions-only `WebsitePageShell` (or a no-op), and a few invented manual `h2.page-title` rows.
+
+**Lever.** `Page` / `PageHeader` / `PageBody` in `apps/dashboard/src/components/`. Title + muted lead + actions on one row; optional `toolbar` / `meta`. `WebsitePageShell` is deprecated for leftovers only.
+
+**Variants.** `default` | `narrow` | `bleed` (Realtime tighter header gap). No `PageTabs` yet; secondary tabs stay in-page (Errors/Logs IA wins).
+
+**Leftovers.** Run `.audit/check-page-frame.sh`. Mechanical migrate remaining website routes onto the same API.
 
 ## Out of scope
 
 New metrics backends, warehouse SQL redesign, marketing landing rewrite, accent rails.
+

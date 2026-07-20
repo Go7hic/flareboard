@@ -9,7 +9,8 @@ import {
   replayConfigToJson,
   type ReplayConfig,
 } from '../components/ReplayConfigWizard';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -230,9 +231,10 @@ export default function WebsiteSettingsPage() {
   }
 
   return (
-    <div className="page page-settings">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-settings">
+      <PageHeader title={t('settings')} lead={t('settingsPageLead')} />
 
+      <PageBody>
       <div className="page-settings-stack">
         {websiteId ? (
           <IngestSnippetPanel
@@ -494,6 +496,7 @@ export default function WebsiteSettingsPage() {
           </Panel>
         </div>
       </div>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

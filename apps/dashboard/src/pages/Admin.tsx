@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { Button } from '../components/ui/button';
@@ -119,9 +120,10 @@ export default function AdminPage() {
     (usersQuery.error as Error | undefined)?.message === 'Forbidden';
 
   return (
-    <div className="page">
-      <PageHeader title={t('admin')} subtitle={t('adminSubtitle')} backTo="/websites" backLabel={t('websites')} />
+    <Page>
+      <PageHeader title={t('admin')} lead={t('adminSubtitle')} backTo="/websites" backLabel={t('websites')} />
 
+      <PageBody>
       {isForbidden ? (
         <div className="panel empty-state-rich">
           <h3>{t('adminRequired')}</h3>
@@ -268,6 +270,7 @@ export default function AdminPage() {
           </section>
         </>
       )}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

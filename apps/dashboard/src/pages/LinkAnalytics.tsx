@@ -5,6 +5,7 @@ import { Line, LineChart } from 'recharts';
 import { AnalyticsChart } from '../components/AnalyticsChart';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { EmptyState } from '../components/EmptyState';
+import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { StatCard } from '../components/ui/stat-card';
 import { Button } from '../components/ui/button';
@@ -52,10 +53,10 @@ export default function LinkAnalyticsPage() {
   const chartData = stats?.series ?? [];
 
   return (
-    <div className="page page-link-analytics">
+    <Page className="page-link-analytics">
       <PageHeader
         title={t('linkAnalytics')}
-        subtitle={link ? link.url : undefined}
+        lead={link ? link.url : undefined}
         backTo="/links"
         backLabel={t('links')}
         toolbar={
@@ -82,6 +83,7 @@ export default function LinkAnalyticsPage() {
         }
       />
 
+      <PageBody>
       {!linksQuery.isLoading && !links.length ? (
         <div className="panel empty-state-rich section-gap">
           <EmptyState title={t('noLinksScope')}>
@@ -134,6 +136,7 @@ export default function LinkAnalyticsPage() {
           </div>
         </section>
       ) : null}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

@@ -23,7 +23,6 @@ export function RealtimeWidget({ websiteId }: { websiteId: string }) {
   return (
     <div className="realtime-widget section-gap">
       <header className="realtime-widget-head">
-        <p className="text-muted realtime-widget-lead">{t('realtimeLeadLive')}</p>
         <p
           className={`realtime-connection${sseConnected ? ' realtime-connection--live' : ''}`}
           aria-live="polite"

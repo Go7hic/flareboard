@@ -5600,14 +5600,9 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 .realtime-widget-head {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 1rem;
   margin-bottom: 0.85rem;
-}
-
-.realtime-widget-lead {
-  margin: 0;
-  font-size: 0.875rem;
 }
 
 .realtime-globe-stage {

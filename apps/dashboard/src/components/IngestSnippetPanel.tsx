@@ -4,6 +4,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
 import { api, INGEST_URL, type TrackingStatus } from '../lib/api';
+import { formatDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
 
 const RRWEB_CDN = 'https://cdn.jsdelivr.net/npm/rrweb@2/dist/rrweb.min.js';
@@ -160,7 +161,7 @@ export function IngestSnippetPanel({
           data.lastEventAt
             ? t('trackingTestSuccessWithTime').replace(
                 '{time}',
-                new Date(data.lastEventAt).toLocaleString(),
+                formatDateTime(data.lastEventAt),
               )
             : t('trackingTestSuccess'),
         );

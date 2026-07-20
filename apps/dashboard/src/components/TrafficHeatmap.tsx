@@ -1,5 +1,6 @@
 import { Fragment, useMemo, type CSSProperties } from 'react';
 import type { TrafficHeatmapCell } from '../hooks/useTrafficHeatmap';
+import { formatNumber } from '../lib/format';
 import { getLocale, t } from '../lib/i18n';
 import { EmptyState } from './EmptyState';
 import { Skeleton } from './ui/skeleton';
@@ -89,7 +90,7 @@ export function TrafficHeatmap({
                   <span
                     className="traffic-heatmap-punch-dot"
                     style={circleStyle(intensity, count)}
-                    title={`${dowLabel(dow)} ${formatHourLabel(hour)} — ${count.toLocaleString()} ${t('pageviews')}`}
+                    title={`${dowLabel(dow)} ${formatHourLabel(hour)} — ${formatNumber(count)} ${t('pageviews')}`}
                   />
                 </div>
               );

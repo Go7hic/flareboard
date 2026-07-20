@@ -52,16 +52,20 @@ export function formatDurationMs(ms: number | null | undefined): string {
   return formatDurationSeconds(Math.max(0, Math.round(ms / 1000)));
 }
 
-export function formatDateTime(value: string | number | null | undefined): string {
+export function formatDateTime(
+  value: string | number | null | undefined,
+  opts?: { timeZone?: string; includeYear?: boolean },
+): string {
   if (value == null) return EMPTY;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return EMPTY;
   return date.toLocaleString(getLocale(), {
-    year: 'numeric',
+    ...(opts?.includeYear === false ? {} : { year: 'numeric' as const }),
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: opts?.timeZone,
   });
 }
 

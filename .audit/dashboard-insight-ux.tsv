@@ -25,3 +25,4 @@ ts	phase	decision	why	evidence	result
 2026-07-20T10:00:00Z	u5	DashboardHome	DataViewState; StatCard aggregate KPIs; AnalyticsChart aggregate+site sparklines; formatNumber already wired	DashboardHome.tsx	VERIFIED
 2026-07-20T10:00:00Z	u5	WebsiteBreakdown	redirect-only to overview explorer; no page-local levers needed	WebsiteBreakdown.tsx	skipped redirect
 2026-07-20T10:00:00Z	u5	Phase A predicate met: >=8 analytics pages on format+StatCard/chart/DataViewState levers	U5 core paths + prior U0-U4 migrations; pnpm --filter @flareboard/dashboard typecheck	VERIFIED
+2026-07-20T09:58:50Z	u6	thin /reports hub: saved CRUD kept; 10 inline sections link to /websites/:id/*	Subtract Before You Add; stop duplicate insight UX	c4531bf Reports.tsx 1335→374	VERIFIED

@@ -63,7 +63,6 @@ export default function WebsiteEventsPage() {
         <header className="panel-header">
           <div>
             <h2 className="section-title">{t('eventCatalog')}</h2>
-            <p className="text-muted">{t('eventCatalogLead')}</p>
           </div>
         </header>
 

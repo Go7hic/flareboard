@@ -552,13 +552,6 @@ export default function WebsiteExperimentsPage() {
 
       {canEdit ? (
       <section className="panel section-gap">
-        <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('experiments')}</h2>
-            <p className="text-muted">{t('experimentsLead')}</p>
-          </div>
-        </header>
-
         <div className="panel-form">
           <div className="field">
             <Label htmlFor="experiment-name">{t('name')}</Label>

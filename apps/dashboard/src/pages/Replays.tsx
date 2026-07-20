@@ -228,7 +228,6 @@ export default function ReplaysPage() {
           list={
           <section className="panel">
             <h2 className="section-title">{t('replaysVisits')}</h2>
-            <p className="section-lead">{t('replaysVisitsLead')}</p>
             <div className="replays-filter-row">
               <select
                 className="select"

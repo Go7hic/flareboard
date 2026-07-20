@@ -41,8 +41,6 @@ export default function WebsiteShareLinksPage() {
 
       <PageBody>
       <section className="panel section-gap">
-        <h2 className="section-title">{t('sharePageTitle')}</h2>
-        <p className="section-lead">{t('sharePageLead')}</p>
         {websiteId ? <ShareManage websiteId={websiteId} /> : null}
         <div className="share-create-block">
           <Button

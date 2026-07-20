@@ -135,20 +135,16 @@ export default function WebsiteAnnotationsPage() {
 
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
-      <section className="panel section-gap">
-        <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('annotations')}</h2>
-            <p className="text-muted">{t('annotationsLead')}</p>
-          </div>
-          {canEdit ? (
+      {canEdit ? (
+        <section className="panel section-gap">
+          <header className="panel-header">
             <Button type="button" variant="secondary" onClick={newAnnotation}>
               <Plus size={16} strokeWidth={2} aria-hidden />
               {t('newAnnotation')}
             </Button>
-          ) : null}
-        </header>
-      </section>
+          </header>
+        </section>
+      ) : null}
 
       <section className="panel section-gap">
         {annotationsQuery.isLoading ? (

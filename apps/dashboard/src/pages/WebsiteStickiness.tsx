@@ -81,12 +81,6 @@ export default function WebsiteStickinessPage() {
 
       <PageBody>
       <section className="panel section-gap">
-        <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('stickiness')}</h2>
-            <p className="text-muted">{t('stickinessLead')}</p>
-          </div>
-        </header>
         <div className="panel-form">
           <div className="field">
             <Label htmlFor="stickiness-event">{t('stickinessEvent')}</Label>

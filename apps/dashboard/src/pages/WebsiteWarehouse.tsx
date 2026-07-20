@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
-import { Database } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
 import { MasterDetailLayout } from '../components/master-detail';
 import { SegmentTabs } from '../components/SegmentTabs';
@@ -234,14 +233,6 @@ export default function WebsiteWarehousePage() {
           wrapList={false}
           list={
           <section className="panel">
-            <header className="panel-header">
-              <div>
-                <h2 className="section-title">{t('dataWarehouse')}</h2>
-                <p className="text-muted">{t('dataWarehouseLead')}</p>
-              </div>
-              <Database size={20} strokeWidth={2} aria-hidden />
-            </header>
-
             <div className="warehouse-query">
               <textarea
                 className="textarea warehouse-sql"

@@ -67,10 +67,6 @@ export default function WebsiteGroupsPage() {
 
       <section className="panel section-gap">
         <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('groups')}</h2>
-            <p className="text-muted">{t('groupsLead')}</p>
-          </div>
           <select
             className="select"
             value={activeType}

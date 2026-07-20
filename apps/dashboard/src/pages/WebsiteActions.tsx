@@ -155,7 +155,6 @@ export default function WebsiteActionsPage() {
         <header className="panel-header">
           <div>
             <h2 className="section-title">{t('actionDefinitions')}</h2>
-            <p className="text-muted">{t('actionDefinitionsLead')}</p>
           </div>
           {canEdit ? (
             <Button type="button" variant="secondary" onClick={newAction}>

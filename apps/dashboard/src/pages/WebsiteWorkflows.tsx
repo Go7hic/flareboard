@@ -334,13 +334,6 @@ export default function WebsiteWorkflowsPage() {
 
       {canEdit ? (
       <section className="panel section-gap">
-        <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('workflows')}</h2>
-            <p className="text-muted">{t('workflowsLead')}</p>
-          </div>
-        </header>
-
         <div className="workflow-create-form">
           <div className="field">
             <Label htmlFor="workflow-name">{t('name')}</Label>

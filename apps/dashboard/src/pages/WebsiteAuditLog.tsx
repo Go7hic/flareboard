@@ -76,13 +76,6 @@ export default function WebsiteAuditLogPage() {
       <PageBody>
 
       <section className="panel section-gap">
-        <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('auditLog')}</h2>
-            <p className="text-muted">{t('websiteAuditLogLead')}</p>
-          </div>
-        </header>
-
         {auditQuery.isLoading ? <div className="skeleton skeleton-block" aria-busy /> : null}
 
         {!auditQuery.isLoading && items.length ? (

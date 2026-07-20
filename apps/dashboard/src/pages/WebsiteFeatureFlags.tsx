@@ -568,13 +568,6 @@ export default function WebsiteFeatureFlagsPage() {
 
       {canEdit ? (
       <section className="panel section-gap">
-        <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('featureFlags')}</h2>
-            <p className="text-muted">{t('featureFlagsLead')}</p>
-          </div>
-        </header>
-
         <div className="panel-form">
           <div className="field">
             <Label htmlFor="flag-key">{t('featureFlagKey')}</Label>

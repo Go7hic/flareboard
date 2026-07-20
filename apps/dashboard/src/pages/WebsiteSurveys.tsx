@@ -449,13 +449,6 @@ export default function WebsiteSurveysPage() {
 
       {canEdit ? (
       <section className="panel section-gap">
-        <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('surveys')}</h2>
-            <p className="text-muted">{t('surveysLead')}</p>
-          </div>
-        </header>
-
         <div className="panel-form">
           <div className="field">
             <Label htmlFor="survey-name">{t('name')}</Label>

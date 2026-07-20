@@ -126,13 +126,6 @@ export default function WebsitePeoplePage() {
       <PageBody>
 
       <section className="panel section-gap">
-        <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('people')}</h2>
-            <p className="text-muted">{t('peopleLead')}</p>
-          </div>
-        </header>
-
         <ResourceSearchField
           value={search}
           onChange={setSearch}

@@ -1,25 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Line, LineChart } from 'recharts';
+import { AnalyticsChart } from '../components/AnalyticsChart';
 import { BoardWidgets } from '../components/BoardWidgets';
 import { BrandLogo } from '../components/BrandLogo';
 import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
+import { StatCard } from '../components/ui/stat-card';
 import { formatChartTimeLabel, isHourlyChartRange } from '../lib/chartTimeseries';
 import { API_URL, type WebsiteStats } from '../lib/api';
 import { parseBoardConfig, type BoardRangePreset } from '../lib/board-config';
 import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/dateRange';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
-import { chartTooltipStyle } from '../lib/chartStyles';
 
 type PublicWebsiteShare = WebsiteStats & {
   website: { id: string; name: string; domain?: string; timezone?: string };
@@ -140,32 +134,17 @@ export default function SharePublic() {
       ) : (
         <>
           <div className="stat-grid">
-            <div className="stat-card stat-card-primary">
-              <div className="stat-label">{t('pageviews')}</div>
-              <div className="stat-value">{data.pageviews.value.toLocaleString()}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">{t('visitors')}</div>
-              <div className="stat-value">{data.visitors.value.toLocaleString()}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">{t('visits')}</div>
-              <div className="stat-value">{data.visits.value.toLocaleString()}</div>
-            </div>
+            <StatCard label={t('pageviews')} value={formatNumber(data.pageviews.value)} variant="primary" />
+            <StatCard label={t('visitors')} value={formatNumber(data.visitors.value)} />
+            <StatCard label={t('visits')} value={formatNumber(data.visits.value)} />
           </div>
 
           <section className="panel chart-panel section-gap-lg">
             <h2 className="section-title">{t('pageviewsOverTime')}</h2>
             <div className="chart-wrap">
-              <ResponsiveContainer>
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} />
-                  <XAxis dataKey="x" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-                  <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 13 })} />
-                  <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
+              <AnalyticsChart Chart={LineChart} data={chartData} xAxis={{ dataKey: 'x' }}>
+                <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} />
+              </AnalyticsChart>
             </div>
           </section>
         </>

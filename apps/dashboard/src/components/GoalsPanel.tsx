@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart } from 'recharts';
+import { AnalyticsChart } from './AnalyticsChart';
 import { EmptyState } from './EmptyState';
 import { GoalFormDialog, type GoalConfigRow } from './GoalFormDialog';
 import { StatCard, StatCardSkeleton } from './ui/stat-card';
@@ -10,7 +11,6 @@ import { api, type Website } from '../lib/api';
 import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
-import { chartTooltipStyle } from '../lib/chartStyles';
 
 export type GoalReportRow = {
   event: string;
@@ -173,21 +173,17 @@ export function GoalsPanel({
           <h2 className="section-title goals-chart-title">{t('goalChartTitle')}</h2>
           <p className="text-muted goals-chart-lead">{t('goalChartLead')}</p>
           <div className="chart-wrap chart-wrap-compact goals-chart-wrap">
-            <ResponsiveContainer>
-              <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 16 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={120}
-                  tick={{ fontSize: 11, fill: chartColors.muted }}
-                  stroke={chartColors.border}
-                />
-                <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 12 })} />
-                <Bar dataKey="count" fill={chartColors.accent} radius={[0, 4, 4, 0]} maxBarSize={28} />
-              </BarChart>
-            </ResponsiveContainer>
+            <AnalyticsChart
+              Chart={BarChart}
+              data={chartData}
+              layout="vertical"
+              margin={{ left: 8, right: 16 }}
+              grid={{ horizontal: false }}
+              xAxis={{ type: 'number' }}
+              yAxis={{ type: 'category', dataKey: 'name', width: 120 }}
+            >
+              <Bar dataKey="count" fill={chartColors.accent} radius={[0, 4, 4, 0]} maxBarSize={28} />
+            </AnalyticsChart>
           </div>
         </section>
       ) : null}
@@ -273,8 +269,8 @@ export function GoalsPanel({
                             <span className="goals-unconfigured-badge">{t('goalUnconfigured')}</span>
                           ) : null}
                         </td>
-                        <td className="stat-value">{row.count.toLocaleString()}</td>
-                        <td>{row.target != null ? row.target.toLocaleString() : '—'}</td>
+                        <td className="stat-value">{formatNumber(row.count)}</td>
+                        <td>{row.target != null ? formatNumber(row.target) : '—'}</td>
                         <td className="text-muted">{formatPeriodLabel(row)}</td>
                         <td>
                           {row.progress != null && row.target != null ? (

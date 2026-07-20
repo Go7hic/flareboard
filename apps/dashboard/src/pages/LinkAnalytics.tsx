@@ -1,15 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Line, LineChart } from 'recharts';
+import { AnalyticsChart } from '../components/AnalyticsChart';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
@@ -21,7 +14,6 @@ import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/da
 import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
-import { chartTooltipStyle } from '../lib/chartStyles';
 
 export default function LinkAnalyticsPage() {
   const chartColors = useChartColors();
@@ -132,19 +124,9 @@ export default function LinkAnalyticsPage() {
               </div>
             ) : chartData.length > 0 ? (
               <div className="chart-wrap chart-wrap-hero">
-                <ResponsiveContainer>
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
-                    <XAxis dataKey="x" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-                    <YAxis
-                      allowDecimals={false}
-                      tick={{ fontSize: 11, fill: chartColors.muted }}
-                      stroke={chartColors.border}
-                    />
-                    <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 13 })} />
-                    <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
+                <AnalyticsChart Chart={LineChart} data={chartData} xAxis={{ dataKey: 'x' }}>
+                  <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} />
+                </AnalyticsChart>
               </div>
             ) : (
               <p className="text-muted">{t('noLinkClicksInRange')}</p>

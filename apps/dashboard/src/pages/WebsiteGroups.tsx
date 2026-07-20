@@ -11,8 +11,9 @@ import {
   useMasterDetailSelection,
 } from '../components/master-detail';
 import { WebsitePageShell } from '../components/WebsitePageShell';
+import { StatCard } from '../components/ui/stat-card';
 import { api, type GroupDetailResponse, type GroupRow, type GroupsResponse } from '../lib/api';
-import { formatDate } from '../lib/formatDate';
+import { formatDateTime, formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 
@@ -113,9 +114,9 @@ export default function WebsiteGroupsPage() {
                 meta={
                   <>
                     <span className="badge">
-                      {group.people.toLocaleString()} {t('people')}
+                      {formatNumber(group.people)} {t('people')}
                     </span>
-                    <span className="text-muted">{formatDate(group.lastSeenAt)}</span>
+                    <span className="text-muted">{formatDateTime(group.lastSeenAt)}</span>
                   </>
                 }
               />
@@ -126,23 +127,11 @@ export default function WebsiteGroupsPage() {
                   title={groupLabel(selectedGroup)}
                   description={`${activeType}: ${selectedGroup.groupKey}`}
                 >
-                  <div className="detail-stats">
-                    <div>
-                      <span className="stat-label">{t('people')}</span>
-                      <strong className="stat-value">{selectedGroup.people.toLocaleString()}</strong>
-                    </div>
-                    <div>
-                      <span className="stat-label">{t('sessions')}</span>
-                      <strong className="stat-value">{selectedGroup.sessions.toLocaleString()}</strong>
-                    </div>
-                    <div>
-                      <span className="stat-label">{t('events')}</span>
-                      <strong className="stat-value">{selectedGroup.events.toLocaleString()}</strong>
-                    </div>
-                    <div>
-                      <span className="stat-label">{t('lastSeen')}</span>
-                      <strong className="stat-value">{formatDate(selectedGroup.lastSeenAt)}</strong>
-                    </div>
+                  <div className="experiment-summary-grid">
+                    <StatCard label={t('people')} value={formatNumber(selectedGroup.people)} />
+                    <StatCard label={t('sessions')} value={formatNumber(selectedGroup.sessions)} />
+                    <StatCard label={t('events')} value={formatNumber(selectedGroup.events)} />
+                    <StatCard label={t('lastSeen')} value={formatDateTime(selectedGroup.lastSeenAt)} />
                   </div>
 
                   <div className="workflow-insights-grid">
@@ -194,7 +183,7 @@ export default function WebsiteGroupsPage() {
                                 {[session.distinctId, session.browser, session.country].filter(Boolean).join(' · ') || '-'}
                               </p>
                             </div>
-                            <span className="badge">{session.events.toLocaleString()}</span>
+                            <span className="badge">{formatNumber(session.events)}</span>
                           </div>
                         ))}
                       </div>
@@ -230,7 +219,7 @@ export default function WebsiteGroupsPage() {
                                     <ExternalLink size={12} strokeWidth={2} aria-hidden />
                                   </Link>
                                 </td>
-                                <td className="text-muted">{formatDate(event.createdAt)}</td>
+                                <td className="text-muted">{formatDateTime(event.createdAt)}</td>
                               </tr>
                             ))
                           ) : (

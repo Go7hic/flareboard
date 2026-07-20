@@ -2,6 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { api } from '../lib/api';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import {
   CLOUD_MONTHLY_USD,
@@ -113,7 +114,7 @@ export default function Billing() {
             <div className="list-row" style={{ marginBottom: '0.35rem' }}>
               <span>{t('eventsThisMonth')}</span>
               <span className="stat-value" style={{ fontSize: '0.9375rem' }}>
-                {used.toLocaleString()} / {plan.maxEventsPerMonth.toLocaleString()}
+                {formatNumber(used)} / {formatNumber(plan.maxEventsPerMonth)}
               </span>
             </div>
             <div

@@ -20,6 +20,7 @@ import {
 } from '../lib/api';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
+import { formatDateOnly, formatDateTime, formatNumber, formatPercent } from '../lib/format';
 
 const EXAMPLE_SQL = `SELECT event_name as eventName, url_path as urlPath, created_at as createdAt
 FROM website_event
@@ -37,8 +38,7 @@ function displayValue(value: unknown) {
 }
 
 function formatTime(value: number | null | undefined) {
-  if (!value) return '-';
-  return new Date(value).toLocaleString();
+  return formatDateTime(value);
 }
 
 export default function WebsiteWarehousePage() {
@@ -415,7 +415,7 @@ export default function WebsiteWarehousePage() {
                           {entry.status}
                         </span>
                       </td>
-                      <td>{entry.rowCount.toLocaleString()}</td>
+                      <td>{formatNumber(entry.rowCount)}</td>
                       <td className="text-muted">{formatTime(entry.createdAt)}</td>
                       <td>
                         <code className="mono">{entry.sql.slice(0, 120)}{entry.sql.length > 120 ? '…' : ''}</code>

@@ -5,12 +5,8 @@ import { EmptyState } from '../components/EmptyState';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { api, type ErrorEventDetail } from '../lib/api';
+import { formatDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
-
-function formatTime(value: number | null | undefined) {
-  if (!value) return '-';
-  return new Date(value).toLocaleString();
-}
 
 function display(value: string | number | null | undefined) {
   if (value === null || value === undefined || value === '') return '-';
@@ -74,7 +70,7 @@ export default function WebsiteErrorDetailPage() {
               <DetailItem label={t('os')} value={error.os} />
               <DetailItem label={t('device')} value={error.device} />
               <DetailItem label={t('country')} value={error.country} />
-              <DetailItem label={t('when')} value={formatTime(error.createdAt)} />
+              <DetailItem label={t('when')} value={formatDateTime(error.createdAt)} />
               <DetailItem label={t('eventId')} value={error.id} />
             </dl>
 

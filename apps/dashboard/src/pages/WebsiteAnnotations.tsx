@@ -13,6 +13,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { api, type Annotation, type AnnotationsResponse } from '../lib/api';
+import { formatDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 
@@ -21,16 +22,7 @@ type AnnotationCategory = Annotation['category'];
 const CATEGORIES: AnnotationCategory[] = ['note', 'release', 'campaign', 'incident', 'experiment'];
 
 function formatDate(value: string | number | null | undefined) {
-  if (value == null) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatDateTime(value);
 }
 
 function toInputDateTime(value: number) {

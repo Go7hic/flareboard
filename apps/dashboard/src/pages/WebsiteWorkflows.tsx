@@ -19,6 +19,7 @@ import { formatDate } from '../lib/formatDate';
 import { t } from '../lib/i18n';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
+import { formatDateOnly, formatDateTime, formatNumber, formatPercent } from '../lib/format';
 
 const DEFAULT_WORKFLOW = {
   name: '',
@@ -457,7 +458,7 @@ export default function WebsiteWorkflowsPage() {
                   <>
                     <span className="badge">{workflow.enabled ? t('enabled') : t('disabled')}</span>
                     <span className="text-muted">
-                      {workflow.summary?.executions.toLocaleString() ?? 0} {t('workflowExecutions')}
+                      {formatNumber(workflow.summary?.executions ?? 0)} {t('workflowExecutions')}
                     </span>
                   </>
                 }
@@ -527,24 +528,24 @@ export default function WebsiteWorkflowsPage() {
                     <div>
                       <span className="stat-label">{t('workflowExecutions')}</span>
                       <strong className="stat-value">
-                        {(summary?.executions ?? 0).toLocaleString()}
+                        {formatNumber((summary?.executions ?? 0))}
                       </strong>
                     </div>
                     <div>
                       <span className="stat-label">{t('workflowFailures')}</span>
                       <strong className="stat-value">
-                        {(summary?.failures ?? 0).toLocaleString()}
+                        {formatNumber((summary?.failures ?? 0))}
                       </strong>
                     </div>
                     <div>
                       <span className="stat-label">{t('workflowSuccessRate')}</span>
                       <strong className="stat-value">
-                        {(summary?.successRate ?? 0).toLocaleString()}%
+                        {formatNumber((summary?.successRate ?? 0))}%
                       </strong>
                     </div>
                     <div>
                       <span className="stat-label">{t('workflowLastExecution')}</span>
-                      <strong className="stat-value">{formatDate(summary?.lastExecutionAt)}</strong>
+                      <strong className="stat-value">{formatDateTime(summary?.lastExecutionAt)}</strong>
                     </div>
                   </div>
 
@@ -570,9 +571,9 @@ export default function WebsiteWorkflowsPage() {
                             {summary.trend.map((item) => (
                               <tr key={item.date}>
                                 <td className="text-muted">{item.date}</td>
-                                <td className="num">{item.executions.toLocaleString()}</td>
-                                <td className="num">{item.failures.toLocaleString()}</td>
-                                <td className="num">{item.successRate.toLocaleString()}%</td>
+                                <td className="num">{formatNumber(item.executions)}</td>
+                                <td className="num">{formatNumber(item.failures)}</td>
+                                <td className="num">{formatNumber(item.successRate)}%</td>
                               </tr>
                             ))}
                           </tbody>
@@ -598,7 +599,7 @@ export default function WebsiteWorkflowsPage() {
                               <div className="breakdown-meta">
                                 <strong>{workflowExecutionStatusLabel(item.status)}</strong>
                                 <span className="text-muted">
-                                  {item.executions.toLocaleString()} · {item.percentage.toLocaleString()}%
+                                  {formatNumber(item.executions)} · {formatNumber(item.percentage)}%
                                 </span>
                               </div>
                               <div className="breakdown-track" aria-hidden>
@@ -623,9 +624,9 @@ export default function WebsiteWorkflowsPage() {
                             <div key={item.eventName} className="workflow-event-row">
                               <div>
                                 <strong>{item.eventName}</strong>
-                                <p className="text-muted">{formatDate(item.lastExecutionAt)}</p>
+                                <p className="text-muted">{formatDateTime(item.lastExecutionAt)}</p>
                               </div>
-                              <span className="badge">{item.executions.toLocaleString()}</span>
+                              <span className="badge">{formatNumber(item.executions)}</span>
                             </div>
                           ))}
                         </div>
@@ -720,7 +721,7 @@ export default function WebsiteWorkflowsPage() {
                                 )}
                               </td>
                               <td className="text-muted">{execution.error ?? '-'}</td>
-                              <td className="text-muted">{formatDate(execution.createdAt)}</td>
+                              <td className="text-muted">{formatDateTime(execution.createdAt)}</td>
                             </tr>
                           ))
                         ) : (

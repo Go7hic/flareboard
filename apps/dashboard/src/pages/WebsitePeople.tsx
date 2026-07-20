@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { ExternalLink, UserRound } from 'lucide-react';
+import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
 import {
   MasterDetailLayout,
@@ -12,8 +13,9 @@ import {
 } from '../components/master-detail';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
+import { StatCard } from '../components/ui/stat-card';
 import { api, type PeopleResponse, type PersonDetailResponse, type PersonSummary } from '../lib/api';
-import { formatDate } from '../lib/formatDate';
+import { formatDateTime, formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
@@ -138,9 +140,14 @@ export default function WebsitePeoplePage() {
       </section>
 
       <section className="panel section-gap">
-        {peopleQuery.isLoading ? (
-          <div className="skeleton skeleton-block" aria-busy />
-        ) : people.length ? (
+        <DataViewState
+          loading={peopleQuery.isLoading && !peopleQuery.data}
+          error={peopleQuery.isError ? peopleQuery.error : null}
+          onRetry={() => peopleQuery.refetch()}
+          isEmpty={!peopleQuery.isLoading && !people.length}
+          emptyTitle={t('peopleEmptyTitle')}
+          emptyDescription={t('peopleEmptyBody')}
+        >
           <MasterDetailLayout
             list={people.map((person) => (
               <MasterDetailListItem
@@ -160,9 +167,9 @@ export default function WebsitePeoplePage() {
                 meta={
                   <>
                     <span className="badge">
-                      {person.sessions.toLocaleString()} {t('sessions')}
+                      {formatNumber(person.sessions)} {t('sessions')}
                     </span>
-                    <span className="text-muted">{formatDate(person.lastSeenAt)}</span>
+                    <span className="text-muted">{formatDateTime(person.lastSeenAt)}</span>
                   </>
                 }
               />
@@ -181,23 +188,11 @@ export default function WebsitePeoplePage() {
                     )
                   }
                 >
-                  <div className="detail-stats">
-                    <div>
-                      <span className="stat-label">{t('peopleSessions')}</span>
-                      <strong className="stat-value">{selectedPerson.sessions.toLocaleString()}</strong>
-                    </div>
-                    <div>
-                      <span className="stat-label">{t('visits')}</span>
-                      <strong className="stat-value">{selectedPerson.visits.toLocaleString()}</strong>
-                    </div>
-                    <div>
-                      <span className="stat-label">{t('pageviews')}</span>
-                      <strong className="stat-value">{selectedPerson.pageviews.toLocaleString()}</strong>
-                    </div>
-                    <div>
-                      <span className="stat-label">{t('peopleLastSeen')}</span>
-                      <strong className="stat-value">{formatDate(selectedPerson.lastSeenAt)}</strong>
-                    </div>
+                  <div className="experiment-summary-grid">
+                    <StatCard label={t('peopleSessions')} value={formatNumber(selectedPerson.sessions)} />
+                    <StatCard label={t('visits')} value={formatNumber(selectedPerson.visits)} />
+                    <StatCard label={t('pageviews')} value={formatNumber(selectedPerson.pageviews)} />
+                    <StatCard label={t('peopleLastSeen')} value={formatDateTime(selectedPerson.lastSeenAt)} />
                   </div>
 
                   <div className="workflow-insights-grid">
@@ -290,7 +285,7 @@ export default function WebsitePeoplePage() {
                                 {[session.browser, session.os, session.country].filter(Boolean).join(' · ') || '-'}
                               </p>
                             </div>
-                            <span className="badge">{session.events.toLocaleString()}</span>
+                            <span className="badge">{formatNumber(session.events)}</span>
                           </div>
                         ))}
                       </div>
@@ -326,7 +321,7 @@ export default function WebsitePeoplePage() {
                                     <ExternalLink size={12} strokeWidth={2} aria-hidden />
                                   </Link>
                                 </td>
-                                <td className="text-muted">{formatDate(event.createdAt)}</td>
+                                <td className="text-muted">{formatDateTime(event.createdAt)}</td>
                               </tr>
                             ))
                           ) : (
@@ -344,9 +339,7 @@ export default function WebsitePeoplePage() {
               ) : null
             }
           />
-        ) : (
-          <EmptyState title={t('peopleEmptyTitle')} description={t('peopleEmptyBody')} />
-        )}
+        </DataViewState>
       </section>
     </div>
   );

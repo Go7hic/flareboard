@@ -19,6 +19,7 @@ import { formatDate } from '../lib/formatDate';
 import { t } from '../lib/i18n';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
+import { formatDateOnly, formatDateTime, formatNumber, formatPercent } from '../lib/format';
 
 const DEFAULT_SURVEY = {
   name: '',
@@ -593,7 +594,7 @@ export default function WebsiteSurveysPage() {
                   <>
                     <span className="badge">{survey.enabled ? t('enabled') : t('disabled')}</span>
                     <span className="text-muted">
-                      {survey.summary?.responses.toLocaleString() ?? 0} {t('surveyResponses')}
+                      {formatNumber(survey.summary?.responses ?? 0)} {t('surveyResponses')}
                     </span>
                   </>
                 }
@@ -672,18 +673,18 @@ export default function WebsiteSurveysPage() {
                     <div>
                       <span className="stat-label">{t('surveyResponses')}</span>
                       <strong className="stat-value">
-                        {(summary?.responses ?? 0).toLocaleString()}
+                        {formatNumber((summary?.responses ?? 0))}
                       </strong>
                     </div>
                     <div>
                       <span className="stat-label">{t('surveySessions')}</span>
                       <strong className="stat-value">
-                        {(summary?.sessions ?? 0).toLocaleString()}
+                        {formatNumber((summary?.sessions ?? 0))}
                       </strong>
                     </div>
                     <div>
                       <span className="stat-label">{t('surveyLastResponse')}</span>
-                      <strong className="stat-value">{formatDate(summary?.lastResponseAt)}</strong>
+                      <strong className="stat-value">{formatDateTime(summary?.lastResponseAt)}</strong>
                     </div>
                     {selectedSurvey.type === 'rating' ? (
                       <div>
@@ -719,8 +720,8 @@ export default function WebsiteSurveysPage() {
                             {summary.trend.map((item) => (
                               <tr key={item.date}>
                                 <td className="text-muted">{item.date}</td>
-                                <td className="num">{item.responses.toLocaleString()}</td>
-                                <td className="num">{item.sessions.toLocaleString()}</td>
+                                <td className="num">{formatNumber(item.responses)}</td>
+                                <td className="num">{formatNumber(item.sessions)}</td>
                                 {selectedSurvey.type === 'rating' ? (
                                   <td className="num">{formatRating(item.averageRating)}</td>
                                 ) : null}
@@ -750,8 +751,8 @@ export default function WebsiteSurveysPage() {
                                 <div className="breakdown-meta">
                                   <strong>{sentimentLabel(item.sentiment)}</strong>
                                   <span className="text-muted">
-                                    {item.responses.toLocaleString()} {t('surveyResponses')} ·{' '}
-                                    {item.percentage.toLocaleString()}%
+                                    {formatNumber(item.responses)} {t('surveyResponses')} ·{' '}
+                                    {formatNumber(item.percentage)}%
                                   </span>
                                 </div>
                                 <div className="breakdown-track" aria-hidden>
@@ -779,8 +780,8 @@ export default function WebsiteSurveysPage() {
                                 <div className="breakdown-meta">
                                   <strong>{themeLabel(item.theme)}</strong>
                                   <span className="text-muted">
-                                    {item.responses.toLocaleString()} {t('surveyResponses')} ·{' '}
-                                    {item.percentage.toLocaleString()}%
+                                    {formatNumber(item.responses)} {t('surveyResponses')} ·{' '}
+                                    {formatNumber(item.percentage)}%
                                   </span>
                                 </div>
                                 <div className="breakdown-track" aria-hidden>
@@ -818,9 +819,9 @@ export default function WebsiteSurveysPage() {
                             {summary.pages.map((item) => (
                               <tr key={item.urlPath}>
                                 <td>{item.urlPath}</td>
-                                <td className="num">{item.responses.toLocaleString()}</td>
-                                <td className="num">{item.sessions.toLocaleString()}</td>
-                                <td className="text-muted">{formatDate(item.lastResponseAt)}</td>
+                                <td className="num">{formatNumber(item.responses)}</td>
+                                <td className="num">{formatNumber(item.sessions)}</td>
+                                <td className="text-muted">{formatDateTime(item.lastResponseAt)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -845,8 +846,8 @@ export default function WebsiteSurveysPage() {
                             <div className="breakdown-meta">
                               <strong>{item.answer}</strong>
                               <span className="text-muted">
-                                {item.responses.toLocaleString()} {t('surveyResponses')} ·{' '}
-                                {item.percentage.toLocaleString()}%
+                                {formatNumber(item.responses)} {t('surveyResponses')} ·{' '}
+                                {formatNumber(item.percentage)}%
                               </span>
                             </div>
                             <div className="breakdown-track" aria-hidden>
@@ -942,7 +943,7 @@ export default function WebsiteSurveysPage() {
                                   <span className="text-muted">-</span>
                                 )}
                               </td>
-                              <td className="text-muted">{formatDate(response.createdAt)}</td>
+                              <td className="text-muted">{formatDateTime(response.createdAt)}</td>
                             </tr>
                           ))
                         ) : (

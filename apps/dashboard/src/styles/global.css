@@ -2953,7 +2953,6 @@ code {
 .metrics-explorer-nav-item.is-active {
   color: var(--text);
   background: var(--bg-elevated);
-  box-shadow: inset 2px 0 0 var(--geist-gray-1000);
 }
 
 .metrics-explorer-main {
@@ -4388,8 +4387,8 @@ code {
 }
 
 .master-detail-list-item.is-selected {
-  border-color: var(--accent);
-  box-shadow: inset 3px 0 0 var(--accent);
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
 }
 
 .master-detail-list-title {
@@ -4494,10 +4493,9 @@ code {
 }
 
 .workflow-action-note {
-  border-left: 3px solid var(--accent);
   color: var(--text-muted);
   margin: 0.75rem 0 0;
-  padding-left: 0.75rem;
+  padding-left: 0;
 }
 
 .workflow-execution-filters {
@@ -5081,8 +5079,7 @@ code {
 .snippet-panel {
   position: relative;
   margin-bottom: 0;
-  border-left: 3px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 4%, var(--bg));
+  background: var(--bg-subtle);
 }
 
 .snippet-panel-label {
@@ -5298,10 +5295,6 @@ code {
 .realtime-activity-btn:hover,
 .realtime-activity-btn.is-selected {
   background: var(--bg-subtle);
-}
-
-.realtime-activity-btn.is-selected {
-  box-shadow: inset 2px 0 0 var(--geist-gray-1000);
 }
 
 .realtime-activity-avatar {
@@ -6298,13 +6291,11 @@ code {
   padding: 1.25rem 1.5rem;
   text-decoration: none;
   color: inherit;
-  border-left: 3px solid transparent;
   transition: border-color var(--transition), box-shadow var(--transition);
 }
 
 .dashboard-site-card:hover {
   border-color: var(--border-strong);
-  border-left-color: var(--geist-gray-1000);
   box-shadow: var(--shadow-md);
 }
 
@@ -6332,8 +6323,7 @@ code {
 }
 
 .dashboard-site-kpi-primary {
-  padding-left: 0.65rem;
-  border-left: 2px solid var(--accent);
+  padding-left: 0;
 }
 
 .dashboard-site-card-head {
@@ -6630,10 +6620,9 @@ code {
   flex-wrap: wrap;
   padding: 0.9rem 1.1rem;
   margin-bottom: 1rem;
-  border-radius: var(--radius-md);
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
-  border-left: 3px solid var(--accent);
-  background: var(--accent-muted);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
 }
 
 .plan-upgrade-banner-text {
@@ -6649,13 +6638,14 @@ code {
   flex-shrink: 0;
 }
 
-/* Panel accent rail — Geist: subtle gray rail, not brand teal */
+/* Accent rails removed — flat panels only (class kept for call-site compat) */
 .panel-accent-rail {
-  border-left: 3px solid var(--geist-gray-1000);
+  border-left-width: 1px;
+  border-left-color: var(--border);
 }
 
 .panel-danger-zone {
-  border-left: 3px solid var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
 }
 
 .panel-danger-zone .field-label {
@@ -6923,8 +6913,8 @@ code {
 }
 
 .replays-list-item.selected {
-  border-left: 3px solid var(--accent);
-  padding-left: calc(1rem - 3px);
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
 }
 
 .replays-player-panel {
@@ -7757,16 +7747,14 @@ code {
 .landing-feature-accent {
   grid-row: span 2;
   background: var(--bg-subtle);
-  border-color: var(--border-strong);
-  border-left: 3px solid var(--geist-gray-1000);
-  box-shadow: var(--shadow-md);
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
 }
 
 .landing-feature-highlight {
   grid-column: span 2;
   background: var(--bg-subtle);
-  border-color: var(--border-strong);
-  border-top: 3px solid var(--geist-gray-1000);
+  border-color: var(--border);
 }
 
 .landing-feature-title {
@@ -8163,11 +8151,9 @@ code {
 
 .features-category-title {
   margin: 0 0 1.25rem;
-  padding-left: 0.85rem;
   font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: -0.02em;
-  border-left: 3px solid var(--accent);
 }
 
 .features-category-grid {
@@ -8212,7 +8198,6 @@ code {
 }
 
 .landing-path-cloud {
-  border-left: 3px solid var(--geist-gray-1000);
   background: var(--bg-subtle);
 }
 
@@ -8267,7 +8252,6 @@ code {
 
 .landing-plan-card-featured {
   border-color: var(--border-strong);
-  border-top: 3px solid var(--geist-gray-1000);
   box-shadow: var(--shadow-md);
 }
 
@@ -8421,7 +8405,6 @@ code {
   padding: 1.35rem 1.5rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--geist-gray-1000);
   background: var(--bg-elevated);
   box-shadow: var(--shadow-sm);
 }
@@ -8701,13 +8684,10 @@ code {
 
 .landing-data-cell-stat-wide {
   grid-column: span 5;
-  border-left: 3px solid var(--accent);
 }
 
 .landing-data-cell-stat-cf {
   grid-column: span 3;
-  border-top: 3px solid var(--cf-orange);
-  background: color-mix(in srgb, var(--cf-orange) 5%, var(--bg-elevated));
 }
 
 .landing-data-stat-label {

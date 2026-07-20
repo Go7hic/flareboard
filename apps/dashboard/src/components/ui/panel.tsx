@@ -17,9 +17,9 @@ const Panel = React.forwardRef<
       'rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-elevated)] shadow-[var(--shadow-sm)]',
       variant === 'default' && 'p-[1.35rem]',
       variant === 'flush' && 'overflow-hidden',
-      variant === 'accent-rail' && 'p-[1.35rem] border-l-2 border-l-[var(--accent)]',
+      variant === 'accent-rail' && 'p-[1.35rem]',
       variant === 'danger-zone' &&
-        'p-[1.35rem] border-l-2 border-l-[var(--danger)]',
+        'p-[1.35rem] border-[color-mix(in_srgb,var(--danger)_40%,var(--border))]',
       className
     )}
     {...props}

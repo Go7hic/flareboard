@@ -520,9 +520,9 @@ img {
 .post-body :global(blockquote) {
   margin: 1.25rem 0;
   padding: 0.75rem 1rem;
-  border-left: 3px solid var(--geist-gray-1000);
+  border: 1px solid var(--border);
   background: var(--bg-subtle);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
 }
 

@@ -28,10 +28,9 @@ const PATH_CHECKS = [
   },
   {
     id: 'sessions',
-    label: 'Sessions filter row',
+    label: 'Sessions filter row visible when empty',
     path: (id) => `/websites/${id}/sessions`,
-    selectors: ['.page-sessions'],
-    anyOf: ['.sessions-filter-row', '.empty-state-block-title, .empty-state-rich'],
+    selectors: ['.page-sessions', '.sessions-filter-row'],
   },
   {
     id: 'compare',

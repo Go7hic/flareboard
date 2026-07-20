@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { DataViewState } from '../components/DataViewState';
+import { EmptyState } from '../components/EmptyState';
 import { SessionAvatar } from '../components/SessionAvatar';
 import { SessionTechCell } from '../components/SessionTechCell';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
@@ -117,11 +118,6 @@ export default function SessionsPage() {
       <DataViewState
         loading={sessionsQuery.isLoading}
         error={sessionsQuery.isError ? sessionsQuery.error : null}
-        isEmpty={rows.length === 0}
-        emptyTitle={hasFilters ? t('noSessionsMatchFilters') : t('noSessionsInRange')}
-        emptyDescription={
-          hasFilters ? t('noSessionsMatchFiltersHint') : t('noDataInPeriodHint')
-        }
         onRetry={() => sessionsQuery.refetch()}
         loadingFallback={<div className="skeleton section-gap" style={{ height: '4rem' }} />}
       >
@@ -178,6 +174,15 @@ export default function SessionsPage() {
               </Button>
             ) : null}
           </div>
+          {rows.length === 0 ? (
+            <EmptyState
+              title={hasFilters ? t('noSessionsMatchFilters') : t('noSessionsInRange')}
+              description={
+                hasFilters ? t('noSessionsMatchFiltersHint') : t('noDataInPeriodHint')
+              }
+            />
+          ) : (
+            <>
           <div className="sessions-table-scroll">
             <table className="data-table sessions-data-table">
               <thead>
@@ -271,6 +276,8 @@ export default function SessionsPage() {
               </Button>
             ) : null}
           </footer>
+            </>
+          )}
         </section>
       </DataViewState>
     </div>

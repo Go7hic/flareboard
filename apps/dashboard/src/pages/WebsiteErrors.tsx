@@ -6,8 +6,9 @@ import { DateRangePicker } from '../components/DateRangePicker';
 import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
 import { MasterDetailSidePane, MasterDetailTableLayout } from '../components/master-detail';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { SegmentTabs } from '../components/SegmentTabs';
-import { WebsitePageShell } from '../components/WebsitePageShell';
 import { StatCard } from '../components/ui/stat-card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -182,10 +183,11 @@ export default function WebsiteErrorsPage() {
   const alertRules = alertRulesQuery.data?.alertRules ?? [];
 
   return (
-    <div className="page page-errors">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page className="page-errors">
+      <PageHeader
+        title={t('errors')}
+        lead={t('errorsLead')}
+        actions={
           <div className="stats-header-row">
             <div className="stats-header-controls">
               <select
@@ -245,6 +247,7 @@ export default function WebsiteErrorsPage() {
         }
       />
 
+      <PageBody>
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
       <DataViewState
@@ -800,6 +803,7 @@ export default function WebsiteErrorsPage() {
           </DataViewState>
         ) : null}
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

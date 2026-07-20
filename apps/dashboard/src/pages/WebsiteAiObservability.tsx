@@ -10,7 +10,8 @@ import {
   useMasterDetailSelection,
 } from '../components/master-detail';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { api, type AiObservabilityResponse } from '../lib/api';
 import { formatDateTime, formatNumber } from '../lib/format';
@@ -90,17 +91,16 @@ export default function WebsiteAiObservabilityPage() {
   }
 
   return (
-    <div className="page page-ai-observability">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-ai-observability">
+      <PageHeader
+        title={t('aiObservability')}
+        lead={t('aiObservabilityLead')}
+        actions={
+          <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
+        }
+      />
 
-      <div className="stats-header-row section-gap">
-        <div>
-          <h2 className="page-title">{t('aiObservability')}</h2>
-          <p className="text-muted">{t('aiObservabilityLead')}</p>
-        </div>
-        <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
-      </div>
-
+      <PageBody>
       <section className="analytics-hero-stats section-gap" aria-label={t('aiObservability')}>
         <DataViewState
           loading={aiQuery.isLoading}
@@ -508,6 +508,7 @@ export default function WebsiteAiObservabilityPage() {
           <EmptyState title={t('aiEmptyTitle')} description={t('aiEmptyBody')} />
         ) : null}
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

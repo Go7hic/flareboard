@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { DataViewState } from '../components/DataViewState';
+import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { ProductLineCrossLinks } from '../components/ProductLineCrossLinks';
 import { Button } from '../components/ui/button';
@@ -212,15 +213,16 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="page page-reports">
+    <Page className="page-reports">
       <PageHeader
         title={t('reports')}
-        subtitle={t('reportsSubtitle')}
+        lead={t('reportsSubtitle')}
         backTo="/websites"
         backLabel={t('websites')}
+        meta={<ProductLineCrossLinks surface="reports" />}
       />
-      <ProductLineCrossLinks surface="reports" />
 
+      <PageBody>
       {noWebsite ? (
         <div className="panel empty-state-rich section-gap">
           <h3>{t('noWebsites')}</h3>
@@ -371,6 +373,7 @@ export default function ReportsPage() {
           </div>
         </div>
       )}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

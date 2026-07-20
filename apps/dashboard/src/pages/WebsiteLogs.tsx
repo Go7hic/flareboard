@@ -5,9 +5,10 @@ import { ExternalLink, Search, TerminalSquare } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
 import { DataViewState } from '../components/DataViewState';
 import { MasterDetailSidePane, MasterDetailTableLayout } from '../components/master-detail';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { SegmentTabs } from '../components/SegmentTabs';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
-import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -196,17 +197,16 @@ export default function WebsiteLogsPage() {
   }
 
   return (
-    <div className="page page-logs">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-logs">
+      <PageHeader
+        title={t('logs')}
+        lead={t('logsLead')}
+        actions={
+          <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
+        }
+      />
 
-      <div className="stats-header-row">
-        <div>
-          <h2 className="page-title">{t('logs')}</h2>
-          <p className="text-muted">{t('logsLead')}</p>
-        </div>
-        <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
-      </div>
-
+      <PageBody>
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
       <DataViewState
@@ -799,6 +799,7 @@ export default function WebsiteLogsPage() {
         </section>
       ) : null}
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

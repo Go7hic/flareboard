@@ -11,6 +11,7 @@ import {
   MasterDetailListItem,
   MasterDetailPane,
 } from '../components/master-detail';
+import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { ProductLineCrossLinks } from '../components/ProductLineCrossLinks';
 import { Button } from '../components/ui/button';
@@ -236,10 +237,16 @@ export default function InsightsPage() {
   }
 
   return (
-    <div className="page page-insights">
-      <PageHeader title={t('insights')} subtitle={t('insightsSubtitle')} backTo="/websites" backLabel={t('websites')} />
-      <ProductLineCrossLinks surface="insights" />
+    <Page className="page-insights">
+      <PageHeader
+        title={t('insights')}
+        lead={t('insightsSubtitle')}
+        backTo="/websites"
+        backLabel={t('websites')}
+        meta={<ProductLineCrossLinks surface="insights" />}
+      />
 
+      <PageBody>
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
       <section className="panel section-gap">
@@ -433,6 +440,7 @@ export default function InsightsPage() {
           }
         />
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

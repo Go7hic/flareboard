@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { BoardEditorForm } from '../components/BoardEditorForm';
 import { BoardWidgets } from '../components/BoardWidgets';
 import { CollapsibleSection } from '../components/CollapsibleSection';
+import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { ProductLineCrossLinks } from '../components/ProductLineCrossLinks';
 import { Button } from '../components/ui/button';
@@ -117,15 +118,16 @@ export default function BoardsPage() {
   const hasBoards = boards.length > 0;
 
   return (
-    <div className="page page-boards">
+    <Page className="page-boards">
       <PageHeader
         title={t('boards')}
-        subtitle={t('boardsSubtitle')}
+        lead={t('boardsSubtitle')}
         backTo="/websites"
         backLabel={t('websites')}
+        meta={<ProductLineCrossLinks surface="boards" />}
       />
-      <ProductLineCrossLinks surface="boards" />
 
+      <PageBody>
       {hasBoards ? (
         <CollapsibleSection title={t('collapseNewBoard')} summary={t('newBoardLead')}>
           <BoardEditorForm
@@ -258,6 +260,7 @@ export default function BoardsPage() {
           </li>
         ) : null}
       </ul>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

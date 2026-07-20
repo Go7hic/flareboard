@@ -378,6 +378,21 @@ textarea {
   padding: 2rem 1.25rem;
 }
 
+/* Immersive surfaces (Realtime): keep gutter, tighten header→body gap */
+.page-bleed {
+  padding-top: 1.15rem;
+}
+
+.page-bleed .page-header {
+  margin-bottom: 1rem;
+}
+
+.page-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 /* Shell / Nav */
 .shell {
   height: 100%;
@@ -1178,6 +1193,14 @@ img.website-switcher-icon {
 .page-header-copy {
   min-width: 0;
   flex: 1 1 12rem;
+}
+
+.page-header-meta {
+  margin-top: 0.5rem;
+}
+
+.page-header-meta .product-line-cross-links {
+  margin-top: 0;
 }
 
 .page-header-toolbar {

@@ -1,5 +1,9 @@
 import type { ReactNode } from 'react';
 
+/**
+ * @deprecated Prefer `Page` + `PageHeader` with `actions` / `toolbar`.
+ * Kept as a thin actions-only chrome for pages not yet migrated to the unified frame.
+ */
 export function WebsitePageShell({
   websiteId,
   toolbar,

@@ -8,7 +8,8 @@ import {
   MasterDetailListItem,
   MasterDetailPane,
 } from '../components/master-detail';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -127,8 +128,10 @@ export default function WebsiteAnnotationsPage() {
   const canSave = Boolean(draft.title.trim() && draft.happenedAt) && !saveMutation.isPending;
 
   return (
-    <div className="page page-annotations">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-annotations">
+      <PageHeader title={t('annotations')} lead={t('annotationsLead')} />
+
+      <PageBody>
 
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
@@ -256,6 +259,7 @@ export default function WebsiteAnnotationsPage() {
           <EmptyState title={t('annotationsEmptyTitle')} description={t('annotationsEmptyBody')} />
         )}
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

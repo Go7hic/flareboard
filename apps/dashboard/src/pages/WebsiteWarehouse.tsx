@@ -5,7 +5,8 @@ import { Database } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
 import { MasterDetailLayout } from '../components/master-detail';
 import { SegmentTabs } from '../components/SegmentTabs';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -205,8 +206,10 @@ export default function WebsiteWarehousePage() {
   const dataSources = sourcesQuery.data?.dataSources ?? [];
 
   return (
-    <div className="page page-warehouse">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-warehouse">
+      <PageHeader title={t('dataWarehouse')} lead={t('dataWarehouseLead')} />
+
+      <PageBody>
 
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
@@ -710,6 +713,7 @@ export default function WebsiteWarehousePage() {
           )}
         </section>
       ) : null}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

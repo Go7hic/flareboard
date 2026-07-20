@@ -10,7 +10,8 @@ import {
   useMasterDetailSelection,
 } from '../components/master-detail';
 import { ResourceEditDialog } from '../components/ResourceEditDialog';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -542,8 +543,10 @@ export default function WebsiteExperimentsPage() {
   const canCreate = Boolean(draft.name.trim() && draft.featureFlagId && draft.goalEvent.trim());
 
   return (
-    <div className="page page-experiments">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-experiments">
+      <PageHeader title={t('experiments')} lead={t('experimentsLead')} />
+
+      <PageBody>
 
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
@@ -758,6 +761,7 @@ export default function WebsiteExperimentsPage() {
           onSave={(experiment, patch) => updateMutation.mutate({ id: experiment.id, patch })}
         />
       ) : null}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

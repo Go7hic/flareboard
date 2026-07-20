@@ -30,16 +30,17 @@ Evidence in `.audit/dashboard-insight-ux.tsv`. Verdict VERIFIED only with real a
 | U20 | Insights/Boards/Reports line | cross-links + role copy on each surface | VERIFIED |
 | U21 | Auth visual smoke | checklist on core paths light/dark |
 | U22 | Unified page frame | `Page` + `PageHeader` + `PageBody` on critical routes; leftover list via `.audit/check-page-frame.sh` |
+| U22.1 | Leftover page frames | All app leftovers on Page frame; SharePublic allowlisted; WebsitePageShell deleted |
 
 ## U22 page frame (layout chrome)
 
 **Problem.** Insight UX improved IA inside pages, but outer chrome still drifted: global routes used `PageHeader`, website routes often used actions-only `WebsitePageShell` (or a no-op), and a few invented manual `h2.page-title` rows.
 
-**Lever.** `Page` / `PageHeader` / `PageBody` in `apps/dashboard/src/components/`. Title + muted lead + actions on one row; optional `toolbar` / `meta`. `WebsitePageShell` is deprecated for leftovers only.
+**Lever.** `Page` / `PageHeader` / `PageBody` in `apps/dashboard/src/components/`. Title + muted lead + actions on one row; optional `toolbar` / `meta`.
 
 **Variants.** `default` | `narrow` | `bleed` (Realtime: tighter header gap only, not full-bleed media). No `PageTabs` yet; secondary tabs stay in-page (Errors/Logs IA wins).
 
-**Leftovers.** Run `.audit/check-page-frame.sh` (exits 1 while leftovers remain; `SharePublic` allowlisted). Mechanical migrate remaining website routes onto the same API.
+**Status.** App leftovers migrated in U22.1. `.audit/check-page-frame.sh` exits 0 when clean; `SharePublic` remains allowlisted (public share surface, own brand chrome).
 
 ## Out of scope
 

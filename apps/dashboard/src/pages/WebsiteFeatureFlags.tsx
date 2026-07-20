@@ -11,7 +11,8 @@ import {
   useMasterDetailSelection,
 } from '../components/master-detail';
 import { ResourceEditDialog } from '../components/ResourceEditDialog';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -475,8 +476,10 @@ export default function WebsiteFeatureFlagsPage() {
     !createMutation.isPending;
 
   return (
-    <div className="page page-feature-flags">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-feature-flags">
+      <PageHeader title={t('featureFlags')} lead={t('featureFlagsLead')} />
+
+      <PageBody>
 
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
@@ -970,6 +973,7 @@ export default function WebsiteFeatureFlagsPage() {
           onSave={(flag, patch) => updateMutation.mutate({ id: flag.id, patch })}
         />
       ) : null}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

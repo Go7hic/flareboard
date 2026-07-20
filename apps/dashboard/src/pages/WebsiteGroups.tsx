@@ -10,7 +10,8 @@ import {
   ResourceSearchField,
   useMasterDetailSelection,
 } from '../components/master-detail';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { StatCard } from '../components/ui/stat-card';
 import { api, type GroupDetailResponse, type GroupRow, type GroupsResponse } from '../lib/api';
 import { formatDateTime, formatNumber } from '../lib/format';
@@ -59,8 +60,10 @@ export default function WebsiteGroupsPage() {
   });
 
   return (
-    <div className="page page-groups">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-groups">
+      <PageHeader title={t('groups')} lead={t('groupsLead')} />
+
+      <PageBody>
 
       <section className="panel section-gap">
         <header className="panel-header">
@@ -241,6 +244,7 @@ export default function WebsiteGroupsPage() {
           <EmptyState title={t('groupsEmptyTitle')} description={t('groupsEmptyBody')} />
         )}
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

@@ -9,7 +9,8 @@ import {
   MasterDetailPane,
   useMasterDetailSelection,
 } from '../components/master-detail';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { api } from '../lib/api';
 import { t } from '../lib/i18n';
 
@@ -69,8 +70,10 @@ export default function WebsiteAuditLogPage() {
   }, [items, selectedId, setSelectedId]);
 
   return (
-    <div className="page page-audit-log">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-audit-log">
+      <PageHeader title={t('auditLog')} lead={t('websiteAuditLogLead')} />
+
+      <PageBody>
 
       <section className="panel section-gap">
         <header className="panel-header">
@@ -134,6 +137,7 @@ export default function WebsiteAuditLogPage() {
           <EmptyState title={t('auditLogEmptyTitle')} description={t('auditLogEmptyBody')} />
         ) : null}
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

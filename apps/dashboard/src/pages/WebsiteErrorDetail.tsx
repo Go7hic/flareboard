@@ -2,8 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { AlertTriangle, ExternalLink } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
-import { WebsitePageShell } from '../components/WebsitePageShell';
-import { Button } from '../components/ui/button';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { api, type ErrorEventDetail } from '../lib/api';
 import { formatDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
@@ -34,16 +34,14 @@ export default function WebsiteErrorDetailPage() {
   const error = errorQuery.data;
 
   return (
-    <div className="page page-error-detail">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
-          <Button asChild variant="secondary" size="sm">
-            <Link to={`/websites/${websiteId}/errors`}>{t('back')}</Link>
-          </Button>
-        }
+    <Page className="page-error-detail">
+      <PageHeader
+        title={t('error')}
+        backTo={websiteId ? `/websites/${websiteId}/errors` : undefined}
+        backLabel={t('back')}
       />
 
+      <PageBody>
       {errorQuery.isLoading ? <div className="skeleton section-gap" style={{ height: '14rem' }} /> : null}
 
       {!errorQuery.isLoading && !error ? (
@@ -160,6 +158,7 @@ export default function WebsiteErrorDetailPage() {
           </section>
         </>
       ) : null}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

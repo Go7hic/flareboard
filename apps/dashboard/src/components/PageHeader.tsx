@@ -5,7 +5,7 @@ import { cn } from '../lib/utils';
 /**
  * Unified title row for app pages.
  * Title + muted lead + actions on one row; optional toolbar (filters) below.
- * Prefer this over ad-hoc `h1`/`h2.page-title` or actions-only WebsitePageShell chrome.
+ * Prefer this over ad-hoc `h1`/`h2.page-title` chrome.
  */
 export function PageHeader({
   title,

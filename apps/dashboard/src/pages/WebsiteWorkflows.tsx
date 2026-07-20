@@ -10,7 +10,8 @@ import {
   useMasterDetailSelection,
 } from '../components/master-detail';
 import { ResourceEditDialog } from '../components/ResourceEditDialog';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -324,8 +325,10 @@ export default function WebsiteWorkflowsPage() {
   const filtersActive = Boolean(filters.status || filters.event.trim() || filters.q.trim());
 
   return (
-    <div className="page page-workflows">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-workflows">
+      <PageHeader title={t('workflows')} lead={t('workflowsLead')} />
+
+      <PageBody>
 
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
@@ -751,6 +754,7 @@ export default function WebsiteWorkflowsPage() {
           onSave={(workflow, patch) => updateMutation.mutate({ id: workflow.id, patch })}
         />
       ) : null}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

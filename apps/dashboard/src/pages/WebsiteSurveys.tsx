@@ -10,7 +10,8 @@ import {
   useMasterDetailSelection,
 } from '../components/master-detail';
 import { ResourceEditDialog } from '../components/ResourceEditDialog';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -439,8 +440,10 @@ export default function WebsiteSurveysPage() {
     !createMutation.isPending;
 
   return (
-    <div className="page page-surveys">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-surveys">
+      <PageHeader title={t('surveys')} lead={t('surveysLead')} />
+
+      <PageBody>
 
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
@@ -974,6 +977,7 @@ export default function WebsiteSurveysPage() {
           onSave={(survey, patch) => updateMutation.mutate({ id: survey.id, patch })}
         />
       ) : null}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

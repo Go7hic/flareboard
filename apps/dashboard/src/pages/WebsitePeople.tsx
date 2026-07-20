@@ -11,7 +11,8 @@ import {
   ResourceSearchField,
   useMasterDetailSelection,
 } from '../components/master-detail';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { StatCard } from '../components/ui/stat-card';
 import { api, type PeopleResponse, type PersonDetailResponse, type PersonSummary } from '../lib/api';
@@ -119,8 +120,10 @@ export default function WebsitePeoplePage() {
   }
 
   return (
-    <div className="page page-people">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-people">
+      <PageHeader title={t('people')} lead={t('peopleLead')} />
+
+      <PageBody>
 
       <section className="panel section-gap">
         <header className="panel-header">
@@ -341,6 +344,7 @@ export default function WebsitePeoplePage() {
           />
         </DataViewState>
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

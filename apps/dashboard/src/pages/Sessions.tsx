@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { EmptyState } from '../components/EmptyState';
+import { DataViewState } from '../components/DataViewState';
 import { SessionAvatar } from '../components/SessionAvatar';
 import { SessionTechCell } from '../components/SessionTechCell';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
@@ -70,9 +70,15 @@ export default function SessionsPage() {
         }
       />
 
-      {sessionsQuery.isLoading ? <div className="skeleton" style={{ height: '4rem' }} /> : null}
-
-      {!sessionsQuery.isLoading && rows.length > 0 ? (
+      <DataViewState
+        loading={sessionsQuery.isLoading}
+        error={sessionsQuery.isError ? sessionsQuery.error : null}
+        isEmpty={rows.length === 0}
+        emptyTitle={t('noSessionsInRange')}
+        emptyDescription={t('noDataInPeriodHint')}
+        onRetry={() => sessionsQuery.refetch()}
+        loadingFallback={<div className="skeleton section-gap" style={{ height: '4rem' }} />}
+      >
         <section className="panel sessions-panel section-gap">
           <div className="sessions-table-scroll">
             <table className="data-table sessions-data-table">
@@ -168,16 +174,7 @@ export default function SessionsPage() {
             ) : null}
           </footer>
         </section>
-      ) : null}
-
-      {!sessionsQuery.isLoading && !rows.length ? (
-        <div className="panel empty-state-rich section-gap">
-          <EmptyState
-            title={t('noSessionsInRange')}
-            description={t('noDataInPeriodHint')}
-          />
-        </div>
-      ) : null}
+      </DataViewState>
     </div>
   );
 }

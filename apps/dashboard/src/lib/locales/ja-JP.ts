@@ -106,6 +106,8 @@ export const jaJPLocale: Record<string, string> = {
   passwordUpdated: "パスワードを更新しました。ログインできます。",
   resetFailed: "リセットに失敗しました",
   requestFailed: "リクエストに失敗しました",
+  dataLoadFailed: "データを読み込めませんでした",
+  retry: "再試行",
   backToSignIn: "ログインに戻る",
   backToMarketing: "マーケティングサイトに戻る",
   marketingHome: "ホーム",

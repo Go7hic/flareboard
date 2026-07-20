@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Line, LineChart } from 'recharts';
 import { AnalyticsChart } from '../components/AnalyticsChart';
+import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
 import { StatChangeDelta } from '../components/StatChangeDelta';
 import { MetricsTable } from '../components/MetricsTable';
@@ -143,8 +144,30 @@ export default function WebsiteStatsPage() {
     () => mergePageviewsVisitors(overviewQuery.data?.timeseries, hourly, timezone),
     [overviewQuery.data?.timeseries, hourly, timezone],
   );
-  const chartLoading = overviewQuery.isLoading;
+  const chartLoading = overviewQuery.isLoading && !overviewQuery.data;
   const statsLoading = overviewQuery.isLoading && !stats;
+  const overviewInitialLoading = overviewQuery.isLoading && !overviewQuery.data;
+
+  const overviewLoadingFallback = (
+    <>
+      <section className="page-stats-kpis section-gap" aria-hidden>
+        <div className="analytics-hero-kpis">
+          <StatCardSkeleton size="hero" />
+          <StatCardSkeleton size="hero" />
+        </div>
+        <div className="analytics-hero-stats-secondary">
+          <StatCardSkeleton size="secondary" />
+          <StatCardSkeleton size="secondary" />
+          <StatCardSkeleton size="secondary" />
+        </div>
+      </section>
+      <section className="panel page-stats-chart section-gap" aria-hidden>
+        <div className="chart-wrap chart-wrap-hero chart-skeleton" aria-busy>
+          <div className="skeleton skeleton-block" />
+        </div>
+      </section>
+    </>
+  );
 
   function clearCohortFilter() {
     const next = new URLSearchParams(searchParams);
@@ -218,110 +241,117 @@ export default function WebsiteStatsPage() {
         </div>
       ) : null}
 
-      <section className="page-stats-kpis section-gap" aria-labelledby="analytics-overview">
-        <h2 id="analytics-overview" className="visually-hidden">
-          {t('trafficOverTime')}
-        </h2>
+      <DataViewState
+        loading={overviewInitialLoading}
+        error={overviewQuery.isError ? overviewQuery.error : null}
+        onRetry={() => overviewQuery.refetch()}
+        loadingFallback={overviewLoadingFallback}
+      >
+        <section className="page-stats-kpis section-gap" aria-labelledby="analytics-overview">
+          <h2 id="analytics-overview" className="visually-hidden">
+            {t('trafficOverTime')}
+          </h2>
 
-        <div className="analytics-hero-kpis">
-          {statsLoading ? (
-            <>
-              <StatCardSkeleton size="hero" />
-              <StatCardSkeleton size="hero" />
-            </>
-          ) : stats ? (
-            <>
-              <OverviewKpi label={t('pageviews')} stat={stats.pageviews} size="hero" />
-              <OverviewKpi label={t('visitors')} stat={stats.visitors} size="hero" />
-            </>
-          ) : null}
-        </div>
-
-        <div className="analytics-hero-stats-secondary">
-          {statsLoading ? (
-            <>
-              <StatCardSkeleton size="secondary" />
-              <StatCardSkeleton size="secondary" />
-              <StatCardSkeleton size="secondary" />
-            </>
-          ) : stats ? (
-            <>
-              <OverviewKpi label={t('visits')} stat={stats.visits} size="secondary" />
-              <OverviewKpi label={t('bounces')} stat={stats.bounces} size="secondary" />
-              <OverviewKpi label={t('totalTime')} stat={stats.totaltime} size="secondary" />
-            </>
-          ) : null}
-        </div>
-
-        {compareEnabled && compareQuery.data ? (
-          <div className="analytics-compare-strip">
-            <OverviewKpi
-              label={t('comparePageviews')}
-              stat={compareQuery.data.compare.stats.pageviews}
-              size="secondary"
-            />
-            <OverviewKpi
-              label={t('compareVisitors')}
-              stat={compareQuery.data.compare.stats.visitors}
-              size="secondary"
-            />
+          <div className="analytics-hero-kpis">
+            {statsLoading ? (
+              <>
+                <StatCardSkeleton size="hero" />
+                <StatCardSkeleton size="hero" />
+              </>
+            ) : stats ? (
+              <>
+                <OverviewKpi label={t('pageviews')} stat={stats.pageviews} size="hero" />
+                <OverviewKpi label={t('visitors')} stat={stats.visitors} size="hero" />
+              </>
+            ) : null}
           </div>
-        ) : null}
-      </section>
 
-      <section className="panel page-stats-chart section-gap" aria-labelledby="traffic-chart-title">
-        <h2 id="traffic-chart-title" className="section-title">
-          {t('trafficOverTime')}
-        </h2>
-        {chartLoading ? (
-          <div className="chart-wrap chart-wrap-hero chart-skeleton" aria-busy>
-            <div className="skeleton skeleton-block" />
+          <div className="analytics-hero-stats-secondary">
+            {statsLoading ? (
+              <>
+                <StatCardSkeleton size="secondary" />
+                <StatCardSkeleton size="secondary" />
+                <StatCardSkeleton size="secondary" />
+              </>
+            ) : stats ? (
+              <>
+                <OverviewKpi label={t('visits')} stat={stats.visits} size="secondary" />
+                <OverviewKpi label={t('bounces')} stat={stats.bounces} size="secondary" />
+                <OverviewKpi label={t('totalTime')} stat={stats.totaltime} size="secondary" />
+              </>
+            ) : null}
           </div>
-        ) : chartData.length > 0 ? (
-          <>
-            <div className="chart-wrap chart-wrap-hero">
-              <AnalyticsChart
-                Chart={LineChart}
-                data={chartData}
-                xAxis={{
-                  dataKey: 'x',
-                  interval: hourly ? 'preserveStartEnd' : undefined,
-                  minTickGap: hourly ? 24 : 8,
-                }}
-              >
-                <Line
-                  type="monotone"
-                  dataKey="pageviews"
-                  name={t('pageviews')}
-                  stroke={metricColors.pageviews}
-                  strokeWidth={2}
-                  dot={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="visitors"
-                  name={t('visitors')}
-                  stroke={metricColors.visitors}
-                  strokeWidth={2}
-                  dot={false}
-                />
-              </AnalyticsChart>
+
+          {compareEnabled && compareQuery.data ? (
+            <div className="analytics-compare-strip">
+              <OverviewKpi
+                label={t('comparePageviews')}
+                stat={compareQuery.data.compare.stats.pageviews}
+                size="secondary"
+              />
+              <OverviewKpi
+                label={t('compareVisitors')}
+                stat={compareQuery.data.compare.stats.visitors}
+                size="secondary"
+              />
             </div>
-            <div className="dashboard-aggregate-legend analytics-chart-legend" aria-hidden>
-              <span className="dashboard-aggregate-legend-item">
-                <span className="dashboard-aggregate-legend-swatch dashboard-aggregate-legend-swatch--pageviews" />
-                <span className="dashboard-aggregate-legend-label">{t('pageviews')}</span>
-              </span>
-              <span className="dashboard-aggregate-legend-item">
-                <span className="dashboard-aggregate-legend-swatch dashboard-aggregate-legend-swatch--visitors" />
-                <span className="dashboard-aggregate-legend-label">{t('visitors')}</span>
-              </span>
+          ) : null}
+        </section>
+
+        <section className="panel page-stats-chart section-gap" aria-labelledby="traffic-chart-title">
+          <h2 id="traffic-chart-title" className="section-title">
+            {t('trafficOverTime')}
+          </h2>
+          {chartLoading ? (
+            <div className="chart-wrap chart-wrap-hero chart-skeleton" aria-busy>
+              <div className="skeleton skeleton-block" />
             </div>
-          </>
-        ) : (
-          <EmptyState title={t('chartNoData')} description={t('noDataInPeriodHint')} />
-        )}
-      </section>
+          ) : chartData.length > 0 ? (
+            <>
+              <div className="chart-wrap chart-wrap-hero">
+                <AnalyticsChart
+                  Chart={LineChart}
+                  data={chartData}
+                  xAxis={{
+                    dataKey: 'x',
+                    interval: hourly ? 'preserveStartEnd' : undefined,
+                    minTickGap: hourly ? 24 : 8,
+                  }}
+                >
+                  <Line
+                    type="monotone"
+                    dataKey="pageviews"
+                    name={t('pageviews')}
+                    stroke={metricColors.pageviews}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="visitors"
+                    name={t('visitors')}
+                    stroke={metricColors.visitors}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </AnalyticsChart>
+              </div>
+              <div className="dashboard-aggregate-legend analytics-chart-legend" aria-hidden>
+                <span className="dashboard-aggregate-legend-item">
+                  <span className="dashboard-aggregate-legend-swatch dashboard-aggregate-legend-swatch--pageviews" />
+                  <span className="dashboard-aggregate-legend-label">{t('pageviews')}</span>
+                </span>
+                <span className="dashboard-aggregate-legend-item">
+                  <span className="dashboard-aggregate-legend-swatch dashboard-aggregate-legend-swatch--visitors" />
+                  <span className="dashboard-aggregate-legend-label">{t('visitors')}</span>
+                </span>
+              </div>
+            </>
+          ) : (
+            <EmptyState title={t('chartNoData')} description={t('noDataInPeriodHint')} />
+          )}
+        </section>
+      </DataViewState>
 
       {websiteId ? (
         <OverviewDimensions

@@ -106,6 +106,8 @@ export const deDELocale: Record<string, string> = {
   passwordUpdated: "Passwort aktualisiert. Sie können sich anmelden.",
   resetFailed: "Zurücksetzen fehlgeschlagen",
   requestFailed: "Anfrage fehlgeschlagen",
+  dataLoadFailed: "Daten konnten nicht geladen werden",
+  retry: "Erneut versuchen",
   backToSignIn: "Zur Anmeldung",
   backToMarketing: "Zur Marketingseite",
   marketingHome: "Start",

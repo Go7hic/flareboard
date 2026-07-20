@@ -173,6 +173,8 @@ function OverviewDimensionCardSection({
       onTabChange={onTabChange}
       rows={rows}
       loading={metricsQuery.isLoading}
+      error={metricsQuery.isError ? metricsQuery.error : null}
+      onRetry={() => metricsQuery.refetch()}
       primaryMetric={card.primaryMetric}
       onMoreClick={() => onMoreClick(activeTab)}
     />

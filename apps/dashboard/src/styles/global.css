@@ -3840,6 +3840,10 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   line-height: 1.5;
 }
 
+.data-view-error-actions {
+  margin-top: 1rem;
+}
+
 @media (max-width: 640px) {
   .empty-state-block-desc {
     max-width: 100%;

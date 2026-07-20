@@ -106,6 +106,8 @@ export const frFRLocale: Record<string, string> = {
   passwordUpdated: "Mot de passe mis à jour. Vous pouvez vous connecter.",
   resetFailed: "Échec de la réinitialisation",
   requestFailed: "Échec de la requête",
+  dataLoadFailed: "Impossible de charger les données",
+  retry: "Réessayer",
   backToSignIn: "Retour à la connexion",
   backToMarketing: "Retour au site marketing",
   marketingHome: "Accueil",

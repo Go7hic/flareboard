@@ -5,6 +5,7 @@ import { BoardEditorForm } from '../components/BoardEditorForm';
 import { BoardWidgets } from '../components/BoardWidgets';
 import { CollapsibleSection } from '../components/CollapsibleSection';
 import { PageHeader } from '../components/PageHeader';
+import { ProductLineCrossLinks } from '../components/ProductLineCrossLinks';
 import { Button } from '../components/ui/button';
 import { boardConfigToDrafts, emptyStatsWidgetDraft, parseBoardConfig } from '../lib/board-config';
 import { api, type Insight, type Website } from '../lib/api';
@@ -123,6 +124,7 @@ export default function BoardsPage() {
         backTo="/websites"
         backLabel={t('websites')}
       />
+      <ProductLineCrossLinks surface="boards" />
 
       {hasBoards ? (
         <CollapsibleSection title={t('collapseNewBoard')} summary={t('newBoardLead')}>

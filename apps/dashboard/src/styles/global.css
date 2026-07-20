@@ -1163,6 +1163,10 @@ img.website-switcher-icon {
   max-width: 52ch;
 }
 
+.product-line-cross-links {
+  margin-top: -0.25rem;
+}
+
 .page-header-row {
   display: flex;
   justify-content: space-between;

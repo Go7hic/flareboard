@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bar, BarChart, Line, LineChart } from 'recharts';
 import { AnalyticsChart } from '../components/AnalyticsChart';
@@ -11,6 +12,7 @@ import {
   MasterDetailPane,
 } from '../components/master-detail';
 import { PageHeader } from '../components/PageHeader';
+import { ProductLineCrossLinks } from '../components/ProductLineCrossLinks';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -236,6 +238,7 @@ export default function InsightsPage() {
   return (
     <div className="page page-insights">
       <PageHeader title={t('insights')} subtitle={t('insightsSubtitle')} backTo="/websites" backLabel={t('websites')} />
+      <ProductLineCrossLinks surface="insights" />
 
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
@@ -401,6 +404,13 @@ export default function InsightsPage() {
                 </Button>
               ) : null}
             </div>
+            <p className="text-muted insight-save-share-hint">
+              {t('insightSaveShareHintBeforeBoards')}{' '}
+              <Link to="/boards">{t('boards')}</Link>
+              {t('insightSaveShareHintBeforeReports')}{' '}
+              <Link to="/reports">{t('reports')}</Link>
+              {t('insightSaveShareHintEnd')}
+            </p>
             </>
             ) : null}
 

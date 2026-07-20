@@ -26,7 +26,7 @@ Evidence in `.audit/dashboard-insight-ux.tsv`. Verdict VERIFIED only with real a
 | U17 | Sessions filters | path/referrer or segment filter + clear empty |
 | U18 | Errors IA | Issues tab primary; secondary tabs demoted |
 | U19 | Logs IA | Events primary; traces/filters/alerts secondary |
-| U20 | Insights/Boards/Reports line | cross-links + role copy on each surface |
+| U20 | Insights/Boards/Reports line | cross-links + role copy on each surface | VERIFIED |
 | U21 | Auth visual smoke | checklist on core paths light/dark |
 
 ## Out of scope

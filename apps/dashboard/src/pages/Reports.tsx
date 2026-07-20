@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { DataViewState } from '../components/DataViewState';
 import { PageHeader } from '../components/PageHeader';
+import { ProductLineCrossLinks } from '../components/ProductLineCrossLinks';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -218,6 +219,7 @@ export default function ReportsPage() {
         backTo="/websites"
         backLabel={t('websites')}
       />
+      <ProductLineCrossLinks surface="reports" />
 
       {noWebsite ? (
         <div className="panel empty-state-rich section-gap">
@@ -347,7 +349,7 @@ export default function ReportsPage() {
           <div className="reports-main">
             <section className="panel section-gap">
               <h2 className="section-title">{t('reportSections')}</h2>
-              <p className="text-muted reports-meta">{t('reportsSubtitle')}</p>
+              <p className="text-muted reports-meta">{t('reportsHubSectionsLead')}</p>
             </section>
             <div className="reports-hub-grid">
               {hubLinks.map((section) => (

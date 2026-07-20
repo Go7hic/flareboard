@@ -5,8 +5,9 @@ import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
 import { SessionAvatar } from '../components/SessionAvatar';
 import { SessionTechCell } from '../components/SessionTechCell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
-import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { api } from '../lib/api';
@@ -107,14 +108,16 @@ export default function SessionsPage() {
   };
 
   return (
-    <div className="page page-sessions">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page className="page-sessions">
+      <PageHeader
+        title={t('sessions')}
+        lead={t('sessionsPageLead')}
+        actions={
           <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
         }
       />
 
+      <PageBody>
       <DataViewState
         loading={sessionsQuery.isLoading}
         error={sessionsQuery.isError ? sessionsQuery.error : null}
@@ -280,6 +283,7 @@ export default function SessionsPage() {
           )}
         </section>
       </DataViewState>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

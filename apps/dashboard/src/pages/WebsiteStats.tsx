@@ -9,8 +9,9 @@ import { StatChangeDelta } from '../components/StatChangeDelta';
 import { MetricsTable } from '../components/MetricsTable';
 import { OverviewDimensions } from '../components/OverviewDimensions';
 import { OverviewMapHeatmapPanel } from '../components/OverviewMapHeatmapPanel';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { WebsiteStatsControls } from '../components/WebsiteStatsControls';
-import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { StatCard, StatCardSkeleton, type StatCardSize } from '../components/ui/stat-card';
 import {
@@ -212,10 +213,11 @@ export default function WebsiteStatsPage() {
   }
 
   return (
-    <div className="page page-stats">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page className="page-stats">
+      <PageHeader
+        title={t('navOverview')}
+        lead={t('overviewPageLead')}
+        actions={
           websiteId ? (
             <WebsiteStatsControls
               websiteId={websiteId}
@@ -236,6 +238,7 @@ export default function WebsiteStatsPage() {
         }
       />
 
+      <PageBody>
       {activeSegmentId ? (
         <div className="cohort-filter-banner section-gap">
           <span>
@@ -406,6 +409,7 @@ export default function WebsiteStatsPage() {
           {websiteId ? <OverviewMapHeatmapPanel websiteId={websiteId} qs={qs} /> : null}
         </div>
       ) : null}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

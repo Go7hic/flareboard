@@ -7,7 +7,8 @@ import { CompareReportControls } from '../components/CompareReportControls';
 import { StatChangeDelta } from '../components/StatChangeDelta';
 import { EmptyState } from '../components/EmptyState';
 import { MetricsTable } from '../components/MetricsTable';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { StatCard, StatCardSkeleton } from '../components/ui/stat-card';
 import { Skeleton } from '../components/ui/skeleton';
 import { useBreakdownMetrics } from '../hooks/useBreakdownMetrics';
@@ -148,10 +149,11 @@ export default function WebsiteComparePage() {
   const visitorsPrevFill = `color-mix(in srgb, var(--text-muted) 80%, transparent)`;
 
   return (
-    <div className="page page-compare">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page className="page-compare">
+      <PageHeader
+        title={t('navCompare')}
+        lead={t('websiteComparePageLead')}
+        actions={
           <CompareReportControls
             range={range}
             onRangeChange={setRange}
@@ -165,8 +167,7 @@ export default function WebsiteComparePage() {
         }
       />
 
-      <p className="section-lead text-muted compare-page-lead">{t('websiteComparePageLead')}</p>
-
+      <PageBody>
       <section className="panel section-gap compare-panel">
         {compareQuery.isLoading ? (
           <>
@@ -349,6 +350,7 @@ export default function WebsiteComparePage() {
           </>
         )}
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

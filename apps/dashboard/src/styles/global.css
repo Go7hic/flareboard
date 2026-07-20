@@ -2201,6 +2201,24 @@ code {
   border-top: 1px solid var(--border-subtle);
 }
 
+.analytics-compare-strip-head {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.analytics-compare-deep-link {
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.page-compare .compare-page-lead {
+  margin: 0 0 1rem;
+}
+
 .analytics-compare-strip .stat-card {
   flex: 1 1 10rem;
   min-width: 10rem;
@@ -5553,7 +5571,7 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   list-style: none;
 }
 
-.realtime-activity-btn {
+.realtime-activity-link {
   display: flex;
   align-items: flex-start;
   gap: 0.65rem;
@@ -5564,12 +5582,19 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   color: inherit;
   text-align: left;
   font: inherit;
+  text-decoration: none;
   cursor: pointer;
-  transition: background var(--transition);
+  transition: background var(--transition), color var(--transition);
 }
 
-.realtime-activity-btn:hover,
-.realtime-activity-btn.is-selected {
+.realtime-activity-link:hover {
+  background: var(--bg-subtle);
+  color: var(--link);
+}
+
+.realtime-activity-link:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
   background: var(--bg-subtle);
 }
 
@@ -5597,6 +5622,10 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 
 .realtime-activity-meta {
   font-size: 0.8125rem;
+}
+
+.realtime-activity-empty-wrap {
+  padding: 1.25rem 1.1rem 1.5rem;
 }
 
 .realtime-activity-empty {
@@ -5718,12 +5747,34 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 }
 
 .realtime-connection {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   margin: 0;
+  padding: 0.25rem 0.55rem;
   font-size: 0.8125rem;
   flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.realtime-connection--live {
+  border-color: color-mix(in srgb, var(--success) 35%, var(--border));
+}
+
+.realtime-connection-label {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.realtime-connection--live .realtime-connection-label {
+  color: var(--text);
+}
+
+.realtime-empty-panel {
+  padding: 2rem 1.5rem;
+  text-align: center;
 }
 
 .live-dot--muted {

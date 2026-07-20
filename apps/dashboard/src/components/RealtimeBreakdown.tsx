@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Bar, BarChart, Legend } from 'recharts';
 import type { RealtimeSession, RealtimeWindow30 } from '../lib/api';
-import { formatNumber, formatPercent } from '../lib/format';
+import { formatDateTime, formatNumber, formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 import { getCountryLabel } from '../lib/map-format';
+import { formatRelativeTime } from '../lib/session-display';
 import { useChartColors } from '../lib/useChartColors';
 import { AnalyticsChart } from './AnalyticsChart';
+import { EmptyState } from './EmptyState';
 import { SegmentTabs } from './SegmentTabs';
 import { SessionAvatar } from './SessionAvatar';
 import { StatCard } from './ui/stat-card';
@@ -148,17 +151,15 @@ function RealtimeRankTable({
 }
 
 export function RealtimeBreakdown({
+  websiteId,
   sessions,
   visitors,
   window30,
-  onSelectSession,
-  selectedSessionId,
 }: {
+  websiteId: string;
   sessions: RealtimeSession[];
   visitors: number;
   window30?: RealtimeWindow30;
-  onSelectSession: (sessionId: string | null) => void;
-  selectedSessionId: string | null;
 }) {
   const chartColors = useChartColors();
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all');
@@ -257,46 +258,56 @@ export function RealtimeBreakdown({
             aria-label={t('realtimeActivityLog')}
           />
         </header>
-        <ul className="list-plain realtime-activity-feed">
-          {activityRows.map((session) => {
-            const isSelected = selectedSessionId === session.sessionId;
-            const countryLabel = session.country ? getCountryLabel(session.country) : t('unknown');
-            return (
-              <li key={session.sessionId} className="realtime-activity-item">
-                <button
-                  type="button"
-                  className={`realtime-activity-btn${isSelected ? ' is-selected' : ''}`}
-                  onClick={() =>
-                    onSelectSession(isSelected ? null : session.sessionId)
-                  }
-                >
-                  <SessionAvatar
-                    seed={session.sessionId}
-                    size={28}
-                    className="realtime-activity-avatar"
-                  />
-                  <span className="realtime-activity-body">
-                    <span className="realtime-activity-time text-muted">
-                      {new Date(session.createdAt).toLocaleTimeString()}
+        {activityRows.length ? (
+          <ul className="list-plain realtime-activity-feed">
+            {activityRows.map((session) => {
+              const countryLabel = session.country ? getCountryLabel(session.country) : t('unknown');
+              const sessionHref = `/websites/${websiteId}/sessions/${session.sessionId}`;
+              const locationHint = session.country
+                ? t('realtimeVisitorFrom').replace('{country}', countryLabel)
+                : undefined;
+              return (
+                <li key={session.sessionId} className="realtime-activity-item">
+                  <Link
+                    to={sessionHref}
+                    className="realtime-activity-link"
+                    aria-label={t('realtimeOpenSession').replace('{path}', session.urlPath || '/')}
+                  >
+                    <SessionAvatar
+                      seed={session.sessionId}
+                      size={28}
+                      className="realtime-activity-avatar"
+                    />
+                    <span className="realtime-activity-body">
+                      <span
+                        className="realtime-activity-time text-muted"
+                        title={formatDateTime(session.createdAt)}
+                      >
+                        {formatRelativeTime(session.createdAt)}
+                      </span>
+                      <span className="realtime-activity-text">
+                        <span className="realtime-path-mono">{session.urlPath || '/'}</span>
+                        {locationHint ? (
+                          <span className="text-muted realtime-activity-meta">
+                            {' · '}
+                            {locationHint}
+                          </span>
+                        ) : null}
+                      </span>
                     </span>
-                    <span className="realtime-activity-text">
-                      <span className="realtime-path-mono">{session.urlPath || '/'}</span>
-                      {session.country ? (
-                        <span className="text-muted realtime-activity-meta">
-                          {' · '}
-                          {t('realtimeVisitorFrom').replace('{country}', countryLabel)}
-                        </span>
-                      ) : null}
-                    </span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-          {!activityRows.length ? (
-            <li className="text-muted realtime-activity-empty">{t('realtimeNoActivity')}</li>
-          ) : null}
-        </ul>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <div className="realtime-activity-empty-wrap">
+            <EmptyState
+              title={t('realtimeNoActivity')}
+              description={t('realtimeEmptyHint')}
+            />
+          </div>
+        )}
       </section>
 
       <div className="realtime-tables-grid">

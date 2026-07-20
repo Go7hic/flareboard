@@ -24,7 +24,11 @@ const PATH_CHECKS = [
     id: 'realtime',
     label: 'Realtime empty/live + session drill',
     path: (id) => `/websites/${id}/realtime`,
-    selectors: ['.realtime-widget', '.realtime-empty-panel, .realtime-activity-link, .realtime-breakdown'],
+    selectors: [
+      '.realtime-widget',
+      '.realtime-globe-stage',
+      '.realtime-empty-panel, .realtime-activity-link, .realtime-breakdown',
+    ],
   },
   {
     id: 'sessions',

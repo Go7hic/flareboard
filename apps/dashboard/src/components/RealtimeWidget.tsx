@@ -47,31 +47,31 @@ export function RealtimeWidget({ websiteId }: { websiteId: string }) {
         loadingFallback={<div className="skeleton skeleton-block realtime-map-skeleton" aria-hidden />}
       >
         {data ? (
-          isLiveEmpty ? (
-            <div className="panel realtime-empty-panel">
-              <EmptyState
-                title={t('realtimeEmptyTitle')}
-                description={t('realtimeEmptyHint')}
+          <>
+            <div className="realtime-globe-stage">
+              <RealtimeGeoMap
+                sessions={sessions}
+                visitors={data.visitors}
+                siteName={siteName}
               />
             </div>
-          ) : (
-            <>
-              <div className="realtime-globe-stage">
-                <RealtimeGeoMap
-                  sessions={sessions}
-                  visitors={data.visitors}
-                  siteName={siteName}
+
+            {isLiveEmpty ? (
+              <div className="panel realtime-empty-panel section-gap">
+                <EmptyState
+                  title={t('realtimeEmptyTitle')}
+                  description={t('realtimeEmptyHint')}
                 />
               </div>
-
+            ) : (
               <RealtimeBreakdown
                 websiteId={websiteId}
                 sessions={sessions}
                 visitors={data.visitors}
                 window30={window30}
               />
-            </>
-          )
+            )}
+          </>
         ) : null}
       </DataViewState>
     </div>

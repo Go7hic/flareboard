@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { EmptyState } from '../components/EmptyState';
+import { DataViewState } from '../components/DataViewState';
 import { RetentionHeatmap } from '../components/RetentionHeatmap';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';
@@ -36,13 +36,15 @@ export default function WebsiteRetentionPage() {
         }
       />
       <section className="panel section-gap">
-        {retentionQuery.isLoading ? (
-          <div className="skeleton skeleton-block" aria-busy />
-        ) : (retentionQuery.data?.cohorts ?? []).length === 0 ? (
-          <EmptyState title={t('noDataInPeriod')} />
-        ) : (
+        <DataViewState
+          loading={retentionQuery.isLoading}
+          error={retentionQuery.isError ? retentionQuery.error : null}
+          onRetry={() => retentionQuery.refetch()}
+          isEmpty={!retentionQuery.isLoading && (retentionQuery.data?.cohorts ?? []).length === 0}
+          emptyTitle={t('noDataInPeriod')}
+        >
           <RetentionHeatmap cohorts={retentionQuery.data?.cohorts ?? []} />
-        )}
+        </DataViewState>
       </section>
     </div>
   );

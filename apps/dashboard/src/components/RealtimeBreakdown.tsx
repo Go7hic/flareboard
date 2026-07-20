@@ -1,20 +1,14 @@
 import { useMemo, useState } from 'react';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Bar, BarChart, Legend } from 'recharts';
 import type { RealtimeSession, RealtimeWindow30 } from '../lib/api';
+import { formatNumber, formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 import { getCountryLabel } from '../lib/map-format';
 import { useChartColors } from '../lib/useChartColors';
+import { AnalyticsChart } from './AnalyticsChart';
 import { SegmentTabs } from './SegmentTabs';
 import { SessionAvatar } from './SessionAvatar';
+import { StatCard } from './ui/stat-card';
 
 const BUCKET_MS = 2 * 60 * 1000;
 const WINDOW_MS = 30 * 60 * 1000;
@@ -139,8 +133,8 @@ function RealtimeRankTable({
                   <span className="realtime-path-mono">{row.label}</span>
                 </td>
                 <td className="num realtime-rank-value">
-                  <span>{row.count.toLocaleString()}</span>
-                  <span className="realtime-rank-pct">{row.pct}%</span>
+                  <span>{formatNumber(row.count)}</span>
+                  <span className="realtime-rank-pct">{formatPercent(row.pct)}</span>
                 </td>
               </tr>
             ))}
@@ -201,22 +195,10 @@ export function RealtimeBreakdown({
   return (
     <div className="realtime-breakdown section-gap">
       <div className="stat-grid realtime-kpi-grid">
-        <div className="stat-card">
-          <div className="stat-label">{t('realtimeLiveVisitors')}</div>
-          <div className="stat-value">{onlineVisitors.toLocaleString()}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">{t('realtimeLivePages')}</div>
-          <div className="stat-value">{livePages.toLocaleString()}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">{t('realtimeLiveReferrers')}</div>
-          <div className="stat-value">{liveReferrers.toLocaleString()}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">{t('realtimeLiveCountries')}</div>
-          <div className="stat-value">{liveCountries.toLocaleString()}</div>
-        </div>
+        <StatCard label={t('realtimeLiveVisitors')} value={formatNumber(onlineVisitors)} />
+        <StatCard label={t('realtimeLivePages')} value={formatNumber(livePages)} />
+        <StatCard label={t('realtimeLiveReferrers')} value={formatNumber(liveReferrers)} />
+        <StatCard label={t('realtimeLiveCountries')} value={formatNumber(liveCountries)} />
       </div>
 
       <section className="panel realtime-chart-panel">
@@ -224,58 +206,44 @@ export function RealtimeBreakdown({
           <h3 className="realtime-rank-title">{t('realtimeTrend30m')}</h3>
         </header>
         <div className="realtime-chart-wrap">
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="label"
-                tick={{ fill: chartColors.muted, fontSize: 11 }}
-                tickLine={false}
-                axisLine={{ stroke: chartColors.border }}
-                interval="preserveStartEnd"
-                minTickGap={24}
-              />
-              <YAxis
-                allowDecimals={false}
-                tick={{ fill: chartColors.muted, fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-                width={32}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: chartColors.panel,
-                  border: `1px solid ${chartColors.border}`,
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.8125rem',
-                }}
-                labelStyle={{ color: chartColors.text }}
-              />
-              <Legend
-                verticalAlign="bottom"
-                height={28}
-                iconType="circle"
-                iconSize={8}
-                wrapperStyle={{ fontSize: '0.8125rem', color: chartColors.muted }}
-              />
-              <Bar
-                dataKey="visitors"
-                name={t('realtimeChartLegendVisitors')}
-                stackId="traffic"
-                fill={visitorBarColor}
-                radius={[0, 0, 0, 0]}
-                maxBarSize={28}
-              />
-              <Bar
-                dataKey="pageviews"
-                name={t('realtimeChartLegendViews')}
-                stackId="traffic"
-                fill={pageviewBarColor}
-                radius={[2, 2, 0, 0]}
-                maxBarSize={28}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+          <AnalyticsChart
+            Chart={BarChart}
+            data={chartData}
+            margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+            responsive={{ width: '100%', height: 220 }}
+            xAxis={{
+              dataKey: 'label',
+              tickLine: false,
+              axisLine: { stroke: chartColors.border },
+              interval: 'preserveStartEnd',
+              minTickGap: 24,
+            }}
+            yAxis={{ tickLine: false, axisLine: false, width: 32 }}
+          >
+            <Legend
+              verticalAlign="bottom"
+              height={28}
+              iconType="circle"
+              iconSize={8}
+              wrapperStyle={{ fontSize: '0.8125rem', color: chartColors.muted }}
+            />
+            <Bar
+              dataKey="visitors"
+              name={t('realtimeChartLegendVisitors')}
+              stackId="traffic"
+              fill={visitorBarColor}
+              radius={[0, 0, 0, 0]}
+              maxBarSize={28}
+            />
+            <Bar
+              dataKey="pageviews"
+              name={t('realtimeChartLegendViews')}
+              stackId="traffic"
+              fill={pageviewBarColor}
+              radius={[2, 2, 0, 0]}
+              maxBarSize={28}
+            />
+          </AnalyticsChart>
         </div>
       </section>
 

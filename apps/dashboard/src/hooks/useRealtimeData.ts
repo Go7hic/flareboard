@@ -41,6 +41,8 @@ export function useRealtimeData(websiteId: string) {
 
   const data = sseConnected ? sseData : poll.data;
   const isLoading = sseConnected ? sseLoading && !data : poll.isLoading;
+  const error = sseConnected ? null : poll.error;
+  const refetch = () => poll.refetch();
 
-  return { data, isLoading, sseConnected };
+  return { data, isLoading, sseConnected, error, refetch };
 }

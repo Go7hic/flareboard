@@ -2,12 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Bar, BarChart } from 'recharts';
 import { AnalyticsChart } from '../components/AnalyticsChart';
-import { EmptyState } from '../components/EmptyState';
+import { DataViewState } from '../components/DataViewState';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';
 import { Input } from '../components/ui/input';
 import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
 import { api } from '../lib/api';
+import { formatNumber, formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
 
@@ -60,14 +61,16 @@ export default function WebsiteFunnelPage() {
             aria-label={t('funnel')}
           />
         </div>
-        {funnelQuery.isLoading ? (
-          <div className="skeleton skeleton-block section-gap" aria-busy />
-        ) : funnelChartData.length === 0 || !funnelHasData ? (
-          <EmptyState
-            title={t('noDataInPeriod')}
-            description={funnelChartData.length > 0 ? t('funnelNoDataHint') : t('noDataInPeriodHint')}
-          />
-        ) : (
+        <DataViewState
+          loading={funnelQuery.isLoading}
+          error={funnelQuery.isError ? funnelQuery.error : null}
+          onRetry={() => funnelQuery.refetch()}
+          isEmpty={!funnelQuery.isLoading && (funnelChartData.length === 0 || !funnelHasData)}
+          emptyTitle={t('noDataInPeriod')}
+          emptyDescription={
+            funnelChartData.length > 0 ? t('funnelNoDataHint') : t('noDataInPeriodHint')
+          }
+        >
           <>
             <div className="chart-wrap chart-wrap-compact">
               <AnalyticsChart
@@ -87,18 +90,18 @@ export default function WebsiteFunnelPage() {
                 <li key={s.step} className="list-item list-row">
                   <span>{s.step}</span>
                   <span className="list-row-value">
-                    {s.count} ({s.rate}%)
+                    {formatNumber(s.count)} ({formatPercent(s.rate)})
                   </span>
                 </li>
               ))}
             </ul>
             {funnelQuery.data ? (
               <p className="text-muted reports-funnel-conversion">
-                {t('overallConversion')}: {funnelQuery.data.conversion}%
+                {t('overallConversion')}: {formatPercent(funnelQuery.data.conversion)}
               </p>
             ) : null}
           </>
-        )}
+        </DataViewState>
       </section>
     </div>
   );

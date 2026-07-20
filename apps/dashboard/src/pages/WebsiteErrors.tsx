@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { AlertTriangle, ExternalLink } from 'lucide-react';
 import { DateRangePicker } from '../components/DateRangePicker';
+import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
 import { MasterDetailSidePane, MasterDetailTableLayout } from '../components/master-detail';
 import { WebsitePageShell } from '../components/WebsitePageShell';
@@ -11,14 +12,13 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { api, type ErrorAlertRule, type ErrorEventsResponse, type ErrorSourceMap } from '../lib/api';
-import { formatNumber } from '../lib/format';
+import { formatDateOnly, formatDateTime, formatNumber, formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 
 function formatTime(value: number | null | undefined) {
-  if (!value) return '-';
-  return new Date(value).toLocaleString();
+  return formatDateTime(value);
 }
 
 function shortText(value: string | null | undefined, fallback = '-') {
@@ -28,7 +28,7 @@ function shortText(value: string | null | undefined, fallback = '-') {
 }
 
 function formatDate(value: string) {
-  return new Date(`${value}T00:00:00Z`).toLocaleDateString();
+  return formatDateOnly(`${value}T00:00:00Z`);
 }
 
 type ErrorIssueStatusFilter = 'all' | 'open' | 'resolved' | 'ignored';
@@ -242,6 +242,11 @@ export default function WebsiteErrorsPage() {
 
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
+      <DataViewState
+        loading={errorsQuery.isLoading && !errorsQuery.data}
+        error={errorsQuery.isError ? errorsQuery.error : null}
+        onRetry={() => errorsQuery.refetch()}
+      >
       <section className="analytics-hero-stats section-gap">
         <StatCard label={t('errorsTotal')} value={formatNumber(stats?.errors ?? 0)} />
         <StatCard label={t('errorsAffectedSessions')} value={formatNumber(stats?.sessions ?? 0)} />
@@ -273,8 +278,8 @@ export default function WebsiteErrorsPage() {
                     {trendRows.map((row) => (
                       <tr key={row.date}>
                         <td>{formatDate(row.date)}</td>
-                        <td>{row.errors.toLocaleString()}</td>
-                        <td>{row.sessions.toLocaleString()}</td>
+                        <td>{formatNumber(row.errors)}</td>
+                        <td>{formatNumber(row.sessions)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -295,7 +300,7 @@ export default function WebsiteErrorsPage() {
                       <div className="breakdown-meta">
                         <strong>{row.severity}</strong>
                         <span className="text-muted">
-                          {row.errors.toLocaleString()} ({share}%)
+                          {formatNumber(row.errors)} ({formatPercent(share)})
                         </span>
                       </div>
                       <div className="breakdown-track" aria-hidden>
@@ -358,8 +363,8 @@ export default function WebsiteErrorsPage() {
                             </span>
                           </button>
                         </td>
-                        <td>{issue.events.toLocaleString()}</td>
-                        <td>{issue.sessions.toLocaleString()}</td>
+                        <td>{formatNumber(issue.events)}</td>
+                        <td>{formatNumber(issue.sessions)}</td>
                         <td>
                           <span className={`badge error-status-${issue.status}`}>
                             {t(`errorIssueStatus_${issue.status}`)}
@@ -492,6 +497,7 @@ export default function WebsiteErrorsPage() {
           <EmptyState title={t('errorsEmptyTitle')} description={t('errorsEmptyBody')} />
         ) : null}
       </section>
+      </DataViewState>
 
       <section className="panel section-gap">
         <header className="panel-header">

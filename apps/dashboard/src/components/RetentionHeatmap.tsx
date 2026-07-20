@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 
 type RetentionRow = { cohortWeek: string; weekOffset: number; users: number };
@@ -52,9 +53,9 @@ export function RetentionHeatmap({ cohorts }: { cohorts: RetentionRow[] }) {
                       key={o}
                       className="num retention-heatmap-cell"
                       style={{ background: cellColor(intensity) }}
-                      title={`${users} ${t('retentionUsers')}`}
+                      title={`${formatNumber(users)} ${t('retentionUsers')}`}
                     >
-                      {users > 0 ? users : '—'}
+                      {users > 0 ? formatNumber(users) : '—'}
                     </td>
                   );
                 })}

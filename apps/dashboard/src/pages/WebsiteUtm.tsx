@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type { UtmReportResponse } from '@flareboard/shared/client';
+import { DataViewState } from '../components/DataViewState';
 import { MetricsTable } from '../components/MetricsTable';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';
@@ -77,16 +78,27 @@ export default function WebsiteUtmPage() {
         <p className="section-lead">{t('utmLead')}</p>
       </section>
 
-      <div className="utm-dimensions-stack section-gap" aria-label={t('utmBreakdown')}>
-        {UTM_SECTIONS.map(({ key, labelKey }) => (
-          <UtmDimensionPanel
-            key={key}
-            title={t(labelKey)}
-            rows={data?.[key] ?? []}
-            loading={loading}
-          />
-        ))}
-      </div>
+      <DataViewState
+        loading={utmQuery.isLoading}
+        error={utmQuery.isError ? utmQuery.error : null}
+        onRetry={() => utmQuery.refetch()}
+        isEmpty={
+          !utmQuery.isLoading &&
+          UTM_SECTIONS.every(({ key }) => (data?.[key] ?? []).length === 0)
+        }
+        emptyTitle={t('noDataInPeriod')}
+      >
+        <div className="utm-dimensions-stack section-gap" aria-label={t('utmBreakdown')}>
+          {UTM_SECTIONS.map(({ key, labelKey }) => (
+            <UtmDimensionPanel
+              key={key}
+              title={t(labelKey)}
+              rows={data?.[key] ?? []}
+              loading={loading}
+            />
+          ))}
+        </div>
+      </DataViewState>
     </div>
   );
 }

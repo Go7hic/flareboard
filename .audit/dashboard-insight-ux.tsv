@@ -16,3 +16,12 @@ ts	phase	decision	why	evidence	result
 2026-07-20T09:36:59Z	u2	AnalyticsChart wrapper	Shared Recharts shell removes duplicated axis/tooltip chrome and locale-formats Y ticks via formatNumber	AnalyticsChart.tsx + WebsiteStats/WebsiteFunnel/WebsiteCompare migrations; pnpm typecheck pass	shipped
 2026-07-20T09:42:52Z	u3	MetricsTable optional column sort + Sessions load-more	Ranked breakdowns and session lists need inspectable order beyond fixed API sort and 50-cap	MetricsTable.tsx sortable th+aria-sort+formatNumber/formatDurationSeconds; Sessions.tsx useInfiniteQuery+load-more; pnpm --filter @flareboard/dashboard typecheck	VERIFIED
 2026-07-20T09:47:54Z	u4	DataViewState shared loading/error/empty+retry	Build the Lever; failed fetches were silent on query-driven panels; consistent gate for loading/empty	DataViewState.tsx; WebsiteStats overviewQuery; Sessions list; OverviewDimensions cards; i18n dataLoadFailed+retry; pnpm --filter @flareboard/dashboard typecheck	VERIFIED
+2026-07-20T10:00:00Z	u5	WebsiteRealtime RealtimeBreakdown RealtimeWidget	StatCard KPIs; AnalyticsChart 30m trend; formatNumber/formatPercent; DataViewState on poll fallback	RealtimeBreakdown.tsx RealtimeWidget.tsx useRealtimeData.ts	VERIFIED
+2026-07-20T10:00:00Z	u5	WebsiteRetention	DataViewState on retentionQuery; formatNumber in RetentionHeatmap cells	WebsiteRetention.tsx RetentionHeatmap.tsx	VERIFIED
+2026-07-20T10:00:00Z	u5	WebsiteFunnel	DataViewState; formatNumber/formatPercent on step list and conversion; AnalyticsChart already wired	WebsiteFunnel.tsx	VERIFIED
+2026-07-20T10:00:00Z	u5	WebsiteErrors	DataViewState on primary errorsQuery; formatNumber/formatPercent/formatDateTime leftovers	WebsiteErrors.tsx	VERIFIED
+2026-07-20T10:00:00Z	u5	Insights	AnalyticsChart on trend/funnel/stickiness previews; formatNumber tables; DataViewState list+preview	Insights.tsx	VERIFIED
+2026-07-20T10:00:00Z	u5	WebsiteUtm	DataViewState on utmQuery; MetricsTable sortable already wired	WebsiteUtm.tsx	VERIFIED
+2026-07-20T10:00:00Z	u5	DashboardHome	DataViewState; StatCard aggregate KPIs; AnalyticsChart aggregate+site sparklines; formatNumber already wired	DashboardHome.tsx	VERIFIED
+2026-07-20T10:00:00Z	u5	WebsiteBreakdown	redirect-only to overview explorer; no page-local levers needed	WebsiteBreakdown.tsx	skipped redirect
+2026-07-20T10:00:00Z	u5	Phase A predicate met: >=8 analytics pages on format+StatCard/chart/DataViewState levers	U5 core paths + prior U0-U4 migrations; pnpm --filter @flareboard/dashboard typecheck	VERIFIED

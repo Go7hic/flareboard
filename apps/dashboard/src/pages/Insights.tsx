@@ -1,16 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Bar, BarChart, Line, LineChart } from 'recharts';
+import { AnalyticsChart } from '../components/AnalyticsChart';
+import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
 import {
   MasterDetailLayout,
@@ -23,10 +15,10 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { api, type Insight, type InsightQuery, type InsightResult, type InsightType, type Website } from '../lib/api';
 import { presetToRange, rangeQueryString } from '../lib/dateRange';
+import { formatNumber, formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { useChartColors } from '../lib/useChartColors';
-import { chartTooltipStyle } from '../lib/chartStyles';
 
 const DEFAULT_QUERY: InsightQuery = {
   metric: 'pageviews',
@@ -74,15 +66,9 @@ function ResultPreview({ result }: { result: InsightResult | null | undefined })
   if (result.kind === 'trend') {
     return (
       <div className="chart-wrap chart-wrap-compact">
-        <ResponsiveContainer>
-          <LineChart data={result.series} margin={{ left: 8, right: 16 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
-            <XAxis dataKey="x" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-            <YAxis tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-            <Tooltip contentStyle={chartTooltipStyle(chartColors)} />
-            <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
+        <AnalyticsChart Chart={LineChart} data={result.series} margin={{ left: 8, right: 16 }} xAxis={{ dataKey: 'x' }}>
+          <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} />
+        </AnalyticsChart>
       </div>
     );
   }
@@ -92,17 +78,19 @@ function ResultPreview({ result }: { result: InsightResult | null | undefined })
     return (
       <>
         <div className="chart-wrap chart-wrap-compact">
-          <ResponsiveContainer>
-            <BarChart data={rows} layout="vertical" margin={{ left: 8, right: 16 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} horizontal={false} />
-              <XAxis type="number" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-              <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-              <Tooltip contentStyle={chartTooltipStyle(chartColors)} />
-              <Bar dataKey="count" fill={chartColors.accent} radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <AnalyticsChart
+            Chart={BarChart}
+            data={rows}
+            layout="vertical"
+            margin={{ left: 8, right: 16 }}
+            grid={{ horizontal: false }}
+            xAxis={{ type: 'number' }}
+            yAxis={{ type: 'category', dataKey: 'name', width: 110 }}
+          >
+            <Bar dataKey="count" fill={chartColors.accent} radius={[0, 4, 4, 0]} />
+          </AnalyticsChart>
         </div>
-        <p className="text-muted">{t('overallConversion')}: {result.conversion}%</p>
+        <p className="text-muted">{t('overallConversion')}: {formatPercent(result.conversion)}</p>
       </>
     );
   }
@@ -111,15 +99,9 @@ function ResultPreview({ result }: { result: InsightResult | null | undefined })
     const rows = result.distribution.map((row) => ({ name: `${row.activeDays}d`, actors: row.actors }));
     return (
       <div className="chart-wrap chart-wrap-compact">
-        <ResponsiveContainer>
-          <BarChart data={rows} margin={{ left: 8, right: 16 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
-            <XAxis dataKey="name" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-            <YAxis tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-            <Tooltip contentStyle={chartTooltipStyle(chartColors)} />
-            <Bar dataKey="actors" fill={chartColors.accent} radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <AnalyticsChart Chart={BarChart} data={rows} margin={{ left: 8, right: 16 }} xAxis={{ dataKey: 'name' }}>
+          <Bar dataKey="actors" fill={chartColors.accent} radius={[4, 4, 0, 0]} />
+        </AnalyticsChart>
       </div>
     );
   }
@@ -142,7 +124,7 @@ function ResultPreview({ result }: { result: InsightResult | null | undefined })
             {result.next.map((row) => (
               <tr key={row.path}>
                 <td>{row.path}</td>
-                <td className="num">{row.count.toLocaleString()}</td>
+                <td className="num">{formatNumber(row.count)}</td>
               </tr>
             ))}
           </tbody>
@@ -164,7 +146,7 @@ function ResultPreview({ result }: { result: InsightResult | null | undefined })
           {result.rows.map((row) => (
             <tr key={row.x}>
               <td>{row.x}</td>
-              <td className="num">{row.y.toLocaleString()}</td>
+              <td className="num">{formatNumber(row.y)}</td>
             </tr>
           ))}
         </tbody>
@@ -262,20 +244,26 @@ export default function InsightsPage() {
       <section className="panel section-gap">
         <MasterDetailLayout
           list={
-            <>
-              {(insightsQuery.data ?? []).map((insight) => (
-                <MasterDetailListItem
-                  key={insight.id}
-                  selected={selectedId === insight.id}
-                  onSelect={() => selectInsight(insight)}
-                  title={insight.name}
-                  subtitle={insightTypeLabel(insight.type)}
-                />
-              ))}
-              {!insightsQuery.isLoading && !(insightsQuery.data ?? []).length ? (
-                <EmptyState title={t('insightsEmptyTitle')} description={t('insightsEmptyBody')} />
-              ) : null}
-            </>
+            <DataViewState
+              loading={insightsQuery.isLoading}
+              error={insightsQuery.isError ? insightsQuery.error : null}
+              onRetry={() => insightsQuery.refetch()}
+              isEmpty={!insightsQuery.isLoading && !(insightsQuery.data ?? []).length}
+              emptyTitle={t('insightsEmptyTitle')}
+              emptyDescription={t('insightsEmptyBody')}
+            >
+              <>
+                {(insightsQuery.data ?? []).map((insight) => (
+                  <MasterDetailListItem
+                    key={insight.id}
+                    selected={selectedId === insight.id}
+                    onSelect={() => selectInsight(insight)}
+                    title={insight.name}
+                    subtitle={insightTypeLabel(insight.type)}
+                  />
+                ))}
+              </>
+            </DataViewState>
           }
           detail={
             <MasterDetailPane
@@ -419,11 +407,13 @@ export default function InsightsPage() {
                   <p className="text-muted">{t('insightPreviewLead')}</p>
                 </div>
               </div>
-              {previewMutation.isPending ? (
-                <div className="skeleton skeleton-block" aria-busy />
-              ) : (
+              <DataViewState
+                loading={previewMutation.isPending}
+                error={previewMutation.isError ? previewMutation.error : null}
+                onRetry={() => previewMutation.mutate()}
+              >
                 <ResultPreview result={previewMutation.data?.data} />
-              )}
+              </DataViewState>
             </div>
             </MasterDetailPane>
           }

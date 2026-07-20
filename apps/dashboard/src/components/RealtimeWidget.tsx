@@ -5,13 +5,14 @@ import { api, type Website } from '../lib/api';
 import { useRealtimeData } from '../hooks/useRealtimeData';
 import { t } from '../lib/i18n';
 import { Button } from './ui/button';
+import { DataViewState } from './DataViewState';
 import { RealtimeBreakdown } from './RealtimeBreakdown';
 import { RealtimeGeoMap } from './RealtimeGeoMap';
 
 type ActivityRow = { urlPath: string; eventName: string | null; createdAt: number };
 
 export function RealtimeWidget({ websiteId }: { websiteId: string }) {
-  const { data, isLoading, sseConnected } = useRealtimeData(websiteId);
+  const { data, isLoading, sseConnected, error, refetch } = useRealtimeData(websiteId);
   const websiteQuery = useQuery({
     queryKey: ['website', websiteId],
     queryFn: () => api<Website>(`/api/websites/${websiteId}`),
@@ -47,27 +48,34 @@ export function RealtimeWidget({ websiteId }: { websiteId: string }) {
         </p>
       </header>
 
-      {isLoading ? <div className="skeleton skeleton-block realtime-map-skeleton" aria-hidden /> : null}
+      <DataViewState
+        loading={isLoading && !data}
+        error={error}
+        onRetry={() => refetch()}
+        isEmpty={!isLoading && !data}
+        emptyTitle={t('noDataInPeriod')}
+        loadingFallback={<div className="skeleton skeleton-block realtime-map-skeleton" aria-hidden />}
+      >
+        {data ? (
+          <>
+            <div className="realtime-globe-stage">
+              <RealtimeGeoMap
+                sessions={sessions}
+                visitors={data.visitors}
+                siteName={siteName}
+              />
+            </div>
 
-      {data ? (
-        <>
-          <div className="realtime-globe-stage">
-            <RealtimeGeoMap
+            <RealtimeBreakdown
               sessions={sessions}
               visitors={data.visitors}
-              siteName={siteName}
+              window30={window30}
+              onSelectSession={setSelectedSessionId}
+              selectedSessionId={selectedSessionId}
             />
-          </div>
-
-          <RealtimeBreakdown
-            sessions={sessions}
-            visitors={data.visitors}
-            window30={window30}
-            onSelectSession={setSelectedSessionId}
-            selectedSessionId={selectedSessionId}
-          />
-        </>
-      ) : null}
+          </>
+        ) : null}
+      </DataViewState>
 
       {selectedSessionId && selected ? (
         <div className="realtime-session-drawer panel section-gap">

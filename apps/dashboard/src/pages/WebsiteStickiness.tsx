@@ -2,9 +2,9 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { EmptyState } from '../components/EmptyState';
+import { EventCatalogPicker } from '../components/EventCatalogPicker';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';
-import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
 import { api } from '../lib/api';
@@ -86,11 +86,14 @@ export default function WebsiteStickinessPage() {
         <div className="panel-form">
           <div className="field">
             <Label htmlFor="stickiness-event">{t('stickinessEvent')}</Label>
-            <Input
+            <EventCatalogPicker
+              mode="single"
+              websiteId={websiteId}
               id="stickiness-event"
               value={eventName}
-              onChange={(event) => setEventName(event.target.value)}
+              onChange={setEventName}
               placeholder={t('stickinessEventPlaceholder')}
+              allowEmpty
             />
           </div>
           <div className="field">

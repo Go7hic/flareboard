@@ -3,9 +3,9 @@ import { useMemo, useState } from 'react';
 import { Bar, BarChart } from 'recharts';
 import { AnalyticsChart } from '../components/AnalyticsChart';
 import { DataViewState } from '../components/DataViewState';
+import { EventCatalogPicker } from '../components/EventCatalogPicker';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';
-import { Input } from '../components/ui/input';
 import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
 import { api } from '../lib/api';
 import { formatNumber, formatPercent } from '../lib/format';
@@ -16,14 +16,16 @@ export default function WebsiteFunnelPage() {
   const chartColors = useChartColors();
   const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl, timezone } =
     useWebsiteReportContext('30d');
-  const [funnelSteps, setFunnelSteps] = useState('signup,purchase');
+  const [funnelSteps, setFunnelSteps] = useState(['signup', 'purchase']);
+
+  const funnelStepsParam = funnelSteps.join(',');
 
   const funnelQuery = useQuery({
-    queryKey: ['reports-funnel', websiteId, funnelSteps, range, segmentId],
+    queryKey: ['reports-funnel', websiteId, funnelStepsParam, range, segmentId],
     enabled: Boolean(websiteId),
     queryFn: () =>
       api<{ steps: Array<{ step: string; count: number; rate: number }>; conversion: number }>(
-        reportUrl('funnel', `&steps=${encodeURIComponent(funnelSteps)}`),
+        reportUrl('funnel', `&steps=${encodeURIComponent(funnelStepsParam)}`),
       ),
   });
 
@@ -54,9 +56,11 @@ export default function WebsiteFunnelPage() {
       />
       <section className="panel section-gap">
         <div className="field" style={{ maxWidth: '28rem' }}>
-          <Input
+          <EventCatalogPicker
+            mode="multi"
+            websiteId={websiteId}
             value={funnelSteps}
-            onChange={(e) => setFunnelSteps(e.target.value)}
+            onChange={setFunnelSteps}
             placeholder={t('funnelStepsPlaceholder')}
             aria-label={t('funnel')}
           />

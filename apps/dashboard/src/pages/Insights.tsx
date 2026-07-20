@@ -4,6 +4,7 @@ import { Bar, BarChart, Line, LineChart } from 'recharts';
 import { AnalyticsChart } from '../components/AnalyticsChart';
 import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
+import { EventCatalogPicker } from '../components/EventCatalogPicker';
 import {
   MasterDetailLayout,
   MasterDetailListItem,
@@ -52,11 +53,8 @@ function insightTypeLabel(type: InsightType) {
   return defaultName(type);
 }
 
-function parseEvents(value: string) {
-  return value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
+function funnelStepsFromQuery(events: string[] | undefined) {
+  return events?.length ? events : ['signup', 'purchase'];
 }
 
 function ResultPreview({ result }: { result: InsightResult | null | undefined }) {
@@ -322,11 +320,14 @@ export default function InsightsPage() {
               {type === 'funnel' ? (
                 <div className="field">
                   <Label htmlFor="insight-events">{t('funnel')}</Label>
-                  <Input
+                  <EventCatalogPicker
+                    mode="multi"
+                    websiteId={websiteId}
                     id="insight-events"
-                    value={(query.events ?? []).join(',')}
-                    onChange={(event) => setQuery((prev) => ({ ...prev, events: parseEvents(event.target.value) }))}
-                    placeholder="signup,purchase"
+                    value={funnelStepsFromQuery(query.events)}
+                    onChange={(events) => setQuery((prev) => ({ ...prev, events }))}
+                    placeholder={t('funnelStepsPlaceholder')}
+                    aria-label={t('funnel')}
                   />
                 </div>
               ) : type === 'table' ? (
@@ -358,11 +359,14 @@ export default function InsightsPage() {
               ) : type === 'trend' || type === 'stickiness' ? (
                 <div className="field">
                   <Label htmlFor="insight-event">{t('event')}</Label>
-                  <Input
+                  <EventCatalogPicker
+                    mode="single"
+                    websiteId={websiteId}
                     id="insight-event"
                     value={query.event ?? ''}
-                    onChange={(event) => setQuery((prev) => ({ ...prev, event: event.target.value }))}
+                    onChange={(event) => setQuery((prev) => ({ ...prev, event }))}
                     placeholder={type === 'trend' ? t('insightTrendEventPlaceholder') : t('stickinessEventPlaceholder')}
+                    allowEmpty={type === 'stickiness'}
                   />
                 </div>
               ) : null}

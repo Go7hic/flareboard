@@ -7,6 +7,7 @@ import { SessionTechCell } from '../components/SessionTechCell';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { api } from '../lib/api';
+import { formatDateTime, formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import {
   countryFlagEmoji,
@@ -88,9 +89,9 @@ export default function SessionsPage() {
                           <SessionAvatar seed={s.id} size={32} className="sessions-table-avatar" />
                         </Link>
                       </td>
-                      <td className="num">{s.visits.toLocaleString()}</td>
-                      <td className="num">{s.pageviews.toLocaleString()}</td>
-                      <td className="num">{s.events.toLocaleString()}</td>
+                      <td className="num">{formatNumber(s.visits)}</td>
+                      <td className="num">{formatNumber(s.pageviews)}</td>
+                      <td className="num">{formatNumber(s.events)}</td>
                       <td>
                         <Link
                           to={`/websites/${websiteId}/sessions/${s.id}`}
@@ -123,7 +124,7 @@ export default function SessionsPage() {
                         <Link
                           to={`/websites/${websiteId}/sessions/${s.id}`}
                           className="sessions-row-link sessions-last-cell"
-                          title={new Date(s.lastAt).toLocaleString()}
+                          title={formatDateTime(s.lastAt)}
                         >
                           {formatRelativeTime(s.lastAt)}
                         </Link>

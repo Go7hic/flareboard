@@ -18,6 +18,7 @@ import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { api } from '../lib/api';
 import { formatChartTimeLabel, isHourlyChartRange } from '../lib/chartTimeseries';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useDashboardRange } from '../lib/useDashboardRange';
 import { useChartColors } from '../lib/useChartColors';
@@ -167,15 +168,15 @@ export default function DashboardHome() {
                 <div className="dashboard-aggregate-kpis">
                   <div className="dashboard-aggregate-kpi">
                     <span className="dashboard-aggregate-kpi-label">{t('pageviews')}</span>
-                    <span className="dashboard-aggregate-kpi-value">{totals.pageviews.toLocaleString()}</span>
+                    <span className="dashboard-aggregate-kpi-value">{formatNumber(totals.pageviews)}</span>
                   </div>
                   <div className="dashboard-aggregate-kpi">
                     <span className="dashboard-aggregate-kpi-label">{t('visitors')}</span>
-                    <span className="dashboard-aggregate-kpi-value">{totals.visitors.toLocaleString()}</span>
+                    <span className="dashboard-aggregate-kpi-value">{formatNumber(totals.visitors)}</span>
                   </div>
                   <div className="dashboard-aggregate-kpi">
                     <span className="dashboard-aggregate-kpi-label">{t('visits')}</span>
-                    <span className="dashboard-aggregate-kpi-value">{totals.visits.toLocaleString()}</span>
+                    <span className="dashboard-aggregate-kpi-value">{formatNumber(totals.visits)}</span>
                   </div>
                 </div>
               ) : null}
@@ -311,17 +312,17 @@ export default function DashboardHome() {
                       <div className="dashboard-site-kpi dashboard-site-kpi-primary">
                         <span className="dashboard-site-kpi-label">{t('pageviews')}</span>
                         <span className="dashboard-site-kpi-value is-primary">
-                          {w.pageviews.toLocaleString()}
+                          {formatNumber(w.pageviews)}
                         </span>
                       </div>
                       <div className="dashboard-site-kpi">
                         <span className="dashboard-site-kpi-label">{t('visitors')}</span>
-                        <span className="dashboard-site-kpi-value">{w.visitors.toLocaleString()}</span>
+                        <span className="dashboard-site-kpi-value">{formatNumber(w.visitors)}</span>
                       </div>
                       {w.visits != null ? (
                         <div className="dashboard-site-kpi">
                           <span className="dashboard-site-kpi-label">{t('visits')}</span>
-                          <span className="dashboard-site-kpi-value">{w.visits.toLocaleString()}</span>
+                          <span className="dashboard-site-kpi-value">{formatNumber(w.visits)}</span>
                         </div>
                       ) : null}
                     </div>

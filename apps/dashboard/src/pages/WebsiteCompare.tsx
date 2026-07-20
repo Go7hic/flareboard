@@ -37,6 +37,7 @@ import {
   type MetricsSeries,
 } from '../lib/compare-utils';
 import { rangeQueryString } from '../lib/dateRange';
+import { formatNumber, formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
 
@@ -139,19 +140,19 @@ export default function WebsiteComparePage() {
     const previousAvg = avgDurationSecFromStats(compare.stats);
     return {
       visitors: {
-        value: primary.stats.visitors.value.toLocaleString(),
+        value: formatNumber(primary.stats.visitors.value),
         change: pctChange(primary.stats.visitors.value, compare.stats.visitors.value),
       },
       visits: {
-        value: primary.stats.visits.value.toLocaleString(),
+        value: formatNumber(primary.stats.visits.value),
         change: pctChange(primary.stats.visits.value, compare.stats.visits.value),
       },
       pageviews: {
-        value: primary.stats.pageviews.value.toLocaleString(),
+        value: formatNumber(primary.stats.pageviews.value),
         change: pctChange(primary.stats.pageviews.value, compare.stats.pageviews.value),
       },
       bounceRate: {
-        value: `${currentBounce}%`,
+        value: formatPercent(currentBounce),
         change: pctChange(currentBounce, previousBounce),
         invertDelta: true,
       },

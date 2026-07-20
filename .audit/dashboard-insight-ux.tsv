@@ -1,0 +1,10 @@
+ts	phase	decision	why	evidence	result
+2026-07-20T09:10:00Z	frame	optimize for insight quality not chrome across ~40 analytics pages	operator tool density 7; Geist already shipped	DESIGN-NOTE.md	open
+2026-07-20T09:12:00Z	frame	DoD: locale formatters + StatCard + chart shell + sortable tables + DataViewState on >=8 core pages with before/after evidence	falsifiable prove-it-works predicate	phase-a checkpoint	open
+2026-07-20T09:15:00Z	design	sequence five shared levers before page polish: format, StatCard, AnalyticsChart, sortable MetricsTable, DataViewState	Build the Lever; audit found duplication across pages	subagent e6377522	accepted
+2026-07-20T09:15:30Z	design	skip architect/arena; shape is concrete from shared-pattern audit	Laziness Protocol; not a one-way door on product interaction model	e6377522 report	skipped arena
+2026-07-20T09:12:50Z	inventory	accepted route inventory of ~44 app + 33 website pages	grounds scope and top-10 insight levers from real routes	subagent 462a566e	accepted
+2026-07-20T09:12:50Z	design	insert U0.5 overview hierarchy + U0.6 unified report chrome after U0 format	inventory ranked overview and control-bar highest for daily insight load	.audit/dashboard-insight-ux.playbook.md	open
+2026-07-20T09:12:50Z	design	defer Reports vs website-route dedup until after chrome+StatCard; treat as IA unit U6	high architectural unknown; avoid big-bang while levers land	inventory top-10 #3	deferred
+2026-07-20T09:16:46Z	u0	central lib/format.ts via getLocale(); migrate Stats Compare DashboardHome Replays Sessions SessionDetail	Build the Lever; ends ad-hoc toLocaleString drift on core paths	apps/dashboard/src/lib/format.ts; pnpm --filter @flareboard/dashboard typecheck	VERIFIED
+2026-07-20T09:17:12Z	u0	Central format.ts via getLocale()	Numbers/dates used browser default locale while LanguageSelector persists flareboard_locale; split ad hoc toLocaleString and local formatDuration	apps/dashboard/src/lib/format.ts, formatDate.ts, compare-utils.ts, StatChangeDelta, WebsiteStats, WebsiteCompare, DashboardHome, Replays, Sessions, SessionDetail	typecheck pass; high-traffic pages migrated

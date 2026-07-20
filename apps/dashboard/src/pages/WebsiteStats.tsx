@@ -30,6 +30,7 @@ import {
   mergePageviewsVisitors,
   type MetricsSeries,
 } from '../lib/chartTimeseries';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsiteExport } from '../lib/useWebsiteExport';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
@@ -53,7 +54,7 @@ function StatCard({
   return (
     <div className={`stat-card${primary ? ' stat-card-primary' : ''}`}>
       <div className="stat-label">{label}</div>
-      <div className="stat-value">{stat.value.toLocaleString()}</div>
+      <div className="stat-value">{formatNumber(stat.value)}</div>
       {stat.change !== undefined ? <StatChangeDelta change={stat.change} /> : null}
     </div>
   );

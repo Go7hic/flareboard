@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { chartSeriesColor } from '../lib/chartStyles';
+import { formatNumber } from '../lib/format';
 import { WebsiteNameLabel } from './WebsiteNameLabel';
 import { t } from '../lib/i18n';
 
@@ -54,7 +55,7 @@ export function DashboardSiteRanking({
                 faviconSize={16}
               />
               <span className="dashboard-site-ranking-stats">
-                {w.pageviews.toLocaleString()} / {w.visitors.toLocaleString()}
+                {formatNumber(w.pageviews)} / {formatNumber(w.visitors)}
               </span>
             </Link>
           </li>

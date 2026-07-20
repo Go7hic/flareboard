@@ -35,14 +35,7 @@ export function avgDurationSecFromStats(stats: WebsiteStats) {
   return visits > 0 ? Math.round(stats.totaltime.value / visits) : 0;
 }
 
-export function formatDuration(seconds: number) {
-  if (seconds <= 0) return '0s';
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  if (mins <= 0) return `${secs}s`;
-  if (secs <= 0) return `${mins}m`;
-  return `${mins}m ${secs}s`;
-}
+export { formatDurationSeconds as formatDuration } from './format';
 
 export function formatCompareRangeLabel(startAt: number, endAt: number) {
   const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };

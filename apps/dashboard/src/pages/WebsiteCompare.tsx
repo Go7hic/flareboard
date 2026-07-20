@@ -15,6 +15,7 @@ import { StatChangeDelta } from '../components/StatChangeDelta';
 import { EmptyState } from '../components/EmptyState';
 import { MetricsTable } from '../components/MetricsTable';
 import { WebsitePageShell } from '../components/WebsitePageShell';
+import { StatCard, StatCardSkeleton } from '../components/ui/stat-card';
 import { Skeleton } from '../components/ui/skeleton';
 import { useBreakdownMetrics } from '../hooks/useBreakdownMetrics';
 import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
@@ -50,35 +51,6 @@ type CompareResponse = {
     compare: MetricsSeries;
   };
 };
-
-function CompareKpiCard({
-  label,
-  value,
-  change,
-  invertDelta = false,
-}: {
-  label: string;
-  value: string;
-  change: number;
-  invertDelta?: boolean;
-}) {
-  return (
-    <div className="stat-card">
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{value}</div>
-      <StatChangeDelta change={change} invertColors={invertDelta} />
-    </div>
-  );
-}
-
-function KpiSkeleton() {
-  return (
-    <div className="stat-card stat-card-skeleton" aria-hidden>
-      <Skeleton className="h-3 w-2/3" />
-      <Skeleton className="mt-[0.65rem] h-7 w-full" />
-    </div>
-  );
-}
 
 export default function WebsiteComparePage() {
   const chartColors = useChartColors();
@@ -190,7 +162,7 @@ export default function WebsiteComparePage() {
           <>
             <div className="analytics-hero-stats">
               {Array.from({ length: 5 }).map((_, i) => (
-                <KpiSkeleton key={i} />
+                <StatCardSkeleton key={i} />
               ))}
             </div>
             <div className="compare-chart chart-skeleton" aria-busy>
@@ -202,19 +174,35 @@ export default function WebsiteComparePage() {
         ) : (
           <>
             <div className="analytics-hero-stats">
-              <CompareKpiCard label={t('visitors')} value={kpiMetrics!.visitors.value} change={kpiMetrics!.visitors.change} />
-              <CompareKpiCard label={t('visits')} value={kpiMetrics!.visits.value} change={kpiMetrics!.visits.change} />
-              <CompareKpiCard label={t('pageviews')} value={kpiMetrics!.pageviews.value} change={kpiMetrics!.pageviews.change} />
-              <CompareKpiCard
+              <StatCard
+                label={t('visitors')}
+                value={kpiMetrics!.visitors.value}
+                delta={<StatChangeDelta change={kpiMetrics!.visitors.change} />}
+              />
+              <StatCard
+                label={t('visits')}
+                value={kpiMetrics!.visits.value}
+                delta={<StatChangeDelta change={kpiMetrics!.visits.change} />}
+              />
+              <StatCard
+                label={t('pageviews')}
+                value={kpiMetrics!.pageviews.value}
+                delta={<StatChangeDelta change={kpiMetrics!.pageviews.change} />}
+              />
+              <StatCard
                 label={t('bounceRate')}
                 value={kpiMetrics!.bounceRate.value}
-                change={kpiMetrics!.bounceRate.change}
-                invertDelta={kpiMetrics!.bounceRate.invertDelta}
+                delta={
+                  <StatChangeDelta
+                    change={kpiMetrics!.bounceRate.change}
+                    invertColors={kpiMetrics!.bounceRate.invertDelta}
+                  />
+                }
               />
-              <CompareKpiCard
+              <StatCard
                 label={t('avgDuration')}
                 value={kpiMetrics!.avgDuration.value}
-                change={kpiMetrics!.avgDuration.change}
+                delta={<StatChangeDelta change={kpiMetrics!.avgDuration.change} />}
               />
             </div>
 

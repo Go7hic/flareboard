@@ -6,10 +6,12 @@ import { DateRangePicker } from '../components/DateRangePicker';
 import { EmptyState } from '../components/EmptyState';
 import { MasterDetailSidePane, MasterDetailTableLayout } from '../components/master-detail';
 import { WebsitePageShell } from '../components/WebsitePageShell';
+import { StatCard } from '../components/ui/stat-card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { api, type ErrorAlertRule, type ErrorEventsResponse, type ErrorSourceMap } from '../lib/api';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
@@ -27,24 +29,6 @@ function shortText(value: string | null | undefined, fallback = '-') {
 
 function formatDate(value: string) {
   return new Date(`${value}T00:00:00Z`).toLocaleDateString();
-}
-
-function ErrorStatCard({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string | number;
-  hint?: string;
-}) {
-  return (
-    <div className="stat-card">
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{typeof value === 'number' ? value.toLocaleString() : value}</div>
-      {hint ? <p className="text-muted stat-hint">{hint}</p> : null}
-    </div>
-  );
 }
 
 type ErrorIssueStatusFilter = 'all' | 'open' | 'resolved' | 'ignored';
@@ -259,9 +243,9 @@ export default function WebsiteErrorsPage() {
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
       <section className="analytics-hero-stats section-gap">
-        <ErrorStatCard label={t('errorsTotal')} value={stats?.errors ?? 0} />
-        <ErrorStatCard label={t('errorsAffectedSessions')} value={stats?.sessions ?? 0} />
-        <ErrorStatCard
+        <StatCard label={t('errorsTotal')} value={formatNumber(stats?.errors ?? 0)} />
+        <StatCard label={t('errorsAffectedSessions')} value={formatNumber(stats?.sessions ?? 0)} />
+        <StatCard
           label={t('errorsLastSeen')}
           value={formatTime(stats?.lastSeenAt)}
           hint={topRelease ? `${t('errorsTopRelease')}: ${topRelease.release}` : undefined}

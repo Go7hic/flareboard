@@ -7,10 +7,11 @@ import { MetricsTable } from '../components/MetricsTable';
 import { SegmentTabs } from '../components/SegmentTabs';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';
+import { StatCard, StatCardSkeleton } from '../components/ui/stat-card';
 import { Input } from '../components/ui/input';
-import { Skeleton } from '../components/ui/skeleton';
 import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
 import { api } from '../lib/api';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 
 type AttributionModel = 'first' | 'last';
@@ -38,24 +39,6 @@ function breakdownRows(rows: Array<{ name: string; value: number }>, formatName?
     x: formatName ? formatName(row.name) : row.name,
     y: row.value,
   }));
-}
-
-function StatCard({ label, value, primary }: { label: string; value: number; primary?: boolean }) {
-  return (
-    <div className={`stat-card${primary ? ' stat-card-primary' : ''}`}>
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{value.toLocaleString()}</div>
-    </div>
-  );
-}
-
-function StatSkeleton() {
-  return (
-    <div className="stat-card stat-card-skeleton" aria-hidden>
-      <Skeleton className="h-3 w-2/3" />
-      <Skeleton className="mt-[0.65rem] h-7 w-full" />
-    </div>
-  );
 }
 
 function BreakdownPanel({
@@ -172,17 +155,21 @@ export default function WebsiteAttributionPage() {
       <section className="analytics-hero-stats section-gap">
         {loading ? (
           <>
-            <StatSkeleton />
-            <StatSkeleton />
-            <StatSkeleton />
-            <StatSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
           </>
         ) : (
           <>
-            <StatCard label={t('attributionConversions')} value={data?.total.conversions ?? 0} primary />
-            <StatCard label={t('visitors')} value={data?.total.visitors ?? 0} />
-            <StatCard label={t('visits')} value={data?.total.visits ?? 0} />
-            <StatCard label={t('pageviews')} value={data?.total.pageviews ?? 0} />
+            <StatCard
+              label={t('attributionConversions')}
+              value={formatNumber(data?.total.conversions ?? 0)}
+              variant="primary"
+            />
+            <StatCard label={t('visitors')} value={formatNumber(data?.total.visitors ?? 0)} />
+            <StatCard label={t('visits')} value={formatNumber(data?.total.visits ?? 0)} />
+            <StatCard label={t('pageviews')} value={formatNumber(data?.total.pageviews ?? 0)} />
           </>
         )}
       </section>

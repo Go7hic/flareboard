@@ -18,8 +18,7 @@ import { OverviewMapHeatmapPanel } from '../components/OverviewMapHeatmapPanel';
 import { WebsiteStatsControls } from '../components/WebsiteStatsControls';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
-import { StatCard } from '../components/ui/stat-card';
-import { Skeleton } from '../components/ui/skeleton';
+import { StatCard, StatCardSkeleton, type StatCardSize } from '../components/ui/stat-card';
 import {
   api,
   type MetricRow,
@@ -45,32 +44,20 @@ function cssVar(name: string): string {
 function OverviewKpi({
   label,
   stat,
-  className,
+  size = 'default',
 }: {
   label: string;
   stat?: { value: number; change?: number };
-  className?: string;
+  size?: StatCardSize;
 }) {
   if (!stat) return null;
   return (
     <StatCard
-      className={className}
+      size={size}
       label={label}
       value={formatNumber(stat.value)}
       delta={stat.change !== undefined ? <StatChangeDelta change={stat.change} /> : undefined}
     />
-  );
-}
-
-function KpiSkeleton({ className }: { className?: string }) {
-  return (
-    <div
-      className={`rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-elevated)] px-[1.2rem] py-[1.1rem] shadow-[var(--shadow-sm)]${className ? ` ${className}` : ''}`}
-      aria-hidden
-    >
-      <Skeleton className="h-3 w-2/3" />
-      <Skeleton className="mt-[0.65rem] h-7 w-full" />
-    </div>
   );
 }
 
@@ -247,13 +234,13 @@ export default function WebsiteStatsPage() {
         <div className="analytics-hero-kpis">
           {statsLoading ? (
             <>
-              <KpiSkeleton className="analytics-hero-kpi" />
-              <KpiSkeleton className="analytics-hero-kpi" />
+              <StatCardSkeleton size="hero" />
+              <StatCardSkeleton size="hero" />
             </>
           ) : stats ? (
             <>
-              <OverviewKpi label={t('pageviews')} stat={stats.pageviews} className="analytics-hero-kpi" />
-              <OverviewKpi label={t('visitors')} stat={stats.visitors} className="analytics-hero-kpi" />
+              <OverviewKpi label={t('pageviews')} stat={stats.pageviews} size="hero" />
+              <OverviewKpi label={t('visitors')} stat={stats.visitors} size="hero" />
             </>
           ) : null}
         </div>
@@ -261,15 +248,15 @@ export default function WebsiteStatsPage() {
         <div className="analytics-hero-stats-secondary">
           {statsLoading ? (
             <>
-              <KpiSkeleton className="analytics-hero-stat-secondary" />
-              <KpiSkeleton className="analytics-hero-stat-secondary" />
-              <KpiSkeleton className="analytics-hero-stat-secondary" />
+              <StatCardSkeleton size="secondary" />
+              <StatCardSkeleton size="secondary" />
+              <StatCardSkeleton size="secondary" />
             </>
           ) : stats ? (
             <>
-              <OverviewKpi label={t('visits')} stat={stats.visits} className="analytics-hero-stat-secondary" />
-              <OverviewKpi label={t('bounces')} stat={stats.bounces} className="analytics-hero-stat-secondary" />
-              <OverviewKpi label={t('totalTime')} stat={stats.totaltime} className="analytics-hero-stat-secondary" />
+              <OverviewKpi label={t('visits')} stat={stats.visits} size="secondary" />
+              <OverviewKpi label={t('bounces')} stat={stats.bounces} size="secondary" />
+              <OverviewKpi label={t('totalTime')} stat={stats.totaltime} size="secondary" />
             </>
           ) : null}
         </div>
@@ -279,12 +266,12 @@ export default function WebsiteStatsPage() {
             <OverviewKpi
               label={t('comparePageviews')}
               stat={compareQuery.data.compare.stats.pageviews}
-              className="analytics-hero-stat-secondary"
+              size="secondary"
             />
             <OverviewKpi
               label={t('compareVisitors')}
               stat={compareQuery.data.compare.stats.visitors}
-              className="analytics-hero-stat-secondary"
+              size="secondary"
             />
           </div>
         ) : null}

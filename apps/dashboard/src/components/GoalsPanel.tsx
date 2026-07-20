@@ -4,9 +4,10 @@ import { Link } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { EmptyState } from './EmptyState';
 import { GoalFormDialog, type GoalConfigRow } from './GoalFormDialog';
+import { StatCard, StatCardSkeleton } from './ui/stat-card';
 import { Button } from './ui/button';
-import { Skeleton } from './ui/skeleton';
 import { api, type Website } from '../lib/api';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
 import { chartTooltipStyle } from '../lib/chartStyles';
@@ -41,24 +42,6 @@ function normalizeGoalConfig(
         ? goal.period
         : 'monthly',
   }));
-}
-
-function StatCard({ label, value, primary }: { label: string; value: number; primary?: boolean }) {
-  return (
-    <div className={`stat-card${primary ? ' stat-card-primary' : ''}`}>
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{value.toLocaleString()}</div>
-    </div>
-  );
-}
-
-function StatSkeleton() {
-  return (
-    <div className="stat-card stat-card-skeleton" aria-hidden>
-      <Skeleton className="h-3 w-2/3" />
-      <Skeleton className="mt-[0.65rem] h-7 w-full" />
-    </div>
-  );
 }
 
 export function GoalsPanel({
@@ -170,17 +153,17 @@ export function GoalsPanel({
       <section className="analytics-hero-stats goals-stats-grid section-gap">
         {loading ? (
           <>
-            <StatSkeleton />
-            <StatSkeleton />
-            <StatSkeleton />
-            <StatSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
           </>
         ) : (
           <>
-            <StatCard label={t('goalConfiguredCount')} value={stats.configured} primary />
-            <StatCard label={t('goalConversions')} value={stats.conversions} />
-            <StatCard label={t('goalOnTrack')} value={stats.onTrack} />
-            <StatCard label={t('goalEventsTracked')} value={stats.eventsWithData} />
+            <StatCard label={t('goalConfiguredCount')} value={formatNumber(stats.configured)} variant="primary" />
+            <StatCard label={t('goalConversions')} value={formatNumber(stats.conversions)} />
+            <StatCard label={t('goalOnTrack')} value={formatNumber(stats.onTrack)} />
+            <StatCard label={t('goalEventsTracked')} value={formatNumber(stats.eventsWithData)} />
           </>
         )}
       </section>

@@ -13,22 +13,15 @@ import {
 import { DateRangePicker } from '../components/DateRangePicker';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
+import { StatCard } from '../components/ui/stat-card';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
 import { api, type LinkStats, type TrackingLink } from '../lib/api';
 import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/dateRange';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
 import { chartTooltipStyle } from '../lib/chartStyles';
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="stat-card">
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{value}</div>
-    </div>
-  );
-}
 
 export default function LinkAnalyticsPage() {
   const chartColors = useChartColors();
@@ -121,15 +114,14 @@ export default function LinkAnalyticsPage() {
             {t('linkClicksOverTime')}
           </h2>
           <div className="analytics-hero-stats">
-            <div className="stat-card stat-card-primary">
-              <div className="stat-label">{t('linkClicks')}</div>
-              <div className="stat-value">
-                {statsQuery.isLoading ? '—' : (stats?.clicks?.toLocaleString() ?? '0')}
-              </div>
-            </div>
+            <StatCard
+              label={t('linkClicks')}
+              value={statsQuery.isLoading ? '—' : formatNumber(stats?.clicks ?? 0)}
+              variant="primary"
+            />
             <StatCard
               label={t('linkUniqueVisitors')}
-              value={statsQuery.isLoading ? '—' : (stats?.visitors?.toLocaleString() ?? '0')}
+              value={statsQuery.isLoading ? '—' : formatNumber(stats?.visitors ?? 0)}
             />
           </div>
           <div className="analytics-hero-chart">

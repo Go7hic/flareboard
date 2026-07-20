@@ -1,26 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Bar, BarChart, Line, LineChart } from 'recharts';
+import { AnalyticsChart } from '../components/AnalyticsChart';
+import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { SegmentTabs } from '../components/SegmentTabs';
 import { Skeleton } from '../components/ui/skeleton';
 import { api } from '../lib/api';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
-import { chartTooltipStyle } from '../lib/chartStyles';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 
 type VitalDistribution = {
@@ -91,12 +83,12 @@ const TREND_METRICS: TrendMetric[] = ['lcp', 'inp', 'cls', 'fcp', 'ttfb'];
 
 function formatMs(value: number | null | undefined) {
   if (value == null) return '—';
-  return `${value} ms`;
+  return `${formatNumber(value)} ms`;
 }
 
 function formatCls(value: number | null | undefined) {
   if (value == null) return '—';
-  return String(value);
+  return formatNumber(value, { maximumFractionDigits: 3 });
 }
 
 function formatAverage(metric: TrendMetric, value: number | null | undefined) {
@@ -165,7 +157,7 @@ function CwvVitalCard({
       <div className="stat-label">
         {label}
         {samples != null && !loading ? (
-          <span className="text-muted text-[0.78rem] font-normal"> ({samples})</span>
+          <span className="text-muted text-[0.78rem] font-normal"> ({formatNumber(samples)})</span>
         ) : null}
       </div>
       {loading ? (
@@ -249,8 +241,6 @@ export default function PerformancePage() {
     [chartColors],
   );
 
-  const tooltipStyle = chartTooltipStyle(chartColors, { fontSize: 12 });
-
   return (
     <div className="page page-performance">
       <WebsitePageShell
@@ -260,6 +250,11 @@ export default function PerformancePage() {
         }
       />
 
+      <DataViewState
+        loading={performanceQuery.isLoading && !performanceQuery.data}
+        error={performanceQuery.isError ? performanceQuery.error : null}
+        onRetry={() => performanceQuery.refetch()}
+      >
       <section className="analytics-hero panel section-gap" aria-labelledby="performance-overview">
         <h2 id="performance-overview" className="visually-hidden">
           {t('performance')}
@@ -343,36 +338,28 @@ export default function PerformancePage() {
           {loading ? (
             <Skeleton className="h-56 w-full" />
           ) : trendData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={trendData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
-                <XAxis
-                  dataKey="x"
-                  tick={{ fontSize: 11, fill: chartColors.muted }}
-                  stroke={chartColors.border}
-                />
-                <YAxis
-                  tick={{ fontSize: 11, fill: chartColors.muted }}
-                  stroke={chartColors.border}
-                  allowDecimals={trendMetric === 'cls'}
-                />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  formatter={(value) => [
-                    formatAverage(trendMetric, typeof value === 'number' ? value : null),
-                    trendMetric.toUpperCase(),
-                  ]}
-                />
-                <Line
-                  type="monotone"
-                  dataKey={trendMetric}
-                  stroke={chartColors.accent}
-                  strokeWidth={2}
-                  dot={false}
-                  connectNulls
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            <AnalyticsChart
+              Chart={LineChart}
+              data={trendData}
+              responsive={{ height: 220 }}
+              xAxis={{ dataKey: 'x' }}
+              yAxis={{ allowDecimals: trendMetric === 'cls' }}
+              tooltip={{
+                formatter: (value) => [
+                  formatAverage(trendMetric, typeof value === 'number' ? value : null),
+                  trendMetric.toUpperCase(),
+                ],
+              }}
+            >
+              <Line
+                type="monotone"
+                dataKey={trendMetric}
+                stroke={chartColors.accent}
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+              />
+            </AnalyticsChart>
           ) : (
             <p className="text-muted">{t('chartNoData')}</p>
           )}
@@ -380,7 +367,7 @@ export default function PerformancePage() {
             <p className="performance-trend-meta text-muted">
               {t('performanceTrendUnit')}: {data.trends.unit === 'hour' ? t('hourly') : t('daily')}
               {' · '}
-              {t('performanceEvents')}: {data.samples.toLocaleString()}
+              {t('performanceEvents')}: {formatNumber(data.samples)}
             </p>
           ) : null}
         </div>
@@ -433,40 +420,39 @@ export default function PerformancePage() {
           ) : breakdownRows.length > 0 ? (
             <>
               <div className="performance-breakdown-chart">
-                <ResponsiveContainer width="100%" height={Math.max(180, breakdownRows.length * 36)}>
-                  <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 16 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} horizontal={false} />
-                    <XAxis
-                      type="number"
-                      domain={[0, 100]}
-                      tick={{ fontSize: 11, fill: chartColors.muted }}
-                      stroke={chartColors.border}
-                      tickFormatter={(v) => `${v}%`}
-                    />
-                    <YAxis
-                      type="category"
-                      dataKey="dimension"
-                      width={140}
-                      tick={{ fontSize: 11, fill: chartColors.muted }}
-                      stroke={chartColors.border}
-                    />
-                    <Tooltip
-                      contentStyle={tooltipStyle}
-                      formatter={(value, name) => {
-                        const label =
-                          name === 'good'
-                            ? t('cwvGood')
-                            : name === 'needsImprovement'
-                              ? t('cwvNeedsImprovement')
-                              : t('cwvPoor');
-                        return [`${value}%`, label];
-                      }}
-                    />
-                    <Bar dataKey="good" stackId="dist" fill={cwvColors.good} radius={[0, 0, 0, 0]} />
-                    <Bar dataKey="needsImprovement" stackId="dist" fill={cwvColors.ni} />
-                    <Bar dataKey="poor" stackId="dist" fill={cwvColors.poor} radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <AnalyticsChart
+                  Chart={BarChart}
+                  data={chartData}
+                  layout="vertical"
+                  margin={{ left: 8, right: 16 }}
+                  grid={{ horizontal: false }}
+                  responsive={{ height: Math.max(180, breakdownRows.length * 36) }}
+                  xAxis={{
+                    type: 'number',
+                    domain: [0, 100],
+                    tickFormatter: (v) => `${v}%`,
+                  }}
+                  yAxis={{
+                    type: 'category',
+                    dataKey: 'dimension',
+                    width: 140,
+                  }}
+                  tooltip={{
+                    formatter: (value, name) => {
+                      const label =
+                        name === 'good'
+                          ? t('cwvGood')
+                          : name === 'needsImprovement'
+                            ? t('cwvNeedsImprovement')
+                            : t('cwvPoor');
+                      return [`${value}%`, label];
+                    },
+                  }}
+                >
+                  <Bar dataKey="good" stackId="dist" fill={cwvColors.good} radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="needsImprovement" stackId="dist" fill={cwvColors.ni} />
+                  <Bar dataKey="poor" stackId="dist" fill={cwvColors.poor} radius={[0, 4, 4, 0]} />
+                </AnalyticsChart>
               </div>
 
               <div className="data-table-wrap performance-breakdown-table">
@@ -491,7 +477,7 @@ export default function PerformancePage() {
                     {breakdownRows.map((row) => (
                       <tr key={row.dimension}>
                         <td className="performance-breakdown-dimension">{row.dimension}</td>
-                        <td>{row.samples.toLocaleString()}</td>
+                        <td>{formatNumber(row.samples)}</td>
                         <td>{formatMs(row.lcp)}</td>
                         <td>{formatMs(row.inp)}</td>
                         <td>{formatCls(row.cls)}</td>
@@ -509,6 +495,7 @@ export default function PerformancePage() {
           )}
         </section>
       ) : null}
+      </DataViewState>
     </div>
   );
 }

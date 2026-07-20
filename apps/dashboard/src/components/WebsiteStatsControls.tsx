@@ -1,16 +1,12 @@
-import { DateRangePicker } from './DateRangePicker';
-import { ExportMenu } from './ExportMenu';
-import { RealtimeOnlineKpi } from './RealtimeOnlineKpi';
-import { SegmentFilterMenu } from './SegmentFilterMenu';
+import { WebsiteAnalyticsControls } from './WebsiteAnalyticsControls';
 import { type DateRangePreset } from '../lib/dateRange';
-import { t } from '../lib/i18n';
 
 interface Segment {
   id: string;
   name: string;
 }
 
-/** Overview only — live count + segment filter + date range + export. */
+/** Overview — live count + segment filter + date range + export. */
 export function WebsiteStatsControls({
   websiteId,
   range,
@@ -37,23 +33,23 @@ export function WebsiteStatsControls({
   timezone?: string;
 }) {
   return (
-    <div className="stats-header-row">
-      <RealtimeOnlineKpi websiteId={websiteId} />
-      <div className="stats-header-controls">
-        <SegmentFilterMenu
-          segmentId={segmentId}
-          onSegmentChange={onSegmentChange}
-          segments={segments}
-          compareEnabled={compareEnabled}
-          onCompareChange={onCompareChange}
-        />
-        <DateRangePicker value={range} onChange={onRangeChange} popover timezone={timezone} />
-        <ExportMenu
-          onExport={onExport}
-          disabled={!exportAllowed}
-          disabledReason={t('dataPortabilityRequiresUpgrade')}
-        />
-      </div>
-    </div>
+    <WebsiteAnalyticsControls
+      websiteId={websiteId}
+      range={range}
+      onRangeChange={onRangeChange}
+      timezone={timezone}
+      layout="row"
+      showRealtime
+      showSegment
+      segmentId={segmentId}
+      onSegmentChange={onSegmentChange}
+      segments={segments}
+      showCompareToggle
+      compareEnabled={compareEnabled}
+      onCompareChange={onCompareChange}
+      showExport
+      onExport={onExport}
+      exportAllowed={exportAllowed}
+    />
   );
 }

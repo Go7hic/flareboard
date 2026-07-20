@@ -1,5 +1,4 @@
-import { DateRangePicker } from './DateRangePicker';
-import { ExportMenu } from './ExportMenu';
+import { WebsiteAnalyticsControls } from './WebsiteAnalyticsControls';
 import { type DateRangePreset } from '../lib/dateRange';
 
 /** Date range + export — used on tabs without segment filtering. */
@@ -17,9 +16,12 @@ export function WebsiteDateExportControls({
   timezone?: string;
 }) {
   return (
-    <div className="stats-header-controls">
-      <DateRangePicker value={range} onChange={onRangeChange} popover timezone={timezone} />
-      {showExport && onExport ? <ExportMenu onExport={onExport} /> : null}
-    </div>
+    <WebsiteAnalyticsControls
+      range={range}
+      onRangeChange={onRangeChange}
+      timezone={timezone}
+      showExport={showExport}
+      onExport={onExport}
+    />
   );
 }

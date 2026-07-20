@@ -18,6 +18,7 @@ import { OverviewMapHeatmapPanel } from '../components/OverviewMapHeatmapPanel';
 import { WebsiteStatsControls } from '../components/WebsiteStatsControls';
 import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
+import { StatCard } from '../components/ui/stat-card';
 import { Skeleton } from '../components/ui/skeleton';
 import {
   api,
@@ -41,28 +42,32 @@ function cssVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-function StatCard({
+function OverviewKpi({
   label,
   stat,
-  primary,
+  className,
 }: {
   label: string;
   stat?: { value: number; change?: number };
-  primary?: boolean;
+  className?: string;
 }) {
   if (!stat) return null;
   return (
-    <div className={`stat-card${primary ? ' stat-card-primary' : ''}`}>
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{formatNumber(stat.value)}</div>
-      {stat.change !== undefined ? <StatChangeDelta change={stat.change} /> : null}
-    </div>
+    <StatCard
+      className={className}
+      label={label}
+      value={formatNumber(stat.value)}
+      delta={stat.change !== undefined ? <StatChangeDelta change={stat.change} /> : undefined}
+    />
   );
 }
 
-function StatSkeleton() {
+function KpiSkeleton({ className }: { className?: string }) {
   return (
-    <div className="stat-card stat-card-skeleton" aria-hidden>
+    <div
+      className={`rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-elevated)] px-[1.2rem] py-[1.1rem] shadow-[var(--shadow-sm)]${className ? ` ${className}` : ''}`}
+      aria-hidden
+    >
       <Skeleton className="h-3 w-2/3" />
       <Skeleton className="mt-[0.65rem] h-7 w-full" />
     </div>
@@ -234,96 +239,117 @@ export default function WebsiteStatsPage() {
         </div>
       ) : null}
 
-      <section className="analytics-hero panel section-gap" aria-labelledby="analytics-overview">
+      <section className="page-stats-kpis section-gap" aria-labelledby="analytics-overview">
         <h2 id="analytics-overview" className="visually-hidden">
           {t('trafficOverTime')}
         </h2>
-        <div className="analytics-hero-stats">
+
+        <div className="analytics-hero-kpis">
           {statsLoading ? (
             <>
-              <StatSkeleton />
-              <StatSkeleton />
-              <StatSkeleton />
-              <StatSkeleton />
-              <StatSkeleton />
+              <KpiSkeleton className="analytics-hero-kpi" />
+              <KpiSkeleton className="analytics-hero-kpi" />
             </>
           ) : stats ? (
             <>
-              <StatCard label={t('pageviews')} stat={stats.pageviews} primary />
-              <StatCard label={t('visitors')} stat={stats.visitors} />
-              <StatCard label={t('visits')} stat={stats.visits} />
-              <StatCard label={t('bounces')} stat={stats.bounces} />
-              <StatCard label={t('totalTime')} stat={stats.totaltime} />
+              <OverviewKpi label={t('pageviews')} stat={stats.pageviews} className="analytics-hero-kpi" />
+              <OverviewKpi label={t('visitors')} stat={stats.visitors} className="analytics-hero-kpi" />
+            </>
+          ) : null}
+        </div>
+
+        <div className="analytics-hero-stats-secondary">
+          {statsLoading ? (
+            <>
+              <KpiSkeleton className="analytics-hero-stat-secondary" />
+              <KpiSkeleton className="analytics-hero-stat-secondary" />
+              <KpiSkeleton className="analytics-hero-stat-secondary" />
+            </>
+          ) : stats ? (
+            <>
+              <OverviewKpi label={t('visits')} stat={stats.visits} className="analytics-hero-stat-secondary" />
+              <OverviewKpi label={t('bounces')} stat={stats.bounces} className="analytics-hero-stat-secondary" />
+              <OverviewKpi label={t('totalTime')} stat={stats.totaltime} className="analytics-hero-stat-secondary" />
             </>
           ) : null}
         </div>
 
         {compareEnabled && compareQuery.data ? (
           <div className="analytics-compare-strip">
-            <StatCard label={t('comparePageviews')} stat={compareQuery.data.compare.stats.pageviews} />
-            <StatCard label={t('compareVisitors')} stat={compareQuery.data.compare.stats.visitors} />
+            <OverviewKpi
+              label={t('comparePageviews')}
+              stat={compareQuery.data.compare.stats.pageviews}
+              className="analytics-hero-stat-secondary"
+            />
+            <OverviewKpi
+              label={t('compareVisitors')}
+              stat={compareQuery.data.compare.stats.visitors}
+              className="analytics-hero-stat-secondary"
+            />
           </div>
         ) : null}
+      </section>
 
-        <div className="analytics-hero-chart">
-          <h3 className="section-title">{t('trafficOverTime')}</h3>
-          {chartLoading ? (
-            <div className="chart-wrap chart-wrap-hero chart-skeleton" aria-busy>
-              <div className="skeleton skeleton-block" />
+      <section className="panel page-stats-chart section-gap" aria-labelledby="traffic-chart-title">
+        <h2 id="traffic-chart-title" className="section-title">
+          {t('trafficOverTime')}
+        </h2>
+        {chartLoading ? (
+          <div className="chart-wrap chart-wrap-hero chart-skeleton" aria-busy>
+            <div className="skeleton skeleton-block" />
+          </div>
+        ) : chartData.length > 0 ? (
+          <>
+            <div className="chart-wrap chart-wrap-hero">
+              <ResponsiveContainer>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
+                  <XAxis
+                    dataKey="x"
+                    tick={{ fontSize: 11, fill: chartColors.muted }}
+                    stroke={chartColors.border}
+                    interval={hourly ? 'preserveStartEnd' : undefined}
+                    minTickGap={hourly ? 24 : 8}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fontSize: 11, fill: chartColors.muted }}
+                    stroke={chartColors.border}
+                  />
+                  <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 13 })} />
+                  <Line
+                    type="monotone"
+                    dataKey="pageviews"
+                    name={t('pageviews')}
+                    stroke={metricColors.pageviews}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="visitors"
+                    name={t('visitors')}
+                    stroke={metricColors.visitors}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
-          ) : chartData.length > 0 ? (
-            <>
-              <div className="chart-wrap chart-wrap-hero">
-                <ResponsiveContainer>
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
-                    <XAxis
-                      dataKey="x"
-                      tick={{ fontSize: 11, fill: chartColors.muted }}
-                      stroke={chartColors.border}
-                      interval={hourly ? 'preserveStartEnd' : undefined}
-                      minTickGap={hourly ? 24 : 8}
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      tick={{ fontSize: 11, fill: chartColors.muted }}
-                      stroke={chartColors.border}
-                    />
-                    <Tooltip contentStyle={chartTooltipStyle(chartColors, { fontSize: 13 })} />
-                    <Line
-                      type="monotone"
-                      dataKey="pageviews"
-                      name={t('pageviews')}
-                      stroke={metricColors.pageviews}
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="visitors"
-                      name={t('visitors')}
-                      stroke={metricColors.visitors}
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="dashboard-aggregate-legend analytics-chart-legend" aria-hidden>
-                <span className="dashboard-aggregate-legend-item">
-                  <span className="dashboard-aggregate-legend-swatch dashboard-aggregate-legend-swatch--pageviews" />
-                  <span className="dashboard-aggregate-legend-label">{t('pageviews')}</span>
-                </span>
-                <span className="dashboard-aggregate-legend-item">
-                  <span className="dashboard-aggregate-legend-swatch dashboard-aggregate-legend-swatch--visitors" />
-                  <span className="dashboard-aggregate-legend-label">{t('visitors')}</span>
-                </span>
-              </div>
-            </>
-          ) : (
-            <EmptyState title={t('chartNoData')} description={t('noDataInPeriodHint')} />
-          )}
-        </div>
+            <div className="dashboard-aggregate-legend analytics-chart-legend" aria-hidden>
+              <span className="dashboard-aggregate-legend-item">
+                <span className="dashboard-aggregate-legend-swatch dashboard-aggregate-legend-swatch--pageviews" />
+                <span className="dashboard-aggregate-legend-label">{t('pageviews')}</span>
+              </span>
+              <span className="dashboard-aggregate-legend-item">
+                <span className="dashboard-aggregate-legend-swatch dashboard-aggregate-legend-swatch--visitors" />
+                <span className="dashboard-aggregate-legend-label">{t('visitors')}</span>
+              </span>
+            </div>
+          </>
+        ) : (
+          <EmptyState title={t('chartNoData')} description={t('noDataInPeriodHint')} />
+        )}
       </section>
 
       {websiteId ? (
@@ -335,18 +361,24 @@ export default function WebsiteStatsPage() {
         />
       ) : null}
 
-      {eventsQuery.isLoading || (eventsQuery.data?.length ?? 0) > 0 ? (
-        <section className="panel section-gap custom-events-panel">
-          <MetricsTable
-            embedded
-            title={t('customEvents')}
-            rows={eventsQuery.data ?? []}
-            loading={eventsQuery.isLoading}
-          />
-        </section>
-      ) : null}
+      {eventsQuery.isLoading ||
+      (eventsQuery.data?.length ?? 0) > 0 ||
+      websiteId ? (
+        <div className="overview-secondary">
+          {eventsQuery.isLoading || (eventsQuery.data?.length ?? 0) > 0 ? (
+            <section className="panel custom-events-panel">
+              <MetricsTable
+                embedded
+                title={t('customEvents')}
+                rows={eventsQuery.data ?? []}
+                loading={eventsQuery.isLoading}
+              />
+            </section>
+          ) : null}
 
-      {websiteId ? <OverviewMapHeatmapPanel websiteId={websiteId} qs={qs} /> : null}
+          {websiteId ? <OverviewMapHeatmapPanel websiteId={websiteId} qs={qs} /> : null}
+        </div>
+      ) : null}
     </div>
   );
 }

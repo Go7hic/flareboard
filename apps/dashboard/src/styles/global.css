@@ -3980,6 +3980,33 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   font-size: 0.8125rem;
 }
 
+.reports-hub-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.reports-hub-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-height: 8.5rem;
+}
+
+.reports-hub-card-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.reports-hub-card-desc {
+  flex: 1;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
 .table-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;

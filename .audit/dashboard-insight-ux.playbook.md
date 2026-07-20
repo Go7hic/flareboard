@@ -37,9 +37,9 @@ Evidence in `.audit/dashboard-insight-ux.tsv`. Verdict VERIFIED only with real a
 
 **Lever.** `Page` / `PageHeader` / `PageBody` in `apps/dashboard/src/components/`. Title + muted lead + actions on one row; optional `toolbar` / `meta`. `WebsitePageShell` is deprecated for leftovers only.
 
-**Variants.** `default` | `narrow` | `bleed` (Realtime tighter header gap). No `PageTabs` yet; secondary tabs stay in-page (Errors/Logs IA wins).
+**Variants.** `default` | `narrow` | `bleed` (Realtime: tighter header gap only, not full-bleed media). No `PageTabs` yet; secondary tabs stay in-page (Errors/Logs IA wins).
 
-**Leftovers.** Run `.audit/check-page-frame.sh`. Mechanical migrate remaining website routes onto the same API.
+**Leftovers.** Run `.audit/check-page-frame.sh` (exits 1 while leftovers remain; `SharePublic` allowlisted). Mechanical migrate remaining website routes onto the same API.
 
 ## Out of scope
 

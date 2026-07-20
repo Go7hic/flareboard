@@ -18,11 +18,11 @@ export function PageHeader({
   meta,
   className,
 }: {
-  title: ReactNode;
+  title: string;
   /** Muted one-line page purpose under the title. Preferred over `subtitle`. */
-  lead?: ReactNode;
+  lead?: string;
   /** @deprecated Prefer `lead`. Kept for existing call sites. */
-  subtitle?: ReactNode;
+  subtitle?: string;
   backTo?: string;
   backLabel?: string;
   actions?: ReactNode;

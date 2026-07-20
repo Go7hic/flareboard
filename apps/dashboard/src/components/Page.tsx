@@ -10,7 +10,7 @@ export type PageVariant = 'default' | 'narrow' | 'bleed';
  * Variants:
  * - default: standard analytics / settings gutter
  * - narrow: auth-adjacent or focused forms (`.page-narrow`)
- * - bleed: immersive surfaces (Realtime globe) with tighter top chrome
+ * - bleed: tighter header→body gap (Realtime). Not full-bleed media; name is historical.
  */
 export function Page({
   children,

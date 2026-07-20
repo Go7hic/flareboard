@@ -378,7 +378,7 @@ textarea {
   padding: 2rem 1.25rem;
 }
 
-/* Immersive surfaces (Realtime): keep gutter, tighten header→body gap */
+/* Compact header gap (Realtime). Not full-bleed media. */
 .page-bleed {
   padding-top: 1.15rem;
 }

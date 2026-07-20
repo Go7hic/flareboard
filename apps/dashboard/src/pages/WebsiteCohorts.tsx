@@ -1,14 +1,18 @@
 import { useParams } from 'react-router-dom';
 import { CohortsPanel } from '../components/CohortsPanel';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { t } from '../lib/i18n';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 
 export default function WebsiteCohortsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
 
   return (
-    <div className="page page-cohorts">
-      <WebsitePageShell websiteId={websiteId} />
-      {websiteId ? <CohortsPanel websiteId={websiteId} /> : null}
-    </div>
+    <Page className="page-cohorts">
+      <PageHeader title={t('cohorts')} />
+      <PageBody>
+        {websiteId ? <CohortsPanel websiteId={websiteId} /> : null}
+      </PageBody>
+    </Page>
   );
 }

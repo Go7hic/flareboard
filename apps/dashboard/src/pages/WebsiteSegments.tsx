@@ -1,13 +1,17 @@
 import { useParams } from 'react-router-dom';
 import { SegmentsPanel } from '../components/SegmentsPanel';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { t } from '../lib/i18n';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 export default function WebsiteSegmentsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
 
   return (
-    <div className="page page-segments">
-      <WebsitePageShell websiteId={websiteId} />
-      {websiteId ? <SegmentsPanel websiteId={websiteId} /> : null}
-    </div>
+    <Page className="page-segments">
+      <PageHeader title={t('segments')} lead={t('segmentsLead')} />
+      <PageBody>
+        {websiteId ? <SegmentsPanel websiteId={websiteId} /> : null}
+      </PageBody>
+    </Page>
   );
 }

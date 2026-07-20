@@ -4,7 +4,6 @@ import { Bar, BarChart } from 'recharts';
 import { AnalyticsChart } from '../components/AnalyticsChart';
 import { DataViewState } from '../components/DataViewState';
 import { EventCatalogPicker } from '../components/EventCatalogPicker';
-import { WebsitePageShell } from '../components/WebsitePageShell';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';
 import { Label } from '../components/ui/label';
 import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
@@ -13,6 +12,8 @@ import { formatNumber, formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 
 type StickinessResponse = {
   event: string | null;
@@ -62,10 +63,11 @@ export default function WebsiteStickinessPage() {
   );
 
   return (
-    <div className="page page-stickiness">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page className="page-stickiness">
+      <PageHeader
+        title={t('stickiness')}
+        lead={t('stickinessLead')}
+        actions={
           <WebsiteReportControls
             range={range}
             onRangeChange={setRange}
@@ -77,6 +79,7 @@ export default function WebsiteStickinessPage() {
         }
       />
 
+      <PageBody>
       <section className="panel section-gap">
         <header className="panel-header">
           <div>
@@ -174,6 +177,7 @@ export default function WebsiteStickinessPage() {
           </>
         </DataViewState>
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

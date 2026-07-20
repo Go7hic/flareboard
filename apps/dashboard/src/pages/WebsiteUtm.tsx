@@ -2,11 +2,12 @@ import { useQuery } from '@tanstack/react-query';
 import type { UtmReportResponse } from '@flareboard/shared/client';
 import { DataViewState } from '../components/DataViewState';
 import { MetricsTable } from '../components/MetricsTable';
-import { WebsitePageShell } from '../components/WebsitePageShell';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';
 import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
 import { api } from '../lib/api';
 import { t } from '../lib/i18n';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 
 function breakdownRows(rows: Array<{ name: string; pageviews: number }>) {
   return rows.map((row) => ({ x: row.name, y: row.pageviews }));
@@ -59,10 +60,11 @@ export default function WebsiteUtmPage() {
   const data = utmQuery.data;
 
   return (
-    <div className="page page-utm">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page className="page-utm">
+      <PageHeader
+        title={t('navUtm')}
+        lead={t('utmLead')}
+        actions={
           <WebsiteReportControls
             range={range}
             onRangeChange={setRange}
@@ -74,10 +76,7 @@ export default function WebsiteUtmPage() {
         }
       />
 
-      <section className="panel section-gap">
-        <p className="section-lead">{t('utmLead')}</p>
-      </section>
-
+      <PageBody>
       <DataViewState
         loading={utmQuery.isLoading}
         error={utmQuery.isError ? utmQuery.error : null}
@@ -99,6 +98,7 @@ export default function WebsiteUtmPage() {
           ))}
         </div>
       </DataViewState>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

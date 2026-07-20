@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { PlanUpgradeBanner } from '../components/PlanUpgradeBanner';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { SegmentTabs } from '../components/SegmentTabs';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -195,17 +196,17 @@ export default function HeatmapsPage() {
   }, [overlay, kind, stage]);
 
   return (
-    <div className="page">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page>
+      <PageHeader
+        title={t('heatmaps')}
+        lead={t('heatmapsLead')}
+        actions={
           <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
         }
       />
 
+      <PageBody>
       <Panel>
-        <p className="section-lead">{t('heatmapsLead')}</p>
-
         {!heatmapsAllowed && billingQuery.data ? (
           <PlanUpgradeBanner message={t('heatmapsRequiresUpgrade')} />
         ) : null}
@@ -356,6 +357,7 @@ export default function HeatmapsPage() {
         )}
         </fieldset>
       </Panel>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { DataViewState } from '../components/DataViewState';
 import { RetentionHeatmap } from '../components/RetentionHeatmap';
-import { WebsitePageShell } from '../components/WebsitePageShell';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';
 import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
 import { api } from '../lib/api';
 import { t } from '../lib/i18n';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 
 export default function WebsiteRetentionPage() {
   const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl, timezone } =
@@ -21,10 +22,10 @@ export default function WebsiteRetentionPage() {
   });
 
   return (
-    <div className="page page-retention">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page className="page-retention">
+      <PageHeader
+        title={t('retention')}
+        actions={
           <WebsiteReportControls
             range={range}
             onRangeChange={setRange}
@@ -35,6 +36,8 @@ export default function WebsiteRetentionPage() {
           />
         }
       />
+
+      <PageBody>
       <section className="panel section-gap">
         <DataViewState
           loading={retentionQuery.isLoading}
@@ -46,6 +49,7 @@ export default function WebsiteRetentionPage() {
           <RetentionHeatmap cohorts={retentionQuery.data?.cohorts ?? []} />
         </DataViewState>
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

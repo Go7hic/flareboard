@@ -4,13 +4,14 @@ import { Bar, BarChart } from 'recharts';
 import { AnalyticsChart } from '../components/AnalyticsChart';
 import { DataViewState } from '../components/DataViewState';
 import { EventCatalogPicker } from '../components/EventCatalogPicker';
-import { WebsitePageShell } from '../components/WebsitePageShell';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';
 import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
 import { api } from '../lib/api';
 import { formatNumber, formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 
 export default function WebsiteFunnelPage() {
   const chartColors = useChartColors();
@@ -40,10 +41,10 @@ export default function WebsiteFunnelPage() {
   );
 
   return (
-    <div className="page page-funnel">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page className="page-funnel">
+      <PageHeader
+        title={t('funnel')}
+        actions={
           <WebsiteReportControls
             range={range}
             onRangeChange={setRange}
@@ -54,6 +55,8 @@ export default function WebsiteFunnelPage() {
           />
         }
       />
+
+      <PageBody>
       <section className="panel section-gap">
         <div className="field" style={{ maxWidth: '28rem' }}>
           <EventCatalogPicker
@@ -107,6 +110,7 @@ export default function WebsiteFunnelPage() {
           </>
         </DataViewState>
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

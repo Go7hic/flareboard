@@ -5,7 +5,8 @@ import { Bar, BarChart } from 'recharts';
 import { AnalyticsChart } from '../components/AnalyticsChart';
 import { DataViewState } from '../components/DataViewState';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Panel } from '../components/ui/panel';
 import { api } from '../lib/api';
 import { formatNumber } from '../lib/format';
@@ -43,17 +44,17 @@ export default function RevenuePage() {
   const isEmpty = !revenueQuery.isLoading && chartData.length === 0 && byEvent.length === 0;
 
   return (
-    <div className="page">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page>
+      <PageHeader
+        title={t('revenue')}
+        lead={t('revenuePageLead')}
+        actions={
           <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
         }
       />
 
+      <PageBody>
       <Panel>
-        <p className="section-lead">{t('revenuePageLead')}</p>
-
         <DataViewState
           loading={revenueQuery.isLoading}
           error={revenueQuery.isError ? revenueQuery.error : null}
@@ -95,6 +96,7 @@ export default function RevenuePage() {
           </>
         </DataViewState>
       </Panel>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

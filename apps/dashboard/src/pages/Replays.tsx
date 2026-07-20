@@ -4,7 +4,8 @@ import { Link, useParams } from 'react-router-dom';
 import { EmptyState } from '../components/EmptyState';
 import { MasterDetailLayout, MasterDetailSelectableItem } from '../components/master-detail';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
@@ -200,14 +201,16 @@ export default function ReplaysPage() {
   }, [selectedReplay, savedVisitIds]);
 
   return (
-    <div className="page page-replays">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page className="page-replays">
+      <PageHeader
+        title={t('sessionReplays')}
+        lead={t('replaysVisitsLead')}
+        actions={
           <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
         }
       />
 
+      <PageBody>
       {!replayEnabled && websiteQuery.data ? (
         <div className="panel empty-state-rich section-gap">
           <EmptyState title={t('replayDisabledHint')} description={t('replaysVisitsLead')}>
@@ -343,6 +346,7 @@ export default function ReplaysPage() {
           }
         />
       ) : null}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

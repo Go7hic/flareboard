@@ -12,7 +12,8 @@ import {
   ResourceSearchField,
   useMasterDetailSelection,
 } from '../components/master-detail';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { StatCard } from '../components/ui/stat-card';
 import { api, type EventCatalogDetailResponse, type EventCatalogResponse, type MetricRow } from '../lib/api';
 import { formatDateTime, formatNumber } from '../lib/format';
@@ -54,9 +55,10 @@ export default function WebsiteEventsPage() {
   const summary = detail?.summary ?? selectedEvent;
 
   return (
-    <div className="page page-events">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-events">
+      <PageHeader title={t('events')} lead={t('eventCatalogLead')} />
 
+      <PageBody>
       <section className="panel section-gap">
         <header className="panel-header">
           <div>
@@ -238,6 +240,7 @@ export default function WebsiteEventsPage() {
         />
       </section>
       {websiteId ? <EventDataPanel websiteId={websiteId} /> : null}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

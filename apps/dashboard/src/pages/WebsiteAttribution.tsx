@@ -5,7 +5,8 @@ import type { AttributionConversionResponse } from '@flareboard/shared/client';
 import { EmptyState } from '../components/EmptyState';
 import { MetricsTable } from '../components/MetricsTable';
 import { SegmentTabs } from '../components/SegmentTabs';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';
 import { StatCard, StatCardSkeleton } from '../components/ui/stat-card';
 import { Input } from '../components/ui/input';
@@ -98,10 +99,11 @@ export default function WebsiteAttributionPage() {
   const hasConversions = (data?.total.conversions ?? 0) > 0;
 
   return (
-    <div className="page page-attribution">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page className="page-attribution">
+      <PageHeader
+        title={t('attribution')}
+        lead={t('attributionLead')}
+        actions={
           <WebsiteReportControls
             range={range}
             onRangeChange={setRange}
@@ -113,8 +115,8 @@ export default function WebsiteAttributionPage() {
         }
       />
 
+      <PageBody>
       <section className="panel section-gap">
-        <p className="section-lead">{t('attributionLead')}</p>
         <div className="stats-toolbar attribution-filters" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
           <SegmentTabs
             tabs={[
@@ -211,6 +213,7 @@ export default function WebsiteAttributionPage() {
           </section>
         </>
       )}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

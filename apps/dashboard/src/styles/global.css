@@ -3688,6 +3688,47 @@ code {
   letter-spacing: 0.05em;
 }
 
+.metrics-table-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.metrics-table-sort-btn:hover {
+  color: var(--text);
+}
+
+.metrics-table-sort-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+th[aria-sort='ascending'] .metrics-table-sort-btn::after,
+th[aria-sort='descending'] .metrics-table-sort-btn::after {
+  content: '';
+  width: 0;
+  height: 0;
+  border-left: 0.25rem solid transparent;
+  border-right: 0.25rem solid transparent;
+}
+
+th[aria-sort='ascending'] .metrics-table-sort-btn::after {
+  border-bottom: 0.3rem solid currentColor;
+}
+
+th[aria-sort='descending'] .metrics-table-sort-btn::after {
+  border-top: 0.3rem solid currentColor;
+}
+
 .metrics-table-skeleton {
   display: flex;
   flex-direction: column;
@@ -6581,10 +6622,19 @@ code {
 
 
 .sessions-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
   padding: 0.65rem 1.15rem;
   font-size: 0.8125rem;
   color: var(--text-muted);
   border-top: 1px solid var(--border-subtle);
+}
+
+.sessions-footer p {
+  margin: 0;
 }
 
 /* Activity timeline */

@@ -1,11 +1,11 @@
-import { useQuery } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { EmptyState } from '../components/EmptyState';
 import { SessionAvatar } from '../components/SessionAvatar';
 import { SessionTechCell } from '../components/SessionTechCell';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
 import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Button } from '../components/ui/button';
 import { api } from '../lib/api';
 import { formatDateTime, formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
@@ -29,23 +29,37 @@ interface SessionRow {
   lastAt: number;
 }
 
+interface SessionsPage {
+  data: SessionRow[];
+  count: number;
+  page: number;
+  pageSize: number;
+}
+
 const PAGE_SIZE = 50;
 
 export default function SessionsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
-    const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
+  const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
 
-  const sessionsQuery = useQuery({
+  const sessionsQuery = useInfiniteQuery({
     queryKey: ['sessions', websiteId, range],
     enabled: Boolean(websiteId),
-    queryFn: () =>
-      api<{ data: SessionRow[]; count: number }>(
-        `/api/websites/${websiteId}/sessions?${rangeQs}&pageSize=${PAGE_SIZE}`,
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) =>
+      api<SessionsPage>(
+        `/api/websites/${websiteId}/sessions?${rangeQs}&pageSize=${PAGE_SIZE}&page=${pageParam}`,
       ),
+    getNextPageParam: (lastPage, allPages) => {
+      const loadedCount = allPages.reduce((sum, page) => sum + page.data.length, 0);
+      if (loadedCount >= lastPage.count) return undefined;
+      return lastPage.page + 1;
+    },
   });
 
-  const rows = sessionsQuery.data?.data ?? [];
-  const total = sessionsQuery.data?.count ?? rows.length;
+  const rows = sessionsQuery.data?.pages.flatMap((page) => page.data) ?? [];
+  const total = sessionsQuery.data?.pages[0]?.count ?? rows.length;
+  const hasMore = rows.length < total;
 
   return (
     <div className="page page-sessions">
@@ -135,9 +149,24 @@ export default function SessionsPage() {
               </tbody>
             </table>
           </div>
-          <p className="sessions-footer">
-            {t('showingSessionsLimit').replace('{count}', String(Math.min(PAGE_SIZE, total)))}
-          </p>
+          <footer className="sessions-footer">
+            <p>
+              {t('showingSessionsOf')
+                .replace('{shown}', String(rows.length))
+                .replace('{total}', String(total))}
+            </p>
+            {hasMore ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={sessionsQuery.isFetchingNextPage}
+                onClick={() => sessionsQuery.fetchNextPage()}
+              >
+                {sessionsQuery.isFetchingNextPage ? t('loading') : t('sessionsLoadMore')}
+              </Button>
+            ) : null}
+          </footer>
         </section>
       ) : null}
 

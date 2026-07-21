@@ -212,7 +212,7 @@ export default function ReplaysPage() {
 
       <PageBody>
       {!replayEnabled && websiteQuery.data ? (
-        <div className="panel empty-state-rich section-gap">
+        <div className="section-gap">
           <EmptyState title={t('replayDisabledHint')} description={t('replaysVisitsLead')}>
             <Button asChild variant="primary">
               <Link to={`/websites/${websiteId}/settings`}>{t('goToReplaySettings')}</Link>

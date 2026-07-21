@@ -85,7 +85,7 @@ export default function LinkAnalyticsPage() {
 
       <PageBody>
       {!linksQuery.isLoading && !links.length ? (
-        <div className="panel empty-state-rich section-gap">
+        <div className="section-gap">
           <EmptyState title={t('noLinksScope')}>
             <Button asChild variant="primary">
               <Link to="/links">{t('links')}</Link>

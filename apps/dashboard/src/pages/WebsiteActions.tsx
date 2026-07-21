@@ -165,7 +165,7 @@ export default function WebsiteActionsPage() {
         </header>
       </section>
 
-      <section className="panel section-gap">
+      <section className="section-gap">
         <DataViewState
           loading={actionsQuery.isLoading && !actionsQuery.data}
           error={actionsQuery.isError ? actionsQuery.error : null}

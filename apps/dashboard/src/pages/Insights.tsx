@@ -249,7 +249,7 @@ export default function InsightsPage() {
       <PageBody>
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
-      <section className="panel section-gap">
+      <section className="section-gap">
         <MasterDetailLayout
           list={
             <DataViewState

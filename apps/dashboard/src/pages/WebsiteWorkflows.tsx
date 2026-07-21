@@ -430,7 +430,7 @@ export default function WebsiteWorkflowsPage() {
       </section>
       ) : null}
 
-      <section className="panel section-gap">
+      <section className="section-gap">
         {workflowsQuery.isLoading ? (
           <div className="skeleton skeleton-block" aria-busy />
         ) : workflows.length ? (

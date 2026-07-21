@@ -230,7 +230,7 @@ export default function Teams() {
       {error ? <p className="text-danger section-gap">{(error as Error).message}</p> : null}
 
       {!isLoading && !teams.length ? (
-        <div className="panel empty-state-rich section-gap">
+        <div className="section-gap">
           <EmptyState title={t('noTeams')} description={t('noTeamsHint')} />
         </div>
       ) : null}

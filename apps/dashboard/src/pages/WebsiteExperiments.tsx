@@ -619,7 +619,7 @@ export default function WebsiteExperimentsPage() {
       </section>
       ) : null}
 
-      <section className="panel section-gap">
+      <section className="section-gap">
         <DataViewState
           loading={experimentsQuery.isLoading && !experimentsQuery.data}
           error={experimentsQuery.isError ? experimentsQuery.error : null}

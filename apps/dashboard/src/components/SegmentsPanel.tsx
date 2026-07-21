@@ -78,7 +78,7 @@ export function SegmentsPanel({ websiteId }: { websiteId: string }) {
 
   return (
     <>
-      <section className="panel cohorts-panel">
+      <section className="cohorts-panel section-gap">
         <header className="cohorts-panel-head">
           <ResourceSearchField
             value={search}

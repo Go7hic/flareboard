@@ -91,7 +91,7 @@ export default function WebsiteJourneysPage() {
             <div className="skeleton skeleton-block" aria-busy />
           </div>
         ) : !hasData ? (
-          <div className="panel">
+          <div className="section-gap">
             <EmptyState title={t('noDataInPeriod')} description={t('noDataInPeriodHint')} />
           </div>
         ) : journeyQuery.data ? (

@@ -56,18 +56,54 @@ function rel(file) {
   return path.relative(root, file);
 }
 
-/** Find className="…panel…" open tags and the JSX window until a sibling close heuristic. */
+/** True only for the `panel` class token — not panel-header, cohorts-panel, etc. */
+function hasPanelToken(className) {
+  return className.split(/\s+/).filter(Boolean).includes('panel');
+}
+
+/**
+ * Body of a matched open tag until its balanced close, capped for safety.
+ * Avoids adjacent sibling panels bleeding MasterDetail into create/filter chrome.
+ */
+function extractBalancedBody(src, start, tag) {
+  const openRe = new RegExp(`<${tag}\\b`, 'g');
+  const closeRe = new RegExp(`</${tag}>`, 'g');
+  let depth = 1;
+  let i = start;
+  const hardCap = Math.min(src.length, start + 12000);
+  while (i < hardCap && depth > 0) {
+    openRe.lastIndex = i;
+    closeRe.lastIndex = i;
+    const openMatch = openRe.exec(src);
+    const closeMatch = closeRe.exec(src);
+    const openAt = openMatch && openMatch.index < hardCap ? openMatch.index : -1;
+    const closeAt = closeMatch && closeMatch.index < hardCap ? closeMatch.index : -1;
+    if (closeAt < 0) break;
+    if (openAt >= 0 && openAt < closeAt) {
+      depth += 1;
+      i = openAt + openMatch[0].length;
+      continue;
+    }
+    depth -= 1;
+    i = closeAt + closeMatch[0].length;
+    if (depth === 0) {
+      return src.slice(start, closeAt);
+    }
+  }
+  return src.slice(start, hardCap);
+}
+
+/** Find elements whose className includes the exact `panel` token. */
 function findPanelWindows(src) {
   const windows = [];
-  const re = /<(section|div|aside|li|article)\b([^>]*\bclassName=(["'])([^"']*\bpanel\b[^"']*)\3[^>]*)>/g;
+  const re = /<(section|div|aside|li|article)\b([^>]*\bclassName=(["'])([^"']*)\3[^>]*)>/g;
   let match;
   while ((match = re.exec(src))) {
     const tag = match[1];
     const className = match[4];
+    if (!hasPanelToken(className)) continue;
     const start = match.index + match[0].length;
-    // Cap window: nesting smells show up early in the panel body.
-    const end = Math.min(src.length, start + 2400);
-    const body = src.slice(start, end);
+    const body = extractBalancedBody(src, start, tag);
     windows.push({ tag, className, start, body, line: lineOf(src, match.index) });
   }
   return windows;
@@ -118,9 +154,21 @@ function scanFile(file) {
   const smells = new Set();
   const hits = [];
 
-  if (/className=["'][^"']*\bpanel\b[^"']*empty-state-rich|className=["'][^"']*empty-state-rich[^"']*\bpanel\b/.test(src)) {
-    smells.add('panel_empty_state_rich');
-    hits.push({ smell: 'panel_empty_state_rich', line: lineOf(src, src.search(/empty-state-rich/)), note: 'panel+empty-state-rich' });
+  {
+    const richRe = /className=(["'])([^"']*)\1/g;
+    let richMatch;
+    while ((richMatch = richRe.exec(src))) {
+      const cn = richMatch[2];
+      if (hasPanelToken(cn) && cn.split(/\s+/).includes('empty-state-rich')) {
+        smells.add('panel_empty_state_rich');
+        hits.push({
+          smell: 'panel_empty_state_rich',
+          line: lineOf(src, richMatch.index),
+          note: 'panel+empty-state-rich',
+        });
+        break;
+      }
+    }
   }
 
   for (const win of findPanelWindows(src)) {
@@ -164,37 +212,12 @@ function scanFile(file) {
     }
   }
 
-  // Page-level: MasterDetail import present and any panel_wraps_master_detail already covered.
-  // Also flag files that wrap MD in panel via multiline that window might miss if MD is deep.
-  if (/MasterDetail(Layout|TableLayout)\b/.test(src) && /className=["'][^"']*\bpanel\b/.test(src)) {
-    // If MD appears after a panel open within 80 lines, count as wrap even if window truncated.
-    const lines = src.split('\n');
-    let panelOpenLine = -1;
-    for (let i = 0; i < lines.length; i++) {
-      if (/className=["'][^"']*\bpanel\b/.test(lines[i]) && /<(section|div|aside)\b/.test(lines[i])) {
-        panelOpenLine = i;
-      }
-      if (panelOpenLine >= 0 && i - panelOpenLine <= 80 && /MasterDetail(Layout|TableLayout)\b/.test(lines[i])) {
-        if (![...smells].includes('panel_wraps_master_detail')) {
-          smells.add('panel_wraps_master_detail');
-          hits.push({
-            smell: 'panel_wraps_master_detail',
-            line: panelOpenLine + 1,
-            note: 'panel→MD within 80 lines',
-          });
-        }
-        break;
-      }
-      if (panelOpenLine >= 0 && i - panelOpenLine > 80) panelOpenLine = -1;
-    }
-  }
-
   return {
     file: rel(file),
     smells: [...smells].sort(),
     hits,
     counts: {
-      panel: (src.match(/className=["'][^"']*\bpanel\b/g) || []).length,
+      panel: findPanelWindows(src).length,
       emptyState: (src.match(/<EmptyState\b/g) || []).length,
       dataViewState: (src.match(/<DataViewState\b/g) || []).length,
       masterDetail: (src.match(/MasterDetail(Layout|TableLayout|Pane|ListItem|SidePane|SelectableItem)\b/g) || [])

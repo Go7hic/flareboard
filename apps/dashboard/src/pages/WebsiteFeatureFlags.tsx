@@ -659,7 +659,7 @@ export default function WebsiteFeatureFlagsPage() {
       </section>
       ) : null}
 
-      <section className="panel section-gap">
+      <section className="section-gap">
         <header className="cohorts-panel-head">
           <ResourceSearchField
             value={search}

@@ -566,7 +566,7 @@ export default function WebsiteSurveysPage() {
       </section>
       ) : null}
 
-      <section className="panel section-gap">
+      <section className="section-gap">
         {surveysQuery.isLoading ? (
           <div className="skeleton skeleton-block" aria-busy />
         ) : surveys.length ? (

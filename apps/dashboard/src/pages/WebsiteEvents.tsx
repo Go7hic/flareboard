@@ -74,7 +74,7 @@ export default function WebsiteEventsPage() {
         />
       </section>
 
-      <section className="panel section-gap">
+      <section className="section-gap">
         <DataViewState
           loading={catalogQuery.isLoading && !catalogQuery.data}
           error={catalogQuery.isError ? catalogQuery.error : null}

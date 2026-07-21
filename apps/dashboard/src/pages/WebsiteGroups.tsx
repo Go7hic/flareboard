@@ -97,7 +97,7 @@ export default function WebsiteGroupsPage() {
         />
       </section>
 
-      <section className="panel section-gap">
+      <section className="section-gap">
         {groupsQuery.isLoading ? (
           <div className="skeleton skeleton-block" aria-busy />
         ) : groups.length ? (

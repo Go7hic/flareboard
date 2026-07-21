@@ -135,7 +135,7 @@ export default function WebsitePeoplePage() {
         />
       </section>
 
-      <section className="panel section-gap">
+      <section className="section-gap">
         <DataViewState
           loading={peopleQuery.isLoading && !peopleQuery.data}
           error={peopleQuery.isError ? peopleQuery.error : null}

@@ -146,7 +146,7 @@ export default function WebsiteAnnotationsPage() {
         </section>
       ) : null}
 
-      <section className="panel section-gap">
+      <section className="section-gap">
         {annotationsQuery.isLoading ? (
           <div className="skeleton skeleton-block" aria-busy />
         ) : annotations.length || !selectedId ? (

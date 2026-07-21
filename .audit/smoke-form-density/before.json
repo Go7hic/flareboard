@@ -1,0 +1,39 @@
+{
+  "labelToControlGap": 6,
+  "labelMarginBottom": "6px",
+  "fieldDisplay": "block",
+  "fieldGap": "normal",
+  "formRowGap": "16px",
+  "formColGap": "16px",
+  "lastFieldToActions": 16,
+  "actionsToEmpty": -552.05,
+  "headerToForm": 392.05,
+  "emptyPadding": {
+    "top": "32px",
+    "bottom": "32px"
+  },
+  "versionClipOverflow": -756,
+  "versionMinWidth": "auto",
+  "form": {
+    "width": 992,
+    "right": 1256,
+    "overflowX": "visible",
+    "paddingTop": "0px",
+    "paddingBottom": "0px",
+    "marginTop": "0px",
+    "gap": "16px",
+    "rowGap": "16px",
+    "gridTemplateColumns": "236px 236px 236px 236px"
+  },
+  "empty": {
+    "width": 942,
+    "right": 1231,
+    "overflowX": "visible",
+    "paddingTop": "32px",
+    "paddingBottom": "32px",
+    "marginTop": "24px",
+    "gap": "normal",
+    "rowGap": "normal",
+    "gridTemplateColumns": "none"
+  }
+}

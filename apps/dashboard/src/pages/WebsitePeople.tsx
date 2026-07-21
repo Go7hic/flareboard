@@ -16,7 +16,7 @@ import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { StatCard } from '../components/ui/stat-card';
 import { api, type PeopleResponse, type PersonDetailResponse, type PersonSummary } from '../lib/api';
-import { formatDateTime, formatNumber } from '../lib/format';
+import { formatDateOnly, formatDateTime, formatNumber, identityPrimary } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
@@ -24,7 +24,17 @@ import { useWebsiteRange } from '../lib/useWebsiteRange';
 
 function personLabel(person: PersonSummary | null | undefined) {
   if (!person) return '-';
-  return person.latestName || person.latestEmail || person.latestAlias || person.personId;
+  return identityPrimary(
+    [person.latestName, person.latestEmail, person.latestAlias],
+    person.personId,
+  );
+}
+
+function personDetailMeta(person: PersonSummary) {
+  const lastSeen = person.lastSeenAt
+    ? `${t('peopleLastSeen')} ${formatDateTime(person.lastSeenAt)}`
+    : null;
+  return [person.personId, lastSeen].filter(Boolean).join(' · ');
 }
 
 function propertiesToJson(properties: Array<{ key: string; value: string | null }>) {
@@ -155,17 +165,13 @@ export default function WebsitePeoplePage() {
                 }}
                 icon={<UserRound size={16} strokeWidth={2} aria-hidden />}
                 title={personLabel(person)}
-                subtitle={
-                  person.latestAlias && person.latestAlias !== person.personId
-                    ? `${person.latestAlias} · ${person.personId}`
-                    : person.personId
-                }
+                subtitle={person.personId}
                 meta={
                   <>
                     <span className="badge">
                       {formatNumber(person.sessions)} {t('sessions')}
                     </span>
-                    <span className="text-muted">{formatDateTime(person.lastSeenAt)}</span>
+                    <span className="text-muted">{formatDateOnly(person.lastSeenAt)}</span>
                   </>
                 }
               />
@@ -174,21 +180,12 @@ export default function WebsitePeoplePage() {
               selectedPerson ? (
                 <MasterDetailPane
                   title={personLabel(selectedPerson)}
-                  description={
-                    selectedPerson.latestAlias ? (
-                      <>
-                        {t('peopleAlias')}: {selectedPerson.latestAlias} · {selectedPerson.personId}
-                      </>
-                    ) : (
-                      selectedPerson.personId
-                    )
-                  }
+                  description={personDetailMeta(selectedPerson)}
                 >
                   <div className="experiment-summary-grid">
                     <StatCard label={t('peopleSessions')} value={formatNumber(selectedPerson.sessions)} />
                     <StatCard label={t('visits')} value={formatNumber(selectedPerson.visits)} />
                     <StatCard label={t('pageviews')} value={formatNumber(selectedPerson.pageviews)} />
-                    <StatCard label={t('peopleLastSeen')} value={formatDateTime(selectedPerson.lastSeenAt)} />
                   </div>
 
                   <div className="workflow-insights-grid">

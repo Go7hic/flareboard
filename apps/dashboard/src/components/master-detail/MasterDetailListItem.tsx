@@ -23,11 +23,11 @@ export function MasterDetailListItem({
       className={`master-detail-list-item${selected ? ' is-selected' : ''}`}
       onClick={onSelect}
     >
-      <span className="errors-name-cell">
+      <span className="master-detail-list-main">
         {icon}
-        <span>
+        <span className="master-detail-list-copy">
           <span className="master-detail-list-title">{title}</span>
-          {subtitle ? <span className="text-muted">{subtitle}</span> : null}
+          {subtitle ? <span className="master-detail-list-subtitle">{subtitle}</span> : null}
         </span>
       </span>
       {meta ? <span className="master-detail-list-meta">{meta}</span> : null}

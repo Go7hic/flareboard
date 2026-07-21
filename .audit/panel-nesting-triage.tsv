@@ -54,8 +54,8 @@
 /websites/:websiteId/feature-flags	WebsiteFeatureFlags.tsx	fix	List section: dropped outer panel around MD/empty; create form panels keep	-	
 /websites/:websiteId/experiments	WebsiteExperiments.tsx	fix	Dropped outer panel around MasterDetail via DataViewState; create form stays	-	
 /websites/:websiteId/surveys	WebsiteSurveys.tsx	fix	Dropped outer panel around MD/empty; create form stays	-	
-/websites/:websiteId/people	WebsitePeople.tsx	fix	Dropped outer panel around MasterDetail; search panel stays	-	
-/websites/:websiteId/groups	WebsiteGroups.tsx	fix	Dropped outer panel around MD/empty; filter panel stays	-	
+/websites/:websiteId/people	WebsitePeople.tsx	fix	Dropped outer panel around MasterDetail; search panel stays; follow-up: identity shortId + lastSeen meta (no dup UUID / 4th card)	-	
+/websites/:websiteId/groups	WebsiteGroups.tsx	fix	Dropped outer panel around MD/empty; filter panel stays; follow-up: identity shortId + lastSeen meta (parity with people)	-	
 /websites/:websiteId/workflows	WebsiteWorkflows.tsx	fix	Dropped outer panel around MD/empty; create form stays	-	
 /websites/:websiteId/warehouse	WebsiteWarehouse.tsx	fix	Titled tab sections: dropped outer panel around empties/tables; MD explorer chrome stays	-	
 /websites/:websiteId/audit	WebsiteAuditLog.tsx	keep	Already flattened (15a1f6d); MD + empty without outer panel	-	gold standard

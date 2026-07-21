@@ -93,3 +93,24 @@ export function formatTimeOfDay(
     timeZone: opts?.timeZone,
   });
 }
+
+/** Short mono label for long ids; never equals the full id when truncated. */
+export function shortId(id: string, len = 8): string {
+  const trimmed = id.trim();
+  if (trimmed.length <= len) return trimmed;
+  return `${trimmed.slice(0, len)}…`;
+}
+
+/**
+ * Prefer a human label; fall back to a short id.
+ * Skips candidates that equal the full id so title/subtitle never duplicate.
+ */
+export function identityPrimary(
+  candidates: Array<string | null | undefined>,
+  id: string,
+): string {
+  for (const value of candidates) {
+    if (value && value !== id) return value;
+  }
+  return shortId(id);
+}

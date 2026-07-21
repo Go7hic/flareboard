@@ -14,12 +14,19 @@ import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { StatCard } from '../components/ui/stat-card';
 import { api, type GroupDetailResponse, type GroupRow, type GroupsResponse } from '../lib/api';
-import { formatDateTime, formatNumber } from '../lib/format';
+import { formatDateOnly, formatDateTime, formatNumber, identityPrimary } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 
 function groupLabel(group: GroupRow) {
-  return group.latestName || group.groupKey;
+  return identityPrimary([group.latestName], group.groupKey);
+}
+
+function groupDetailMeta(group: GroupRow, type: string) {
+  const lastSeen = group.lastSeenAt
+    ? `${t('lastSeen')} ${formatDateTime(group.lastSeenAt)}`
+    : null;
+  return [`${type}: ${group.groupKey}`, lastSeen].filter(Boolean).join(' · ');
 }
 
 export default function WebsiteGroupsPage() {
@@ -115,7 +122,7 @@ export default function WebsiteGroupsPage() {
                     <span className="badge">
                       {formatNumber(group.people)} {t('people')}
                     </span>
-                    <span className="text-muted">{formatDateTime(group.lastSeenAt)}</span>
+                    <span className="text-muted">{formatDateOnly(group.lastSeenAt)}</span>
                   </>
                 }
               />
@@ -124,13 +131,12 @@ export default function WebsiteGroupsPage() {
               selectedGroup ? (
                 <MasterDetailPane
                   title={groupLabel(selectedGroup)}
-                  description={`${activeType}: ${selectedGroup.groupKey}`}
+                  description={groupDetailMeta(selectedGroup, activeType)}
                 >
                   <div className="experiment-summary-grid">
                     <StatCard label={t('people')} value={formatNumber(selectedGroup.people)} />
                     <StatCard label={t('sessions')} value={formatNumber(selectedGroup.sessions)} />
                     <StatCard label={t('events')} value={formatNumber(selectedGroup.events)} />
-                    <StatCard label={t('lastSeen')} value={formatDateTime(selectedGroup.lastSeenAt)} />
                   </div>
 
                   <div className="workflow-insights-grid">

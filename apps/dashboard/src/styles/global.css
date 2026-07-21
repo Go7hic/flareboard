@@ -1333,13 +1333,19 @@ img.website-switcher-icon {
   padding: 1.5rem;
 }
 
-.panel > .panel-header + .cohorts-search-wrap,
-.panel > .panel-header + .workflow-insights-grid {
-  margin-top: 1rem;
-}
-
 .panel-body {
   padding: 1.5rem;
+}
+
+/*
+ * .panel .panel-header cancels panel padding (full-bleed divider). Restore body
+ * rhythm so empty/table content does not sit flush on that rule. Non-panel
+ * sections that reuse .panel-header inherit the same empty/table gap.
+ */
+.panel > .panel-header + *,
+.panel-header + .empty-state-block,
+.panel-header + .table-scroll {
+  margin-top: 1.5rem;
 }
 
 .panel > .form-row,
@@ -1355,6 +1361,11 @@ img.website-switcher-icon {
 .panel > .workflow-create-form + .empty-state-block,
 .panel > .workflow-create-form + .table-scroll {
   margin-top: 1rem;
+}
+
+/* Zero-padding panel shells (filter toolbar as chrome) still need empty inset. */
+.sessions-filter-row + .empty-state-block {
+  margin: 1.5rem;
 }
 
 .stat-card-actions {

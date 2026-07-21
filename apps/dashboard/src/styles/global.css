@@ -1348,19 +1348,49 @@ img.website-switcher-icon {
   margin-top: 1.5rem;
 }
 
+/*
+ * Nest-flattened pages reuse .panel-header without a .panel shell. Reset the
+ * uppercase chrome + side padding so section titles align with create forms.
+ */
+:not(.panel) > .panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0 0 1rem;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: normal;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* Header → create form (panel and bare section alike). */
+.panel-header + .form-row,
+.panel-header + .panel-form,
+.panel-header + .workflow-create-form {
+  margin-top: 1.5rem;
+}
+
 .panel > .form-row,
 .panel > .panel-form,
 .panel > .workflow-create-form {
   margin-top: 0.25rem;
 }
 
-.panel > .form-row + .empty-state-block,
-.panel > .form-row + .table-scroll,
-.panel > .panel-form + .empty-state-block,
-.panel > .panel-form + .table-scroll,
-.panel > .workflow-create-form + .empty-state-block,
-.panel > .workflow-create-form + .table-scroll {
-  margin-top: 1rem;
+/*
+ * Create form → empty/table. Must NOT require `.panel >` — Errors/Logs alerts
+ * (and other nest-flattened sections) put .panel-form beside EmptyState in a
+ * bare section.
+ */
+.form-row + .empty-state-block,
+.form-row + .table-scroll,
+.panel-form + .empty-state-block,
+.panel-form + .table-scroll,
+.workflow-create-form + .empty-state-block,
+.workflow-create-form + .table-scroll {
+  margin-top: 1.5rem;
 }
 
 /* Zero-padding panel shells (filter toolbar as chrome) still need empty inset. */
@@ -1445,9 +1475,23 @@ img.website-switcher-icon {
 /* Forms
  * NOTE: .field-label, .input, .select, .textarea are kept for native <select>
  * elements and legacy markup. New code should use src/components/ui/* components.
+ *
+ * Field rhythm: flex column + gap owns label→control spacing. Neutralize Label's
+ * Tailwind mb-1.5 (6px) so every create/filter form inherits the same air.
  */
 .field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.625rem;
   margin-bottom: 0.95rem;
+  min-width: 0;
+}
+
+.field > label,
+.field > .field-label,
+.field > [data-slot='label'] {
+  margin-bottom: 0;
 }
 
 /* Legacy: use <Label> component for new code */
@@ -1457,6 +1501,10 @@ img.website-switcher-icon {
   font-weight: 500;
   color: var(--text-muted);
   margin-bottom: 0.4rem;
+}
+
+.field > .field-label {
+  margin-bottom: 0;
 }
 
 .input,
@@ -1533,8 +1581,9 @@ img.website-switcher-icon {
 
 .panel-form {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
-  gap: 1rem;
+  /* min() keeps the last column from overflowing when the track is tight */
+  grid-template-columns: repeat(auto-fill, minmax(min(12rem, 100%), 1fr));
+  gap: 1.25rem 1rem;
   align-items: end;
 }
 
@@ -1550,6 +1599,7 @@ img.website-switcher-icon {
 
 .panel-form .field {
   margin-bottom: 0;
+  min-width: 0;
 }
 
 .event-catalog-picker {
@@ -1712,6 +1762,8 @@ img.website-switcher-icon {
 .detail-section .form-actions,
 .workflow-create-form .form-actions {
   grid-column: 1 / -1;
+  /* Extra air under the last field row (on top of grid row-gap). */
+  margin-top: 0.25rem;
 }
 
 /* Buttons
@@ -4615,9 +4667,13 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 
 .feature-flag-form {
   display: grid;
-  grid-template-columns: minmax(10rem, 1fr) minmax(12rem, 1fr) minmax(7rem, 0.45fr);
-  gap: 1rem;
+  grid-template-columns: minmax(min(10rem, 100%), 1fr) minmax(min(12rem, 100%), 1fr) minmax(min(7rem, 100%), 0.45fr);
+  gap: 1.25rem 1rem;
   align-items: end;
+}
+
+.feature-flag-form .field {
+  min-width: 0;
 }
 
 .feature-flag-form > button {
@@ -4626,13 +4682,14 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 
 .workflow-create-form {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(12rem, 100%), 1fr));
+  gap: 1.25rem 1rem;
   align-items: end;
 }
 
 .workflow-create-form .field {
   margin-bottom: 0;
+  min-width: 0;
 }
 
 .workflow-create-form .form-actions {

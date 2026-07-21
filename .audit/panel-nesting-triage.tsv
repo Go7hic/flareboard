@@ -4,6 +4,7 @@
 # scan_smells: from node .audit/scan-panel-nesting.mjs (exact `panel` token + balanced body)
 # updated: 2026-07-21; unify wave: 15a1f6d + 791b858 + 1c9aca9
 # empty inset: after panel-nest subtract, `.panel-header + .empty-state-block` / `.panel > .panel-header + *` restore 1.5rem (global.css); do not page-patch empties
+# create-form density: `.field` flex gap + `.panel-form`/`.workflow-create-form` row-gap/minmax + unscoped `form + empty/table` (not only `.panel >`); prove via `pnpm smoke:form-density`
 
 /	Landing.tsx	keep	Marketing hero; no panel soup	-	
 /features	Features.tsx	keep	Marketing; no panel soup	-	

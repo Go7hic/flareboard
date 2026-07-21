@@ -275,7 +275,69 @@ export default function WebsiteErrorsPage() {
           />
         </section>
 
-        <section className="panel section-gap page-errors-hero">
+        {(trendRows.length || severityRows.length) ? (
+          <section className="panel section-gap page-errors-insights">
+            <div className="error-insights-grid">
+              <div>
+                <header className="compact-panel-header">
+                  <h2 className="section-title">{t('errorsTrend')}</h2>
+                  <p className="text-muted">{t('errorsTrendLead')}</p>
+                </header>
+                <div className="table-scroll">
+                  <table className="data-table errors-table">
+                    <thead>
+                      <tr>
+                        <th>{t('date')}</th>
+                        <th>{t('errors')}</th>
+                        <th>{t('sessions')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {trendRows.map((row) => (
+                        <tr key={row.date}>
+                          <td>{formatDate(row.date)}</td>
+                          <td>{formatNumber(row.errors)}</td>
+                          <td>{formatNumber(row.sessions)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="detail-section error-severity-panel">
+                <header className="compact-panel-header">
+                  <h2 className="section-title">{t('errorsSeverityBreakdown')}</h2>
+                  <p className="text-muted">{t('errorsSeverityBreakdownLead')}</p>
+                </header>
+                <div className="breakdown-list">
+                  {severityRows.map((row) => {
+                    const share = stats?.errors ? Math.round((row.errors / stats.errors) * 100) : 0;
+                    return (
+                      <div key={row.severity} className="breakdown-row">
+                        <div className="breakdown-meta">
+                          <strong>{row.severity}</strong>
+                          <span className="text-muted">
+                            {formatNumber(row.errors)} ({formatPercent(share)})
+                          </span>
+                        </div>
+                        <div className="breakdown-track" aria-hidden>
+                          <span style={{ width: `${share}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        <section
+          className={
+            issues.length ? 'panel section-gap page-errors-hero' : 'section-gap page-errors-hero page-errors-hero-empty'
+          }
+        >
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('errorIssues')}</h2>
@@ -416,64 +478,6 @@ export default function WebsiteErrorsPage() {
             error={errorsQuery.isError ? errorsQuery.error : null}
             onRetry={() => errorsQuery.refetch()}
           >
-            {(trendRows.length || severityRows.length) ? (
-              <section className="panel section-gap">
-                <div className="error-insights-grid">
-                  <div>
-                    <header className="compact-panel-header">
-                      <h3 className="section-title">{t('errorsTrend')}</h3>
-                      <p className="text-muted">{t('errorsTrendLead')}</p>
-                    </header>
-                    <div className="table-scroll">
-                      <table className="data-table errors-table">
-                        <thead>
-                          <tr>
-                            <th>{t('date')}</th>
-                            <th>{t('errors')}</th>
-                            <th>{t('sessions')}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {trendRows.map((row) => (
-                            <tr key={row.date}>
-                              <td>{formatDate(row.date)}</td>
-                              <td>{formatNumber(row.errors)}</td>
-                              <td>{formatNumber(row.sessions)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  <div className="detail-section error-severity-panel">
-                    <header className="compact-panel-header">
-                      <h3 className="section-title">{t('errorsSeverityBreakdown')}</h3>
-                      <p className="text-muted">{t('errorsSeverityBreakdownLead')}</p>
-                    </header>
-                    <div className="breakdown-list">
-                      {severityRows.map((row) => {
-                        const share = stats?.errors ? Math.round((row.errors / stats.errors) * 100) : 0;
-                        return (
-                          <div key={row.severity} className="breakdown-row">
-                            <div className="breakdown-meta">
-                              <strong>{row.severity}</strong>
-                              <span className="text-muted">
-                                {formatNumber(row.errors)} ({formatPercent(share)})
-                              </span>
-                            </div>
-                            <div className="breakdown-track" aria-hidden>
-                              <span style={{ width: `${share}%` }} />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </section>
-            ) : null}
-
             <section className="section-gap">
               <header className="panel-header">
                 <div>

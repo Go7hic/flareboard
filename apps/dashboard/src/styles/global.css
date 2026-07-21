@@ -4354,9 +4354,34 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   font-size: 1.0625rem;
 }
 
+/* Empty Issues: no solid panel chrome so More tabs stay in the first viewport. */
+.page-errors-hero-empty .panel-header {
+  margin-bottom: 0.75rem;
+}
+
+.page-errors-hero-empty .empty-state-block {
+  padding-block: 1.25rem;
+}
+
+/* Errors header: 4 filter actions crowd the lead; allow wrap instead of clipping. */
+.page-errors .page-header-row {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.page-errors .page-header-copy .page-subtitle {
+  white-space: normal;
+}
+
+.page-errors .page-header-actions {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  margin-left: 0;
+}
+
 .page-errors-secondary {
-  margin-top: 2rem;
-  padding-top: 1.5rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
   border-top: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;

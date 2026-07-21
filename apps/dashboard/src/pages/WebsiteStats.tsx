@@ -166,14 +166,12 @@ export default function WebsiteStatsPage() {
   const overviewLoadingFallback = (
     <>
       <section className="page-stats-kpis section-gap" aria-hidden>
-        <div className="analytics-hero-kpis">
-          <StatCardSkeleton size="hero" />
-          <StatCardSkeleton size="hero" />
-        </div>
-        <div className="analytics-hero-stats-secondary">
-          <StatCardSkeleton size="secondary" />
-          <StatCardSkeleton size="secondary" />
-          <StatCardSkeleton size="secondary" />
+        <div className="analytics-hero-stats">
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
         </div>
       </section>
       <section className="panel page-stats-chart section-gap" aria-hidden>
@@ -271,32 +269,22 @@ export default function WebsiteStatsPage() {
             {t('trafficOverTime')}
           </h2>
 
-          <div className="analytics-hero-kpis">
+          <div className="analytics-hero-stats">
             {statsLoading ? (
               <>
-                <StatCardSkeleton size="hero" />
-                <StatCardSkeleton size="hero" />
+                <StatCardSkeleton />
+                <StatCardSkeleton />
+                <StatCardSkeleton />
+                <StatCardSkeleton />
+                <StatCardSkeleton />
               </>
             ) : stats ? (
               <>
-                <OverviewKpi label={t('pageviews')} stat={stats.pageviews} size="hero" />
-                <OverviewKpi label={t('visitors')} stat={stats.visitors} size="hero" />
-              </>
-            ) : null}
-          </div>
-
-          <div className="analytics-hero-stats-secondary">
-            {statsLoading ? (
-              <>
-                <StatCardSkeleton size="secondary" />
-                <StatCardSkeleton size="secondary" />
-                <StatCardSkeleton size="secondary" />
-              </>
-            ) : stats ? (
-              <>
-                <OverviewKpi label={t('visits')} stat={stats.visits} size="secondary" />
-                <OverviewKpi label={t('bounces')} stat={stats.bounces} size="secondary" />
-                <OverviewKpi label={t('totalTime')} stat={stats.totaltime} size="secondary" />
+                <OverviewKpi label={t('pageviews')} stat={stats.pageviews} />
+                <OverviewKpi label={t('visitors')} stat={stats.visitors} />
+                <OverviewKpi label={t('visits')} stat={stats.visits} />
+                <OverviewKpi label={t('bounces')} stat={stats.bounces} />
+                <OverviewKpi label={t('totalTime')} stat={stats.totaltime} />
               </>
             ) : null}
           </div>

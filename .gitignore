@@ -39,3 +39,6 @@ worker-configuration.d.ts
 local-docs/
 
 *.plan.md
+
+# Local agent/audit trails (do not commit)
+.audit/

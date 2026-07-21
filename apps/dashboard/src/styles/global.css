@@ -1175,7 +1175,13 @@ img.website-switcher-icon {
   margin: 0.35rem 0 0;
   color: var(--text-muted);
   font-size: 0.875rem;
-  max-width: 52ch;
+}
+
+/* Desktop: keep PageHeader lead on one line beside actions; wrap below 900px. */
+@media (min-width: 901px) {
+  .page-header-copy .page-subtitle {
+    white-space: nowrap;
+  }
 }
 
 .product-line-cross-links {

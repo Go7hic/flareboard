@@ -109,7 +109,7 @@ export default function WebsiteStickinessPage() {
         </div>
       </section>
 
-      <section className="panel section-gap">
+      <section className="section-gap">
         <DataViewState
           loading={stickinessQuery.isLoading}
           error={stickinessQuery.isError ? stickinessQuery.error : null}

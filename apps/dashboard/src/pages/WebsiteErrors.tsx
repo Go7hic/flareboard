@@ -474,7 +474,7 @@ export default function WebsiteErrorsPage() {
               </section>
             ) : null}
 
-            <section className="panel">
+            <section className="section-gap">
               <header className="panel-header">
                 <div>
                   <h3 className="section-title">{t('errorsRecent')}</h3>
@@ -543,7 +543,7 @@ export default function WebsiteErrorsPage() {
             error={sourceMapsQuery.isError ? sourceMapsQuery.error : null}
             onRetry={() => sourceMapsQuery.refetch()}
           >
-            <section className="panel">
+            <section className="section-gap">
               <header className="panel-header">
                 <div>
                   <h3 className="section-title">{t('errorSourceMaps')}</h3>
@@ -629,7 +629,7 @@ export default function WebsiteErrorsPage() {
             error={alertRulesQuery.isError ? alertRulesQuery.error : null}
             onRetry={() => alertRulesQuery.refetch()}
           >
-            <section className="panel">
+            <section className="section-gap">
               <header className="panel-header">
                 <div>
                   <h3 className="section-title">{t('errorAlertRules')}</h3>

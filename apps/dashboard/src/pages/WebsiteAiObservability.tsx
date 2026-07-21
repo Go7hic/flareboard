@@ -290,7 +290,7 @@ export default function WebsiteAiObservabilityPage() {
         </section>
       ) : null}
 
-      <section className="panel section-gap">
+      <section className="section-gap">
         <header className="panel-header">
           <div>
             <h2 className="section-title">{t('aiModels')}</h2>
@@ -332,7 +332,7 @@ export default function WebsiteAiObservabilityPage() {
         )}
       </section>
 
-      <section className="panel section-gap">
+      <section className="section-gap">
         <header className="panel-header panel-header--filters">
           <div>
             <h2 className="section-title">{t('aiRecentCalls')}</h2>

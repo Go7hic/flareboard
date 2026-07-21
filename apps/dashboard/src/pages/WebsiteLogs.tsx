@@ -446,7 +446,7 @@ export default function WebsiteLogsPage() {
         </header>
 
       {secondaryTab === 'traces' ? (
-        <section className="panel">
+        <section className="section-gap">
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('logsTraces')}</h2>
@@ -533,7 +533,7 @@ export default function WebsiteLogsPage() {
       ) : null}
 
       {secondaryTab === 'filters' ? (
-        <section className="panel">
+        <section className="section-gap">
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('logsSavedFilters')}</h2>
@@ -609,7 +609,7 @@ export default function WebsiteLogsPage() {
       ) : null}
 
       {secondaryTab === 'alerts' ? (
-        <section className="panel">
+        <section className="section-gap">
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('logsAlertRules')}</h2>

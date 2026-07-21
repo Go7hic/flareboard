@@ -125,7 +125,7 @@ export default function AdminPage() {
 
       <PageBody>
       {isForbidden ? (
-        <div className="panel empty-state-rich">
+        <div className="section-gap">
           <h3>{t('adminRequired')}</h3>
           <p className="text-danger">{t('adminDenied')}</p>
         </div>

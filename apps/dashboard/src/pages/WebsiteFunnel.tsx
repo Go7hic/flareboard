@@ -57,17 +57,17 @@ export default function WebsiteFunnelPage() {
       />
 
       <PageBody>
-      <section className="panel section-gap">
-        <div className="field" style={{ maxWidth: '28rem' }}>
-          <EventCatalogPicker
-            mode="multi"
-            websiteId={websiteId}
-            value={funnelSteps}
-            onChange={setFunnelSteps}
-            placeholder={t('funnelStepsPlaceholder')}
-            aria-label={t('funnel')}
-          />
-        </div>
+      <div className="field section-gap" style={{ maxWidth: '28rem' }}>
+        <EventCatalogPicker
+          mode="multi"
+          websiteId={websiteId}
+          value={funnelSteps}
+          onChange={setFunnelSteps}
+          placeholder={t('funnelStepsPlaceholder')}
+          aria-label={t('funnel')}
+        />
+      </div>
+      <div className="section-gap">
         <DataViewState
           loading={funnelQuery.isLoading}
           error={funnelQuery.isError ? funnelQuery.error : null}
@@ -109,7 +109,7 @@ export default function WebsiteFunnelPage() {
             ) : null}
           </>
         </DataViewState>
-      </section>
+      </div>
       </PageBody>
     </Page>
   );

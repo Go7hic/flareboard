@@ -258,6 +258,14 @@ export default function PerformancePage() {
         error={performanceQuery.isError ? performanceQuery.error : null}
         onRetry={() => performanceQuery.refetch()}
       >
+      {!loading && !hasData ? (
+        <div className="section-gap">
+          <EmptyState
+            title={t('noDataInPeriod')}
+            description={t('noDataInPeriodHint')}
+          />
+        </div>
+      ) : (
       <section className="analytics-hero panel section-gap" aria-labelledby="performance-overview">
         <h2 id="performance-overview" className="visually-hidden">
           {t('performance')}
@@ -373,16 +381,8 @@ export default function PerformancePage() {
             </p>
           ) : null}
         </div>
-
-        {!loading && !hasData ? (
-          <div className="panel empty-state-rich">
-            <EmptyState
-              title={t('noDataInPeriod')}
-              description={t('noDataInPeriodHint')}
-            />
-          </div>
-        ) : null}
       </section>
+      )}
 
       {hasData || loading ? (
         <section className="panel breakdown-panel section-gap-lg">

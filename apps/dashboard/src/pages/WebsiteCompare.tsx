@@ -168,21 +168,23 @@ export default function WebsiteComparePage() {
       />
 
       <PageBody>
-      <section className="panel section-gap compare-panel">
-        {compareQuery.isLoading ? (
-          <>
-            <div className="analytics-hero-stats">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <StatCardSkeleton key={i} />
-              ))}
-            </div>
-            <div className="compare-chart chart-skeleton" aria-busy>
-              <Skeleton className="h-64 w-full" />
-            </div>
-          </>
-        ) : !compareQuery.data ? (
+      {compareQuery.isLoading ? (
+        <section className="panel section-gap compare-panel">
+          <div className="analytics-hero-stats">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <StatCardSkeleton key={i} />
+            ))}
+          </div>
+          <div className="compare-chart chart-skeleton" aria-busy>
+            <Skeleton className="h-64 w-full" />
+          </div>
+        </section>
+      ) : !compareQuery.data ? (
+        <div className="section-gap">
           <EmptyState title={t('noDataInPeriod')} />
-        ) : (
+        </div>
+      ) : (
+      <section className="panel section-gap compare-panel">
           <>
             <div className="analytics-hero-stats">
               <StatCard
@@ -348,8 +350,8 @@ export default function WebsiteComparePage() {
               </div>
             </div>
           </>
-        )}
       </section>
+      )}
       </PageBody>
     </Page>
   );

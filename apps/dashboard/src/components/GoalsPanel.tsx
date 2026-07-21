@@ -188,7 +188,7 @@ export function GoalsPanel({
         </section>
       ) : null}
 
-      <section className="panel section-gap goals-panel">
+      <section className="section-gap goals-panel">
         <header className="goals-panel-head">
           <h2 className="section-title goals-list-title">{t('goalListTitle')}</h2>
           <div className="goals-panel-toolbar">

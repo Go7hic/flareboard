@@ -38,7 +38,7 @@ export default function WebsiteRetentionPage() {
       />
 
       <PageBody>
-      <section className="panel section-gap">
+      <div className="section-gap">
         <DataViewState
           loading={retentionQuery.isLoading}
           error={retentionQuery.isError ? retentionQuery.error : null}
@@ -48,7 +48,7 @@ export default function WebsiteRetentionPage() {
         >
           <RetentionHeatmap cohorts={retentionQuery.data?.cohorts ?? []} />
         </DataViewState>
-      </section>
+      </div>
       </PageBody>
     </Page>
   );

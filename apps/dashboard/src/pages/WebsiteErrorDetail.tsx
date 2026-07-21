@@ -80,7 +80,7 @@ export default function WebsiteErrorDetailPage() {
             </div>
           </section>
 
-          <section className="panel section-gap">
+          <section className="section-gap">
             <header className="panel-header">
               <div>
                 <h2 className="section-title">{t('properties')}</h2>
@@ -112,7 +112,7 @@ export default function WebsiteErrorDetailPage() {
             )}
           </section>
 
-          <section className="panel section-gap">
+          <section className="section-gap">
             <header className="panel-header">
               <div>
                 <h2 className="section-title">{t('errorResolvedStack')}</h2>

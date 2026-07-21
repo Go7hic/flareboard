@@ -309,7 +309,7 @@ export default function WebsiteWarehousePage() {
       ) : null}
 
       {tab === 'saved' ? (
-        <section className="panel section-gap">
+        <section className="section-gap">
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('warehouseSavedQueries')}</h2>
@@ -383,7 +383,7 @@ export default function WebsiteWarehousePage() {
       ) : null}
 
       {tab === 'history' ? (
-        <section className="panel section-gap">
+        <section className="section-gap">
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('warehouseQueryHistory')}</h2>
@@ -427,7 +427,7 @@ export default function WebsiteWarehousePage() {
       ) : null}
 
       {tab === 'schedules' ? (
-        <section className="panel section-gap">
+        <section className="section-gap">
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('warehouseScheduledQueries')}</h2>
@@ -543,7 +543,7 @@ export default function WebsiteWarehousePage() {
       ) : null}
 
       {tab === 'sources' ? (
-        <section className="panel section-gap">
+        <section className="section-gap">
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('warehouseDataSources')}</h2>
@@ -663,7 +663,7 @@ export default function WebsiteWarehousePage() {
       ) : null}
 
       {tab === 'query' ? (
-        <section className="panel section-gap">
+        <section className="section-gap">
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('queryResults')}</h2>

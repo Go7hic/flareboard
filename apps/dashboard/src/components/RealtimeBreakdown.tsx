@@ -187,8 +187,8 @@ export function RealtimeBreakdown({
     { id: 'events', label: t('realtimeFilterEvents') },
   ];
 
-  const visitorBarColor = chartColors.accent;
-  const pageviewBarColor = `color-mix(in srgb, ${chartColors.accent} 50%, white)`;
+  const visitorBarColor = chartColors.series.visitors;
+  const pageviewBarColor = chartColors.series.pageviews;
 
   return (
     <div className="realtime-breakdown section-gap">

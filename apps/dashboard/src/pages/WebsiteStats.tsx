@@ -32,10 +32,6 @@ import { useWebsiteExport } from '../lib/useWebsiteExport';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 import { useChartColors } from '../lib/useChartColors';
 
-function cssVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
 function OverviewKpi({
   label,
   stat,
@@ -91,8 +87,8 @@ export default function WebsiteStatsPage() {
 
   const metricColors = useMemo(
     () => ({
-      pageviews: chartColors.accent,
-      visitors: cssVar('--chart-axis') || chartColors.muted,
+      pageviews: chartColors.series.pageviews,
+      visitors: chartColors.series.visitors,
     }),
     [chartColors],
   );

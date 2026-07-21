@@ -1,4 +1,9 @@
 import { useEffect, useState } from 'react';
+import {
+  getChartSeriesPrimary,
+  getMetricSeriesColors,
+  type MetricSeriesColors,
+} from './chart-colors';
 import { themeChangeEventName } from './theme';
 
 function cssVar(name: string): string {
@@ -8,18 +13,21 @@ function cssVar(name: string): string {
 export type ChartColors = {
   border: string;
   muted: string;
+  /** Primary data series (blue). Never --accent / gray-1000. */
   accent: string;
   panel: string;
   text: string;
+  series: MetricSeriesColors;
 };
 
 export function getChartColors(): ChartColors {
   return {
     border: cssVar('--chart-grid') || cssVar('--border'),
     muted: cssVar('--chart-axis') || cssVar('--text-muted'),
-    accent: cssVar('--chart-line') || cssVar('--accent'),
+    accent: getChartSeriesPrimary(),
     panel: cssVar('--chart-tooltip-bg') || cssVar('--bg-elevated'),
     text: cssVar('--text'),
+    series: getMetricSeriesColors(),
   };
 }
 

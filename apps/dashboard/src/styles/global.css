@@ -6666,18 +6666,18 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 }
 
 .dashboard-aggregate-legend-swatch--pageviews {
-  border-color: var(--chart-line);
-  background: color-mix(in srgb, var(--chart-line) 14%, transparent);
+  border-color: var(--chart-pageviews);
+  background: color-mix(in srgb, var(--chart-pageviews) 14%, transparent);
 }
 
 .dashboard-aggregate-legend-swatch--visitors {
-  border-color: var(--geist-amber-800);
-  background: color-mix(in srgb, var(--geist-amber-800) 14%, transparent);
+  border-color: var(--chart-visitors);
+  background: color-mix(in srgb, var(--chart-visitors) 14%, transparent);
 }
 
 .dashboard-aggregate-legend-swatch--visits {
-  border-color: var(--chart-axis);
-  background: color-mix(in srgb, var(--chart-axis) 14%, transparent);
+  border-color: var(--chart-visits);
+  background: color-mix(in srgb, var(--chart-visits) 14%, transparent);
 }
 
 .dashboard-site-ranking-panel {
@@ -9106,7 +9106,7 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 }
 
 .landing-edge-node:nth-child(odd) {
-  fill: var(--accent);
+  fill: var(--chart-1);
 }
 
 /* Hero analytics dashboard preview */
@@ -10471,12 +10471,12 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 }
 
 .journey-connector-chain {
-  stroke: var(--accent);
+  stroke: var(--chart-1);
   opacity: 0.55;
 }
 
 .journey-connector-branch {
-  stroke: var(--accent);
+  stroke: var(--chart-1);
   opacity: 0.55;
 }
 

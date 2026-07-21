@@ -36,7 +36,7 @@ function circleStyle(intensity: number, count: number): CSSProperties {
   return {
     width: `${size}px`,
     height: `${size}px`,
-    background: `color-mix(in srgb, var(--accent) ${pct}%, var(--bg-subtle))`,
+    background: `color-mix(in srgb, var(--chart-1) ${pct}%, var(--bg-subtle))`,
   };
 }
 

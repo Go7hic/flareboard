@@ -144,9 +144,10 @@ export default function WebsiteComparePage() {
     };
   }, [compareQuery.data]);
 
-  const visitorsCurrentFill = `color-mix(in srgb, ${chartColors.accent} 42%, var(--bg-elevated))`;
-  const pageviewsPrevFill = `color-mix(in srgb, var(--text-muted) 55%, var(--accent))`;
-  const visitorsPrevFill = `color-mix(in srgb, var(--text-muted) 80%, transparent)`;
+  const pageviewsCurrentFill = chartColors.series.pageviews;
+  const visitorsCurrentFill = chartColors.series.visitors;
+  const pageviewsPrevFill = `color-mix(in srgb, ${chartColors.series.pageviews} 40%, var(--bg-elevated))`;
+  const visitorsPrevFill = `color-mix(in srgb, ${chartColors.series.visitors} 40%, var(--bg-elevated))`;
 
   return (
     <Page className="page-compare">
@@ -267,14 +268,14 @@ export default function WebsiteComparePage() {
                       dataKey="visitors"
                       name={t('compareChartVisitorsCurrent')}
                       stackId="current"
-                      fill={chartColors.accent}
+                      fill={visitorsCurrentFill}
                       maxBarSize={24}
                     />
                     <Bar
                       dataKey="pageviews"
                       name={t('compareChartPageviewsCurrent')}
                       stackId="current"
-                      fill={visitorsCurrentFill}
+                      fill={pageviewsCurrentFill}
                       radius={[2, 2, 0, 0]}
                       maxBarSize={24}
                     />

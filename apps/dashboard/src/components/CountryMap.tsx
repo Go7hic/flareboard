@@ -99,7 +99,7 @@ type TooltipState = {
   y: number;
 };
 
-export function CountryMap({ rows, accent = 'var(--accent)', loading }: CountryMapProps) {
+export function CountryMap({ rows, accent = 'var(--chart-1)', loading }: CountryMapProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [position, setPosition] = useState<MapPosition>(DEFAULT_POSITION);

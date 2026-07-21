@@ -64,6 +64,8 @@ Header chrome: `--shell-bg` + `backdrop-filter` on `.shell-nav` / `.landing-nav`
 
 **Data UI:** `.panel`, `.stat-card`, `.data-table`, `.stat-value` (mono tabular).
 
+**Charts:** series strokes/fills and legend swatches share `apps/dashboard/src/lib/chart-colors.ts` + `--chart-1`…`--chart-6` / `--chart-pageviews|visitors|visits` in `geist-tokens.css`. Never use `--accent`, `--text`, or gray-1000 for data series (chrome only). Re-run `node apps/dashboard/scripts/check-chart-colors.mjs`.
+
 ### i18n
 
 - Locales: `LOCALES` in `src/lib/i18n.ts` (`en-US`, `zh-CN`, `ja-JP`, `de-DE`, `fr-FR`).

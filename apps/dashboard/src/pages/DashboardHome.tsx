@@ -50,10 +50,6 @@ interface DashboardOverview {
   aggregateMetrics: AggregateMetrics;
 }
 
-function cssVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
 function mergeAggregateMetrics(metrics: AggregateMetrics | undefined, hourly: boolean) {
   if (!metrics) return [];
 
@@ -116,9 +112,9 @@ export default function DashboardHome() {
 
   const metricColors = useMemo(
     () => ({
-      pageviews: chartColors.accent,
-      visitors: cssVar('--geist-amber-800') || chartColors.muted,
-      visits: cssVar('--chart-axis') || chartColors.muted,
+      pageviews: chartColors.series.pageviews,
+      visitors: chartColors.series.visitors,
+      visits: chartColors.series.visits,
     }),
     [chartColors],
   );

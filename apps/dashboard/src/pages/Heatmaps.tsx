@@ -37,7 +37,7 @@ const DEVICE_OPTIONS = [
 
 function heatColor(intensity: number): string {
   const alpha = Math.round(intensity * 0.85 * 100) / 100;
-  return `color-mix(in srgb, var(--accent) ${Math.round(alpha * 100)}%, transparent)`;
+  return `color-mix(in srgb, var(--chart-1) ${Math.round(alpha * 100)}%, transparent)`;
 }
 
 export default function HeatmapsPage() {
@@ -174,8 +174,9 @@ export default function HeatmapsPage() {
     ctx.clearRect(0, 0, displayW, displayH);
 
     const accent =
-      getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() ||
-      getComputedStyle(document.documentElement).getPropertyValue('--geist-gray-1000').trim();
+      getComputedStyle(document.documentElement).getPropertyValue('--chart-1').trim() ||
+      getComputedStyle(document.documentElement).getPropertyValue('--geist-blue-700').trim() ||
+      '#006bff';
 
     for (const cell of overlay.cells) {
       const intensity = cell.count / overlay.max;

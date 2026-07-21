@@ -2,7 +2,9 @@
 
 ## Predicate
 
-Decorative nesting (solid `.panel` around dashed `EmptyState`, or outer `.panel` around already-bordered MasterDetail list/pane) is gone from operator-facing empty-first and master-detail pages. Content chrome stays (KPI, chart, table, settings rails, intentional Errors/Logs secondary “More” panels).
+Decorative nesting (solid `.panel` around dashed `EmptyState`, or outer `.panel` around already-bordered MasterDetail list/pane) is gone from operator-facing empty-first and master-detail pages. Content chrome stays (KPI, chart, table, settings rails, intentional Errors/Logs **primary** heroes, card-grid empties).
+
+**Binary rule:** when the only job of an outer `.panel` is to wrap EmptyState / DataViewState empty, or MasterDetail whose list/pane already border themselves → **drop the outer panel**. No `maybe` limbo.
 
 ## Lever
 
@@ -11,63 +13,43 @@ node .audit/scan-panel-nesting.mjs
 node .audit/scan-panel-nesting.mjs --json
 ```
 
-Heuristics flag candidates. **Verdicts live only in `panel-nesting-triage.tsv`.** Re-run the lever after subtract waves to confirm smell rows drop.
+Heuristics flag candidates (exact `panel` class token + balanced tag body). **Verdicts live only in `panel-nesting-triage.tsv`** as `keep` | `fix`. Re-run after waves; remaining smells must be documented keep FPs (chart-in-panel, MD chrome, card grid, primary Errors/Logs).
 
-## Criteria (decision rules)
+## Criteria
 
-**Subtract** when any of:
+**Fix** when any of:
 
-1. Outer `.panel` / `section.panel` wraps `MasterDetailLayout` / table-layout whose list items + pane already have borders.
+1. Outer `.panel` wraps `MasterDetail*` whose list items + pane already have borders.
 2. `EmptyState` (or `DataViewState` empty → dashed block) is the sole meaningful child of a bordered panel.
-3. `.panel.empty-state-rich` wraps `EmptyState` (solid + dashed / double empty chrome).
+3. `.panel.empty-state-rich` wraps EmptyState (solid + dashed) on a page frame (not a card-grid slot).
+4. Titled secondary section whose body is header + EmptyState / MD with no other content chrome.
 
 **Keep** when:
 
-- Overview KPI / dimension / map panels.
-- Primary chart-in-panel or table-in-panel with real toolbar/header chrome (incl. Sessions filters + table).
-- Settings / form accent sections.
-- Marketing / auth frames with no panel soup.
-- Audit Log after `15a1f6d` (already flattened).
+- Overview KPI / dimension / map panels (`OverviewDimensionCard`, UTM dimension cards, breakdown).
+- Primary chart-in-panel or table-in-panel (WebsiteStats chart, Sessions filters + table, Errors/Logs **primary** heroes).
+- Settings / form accent sections and create-form panels with real fields.
+- Marketing / auth / SharePublic frames.
+- Card-grid empty placeholders (Websites, Boards, DashboardHome, Reports hub).
+- Populated MD chrome when `wrapList={false}` (Teams sidebar, Replays list/player).
+- Audit Log after `15a1f6d` (gold standard).
 
-**Maybe** when:
+## Spot-check
 
-- Errors/Logs secondary “More” panels with empties (intentional demotion).
-- Warehouse / AI observability section empties inside titled panels.
-- Funnel/Retention/UTM/Stickiness result panel wrapping `DataViewState` (empty path only).
-- Board/site empty cards that occupy a card grid slot.
-
-## Spot-check (trust calibration)
-
-| Sample | Scan said | Verdict | Note |
-|--------|-----------|---------|------|
-| WebsiteAuditLog | clean | keep | Gold standard after outer-panel drop |
-| Insights | MD wrap | subtract | Same pattern as pre-fix Audit Log |
-| Annotations | MD wrap | subtract | Outer panel around MD + empty |
-| WebsiteErrors primary | MD wrap | keep | Table-in-panel with issue header = content chrome |
-| WebsiteLogs traces | MD wrap | maybe | Secondary “More” panel |
-| WebsiteStats chart empty | empty sole | keep | Primary chart panel; empty is the chart body |
-| Sessions | clean | keep | Empty sits under required filter row (U17.1) |
-| Teams empty | empty+rich | subtract | `panel` + `EmptyState` only |
-| Replays disabled | empty+rich | subtract | Double empty chrome |
-| Replays populated | MD+panel list | keep | List/detail panels are the MD chrome |
-| OverviewDimensionCard | DVS wrap | keep | Dimension panel by design |
-| Boards empty li | empty-rich | maybe | Card-grid placeholder, not page frame |
-| Admin forbidden | empty-rich | maybe | Rare path; single message panel OK |
-| WebsiteCompare | missed empty-in-panel | maybe | FN: EmptyState inside compare panel when no data |
-
-## Subtract wave (do not implement in this commit)
-
-Ordered by operator empty-first impact:
-
-1. Insights
-2. Segments + Cohorts (shared panel wrappers)
-3. People, Groups
-4. Annotations, Workflows, Surveys, Experiments, Feature Flags, Actions, Events
-5. Teams (empty only), Replays (disabled empty), LinkAnalytics, Journeys (empty sole)
-
-Errors/Logs secondary and warehouse/AI stay **maybe**.
+| Sample | Scan | Verdict | Note |
+|--------|------|---------|------|
+| WebsiteAuditLog | clean | keep | Gold standard |
+| Insights | clean | fix | Outer MD panel dropped |
+| WebsiteErrors primary | MD wrap | keep | Table-in-panel hero |
+| WebsiteLogs secondary | clean | fix | Traces/filters/alerts flattened |
+| WebsiteStats chart | empty sole | keep | Chart body empty |
+| Teams empty | clean | fix | Empty flattened; sidebar keep |
+| Boards empty li | empty-rich | keep | Card-grid slot |
+| OverviewDimensionCard | DVS wrap | keep | Dimension by design |
 
 ## Status
 
-- Audit Log subtract: done (`15a1f6d`).
-- This unit: lever + full triage only. No mass page edits.
+- Audit Log: `15a1f6d`
+- MD + empty-first wave: `791b858`
+- Empty/DVS + secondary More wave: `1c9aca9`
+- Triage is binary (`keep` | `fix`); `maybe` retired.

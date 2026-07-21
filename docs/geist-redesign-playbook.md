@@ -21,6 +21,7 @@ Every dashboard route and blog page in light and dark:
 | Primitives | shadcn/ui **Base UI** (`base-nova`) |
 | Blog | In scope (tokens + layout; Astro stays CSS-first) |
 | Delivery | Land token + primitives first, then page families |
+| Panel nesting | Binary: drop outer `.panel` around EmptyState/DVS-empty or bordered MasterDetail; no `maybe` (see `.audit/panel-nesting.playbook.md`) |
 
 ## Units
 

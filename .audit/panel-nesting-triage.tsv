@@ -1,8 +1,8 @@
-# panel nesting triage — full dashboard
+# panel nesting triage — full dashboard (binary)
 # columns: route	file	verdict	why	scan_smells	spot_note
-# verdict: keep | subtract | maybe
-# scan_smells: from node .audit/scan-panel-nesting.mjs (wrappers noted on thin pages)
-# generated: 2026-07-20; Audit Log already subtracted in 15a1f6d
+# verdict: keep | fix  (no maybe — decorative nest is fix or intentional keep)
+# scan_smells: from node .audit/scan-panel-nesting.mjs (exact `panel` token + balanced body)
+# updated: 2026-07-21; unify wave: 15a1f6d + 791b858 + 1c9aca9
 
 /	Landing.tsx	keep	Marketing hero; no panel soup	-	
 /features	Features.tsx	keep	Marketing; no panel soup	-	
@@ -11,51 +11,51 @@
 /login	Login.tsx	keep	Auth form; no decorative nest	-	
 /register	Register.tsx	keep	Auth form; no decorative nest	-	
 /share/:slug	SharePublic.tsx	keep	Public share chrome; empty-state-rich is rare message card	panel_empty_state_rich	allowlisted public frame
-/dashboard	DashboardHome.tsx	keep	Site ranking / empty card occupies grid slot	panel_empty_state_rich	spot: empty-rich without EmptyState component
+/dashboard	DashboardHome.tsx	keep	Site ranking / empty card occupies grid slot	panel_empty_state_rich	card-grid placeholder ≠ page frame
 /websites	Websites.tsx	keep	Website cards are content surfaces	panel_empty_state_rich	empty card in list = card pattern
-/teams	Teams.tsx	subtract	Empty: solid panel wraps EmptyState; drop outer panel on empty path	panel_empty_state_rich,panel_wraps_empty_sole,panel_wraps_master_detail	populated MD uses panel as list/detail chrome (keep that); fix empty only
+/teams	Teams.tsx	fix	Empty path: dropped solid+dashed wrap; populated list/detail panels stay as MD chrome	panel_wraps_master_detail	scan hit = teams-sidebar-panel (intentional MD chrome)
 /links	LinksPixels.tsx	keep	Form/list panels with real fields	-	
-/links/analytics	LinkAnalytics.tsx	subtract	panel empty-state-rich wraps EmptyState (solid+dashed)	panel_empty_state_rich,panel_wraps_empty_sole	
-/reports	Reports.tsx	keep	Hub cards + DVS; empty-rich is hub empty card	panel_empty_state_rich	
-/insights	Insights.tsx	subtract	Outer .panel wraps MasterDetail (list+pane already bordered)	panel_wraps_master_detail	same as pre-fix Audit Log
-/boards	Boards.tsx	maybe	Empty board is a grid card slot; optional flatten later	panel_empty_state_rich	
+/links/analytics	LinkAnalytics.tsx	fix	Dropped panel empty-state-rich around EmptyState	-	
+/reports	Reports.tsx	keep	Hub cards + DVS; empty-rich is hub empty card	panel_empty_state_rich,panel_wraps_dvs	hub card pattern
+/insights	Insights.tsx	fix	Dropped outer panel around MasterDetail	-	
+/boards	Boards.tsx	keep	Empty board is a grid card slot (same class as Websites)	panel_empty_state_rich	card-grid placeholder ≠ page frame
 /billing	Billing.tsx	keep	Plan/form sections; content chrome	-	
-/admin	Admin.tsx	maybe	Forbidden path uses single empty-rich panel; rare	panel_empty_state_rich	
-/websites/:websiteId	WebsiteStats.tsx	keep	KPI + primary chart panel; chart EmptyState is chart body	panel_wraps_empty_sole	FP for subtract: keep chart-in-panel
-/websites/:websiteId/sessions	Sessions.tsx	keep	Filter row + table panel; empty under filters is required (U17.1)	-	dashed-in-solid when empty is acceptable until empty chrome softens globally
+/admin	Admin.tsx	fix	Forbidden path: dropped empty-state-rich solid wrap	-	
+/websites/:websiteId	WebsiteStats.tsx	keep	KPI + primary chart panel; chart EmptyState is chart body	panel_wraps_empty_sole	FP for fix: keep chart-in-panel
+/websites/:websiteId/sessions	Sessions.tsx	keep	Filter row + table panel; empty under filters is required (U17.1)	-	
 /websites/:websiteId/sessions/:sessionId	SessionDetail.tsx	keep	Detail sections are content panels	-	
-/websites/:websiteId/settings	WebsiteSettings.tsx	keep	Settings form / ingest rails	-	via IngestSnippetPanel; no nest smell
+/websites/:websiteId/settings	WebsiteSettings.tsx	keep	Settings form / ingest rails	-	
 /websites/:websiteId/share	WebsiteShareLinks.tsx	keep	Single form panel	-	
-/websites/:websiteId/replays	Replays.tsx	subtract	Disabled path: panel wraps EmptyState; drop outer panel	panel_empty_state_rich,panel_wraps_empty_sole,panel_wraps_master_detail	populated MD list/detail panels stay
+/websites/:websiteId/replays	Replays.tsx	fix	Disabled empty flattened; populated list/player panels stay as MD chrome	panel_wraps_master_detail	scan hit = list/player panels (intentional)
 /websites/:websiteId/heatmaps	Heatmaps.tsx	keep	No page-level panel nest	-	
 /websites/:websiteId/revenue	Revenue.tsx	keep	DVS without outer decorative panel wrap	-	
-/websites/:websiteId/performance	Performance.tsx	maybe	empty-state-rich empty path; polish later if noisy	panel_empty_state_rich,panel_wraps_empty_sole	lower traffic than core ops
+/websites/:websiteId/performance	Performance.tsx	fix	Empty path renders dashed EmptyState outside hero panel	-	
 /websites/:websiteId/realtime	WebsiteRealtime.tsx	keep	No panel soup at page level	-	
-/websites/:websiteId/events	WebsiteEvents.tsx	subtract	Outer panel wraps MasterDetail	panel_wraps_master_detail	EventDataPanel table chrome separate
-/websites/:websiteId/actions	WebsiteActions.tsx	subtract	Outer panel wraps MasterDetail + empty	panel_wraps_master_detail	
-/websites/:websiteId/breakdown	WebsiteBreakdown.tsx	keep	Dimension breakdown panel is content chrome	-	via WebsiteBreakdownPanel
-/websites/:websiteId/utm	WebsiteUtm.tsx	maybe	Result panel wraps DataViewState (empty → dashed-in-solid)	panel_wraps_dvs	
-/websites/:websiteId/attribution	WebsiteAttribution.tsx	keep	Dimension-style panels; EmptyState not sole panel child	-	scan FN on empty outside cards is fine
-/websites/:websiteId/annotations	WebsiteAnnotations.tsx	subtract	Outer panel wraps MasterDetail + EmptyState	panel_wraps_master_detail	create-button panel can stay
-/websites/:websiteId/funnel	WebsiteFunnel.tsx	maybe	Result panel wraps DataViewState empty path	panel_wraps_dvs	
-/websites/:websiteId/retention	WebsiteRetention.tsx	maybe	Result panel wraps DataViewState empty path	panel_wraps_dvs	
-/websites/:websiteId/stickiness	WebsiteStickiness.tsx	maybe	Form panel keep; result panel wraps DVS empty	panel_wraps_dvs	spot: form panel ≠ smell
-/websites/:websiteId/goals	WebsiteGoals.tsx	maybe	GoalsPanel list panel has toolbar+EmptyState; soften empty border later	panel_wraps_empty_sole (GoalsPanel)	chart panel keep
-/websites/:websiteId/journeys	WebsiteJourneys.tsx	subtract	Panel wraps EmptyState as primary empty chrome	panel_wraps_empty_sole	
-/websites/:websiteId/segments	WebsiteSegments.tsx	subtract	SegmentsPanel: outer panel wraps MD + EmptyState	panel_wraps_empty_sole,panel_wraps_master_detail (SegmentsPanel)	
-/websites/:websiteId/cohorts	WebsiteCohorts.tsx	subtract	CohortsPanel: outer panel wraps MD + EmptyState	panel_wraps_empty_sole,panel_wraps_master_detail (CohortsPanel)	
-/websites/:websiteId/compare	WebsiteCompare.tsx	maybe	EmptyState inside compare panel when no data (scan FN)	-	spot FN; optional flatten empty path
-/websites/:websiteId/errors	WebsiteErrors.tsx	keep	Primary issues table-in-panel is content chrome	panel_wraps_master_detail	secondary More panels → see maybe row note
-/websites/:websiteId/errors#secondary	WebsiteErrors.tsx	maybe	Source maps / alert-rules empty panels are intentional secondary	(secondary empties)	do not promote into subtract wave
-/websites/:websiteId/errors/:eventId	WebsiteErrorDetail.tsx	maybe	Header+empty sections; polish if triple-frame shows up	empty_after_panel_header_only	
-/websites/:websiteId/logs	WebsiteLogs.tsx	keep	Primary events stream chrome stays	panel_wraps_master_detail (traces secondary)	primary keep
-/websites/:websiteId/logs#secondary	WebsiteLogs.tsx	maybe	Traces/filters/alerts panels are intentional More IA	panel_wraps_master_detail	same as Errors secondary
-/websites/:websiteId/ai-observability	WebsiteAiObservability.tsx	maybe	Dense section panels with occasional empty headers	empty_after_panel_header_only	later polish
-/websites/:websiteId/feature-flags	WebsiteFeatureFlags.tsx	subtract	List section panel wraps MasterDetail + EmptyState	panel_wraps_master_detail	create form panels keep
-/websites/:websiteId/experiments	WebsiteExperiments.tsx	subtract	Outer panel wraps MasterDetail via DataViewState	panel_wraps_master_detail	
-/websites/:websiteId/surveys	WebsiteSurveys.tsx	subtract	Outer panel wraps MasterDetail + EmptyState	panel_wraps_master_detail	
-/websites/:websiteId/people	WebsitePeople.tsx	subtract	Outer panel wraps MasterDetail	panel_wraps_master_detail	
-/websites/:websiteId/groups	WebsiteGroups.tsx	subtract	Outer panel wraps MasterDetail + EmptyState	panel_wraps_master_detail	
-/websites/:websiteId/workflows	WebsiteWorkflows.tsx	subtract	Outer panel wraps MasterDetail + EmptyState	panel_wraps_master_detail	
-/websites/:websiteId/warehouse	WebsiteWarehouse.tsx	maybe	Titled section empties after tools; not empty-first page frame	empty_after_panel_header_only	
+/websites/:websiteId/events	WebsiteEvents.tsx	fix	Dropped outer panel around MasterDetail; catalog header + custom-events table panels stay	-	
+/websites/:websiteId/actions	WebsiteActions.tsx	fix	Dropped outer panel around MD/DVS; create-header panel stays	-	
+/websites/:websiteId/breakdown	WebsiteBreakdown.tsx	keep	Dimension breakdown panel is content chrome	-	
+/websites/:websiteId/utm	WebsiteUtm.tsx	keep	DVS wraps dimension cards; panels are OverviewDimensionCard-class chrome	-	dimension keep (not empty-in-outer)
+/websites/:websiteId/attribution	WebsiteAttribution.tsx	keep	Dimension-style panels; EmptyState not sole panel child	-	
+/websites/:websiteId/annotations	WebsiteAnnotations.tsx	fix	Dropped outer panel around MD/empty; create-button panel stays	-	
+/websites/:websiteId/funnel	WebsiteFunnel.tsx	fix	Dropped panel wrap around result DataViewState (picker stays unboxed)	-	
+/websites/:websiteId/retention	WebsiteRetention.tsx	fix	Dropped panel wrap around DataViewState	-	
+/websites/:websiteId/stickiness	WebsiteStickiness.tsx	fix	Form panel keep; dropped result panel around DVS	-	
+/websites/:websiteId/goals	WebsiteGoals.tsx	fix	GoalsPanel list: dropped outer panel; chart panel keep	-	via GoalsPanel
+/websites/:websiteId/journeys	WebsiteJourneys.tsx	fix	Dropped panel around EmptyState primary empty	-	
+/websites/:websiteId/segments	WebsiteSegments.tsx	fix	SegmentsPanel: dropped outer panel around toolbar+MD/empty	-	via SegmentsPanel
+/websites/:websiteId/cohorts	WebsiteCohorts.tsx	fix	CohortsPanel: dropped outer panel around toolbar+MD/empty	-	via CohortsPanel
+/websites/:websiteId/compare	WebsiteCompare.tsx	fix	Empty path: dashed EmptyState without solid compare panel	-	populated KPI/chart panel stays
+/websites/:websiteId/errors	WebsiteErrors.tsx	keep	Primary issues table-in-panel is content chrome	panel_wraps_master_detail	primary hero keep
+/websites/:websiteId/errors#secondary	WebsiteErrors.tsx	fix	Secondary More: dropped solid wrap around titled empties / recent table	-	forms keep; no dashed-in-solid sole
+/websites/:websiteId/errors/:eventId	WebsiteErrorDetail.tsx	fix	Properties/stack titled empties: dropped outer panel; accent-rail summary stays	-	
+/websites/:websiteId/logs	WebsiteLogs.tsx	keep	Primary events stream chrome stays	empty_after_panel_header_only	primary hero keep
+/websites/:websiteId/logs#secondary	WebsiteLogs.tsx	fix	Traces/filters/alerts: dropped solid wrap; MD/table chrome when populated	-	
+/websites/:websiteId/ai-observability	WebsiteAiObservability.tsx	fix	Models + recent-calls titled sections: dropped outer panel around empty/MD	-	overview KPI panels stay
+/websites/:websiteId/feature-flags	WebsiteFeatureFlags.tsx	fix	List section: dropped outer panel around MD/empty; create form panels keep	-	
+/websites/:websiteId/experiments	WebsiteExperiments.tsx	fix	Dropped outer panel around MasterDetail via DataViewState; create form stays	-	
+/websites/:websiteId/surveys	WebsiteSurveys.tsx	fix	Dropped outer panel around MD/empty; create form stays	-	
+/websites/:websiteId/people	WebsitePeople.tsx	fix	Dropped outer panel around MasterDetail; search panel stays	-	
+/websites/:websiteId/groups	WebsiteGroups.tsx	fix	Dropped outer panel around MD/empty; filter panel stays	-	
+/websites/:websiteId/workflows	WebsiteWorkflows.tsx	fix	Dropped outer panel around MD/empty; create form stays	-	
+/websites/:websiteId/warehouse	WebsiteWarehouse.tsx	fix	Titled tab sections: dropped outer panel around empties/tables; MD explorer chrome stays	-	
 /websites/:websiteId/audit	WebsiteAuditLog.tsx	keep	Already flattened (15a1f6d); MD + empty without outer panel	-	gold standard

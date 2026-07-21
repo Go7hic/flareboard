@@ -99,7 +99,7 @@ type TooltipState = {
   y: number;
 };
 
-export function CountryMap({ rows, accent = 'var(--accent)', loading }: CountryMapProps) {
+export function CountryMap({ rows, accent = 'var(--chart-1)', loading }: CountryMapProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [position, setPosition] = useState<MapPosition>(DEFAULT_POSITION);
@@ -121,7 +121,7 @@ export function CountryMap({ rows, accent = 'var(--accent)', loading }: CountryM
 
   function fillForGeoId(geoId: string) {
     const count = byGeoId.get(geoId);
-    if (!count) return 'var(--panel-muted, #e5e7eb)';
+    if (!count) return 'var(--bg-subtle)';
     const intensity = 0.2 + (count / max) * 0.8;
     return `color-mix(in srgb, ${accent} ${Math.round(intensity * 100)}%, transparent)`;
   }
@@ -177,7 +177,7 @@ export function CountryMap({ rows, accent = 'var(--accent)', loading }: CountryM
                     key={geo.rsmKey}
                     geography={geo}
                     fill={fillForGeoId(geoId)}
-                    stroke="var(--border, #d1d5db)"
+                    stroke="var(--border)"
                     strokeWidth={0.4}
                     style={{
                       default: { outline: 'none' },

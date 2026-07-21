@@ -10,39 +10,22 @@ import {
   useMasterDetailSelection,
 } from '../components/master-detail';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { api, type AiObservabilityResponse } from '../lib/api';
+import { formatDateTime, formatNumber } from '../lib/format';
+import { StatCard } from '../components/ui/stat-card';
+import { DataViewState } from '../components/DataViewState';
 import { t } from '../lib/i18n';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
-
-function formatDate(value: number | null | undefined) {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 function money(value: number | null | undefined) {
   return `$${(value ?? 0).toFixed(4)}`;
 }
 
 function formatTrendDate(value: string) {
-  return new Date(`${value}T00:00:00Z`).toLocaleDateString();
-}
-
-function AiStatCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="stat-card">
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{typeof value === 'number' ? value.toLocaleString() : value}</div>
-    </div>
-  );
+  return formatDateTime(`${value}T00:00:00Z`);
 }
 
 export default function WebsiteAiObservabilityPage() {
@@ -108,22 +91,27 @@ export default function WebsiteAiObservabilityPage() {
   }
 
   return (
-    <div className="page page-ai-observability">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-ai-observability">
+      <PageHeader
+        title={t('aiObservability')}
+        lead={t('aiObservabilityLead')}
+        actions={
+          <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
+        }
+      />
 
-      <div className="stats-header-row section-gap">
-        <div>
-          <h2 className="page-title">{t('aiObservability')}</h2>
-          <p className="text-muted">{t('aiObservabilityLead')}</p>
-        </div>
-        <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
-      </div>
-
+      <PageBody>
       <section className="analytics-hero-stats section-gap" aria-label={t('aiObservability')}>
-        <AiStatCard label={t('aiCalls')} value={stats?.calls ?? 0} />
-        <AiStatCard label={t('aiTokens')} value={stats?.tokens ?? 0} />
-        <AiStatCard label={t('aiCost')} value={money(stats?.costUsd)} />
-        <AiStatCard label={t('aiAvgLatency')} value={`${stats?.avgLatencyMs ?? 0}ms`} />
+        <DataViewState
+          loading={aiQuery.isLoading}
+          error={aiQuery.error}
+          onRetry={() => void aiQuery.refetch()}
+        >
+          <StatCard label={t('aiCalls')} value={formatNumber(stats?.calls ?? 0)} />
+          <StatCard label={t('aiTokens')} value={formatNumber(stats?.tokens ?? 0)} />
+          <StatCard label={t('aiCost')} value={money(stats?.costUsd)} />
+          <StatCard label={t('aiAvgLatency')} value={`${formatNumber(stats?.avgLatencyMs ?? 0)}ms`} />
+        </DataViewState>
       </section>
 
       {(trendRows.length || statuses.length) ? (
@@ -150,11 +138,11 @@ export default function WebsiteAiObservabilityPage() {
                     {trendRows.map((row) => (
                       <tr key={row.date}>
                         <td>{formatTrendDate(row.date)}</td>
-                        <td className="num">{row.calls.toLocaleString()}</td>
-                        <td className="num">{row.tokens.toLocaleString()}</td>
+                        <td className="num">{formatNumber(row.calls)}</td>
+                        <td className="num">{formatNumber(row.tokens)}</td>
                         <td className="num">{money(row.costUsd)}</td>
-                        <td className="num">{row.errors.toLocaleString()}</td>
-                        <td className="num">{row.avgLatencyMs ?? 0}ms</td>
+                        <td className="num">{formatNumber(row.errors)}</td>
+                        <td className="num">{formatNumber(row.avgLatencyMs ?? 0)}ms</td>
                       </tr>
                     ))}
                   </tbody>
@@ -175,7 +163,7 @@ export default function WebsiteAiObservabilityPage() {
                       <div className="breakdown-meta">
                         <strong>{row.status}</strong>
                         <span className="text-muted">
-                          {row.calls.toLocaleString()} ({share}%)
+                          {formatNumber(row.calls)} ({share}%)
                         </span>
                       </div>
                       <div className="breakdown-track" aria-hidden>
@@ -206,7 +194,7 @@ export default function WebsiteAiObservabilityPage() {
                       <div className="breakdown-meta">
                         <strong>{row.provider}</strong>
                         <span className="text-muted">
-                          {row.calls.toLocaleString()} · {money(row.costUsd)}
+                          {formatNumber(row.calls)} · {money(row.costUsd)}
                         </span>
                       </div>
                       <div className="breakdown-track" aria-hidden>
@@ -231,7 +219,7 @@ export default function WebsiteAiObservabilityPage() {
                       <div className="breakdown-meta">
                         <strong>{row.quality}</strong>
                         <span className="text-muted">
-                          {row.calls.toLocaleString()} ({share}%)
+                          {formatNumber(row.calls)} ({share}%)
                         </span>
                       </div>
                       <div className="breakdown-track" aria-hidden>
@@ -262,7 +250,7 @@ export default function WebsiteAiObservabilityPage() {
                       <div className="breakdown-meta">
                         <strong>{row.release}</strong>
                         <span className="text-muted">
-                          {row.calls.toLocaleString()} · {money(row.costUsd)}
+                          {formatNumber(row.calls)} · {money(row.costUsd)}
                         </span>
                       </div>
                       <div className="breakdown-track" aria-hidden>
@@ -287,7 +275,7 @@ export default function WebsiteAiObservabilityPage() {
                       <div className="breakdown-meta">
                         <strong>{row.environment}</strong>
                         <span className="text-muted">
-                          {row.calls.toLocaleString()} · {money(row.costUsd)}
+                          {formatNumber(row.calls)} · {money(row.costUsd)}
                         </span>
                       </div>
                       <div className="breakdown-track" aria-hidden>
@@ -302,7 +290,7 @@ export default function WebsiteAiObservabilityPage() {
         </section>
       ) : null}
 
-      <section className="panel section-gap">
+      <section className="section-gap">
         <header className="panel-header">
           <div>
             <h2 className="section-title">{t('aiModels')}</h2>
@@ -328,11 +316,11 @@ export default function WebsiteAiObservabilityPage() {
                 {models.map((row) => (
                   <tr key={row.model}>
                     <td>{row.model}</td>
-                    <td className="num">{row.calls.toLocaleString()}</td>
-                    <td className="num">{row.tokens.toLocaleString()}</td>
+                    <td className="num">{formatNumber(row.calls)}</td>
+                    <td className="num">{formatNumber(row.tokens)}</td>
                     <td className="num">{money(row.costUsd)}</td>
-                    <td className="num">{row.errors.toLocaleString()}</td>
-                    <td className="num">{row.errorRate.toLocaleString()}%</td>
+                    <td className="num">{formatNumber(row.errors)}</td>
+                    <td className="num">{formatNumber(row.errorRate)}%</td>
                     <td className="num">{row.avgLatencyMs ?? 0}ms</td>
                   </tr>
                 ))}
@@ -344,7 +332,7 @@ export default function WebsiteAiObservabilityPage() {
         )}
       </section>
 
-      <section className="panel section-gap">
+      <section className="section-gap">
         <header className="panel-header panel-header--filters">
           <div>
             <h2 className="section-title">{t('aiRecentCalls')}</h2>
@@ -487,7 +475,7 @@ export default function WebsiteAiObservabilityPage() {
                     <div>
                       <span className="stat-label">{t('aiTokens')}</span>
                       <strong className="stat-value">
-                        {(selectedEvent.totalTokens ?? 0).toLocaleString()}
+                        {formatNumber((selectedEvent.totalTokens ?? 0))}
                       </strong>
                     </div>
                     <div>
@@ -507,7 +495,7 @@ export default function WebsiteAiObservabilityPage() {
                       {t('page')}: {selectedEvent.urlPath || '/'}
                     </p>
                     <p className="text-muted">
-                      {t('created')}: {formatDate(selectedEvent.createdAt)}
+                      {t('created')}: {formatDateTime(selectedEvent.createdAt)}
                     </p>
                   </div>
                 </MasterDetailPane>
@@ -520,6 +508,7 @@ export default function WebsiteAiObservabilityPage() {
           <EmptyState title={t('aiEmptyTitle')} description={t('aiEmptyBody')} />
         ) : null}
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

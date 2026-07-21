@@ -4,11 +4,13 @@ import { Link, useParams } from 'react-router-dom';
 import { EmptyState } from '../components/EmptyState';
 import { MasterDetailLayout, MasterDetailSelectableItem } from '../components/master-detail';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
 import { api, type Website } from '../lib/api';
+import { formatDateTime, formatDurationMs, formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 
@@ -55,14 +57,6 @@ interface SavedReplay {
 
 type ReplayFilter = 'all' | 'issues' | 'errors' | 'logs' | 'ai';
 
-function formatDuration(value: number | null | undefined) {
-  const seconds = Math.max(0, Math.round((value ?? 0) / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const rest = seconds % 60;
-  return rest ? `${minutes}m ${rest}s` : `${minutes}m`;
-}
-
 function replayMatchesFilter(replay: ReplayRow | SavedReplay, filter: ReplayFilter) {
   if (filter === 'errors') return replay.errors > 0;
   if (filter === 'logs') return replay.logs > 0;
@@ -74,11 +68,11 @@ function replayMatchesFilter(replay: ReplayRow | SavedReplay, filter: ReplayFilt
 function ReplayMetaBadges({ replay }: { replay: ReplayRow | SavedReplay }) {
   return (
     <div className="replay-meta-badges">
-      <span className="badge">{formatDuration(replay.durationMs)}</span>
-      <span className="badge">{replay.pageviews.toLocaleString()} {t('pageviews')}</span>
-      {replay.errors ? <span className="badge log-level-error">{replay.errors.toLocaleString()} {t('errors')}</span> : null}
-      {replay.logs ? <span className="badge log-level-warn">{replay.logs.toLocaleString()} {t('logs')}</span> : null}
-      {replay.aiCalls ? <span className="badge badge-accent">{replay.aiCalls.toLocaleString()} {t('aiCalls')}</span> : null}
+      <span className="badge">{formatDurationMs(replay.durationMs)}</span>
+      <span className="badge">{formatNumber(replay.pageviews)} {t('pageviews')}</span>
+      {replay.errors ? <span className="badge log-level-error">{formatNumber(replay.errors)} {t('errors')}</span> : null}
+      {replay.logs ? <span className="badge log-level-warn">{formatNumber(replay.logs)} {t('logs')}</span> : null}
+      {replay.aiCalls ? <span className="badge badge-accent">{formatNumber(replay.aiCalls)} {t('aiCalls')}</span> : null}
     </div>
   );
 }
@@ -203,20 +197,22 @@ export default function ReplaysPage() {
       setSaveName('');
       return;
     }
-    setSaveName(`Replay ${new Date(selectedReplay.startedAt ?? Date.now()).toLocaleString()}`);
+    setSaveName(`Replay ${formatDateTime(selectedReplay.startedAt ?? Date.now())}`);
   }, [selectedReplay, savedVisitIds]);
 
   return (
-    <div className="page page-replays">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page className="page-replays">
+      <PageHeader
+        title={t('sessionReplays')}
+        lead={t('replaysVisitsLead')}
+        actions={
           <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
         }
       />
 
+      <PageBody>
       {!replayEnabled && websiteQuery.data ? (
-        <div className="panel empty-state-rich section-gap">
+        <div className="section-gap">
           <EmptyState title={t('replayDisabledHint')} description={t('replaysVisitsLead')}>
             <Button asChild variant="primary">
               <Link to={`/websites/${websiteId}/settings`}>{t('goToReplaySettings')}</Link>
@@ -232,7 +228,6 @@ export default function ReplaysPage() {
           list={
           <section className="panel">
             <h2 className="section-title">{t('replaysVisits')}</h2>
-            <p className="section-lead">{t('replaysVisitsLead')}</p>
             <div className="replays-filter-row">
               <select
                 className="select"
@@ -259,8 +254,8 @@ export default function ReplaysPage() {
                     >
                       <strong>{saved.name}</strong>
                       <span className="text-muted">
-                        {saved.eventCount.toLocaleString()} {t('replayEventsLabel')} ·{' '}
-                        {new Date(saved.startedAt ?? saved.createdAt).toLocaleString()}
+                        {formatNumber(saved.eventCount)} {t('replayEventsLabel')} ·{' '}
+                        {formatDateTime(saved.startedAt ?? saved.createdAt)}
                       </span>
                       <ReplayMetaBadges replay={saved} />
                     </button>
@@ -286,9 +281,9 @@ export default function ReplaysPage() {
                   selected={selectedVisit === r.visitId}
                   onSelect={() => setSelectedVisit(r.visitId)}
                 >
-                  <div>{new Date(r.startedAt).toLocaleString()}</div>
+                  <div>{formatDateTime(r.startedAt)}</div>
                   <div className="text-muted" style={{ fontSize: '0.8125rem', marginTop: '0.2rem' }}>
-                    {r.eventCount} {t('replayEventsLabel')} · {r.chunks} {t('replayChunksLabel')}
+                    {formatNumber(r.eventCount)} {t('replayEventsLabel')} · {formatNumber(r.chunks)} {t('replayChunksLabel')}
                   </div>
                   <ReplayMetaBadges replay={r} />
                 </MasterDetailSelectableItem>
@@ -306,9 +301,9 @@ export default function ReplaysPage() {
                 <h2 className="section-title">{t('replayViewer')}</h2>
                 {selectedReplay ? (
                   <p className="text-muted">
-                    {selectedReplay.eventCount.toLocaleString()} {t('replayEventsLabel')} ·{' '}
-                    {selectedReplay.chunks.toLocaleString()} {t('replayChunksLabel')} ·{' '}
-                    {formatDuration(selectedReplay.durationMs)}
+                    {formatNumber(selectedReplay.eventCount)} {t('replayEventsLabel')} ·{' '}
+                    {formatNumber(selectedReplay.chunks)} {t('replayChunksLabel')} ·{' '}
+                    {formatDurationMs(selectedReplay.durationMs)}
                   </p>
                 ) : null}
               </div>
@@ -350,6 +345,7 @@ export default function ReplaysPage() {
           }
         />
       ) : null}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

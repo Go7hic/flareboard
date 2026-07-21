@@ -11,13 +11,15 @@ import {
   useMasterDetailSelection,
 } from '../components/master-detail';
 import { ResourceEditDialog } from '../components/ResourceEditDialog';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { api, type FeatureFlag, type FeatureFlagEvaluateResult } from '../lib/api';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
+import { formatDateOnly, formatDateTime, formatNumber, formatPercent } from '../lib/format';
 
 const DEFAULT_FLAG = {
   key: '',
@@ -61,28 +63,16 @@ type TargetingField = (typeof TARGETING_FIELDS)[number];
 type TargetingOperator = (typeof TARGETING_OPERATORS)[number];
 
 function formatDate(value: string | number | undefined) {
-  if (value == null) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  return formatDateOnly(value);
 }
 
 function formatTime(value: number | null | undefined) {
-  if (!value) return '-';
-  return new Date(value).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatDateTime(value);
 }
 
 function formatTrendDate(value: string | undefined) {
   if (!value) return '-';
-  return new Date(`${value}T00:00:00Z`).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  });
+  return formatDateOnly(`${value}T00:00:00Z`);
 }
 
 function featureFlagIssueLabel(issue: NonNullable<FeatureFlag['summary']>['health']['issues'][number]) {
@@ -486,8 +476,10 @@ export default function WebsiteFeatureFlagsPage() {
     !createMutation.isPending;
 
   return (
-    <div className="page page-feature-flags">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-feature-flags">
+      <PageHeader title={t('featureFlags')} lead={t('featureFlagsLead')} />
+
+      <PageBody>
 
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
@@ -576,13 +568,6 @@ export default function WebsiteFeatureFlagsPage() {
 
       {canEdit ? (
       <section className="panel section-gap">
-        <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('featureFlags')}</h2>
-            <p className="text-muted">{t('featureFlagsLead')}</p>
-          </div>
-        </header>
-
         <div className="panel-form">
           <div className="field">
             <Label htmlFor="flag-key">{t('featureFlagKey')}</Label>
@@ -674,7 +659,7 @@ export default function WebsiteFeatureFlagsPage() {
       </section>
       ) : null}
 
-      <section className="panel section-gap">
+      <section className="section-gap">
         <header className="cohorts-panel-head">
           <ResourceSearchField
             value={search}
@@ -808,13 +793,13 @@ export default function WebsiteFeatureFlagsPage() {
                     <div>
                       <span className="stat-label">{t('featureFlagExposures')}</span>
                       <strong className="stat-value">
-                        {(selectedFlag.summary?.exposures ?? 0).toLocaleString()}
+                        {formatNumber((selectedFlag.summary?.exposures ?? 0))}
                       </strong>
                     </div>
                     <div>
                       <span className="stat-label">{t('sessions')}</span>
                       <strong className="stat-value">
-                        {(selectedFlag.summary?.sessions ?? 0).toLocaleString()}
+                        {formatNumber((selectedFlag.summary?.sessions ?? 0))}
                       </strong>
                     </div>
                     <div>
@@ -852,7 +837,7 @@ export default function WebsiteFeatureFlagsPage() {
                         {selectedFlag.summary.health.dominantVariant ? (
                           <div className="text-muted">
                             {t('featureFlagDominantVariant')}: {selectedFlag.summary.health.dominantVariant} ·{' '}
-                            {selectedFlag.summary.health.dominantShare?.toLocaleString()}%
+                            {formatNumber(selectedFlag.summary.health.dominantShare ?? 0)}%
                           </div>
                         ) : null}
                       </div>
@@ -870,7 +855,7 @@ export default function WebsiteFeatureFlagsPage() {
                         {selectedFlag.summary.variants.map((variant) => (
                           <div key={variant.variant} className="feature-flag-exposure-row">
                             <span className="text-muted">
-                              {variant.variant} · {variant.exposures.toLocaleString()}
+                              {variant.variant} · {formatNumber(variant.exposures)}
                             </span>
                             <span className="feature-flag-exposure-track" aria-hidden>
                               <span style={{ width: `${Math.min(100, variant.percentage)}%` }} />
@@ -890,7 +875,7 @@ export default function WebsiteFeatureFlagsPage() {
                       </div>
                       <p className="text-muted">
                         {formatTrendDate(selectedFlag.summary.trend.slice(-1)[0]?.date)} ·{' '}
-                        {selectedFlag.summary.trend.slice(-1)[0]?.exposures.toLocaleString()}{' '}
+                        {formatNumber(selectedFlag.summary.trend.slice(-1)[0]?.exposures)}{' '}
                         {t('featureFlagExposures')}
                       </p>
                     </div>
@@ -906,7 +891,7 @@ export default function WebsiteFeatureFlagsPage() {
                       <div className="feature-flag-variants">
                         {selectedFlag.summary.releases.map((release) => (
                           <span key={release.release} className="badge">
-                            {release.release} · {release.exposures.toLocaleString()}
+                            {release.release} · {formatNumber(release.exposures)}
                           </span>
                         ))}
                       </div>
@@ -925,7 +910,7 @@ export default function WebsiteFeatureFlagsPage() {
                       <div className="feature-flag-variants">
                         {selectedFlag.summary.environments.map((environment) => (
                           <span key={environment.environment} className="badge">
-                            {environment.environment} · {environment.exposures.toLocaleString()}
+                            {environment.environment} · {formatNumber(environment.exposures)}
                           </span>
                         ))}
                       </div>
@@ -981,6 +966,7 @@ export default function WebsiteFeatureFlagsPage() {
           onSave={(flag, patch) => updateMutation.mutate({ id: flag.id, patch })}
         />
       ) : null}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

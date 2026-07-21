@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
-import { Database } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
 import { MasterDetailLayout } from '../components/master-detail';
 import { SegmentTabs } from '../components/SegmentTabs';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -20,6 +20,7 @@ import {
 } from '../lib/api';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
+import { formatDateOnly, formatDateTime, formatNumber, formatPercent } from '../lib/format';
 
 const EXAMPLE_SQL = `SELECT event_name as eventName, url_path as urlPath, created_at as createdAt
 FROM website_event
@@ -37,8 +38,7 @@ function displayValue(value: unknown) {
 }
 
 function formatTime(value: number | null | undefined) {
-  if (!value) return '-';
-  return new Date(value).toLocaleString();
+  return formatDateTime(value);
 }
 
 export default function WebsiteWarehousePage() {
@@ -205,8 +205,10 @@ export default function WebsiteWarehousePage() {
   const dataSources = sourcesQuery.data?.dataSources ?? [];
 
   return (
-    <div className="page page-warehouse">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-warehouse">
+      <PageHeader title={t('dataWarehouse')} lead={t('dataWarehouseLead')} />
+
+      <PageBody>
 
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
@@ -231,14 +233,6 @@ export default function WebsiteWarehousePage() {
           wrapList={false}
           list={
           <section className="panel">
-            <header className="panel-header">
-              <div>
-                <h2 className="section-title">{t('dataWarehouse')}</h2>
-                <p className="text-muted">{t('dataWarehouseLead')}</p>
-              </div>
-              <Database size={20} strokeWidth={2} aria-hidden />
-            </header>
-
             <div className="warehouse-query">
               <textarea
                 className="textarea warehouse-sql"
@@ -315,7 +309,7 @@ export default function WebsiteWarehousePage() {
       ) : null}
 
       {tab === 'saved' ? (
-        <section className="panel section-gap">
+        <section className="section-gap">
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('warehouseSavedQueries')}</h2>
@@ -389,7 +383,7 @@ export default function WebsiteWarehousePage() {
       ) : null}
 
       {tab === 'history' ? (
-        <section className="panel section-gap">
+        <section className="section-gap">
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('warehouseQueryHistory')}</h2>
@@ -415,7 +409,7 @@ export default function WebsiteWarehousePage() {
                           {entry.status}
                         </span>
                       </td>
-                      <td>{entry.rowCount.toLocaleString()}</td>
+                      <td>{formatNumber(entry.rowCount)}</td>
                       <td className="text-muted">{formatTime(entry.createdAt)}</td>
                       <td>
                         <code className="mono">{entry.sql.slice(0, 120)}{entry.sql.length > 120 ? '…' : ''}</code>
@@ -433,7 +427,7 @@ export default function WebsiteWarehousePage() {
       ) : null}
 
       {tab === 'schedules' ? (
-        <section className="panel section-gap">
+        <section className="section-gap">
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('warehouseScheduledQueries')}</h2>
@@ -549,7 +543,7 @@ export default function WebsiteWarehousePage() {
       ) : null}
 
       {tab === 'sources' ? (
-        <section className="panel section-gap">
+        <section className="section-gap">
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('warehouseDataSources')}</h2>
@@ -669,7 +663,7 @@ export default function WebsiteWarehousePage() {
       ) : null}
 
       {tab === 'query' ? (
-        <section className="panel section-gap">
+        <section className="section-gap">
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('queryResults')}</h2>
@@ -710,6 +704,7 @@ export default function WebsiteWarehousePage() {
           )}
         </section>
       ) : null}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

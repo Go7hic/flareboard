@@ -2,17 +2,21 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { ExternalLink, ListChecks, Plus, Trash2 } from 'lucide-react';
+import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
 import {
   MasterDetailLayout,
   MasterDetailListItem,
   MasterDetailPane,
 } from '../components/master-detail';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { StatCard } from '../components/ui/stat-card';
 import { api, type ActionDefinition, type ActionRule } from '../lib/api';
+import { formatDateTime, formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 
@@ -27,19 +31,6 @@ const EMPTY_DRAFT = {
   description: '',
   rules: [{ ...EMPTY_RULE }] as ActionRule[],
 };
-
-function formatDate(value: number | null | undefined) {
-  if (value == null) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 function ruleLabel(rule: ActionRule) {
   const field =
@@ -153,8 +144,10 @@ export default function WebsiteActionsPage() {
   const summary = selectedAction?.summary;
 
   return (
-    <div className="page page-actions">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-actions">
+      <PageHeader title={t('actions')} lead={t('actionDefinitionsLead')} />
+
+      <PageBody>
 
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
@@ -162,7 +155,6 @@ export default function WebsiteActionsPage() {
         <header className="panel-header">
           <div>
             <h2 className="section-title">{t('actionDefinitions')}</h2>
-            <p className="text-muted">{t('actionDefinitionsLead')}</p>
           </div>
           {canEdit ? (
             <Button type="button" variant="secondary" onClick={newAction}>
@@ -173,10 +165,16 @@ export default function WebsiteActionsPage() {
         </header>
       </section>
 
-      <section className="panel section-gap">
-        {actionsQuery.isLoading ? (
-          <div className="skeleton skeleton-block" aria-busy />
-        ) : actions.length || !selectedActionId ? (
+      <section className="section-gap">
+        <DataViewState
+          loading={actionsQuery.isLoading && !actionsQuery.data}
+          error={actionsQuery.isError ? actionsQuery.error : null}
+          onRetry={() => actionsQuery.refetch()}
+          isEmpty={!actionsQuery.isLoading && !actions.length && Boolean(selectedActionId)}
+          emptyTitle={t('actionsEmptyTitle')}
+          emptyDescription={t('actionsEmptyBody')}
+        >
+          {actions.length || !selectedActionId ? (
           <MasterDetailLayout
             list={
               <>
@@ -190,8 +188,8 @@ export default function WebsiteActionsPage() {
                     subtitle={action.rules.map(ruleLabel).join(' · ')}
                     meta={
                       <>
-                        <span className="badge">{(action.summary?.events ?? 0).toLocaleString()}</span>
-                        <span className="text-muted">{formatDate(action.summary?.lastSeenAt)}</span>
+                        <span className="badge">{formatNumber(action.summary?.events ?? 0)}</span>
+                        <span className="text-muted">{formatDateTime(action.summary?.lastSeenAt)}</span>
                       </>
                     }
                   />
@@ -326,23 +324,11 @@ export default function WebsiteActionsPage() {
 
                 {selectedActionId ? (
                   <div className="action-summary-section">
-                    <div className="detail-stats">
-                      <div>
-                        <span className="stat-label">{t('events')}</span>
-                        <strong className="stat-value">{(summary?.events ?? 0).toLocaleString()}</strong>
-                      </div>
-                      <div>
-                        <span className="stat-label">{t('sessions')}</span>
-                        <strong className="stat-value">{(summary?.sessions ?? 0).toLocaleString()}</strong>
-                      </div>
-                      <div>
-                        <span className="stat-label">{t('visits')}</span>
-                        <strong className="stat-value">{(summary?.visits ?? 0).toLocaleString()}</strong>
-                      </div>
-                      <div>
-                        <span className="stat-label">{t('lastSeen')}</span>
-                        <strong className="stat-value">{formatDate(summary?.lastSeenAt)}</strong>
-                      </div>
+                    <div className="experiment-summary-grid">
+                      <StatCard label={t('events')} value={formatNumber(summary?.events ?? 0)} />
+                      <StatCard label={t('sessions')} value={formatNumber(summary?.sessions ?? 0)} />
+                      <StatCard label={t('visits')} value={formatNumber(summary?.visits ?? 0)} />
+                      <StatCard label={t('lastSeen')} value={formatDateTime(summary?.lastSeenAt)} />
                     </div>
                     <div className="workflow-event-list">
                       {(summary?.recent ?? []).slice(0, 8).map((event) => (
@@ -369,10 +355,12 @@ export default function WebsiteActionsPage() {
               </MasterDetailPane>
             }
           />
-        ) : (
+          ) : (
           <EmptyState title={t('actionsEmptyTitle')} description={t('actionsEmptyBody')} />
-        )}
+          )}
+        </DataViewState>
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

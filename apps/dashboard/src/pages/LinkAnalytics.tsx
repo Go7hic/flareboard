@@ -1,33 +1,20 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Line, LineChart } from 'recharts';
+import { AnalyticsChart } from '../components/AnalyticsChart';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { EmptyState } from '../components/EmptyState';
+import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
+import { StatCard } from '../components/ui/stat-card';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
 import { api, type LinkStats, type TrackingLink } from '../lib/api';
 import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/dateRange';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="stat-card">
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{value}</div>
-    </div>
-  );
-}
 
 export default function LinkAnalyticsPage() {
   const chartColors = useChartColors();
@@ -66,10 +53,10 @@ export default function LinkAnalyticsPage() {
   const chartData = stats?.series ?? [];
 
   return (
-    <div className="page page-link-analytics">
+    <Page className="page-link-analytics">
       <PageHeader
         title={t('linkAnalytics')}
-        subtitle={link ? link.url : undefined}
+        lead={link ? link.url : undefined}
         backTo="/links"
         backLabel={t('links')}
         toolbar={
@@ -96,8 +83,9 @@ export default function LinkAnalyticsPage() {
         }
       />
 
+      <PageBody>
       {!linksQuery.isLoading && !links.length ? (
-        <div className="panel empty-state-rich section-gap">
+        <div className="section-gap">
           <EmptyState title={t('noLinksScope')}>
             <Button asChild variant="primary">
               <Link to="/links">{t('links')}</Link>
@@ -120,15 +108,14 @@ export default function LinkAnalyticsPage() {
             {t('linkClicksOverTime')}
           </h2>
           <div className="analytics-hero-stats">
-            <div className="stat-card stat-card-primary">
-              <div className="stat-label">{t('linkClicks')}</div>
-              <div className="stat-value">
-                {statsQuery.isLoading ? '—' : (stats?.clicks?.toLocaleString() ?? '0')}
-              </div>
-            </div>
+            <StatCard
+              label={t('linkClicks')}
+              value={statsQuery.isLoading ? '—' : formatNumber(stats?.clicks ?? 0)}
+              variant="primary"
+            />
             <StatCard
               label={t('linkUniqueVisitors')}
-              value={statsQuery.isLoading ? '—' : (stats?.visitors?.toLocaleString() ?? '0')}
+              value={statsQuery.isLoading ? '—' : formatNumber(stats?.visitors ?? 0)}
             />
           </div>
           <div className="analytics-hero-chart">
@@ -139,27 +126,9 @@ export default function LinkAnalyticsPage() {
               </div>
             ) : chartData.length > 0 ? (
               <div className="chart-wrap chart-wrap-hero">
-                <ResponsiveContainer>
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
-                    <XAxis dataKey="x" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-                    <YAxis
-                      allowDecimals={false}
-                      tick={{ fontSize: 11, fill: chartColors.muted }}
-                      stroke={chartColors.border}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        background: chartColors.panel,
-                        border: `1px solid ${chartColors.border}`,
-                        borderRadius: 8,
-                        fontSize: 13,
-                        color: chartColors.text,
-                      }}
-                    />
-                    <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
+                <AnalyticsChart Chart={LineChart} data={chartData} xAxis={{ dataKey: 'x' }}>
+                  <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} />
+                </AnalyticsChart>
               </div>
             ) : (
               <p className="text-muted">{t('noLinkClicksInRange')}</p>
@@ -167,6 +136,7 @@ export default function LinkAnalyticsPage() {
           </div>
         </section>
       ) : null}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

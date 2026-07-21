@@ -9,7 +9,8 @@ import {
   MasterDetailPane,
   useMasterDetailSelection,
 } from '../components/master-detail';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { api } from '../lib/api';
 import { t } from '../lib/i18n';
 
@@ -69,71 +70,69 @@ export default function WebsiteAuditLogPage() {
   }, [items, selectedId, setSelectedId]);
 
   return (
-    <div className="page page-audit-log">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-audit-log">
+      <PageHeader title={t('auditLog')} lead={t('websiteAuditLogLead')} />
 
-      <section className="panel section-gap">
-        <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('auditLog')}</h2>
-            <p className="text-muted">{t('websiteAuditLogLead')}</p>
-          </div>
-        </header>
+      <PageBody>
+      {auditQuery.isLoading ? (
+        <div className="skeleton skeleton-block section-gap" aria-busy />
+      ) : null}
 
-        {auditQuery.isLoading ? <div className="skeleton skeleton-block" aria-busy /> : null}
+      {!auditQuery.isLoading && items.length ? (
+        <MasterDetailLayout
+          className="master-detail-layout section-gap"
+          list={items.map((entry) => (
+            <MasterDetailListItem
+              key={entry.id}
+              selected={entry.id === selectedId}
+              onSelect={() => setSelectedId(entry.id)}
+              icon={<ClipboardList size={16} strokeWidth={2} aria-hidden />}
+              title={entry.action}
+              subtitle={`${entry.username} · ${entry.entityType}`}
+              meta={<span className="text-muted">{formatDate(entry.createdAt)}</span>}
+            />
+          ))}
+          detail={
+            selectedEntry ? (
+              <MasterDetailPane
+                title={selectedEntry.action}
+                description={
+                  <>
+                    <p className="text-muted">
+                      {t('operator')}: {selectedEntry.username}
+                    </p>
+                    <p className="text-muted">
+                      {t('entity')}: {selectedEntry.entityType}
+                      {selectedEntry.entityId ? ` · ${selectedEntry.entityId}` : ''}
+                    </p>
+                    <p className="text-muted">
+                      {t('when')}: {formatDate(selectedEntry.createdAt)}
+                    </p>
+                  </>
+                }
+              >
+                <div className="detail-section">
+                  <h4 className="section-title experiment-title">{t('metadata')}</h4>
+                  {formatMetadata(selectedEntry.metadata) ? (
+                    <pre className="mono text-muted segment-parameters-preview">
+                      {formatMetadata(selectedEntry.metadata)}
+                    </pre>
+                  ) : (
+                    <p className="text-muted">—</p>
+                  )}
+                </div>
+              </MasterDetailPane>
+            ) : null
+          }
+        />
+      ) : null}
 
-        {!auditQuery.isLoading && items.length ? (
-          <MasterDetailLayout
-            list={items.map((entry) => (
-              <MasterDetailListItem
-                key={entry.id}
-                selected={entry.id === selectedId}
-                onSelect={() => setSelectedId(entry.id)}
-                icon={<ClipboardList size={16} strokeWidth={2} aria-hidden />}
-                title={entry.action}
-                subtitle={`${entry.username} · ${entry.entityType}`}
-                meta={<span className="text-muted">{formatDate(entry.createdAt)}</span>}
-              />
-            ))}
-            detail={
-              selectedEntry ? (
-                <MasterDetailPane
-                  title={selectedEntry.action}
-                  description={
-                    <>
-                      <p className="text-muted">
-                        {t('operator')}: {selectedEntry.username}
-                      </p>
-                      <p className="text-muted">
-                        {t('entity')}: {selectedEntry.entityType}
-                        {selectedEntry.entityId ? ` · ${selectedEntry.entityId}` : ''}
-                      </p>
-                      <p className="text-muted">
-                        {t('when')}: {formatDate(selectedEntry.createdAt)}
-                      </p>
-                    </>
-                  }
-                >
-                  <div className="detail-section">
-                    <h4 className="section-title experiment-title">{t('metadata')}</h4>
-                    {formatMetadata(selectedEntry.metadata) ? (
-                      <pre className="mono text-muted segment-parameters-preview">
-                        {formatMetadata(selectedEntry.metadata)}
-                      </pre>
-                    ) : (
-                      <p className="text-muted">—</p>
-                    )}
-                  </div>
-                </MasterDetailPane>
-              ) : null
-            }
-          />
-        ) : null}
-
-        {!auditQuery.isLoading && !items.length ? (
+      {!auditQuery.isLoading && !items.length ? (
+        <div className="section-gap">
           <EmptyState title={t('auditLogEmptyTitle')} description={t('auditLogEmptyBody')} />
-        ) : null}
-      </section>
-    </div>
+        </div>
+      ) : null}
+      </PageBody>
+    </Page>
   );
 }

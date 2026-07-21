@@ -1,5 +1,6 @@
 import type { WebsiteStats } from './api';
 import { formatChartTimeLabel } from './chartTimeseries';
+import { formatDateOnly } from './format';
 
 export type CompareMode = 'previous' | 'year';
 
@@ -35,20 +36,10 @@ export function avgDurationSecFromStats(stats: WebsiteStats) {
   return visits > 0 ? Math.round(stats.totaltime.value / visits) : 0;
 }
 
-export function formatDuration(seconds: number) {
-  if (seconds <= 0) return '0s';
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  if (mins <= 0) return `${secs}s`;
-  if (secs <= 0) return `${mins}m`;
-  return `${mins}m ${secs}s`;
-}
+export { formatDurationSeconds as formatDuration } from './format';
 
 export function formatCompareRangeLabel(startAt: number, endAt: number) {
-  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
-  const start = new Date(startAt).toLocaleDateString(undefined, opts);
-  const end = new Date(endAt).toLocaleDateString(undefined, opts);
-  return `${start} — ${end}`;
+  return `${formatDateOnly(startAt)} — ${formatDateOnly(endAt)}`;
 }
 
 export type MetricsSeriesPoint = { x: string; y: number };

@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
-import { DateRangePicker } from './DateRangePicker';
-import { SegmentFilterMenu } from './SegmentFilterMenu';
+import { WebsiteAnalyticsControls } from './WebsiteAnalyticsControls';
 import { type DateRangePreset } from '../lib/dateRange';
 
 interface Segment {
@@ -30,18 +29,15 @@ export function WebsiteReportControls({
   timezone?: string;
 }) {
   return (
-    <div className="stats-header-controls">
-      {leading}
-      {showSegment && onSegmentChange && segments ? (
-        <SegmentFilterMenu
-          segmentId={segmentId ?? ''}
-          onSegmentChange={onSegmentChange}
-          segments={segments}
-          compareEnabled={false}
-          onCompareChange={() => {}}
-        />
-      ) : null}
-      <DateRangePicker value={range} onChange={onRangeChange} popover timezone={timezone} />
-    </div>
+    <WebsiteAnalyticsControls
+      range={range}
+      onRangeChange={onRangeChange}
+      timezone={timezone}
+      leading={leading}
+      showSegment={showSegment && Boolean(onSegmentChange && segments)}
+      segmentId={segmentId}
+      onSegmentChange={onSegmentChange}
+      segments={segments}
+    />
   );
 }

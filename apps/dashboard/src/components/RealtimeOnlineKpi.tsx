@@ -1,12 +1,13 @@
 import { Link } from 'react-router-dom';
 import { useRealtimeData } from '../hooks/useRealtimeData';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { Skeleton } from './ui/skeleton';
 
 /** Compact live visitor count for the overview filter row. */
 export function RealtimeOnlineKpi({ websiteId }: { websiteId: string }) {
   const { data, isLoading } = useRealtimeData(websiteId);
-  const count = data?.visitors.toLocaleString() ?? '—';
+  const count = data ? formatNumber(data.visitors) : '—';
   const label = isLoading ? null : t('realtimeOnlineCount').replace('{count}', count);
 
   return (

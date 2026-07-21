@@ -139,24 +139,21 @@ export default function Landing() {
     <LandingChrome activeNav="home">
       <section className="landing-hero">
         <div className="landing-hero-copy landing-reveal">
-          <p className="landing-hero-badge">
-            <span className="landing-hero-badge-dot" aria-hidden />
-            {t('landingHeroBadge')}
-          </p>
+          <p className="landing-hero-brand">Flareboard</p>
           <h1 className="landing-headline">{t('landingHeadline')}</h1>
           <p className="landing-lead">{t('landingLead')}</p>
           <div className="landing-cta-row">
-            <Button asChild variant="primary">
+            <Button asChild variant="primary" size="lg">
               <Link to={startHref}>{t('landingCreateFreeAccount')}</Link>
             </Button>
-            <Button asChild variant="secondary">
+            <Button asChild variant="outline" size="lg">
               <a href={FLAREBOARD_GITHUB} target="_blank" rel="noopener noreferrer">
                 {t('landingViewGithub')}
               </a>
             </Button>
           </div>
         </div>
-        <div className="landing-hero-visual landing-reveal landing-reveal-delay">
+        <div className="landing-hero-visual landing-reveal landing-reveal-delay" aria-hidden>
           <HeroDashboardPreview />
         </div>
       </section>

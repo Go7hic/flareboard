@@ -3,7 +3,8 @@ import { useMemo, useEffect, useState } from 'react';
 import { EmptyState } from '../components/EmptyState';
 import { JourneyFlowPanel } from '../components/JourneyFlowPanel';
 import { SegmentTabs } from '../components/SegmentTabs';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';
 import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
 import { api } from '../lib/api';
@@ -51,10 +52,11 @@ export default function WebsiteJourneysPage() {
   );
 
   return (
-    <div className="page page-journeys">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page className="page-journeys">
+      <PageHeader
+        title={t('navJourneys')}
+        lead={t('journeyLead')}
+        actions={
           <div className="journey-page-bar">
             {hasData ? (
               <p className="journey-page-hint">{t('journeySelectStep')}</p>
@@ -64,9 +66,9 @@ export default function WebsiteJourneysPage() {
               onRangeChange={setRange}
               segmentId={segmentId}
               onSegmentChange={setSegmentId}
-            segments={segments}
-            timezone={timezone}
-            leading={
+              segments={segments}
+              timezone={timezone}
+              leading={
                 hasData ? (
                   <SegmentTabs
                     tabs={depthTabs}
@@ -82,13 +84,14 @@ export default function WebsiteJourneysPage() {
         }
       />
 
+      <PageBody>
       <section className="section-gap">
         {showSkeleton ? (
           <div className="panel">
             <div className="skeleton skeleton-block" aria-busy />
           </div>
         ) : !hasData ? (
-          <div className="panel">
+          <div className="section-gap">
             <EmptyState title={t('noDataInPeriod')} description={t('noDataInPeriodHint')} />
           </div>
         ) : journeyQuery.data ? (
@@ -101,6 +104,7 @@ export default function WebsiteJourneysPage() {
           />
         ) : null}
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

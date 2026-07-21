@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -87,10 +88,10 @@ export default function LinksPixelsPage() {
   });
 
   return (
-    <div className="page page-links">
+    <Page className="page-links">
       <PageHeader
         title={t('linksAndPixels')}
-        subtitle={t('linksSubtitle')}
+        lead={t('linksSubtitle')}
         toolbar={
           <div className="field links-toolbar-field">
             <Label htmlFor="team-scope">{t('scopeTeam')}</Label>
@@ -106,6 +107,7 @@ export default function LinksPixelsPage() {
         }
       />
 
+      <PageBody>
       <section className="panel section-gap-lg">
         <h2 className="section-title">{t('shortLinks')}</h2>
         <p className="section-lead">{t('shortLinksLead')}</p>
@@ -199,6 +201,7 @@ export default function LinksPixelsPage() {
           </ul>
         </div>
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

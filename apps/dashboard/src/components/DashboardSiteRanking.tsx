@@ -1,18 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { chartSeriesColor } from '../lib/chartStyles';
+import { formatNumber } from '../lib/format';
 import { WebsiteNameLabel } from './WebsiteNameLabel';
 import { t } from '../lib/i18n';
-
-const RANKING_COLORS = [
-  'var(--accent)',
-  'var(--cf-orange)',
-  '#6366f1',
-  '#8b5cf6',
-  '#ec4899',
-  '#14b8a6',
-  '#f59e0b',
-  '#64748b',
-];
 
 const DEFAULT_VISIBLE = 8;
 
@@ -54,7 +45,7 @@ export function DashboardSiteRanking({
             <Link to={`/websites/${w.id}`} className="dashboard-site-ranking-item">
               <span
                 className="dashboard-site-ranking-swatch"
-                style={{ background: RANKING_COLORS[index % RANKING_COLORS.length] }}
+                style={{ background: chartSeriesColor(index) }}
                 aria-hidden
               />
               <WebsiteNameLabel
@@ -64,7 +55,7 @@ export function DashboardSiteRanking({
                 faviconSize={16}
               />
               <span className="dashboard-site-ranking-stats">
-                {w.pageviews.toLocaleString()} / {w.visitors.toLocaleString()}
+                {formatNumber(w.pageviews)} / {formatNumber(w.visitors)}
               </span>
             </Link>
           </li>

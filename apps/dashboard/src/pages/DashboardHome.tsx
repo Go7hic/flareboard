@@ -1,23 +1,20 @@
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Area, AreaChart } from 'recharts';
+import { AnalyticsChart } from '../components/AnalyticsChart';
+import { DataViewState } from '../components/DataViewState';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { DashboardSiteRanking } from '../components/DashboardSiteRanking';
+import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
+import { StatCard } from '../components/ui/stat-card';
 import { api } from '../lib/api';
 import { formatChartTimeLabel, isHourlyChartRange } from '../lib/chartTimeseries';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useDashboardRange } from '../lib/useDashboardRange';
 import { useChartColors } from '../lib/useChartColors';
@@ -51,10 +48,6 @@ interface DashboardOverview {
   cardsTruncated: boolean;
   totals: { pageviews: number; visitors: number; visits: number };
   aggregateMetrics: AggregateMetrics;
-}
-
-function cssVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
 function mergeAggregateMetrics(metrics: AggregateMetrics | undefined, hourly: boolean) {
@@ -119,9 +112,9 @@ export default function DashboardHome() {
 
   const metricColors = useMemo(
     () => ({
-      pageviews: chartColors.accent,
-      visitors: cssVar('--cf-orange') || chartColors.muted,
-      visits: cssVar('--chart-axis') || chartColors.muted,
+      pageviews: chartColors.series.pageviews,
+      visitors: chartColors.series.visitors,
+      visits: chartColors.series.visits,
     }),
     [chartColors],
   );
@@ -141,225 +134,201 @@ export default function DashboardHome() {
   }, []);
 
   return (
-    <div className="page page-dashboard">
+    <Page className="page-dashboard">
       <PageHeader
         title={t('dashboard')}
-        subtitle={t('dashboardAllSitesLead')}
+        lead={t('dashboardAllSitesLead')}
         actions={<DateRangePicker value={range} onChange={setRange} popover />}
       />
 
-      {overviewQuery.isLoading ? (
-        <section className="panel dashboard-aggregate section-gap" aria-hidden>
-          <Skeleton className="h-5 w-1/4" />
-          <Skeleton className="dashboard-aggregate-chart mt-4 h-52 w-full" />
-        </section>
-      ) : null}
-
-      {!overviewQuery.isLoading && hasWebsites ? (
-        <section className="panel dashboard-aggregate section-gap" aria-labelledby="dashboard-total-traffic">
-          <div className="dashboard-aggregate-head">
-            <div>
-              <h2 id="dashboard-total-traffic" className="section-title">
-                {t('dashboardTotalTraffic')}
-              </h2>
-              {totals ? (
-                <div className="dashboard-aggregate-kpis">
-                  <div className="dashboard-aggregate-kpi">
-                    <span className="dashboard-aggregate-kpi-label">{t('pageviews')}</span>
-                    <span className="dashboard-aggregate-kpi-value">{totals.pageviews.toLocaleString()}</span>
-                  </div>
-                  <div className="dashboard-aggregate-kpi">
-                    <span className="dashboard-aggregate-kpi-label">{t('visitors')}</span>
-                    <span className="dashboard-aggregate-kpi-value">{totals.visitors.toLocaleString()}</span>
-                  </div>
-                  <div className="dashboard-aggregate-kpi">
-                    <span className="dashboard-aggregate-kpi-label">{t('visits')}</span>
-                    <span className="dashboard-aggregate-kpi-value">{totals.visits.toLocaleString()}</span>
-                  </div>
+      <PageBody>
+      <DataViewState
+        loading={overviewQuery.isLoading}
+        error={overviewQuery.isError ? overviewQuery.error : null}
+        onRetry={() => overviewQuery.refetch()}
+        loadingFallback={
+          <section className="panel dashboard-aggregate section-gap" aria-hidden>
+            <Skeleton className="h-5 w-1/4" />
+            <Skeleton className="dashboard-aggregate-chart mt-4 h-52 w-full" />
+          </section>
+        }
+      >
+        {!hasWebsites ? (
+          <div className="panel empty-state-rich section-gap">
+            <h3>{t('noWebsitesDashboard')}</h3>
+            <p className="text-muted">{t('noWebsitesHint')}</p>
+            <ol className="empty-state-steps">
+              <li data-step="1">{t('emptyStep1')}</li>
+              <li data-step="2">{t('emptyStep2')}</li>
+              <li data-step="3">{t('emptyStep3')}</li>
+            </ol>
+            <Button asChild variant="primary" className="empty-state-cta">
+              <Link to="/websites">{t('addWebsiteCta')}</Link>
+            </Button>
+          </div>
+        ) : (
+          <>
+            <section className="panel dashboard-aggregate section-gap" aria-labelledby="dashboard-total-traffic">
+              <div className="dashboard-aggregate-head">
+                <div>
+                  <h2 id="dashboard-total-traffic" className="section-title">
+                    {t('dashboardTotalTraffic')}
+                  </h2>
+                  {totals ? (
+                    <div className="analytics-hero-stats dashboard-aggregate-kpis">
+                      <StatCard label={t('pageviews')} value={formatNumber(totals.pageviews)} size="secondary" />
+                      <StatCard label={t('visitors')} value={formatNumber(totals.visitors)} size="secondary" />
+                      <StatCard label={t('visits')} value={formatNumber(totals.visits)} size="secondary" />
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
-          </div>
+              </div>
 
-          <div className="dashboard-aggregate-body">
-            <div className="dashboard-aggregate-chart">
-              {aggregateChart.length > 0 ? (
-                <>
-                  <div className="dashboard-aggregate-chart-plot">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart
-                        data={aggregateChart}
-                        margin={{ top: 8, right: 8, left: 0, bottom: 4 }}
-                        className="dashboard-aggregate-area-chart"
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
-                        <XAxis
-                          dataKey="x"
-                          tick={{ fontSize: 11, fill: chartColors.muted }}
-                          stroke={chartColors.border}
-                          interval="preserveStartEnd"
-                          tickLine={false}
-                          axisLine={false}
-                        />
-                        <YAxis
-                          tick={{ fontSize: 11, fill: chartColors.muted }}
-                          stroke={chartColors.border}
-                          allowDecimals={false}
-                          width={48}
-                          tickLine={false}
-                          axisLine={false}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            background: chartColors.panel,
-                            border: `1px solid ${chartColors.border}`,
-                            borderRadius: 8,
-                            fontSize: 12,
-                            color: chartColors.text,
+              <div className="dashboard-aggregate-body">
+                <div className="dashboard-aggregate-chart">
+                  {aggregateChart.length > 0 ? (
+                    <>
+                      <div className="dashboard-aggregate-chart-plot">
+                        <AnalyticsChart
+                          Chart={AreaChart}
+                          data={aggregateChart}
+                          margin={{ top: 8, right: 8, left: 0, bottom: 4 }}
+                          responsive={{ width: '100%', height: '100%' }}
+                          xAxis={{
+                            dataKey: 'x',
+                            interval: 'preserveStartEnd',
+                            tickLine: false,
+                            axisLine: false,
                           }}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="pageviews"
-                          name={t('pageviews')}
-                          hide={!visibleMetrics.pageviews}
-                          stroke={metricColors.pageviews}
-                          strokeWidth={2}
-                          fill={metricColors.pageviews}
-                          fillOpacity={0.14}
-                          dot={false}
-                          activeDot={{ r: 4, strokeWidth: 0 }}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="visitors"
-                          name={t('visitors')}
-                          hide={!visibleMetrics.visitors}
-                          stroke={metricColors.visitors}
-                          strokeWidth={2}
-                          fill={metricColors.visitors}
-                          fillOpacity={0.14}
-                          dot={false}
-                          activeDot={{ r: 4, strokeWidth: 0 }}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="visits"
-                          name={t('visits')}
-                          hide={!visibleMetrics.visits}
-                          stroke={metricColors.visits}
-                          strokeWidth={2}
-                          fill={metricColors.visits}
-                          fillOpacity={0.14}
-                          dot={false}
-                          activeDot={{ r: 4, strokeWidth: 0 }}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="dashboard-aggregate-legend" role="group" aria-label={t('dashboardTotalTraffic')}>
-                    {AGGREGATE_METRICS.map((key) => (
-                      <button
-                        key={key}
-                        type="button"
-                        className={`dashboard-aggregate-legend-item${visibleMetrics[key] ? '' : ' is-hidden'}`}
-                        aria-pressed={visibleMetrics[key]}
-                        onClick={() => toggleMetric(key)}
-                      >
-                        <span
-                          className={`dashboard-aggregate-legend-swatch dashboard-aggregate-legend-swatch--${key}`}
-                          aria-hidden
-                        />
-                        <span className="dashboard-aggregate-legend-label">{t(key)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <p className="text-muted dashboard-site-card-empty">{t('noDataInPeriod')}</p>
-              )}
-            </div>
-
-            <DashboardSiteRanking ranking={ranking} siteCount={siteCount} />
-          </div>
-        </section>
-      ) : null}
-
-      {!overviewQuery.isLoading && hasWebsites ? (
-        <>
-          {cardsTruncated ? (
-            <div className="dashboard-sites-section-head">
-              <p className="text-muted dashboard-sites-truncated">
-                {t('dashboardSitesTruncated')
-                  .replace('{shown}', String(sites.length))
-                  .replace('{total}', String(siteCount))}
-                {' '}
-                <Link to="/websites">{t('dashboardViewAllSites').replace('{count}', String(siteCount))}</Link>
-              </p>
-            </div>
-          ) : null}
-          <div className="dashboard-site-list section-gap">
-            {sites.map((w) => {
-              const chartData = w.series.map((p) => ({
-                x: formatChartTimeLabel(p.x, hourly),
-                y: p.y,
-              }));
-              return (
-                <Link key={w.id} to={`/websites/${w.id}`} className="panel dashboard-site-card">
-                  <span className="site-card-arrow" aria-hidden>
-                    →
-                  </span>
-                  <div className="dashboard-site-card-head">
-                    <div className="dashboard-site-card-identity">
-                      <WebsiteNameLabel name={w.name} domain={w.domain} className="site-card-name" />
-                      {w.domain ? <span className="site-card-domain">{w.domain}</span> : null}
-                    </div>
-                    <div className="dashboard-site-row-kpis">
-                      <div className="dashboard-site-kpi dashboard-site-kpi-primary">
-                        <span className="dashboard-site-kpi-label">{t('pageviews')}</span>
-                        <span className="dashboard-site-kpi-value is-primary">
-                          {w.pageviews.toLocaleString()}
-                        </span>
+                          yAxis={{ tickLine: false, axisLine: false, width: 48 }}
+                        >
+                          <Area
+                            type="monotone"
+                            dataKey="pageviews"
+                            name={t('pageviews')}
+                            hide={!visibleMetrics.pageviews}
+                            stroke={metricColors.pageviews}
+                            strokeWidth={2}
+                            fill={metricColors.pageviews}
+                            fillOpacity={0.14}
+                            dot={false}
+                            activeDot={{ r: 4, strokeWidth: 0 }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="visitors"
+                            name={t('visitors')}
+                            hide={!visibleMetrics.visitors}
+                            stroke={metricColors.visitors}
+                            strokeWidth={2}
+                            fill={metricColors.visitors}
+                            fillOpacity={0.14}
+                            dot={false}
+                            activeDot={{ r: 4, strokeWidth: 0 }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="visits"
+                            name={t('visits')}
+                            hide={!visibleMetrics.visits}
+                            stroke={metricColors.visits}
+                            strokeWidth={2}
+                            fill={metricColors.visits}
+                            fillOpacity={0.14}
+                            dot={false}
+                            activeDot={{ r: 4, strokeWidth: 0 }}
+                          />
+                        </AnalyticsChart>
                       </div>
-                      <div className="dashboard-site-kpi">
-                        <span className="dashboard-site-kpi-label">{t('visitors')}</span>
-                        <span className="dashboard-site-kpi-value">{w.visitors.toLocaleString()}</span>
+                      <div className="dashboard-aggregate-legend" role="group" aria-label={t('dashboardTotalTraffic')}>
+                        {AGGREGATE_METRICS.map((key) => (
+                          <button
+                            key={key}
+                            type="button"
+                            className={`dashboard-aggregate-legend-item${visibleMetrics[key] ? '' : ' is-hidden'}`}
+                            aria-pressed={visibleMetrics[key]}
+                            onClick={() => toggleMetric(key)}
+                          >
+                            <span
+                              className={`dashboard-aggregate-legend-swatch dashboard-aggregate-legend-swatch--${key}`}
+                              aria-hidden
+                            />
+                            <span className="dashboard-aggregate-legend-label">{t(key)}</span>
+                          </button>
+                        ))}
                       </div>
-                      {w.visits != null ? (
-                        <div className="dashboard-site-kpi">
-                          <span className="dashboard-site-kpi-label">{t('visits')}</span>
-                          <span className="dashboard-site-kpi-value">{w.visits.toLocaleString()}</span>
+                    </>
+                  ) : (
+                    <p className="text-muted dashboard-site-card-empty">{t('noDataInPeriod')}</p>
+                  )}
+                </div>
+
+                <DashboardSiteRanking ranking={ranking} siteCount={siteCount} />
+              </div>
+            </section>
+
+            {cardsTruncated ? (
+              <div className="dashboard-sites-section-head">
+                <p className="text-muted dashboard-sites-truncated">
+                  {t('dashboardSitesTruncated')
+                    .replace('{shown}', String(sites.length))
+                    .replace('{total}', String(siteCount))}
+                  {' '}
+                  <Link to="/websites">{t('dashboardViewAllSites').replace('{count}', String(siteCount))}</Link>
+                </p>
+              </div>
+            ) : null}
+            <div className="dashboard-site-list section-gap">
+              {sites.map((w) => {
+                const chartData = w.series.map((p) => ({
+                  x: formatChartTimeLabel(p.x, hourly),
+                  y: p.y,
+                }));
+                return (
+                  <Link key={w.id} to={`/websites/${w.id}`} className="panel dashboard-site-card">
+                    <span className="site-card-arrow" aria-hidden>
+                      →
+                    </span>
+                    <div className="dashboard-site-card-head">
+                      <div className="dashboard-site-card-identity">
+                        <WebsiteNameLabel name={w.name} domain={w.domain} className="site-card-name" />
+                        {w.domain ? <span className="site-card-domain">{w.domain}</span> : null}
+                      </div>
+                      <div className="dashboard-site-row-kpis">
+                        <div className="dashboard-site-kpi dashboard-site-kpi-primary">
+                          <span className="dashboard-site-kpi-label">{t('pageviews')}</span>
+                          <span className="dashboard-site-kpi-value is-primary">
+                            {formatNumber(w.pageviews)}
+                          </span>
                         </div>
-                      ) : null}
+                        <div className="dashboard-site-kpi">
+                          <span className="dashboard-site-kpi-label">{t('visitors')}</span>
+                          <span className="dashboard-site-kpi-value">{formatNumber(w.visitors)}</span>
+                        </div>
+                        {w.visits != null ? (
+                          <div className="dashboard-site-kpi">
+                            <span className="dashboard-site-kpi-label">{t('visits')}</span>
+                            <span className="dashboard-site-kpi-value">{formatNumber(w.visits)}</span>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                  <div className="dashboard-site-card-chart" aria-hidden={chartData.length === 0}>
-                    {chartData.length > 0 ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                          <CartesianGrid
-                            strokeDasharray="3 3"
-                            stroke={chartColors.border}
-                            vertical={false}
-                          />
-                          <XAxis
-                            dataKey="x"
-                            tick={{ fontSize: 10, fill: chartColors.muted }}
-                            stroke={chartColors.border}
-                            interval="preserveStartEnd"
-                            tickLine={false}
-                            axisLine={false}
-                          />
-                          <YAxis hide allowDecimals={false} />
-                          <Tooltip
-                            contentStyle={{
-                              background: chartColors.panel,
-                              border: `1px solid ${chartColors.border}`,
-                              borderRadius: 8,
-                              fontSize: 12,
-                              color: chartColors.text,
-                            }}
-                          />
+                    <div className="dashboard-site-card-chart" aria-hidden={chartData.length === 0}>
+                      {chartData.length > 0 ? (
+                        <AnalyticsChart
+                          Chart={AreaChart}
+                          data={chartData}
+                          margin={{ top: 4, right: 4, left: 0, bottom: 0 }}
+                          responsive={{ width: '100%', height: '100%' }}
+                          xAxis={{
+                            dataKey: 'x',
+                            interval: 'preserveStartEnd',
+                            tickLine: false,
+                            axisLine: false,
+                          }}
+                          yAxis={{ hide: true, allowDecimals: false }}
+                          grid={{ vertical: false }}
+                        >
                           <Area
                             type="monotone"
                             dataKey="y"
@@ -371,37 +340,23 @@ export default function DashboardHome() {
                             dot={false}
                             activeDot={{ r: 3 }}
                           />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <p className="text-muted dashboard-site-card-empty">{t('noDataInPeriod')}</p>
-                    )}
-                  </div>
-                  <div className="dashboard-site-card-foot">
-                    <span className="dashboard-site-card-hint">{t('dashboardViewSite')}</span>
-                    <span className="dashboard-site-card-compare">{t('dashboardCompareHint')}</span>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </>
-      ) : null}
-
-      {!overviewQuery.isLoading && !hasWebsites ? (
-        <div className="panel empty-state-rich section-gap">
-          <h3>{t('noWebsitesDashboard')}</h3>
-          <p className="text-muted">{t('noWebsitesHint')}</p>
-          <ol className="empty-state-steps">
-            <li data-step="1">{t('emptyStep1')}</li>
-            <li data-step="2">{t('emptyStep2')}</li>
-            <li data-step="3">{t('emptyStep3')}</li>
-          </ol>
-          <Button asChild variant="primary" className="empty-state-cta">
-            <Link to="/websites">{t('addWebsiteCta')}</Link>
-          </Button>
-        </div>
-      ) : null}
-    </div>
+                        </AnalyticsChart>
+                      ) : (
+                        <p className="text-muted dashboard-site-card-empty">{t('noDataInPeriod')}</p>
+                      )}
+                    </div>
+                    <div className="dashboard-site-card-foot">
+                      <span className="dashboard-site-card-hint">{t('dashboardViewSite')}</span>
+                      <span className="dashboard-site-card-compare">{t('dashboardCompareHint')}</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </DataViewState>
+      </PageBody>
+    </Page>
   );
 }

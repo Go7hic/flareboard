@@ -1,16 +1,19 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { EmptyState } from '../components/EmptyState';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Bar, BarChart } from 'recharts';
+import { AnalyticsChart } from '../components/AnalyticsChart';
+import { DataViewState } from '../components/DataViewState';
+import { EventCatalogPicker } from '../components/EventCatalogPicker';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';
-import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
 import { api } from '../lib/api';
+import { formatNumber, formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 
 type StickinessResponse = {
   event: string | null;
@@ -60,10 +63,11 @@ export default function WebsiteStickinessPage() {
   );
 
   return (
-    <div className="page page-stickiness">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page className="page-stickiness">
+      <PageHeader
+        title={t('stickiness')}
+        lead={t('stickinessLead')}
+        actions={
           <WebsiteReportControls
             range={range}
             onRangeChange={setRange}
@@ -75,21 +79,19 @@ export default function WebsiteStickinessPage() {
         }
       />
 
+      <PageBody>
       <section className="panel section-gap">
-        <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('stickiness')}</h2>
-            <p className="text-muted">{t('stickinessLead')}</p>
-          </div>
-        </header>
         <div className="panel-form">
           <div className="field">
             <Label htmlFor="stickiness-event">{t('stickinessEvent')}</Label>
-            <Input
+            <EventCatalogPicker
+              mode="single"
+              websiteId={websiteId}
               id="stickiness-event"
               value={eventName}
-              onChange={(event) => setEventName(event.target.value)}
+              onChange={setEventName}
               placeholder={t('stickinessEventPlaceholder')}
+              allowEmpty
             />
           </div>
           <div className="field">
@@ -107,25 +109,30 @@ export default function WebsiteStickinessPage() {
         </div>
       </section>
 
-      <section className="panel section-gap">
-        {stickinessQuery.isLoading ? (
-          <div className="skeleton skeleton-block" aria-busy />
-        ) : !chartData.length ? (
-          <EmptyState title={t('noDataInPeriod')} description={t('stickinessNoDataHint')} />
-        ) : (
+      <section className="section-gap">
+        <DataViewState
+          loading={stickinessQuery.isLoading}
+          error={stickinessQuery.isError ? stickinessQuery.error : null}
+          onRetry={() => stickinessQuery.refetch()}
+          isEmpty={!stickinessQuery.isLoading && chartData.length === 0}
+          emptyTitle={t('noDataInPeriod')}
+          emptyDescription={t('stickinessNoDataHint')}
+        >
           <>
             <div className="detail-stats">
               <div>
                 <span className="stat-label">{t('stickinessActors')}</span>
-                <strong className="stat-value">{stickinessQuery.data?.totalActors.toLocaleString()}</strong>
+                <strong className="stat-value">{formatNumber(stickinessQuery.data?.totalActors)}</strong>
               </div>
               <div>
                 <span className="stat-label">{t('stickinessActorDays')}</span>
-                <strong className="stat-value">{stickinessQuery.data?.actorDays.toLocaleString()}</strong>
+                <strong className="stat-value">{formatNumber(stickinessQuery.data?.actorDays)}</strong>
               </div>
               <div>
                 <span className="stat-label">{t('stickinessAverageDays')}</span>
-                <strong className="stat-value">{stickinessQuery.data?.averageActiveDays.toFixed(2)}</strong>
+                <strong className="stat-value">
+                  {formatNumber(stickinessQuery.data?.averageActiveDays, { maximumFractionDigits: 2 })}
+                </strong>
               </div>
               <div>
                 <span className="stat-label">{t('event')}</span>
@@ -134,26 +141,9 @@ export default function WebsiteStickinessPage() {
             </div>
 
             <div className="chart-wrap chart-wrap-compact">
-              <ResponsiveContainer>
-                <BarChart data={chartData} margin={{ left: 8, right: 16 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-                  <YAxis tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-                  <Tooltip
-                    formatter={(value, name) =>
-                      name === 'percentage' ? [`${value}%`, t('percentage')] : [value, t('stickinessActors')]
-                    }
-                    contentStyle={{
-                      background: chartColors.panel,
-                      border: `1px solid ${chartColors.border}`,
-                      borderRadius: 8,
-                      fontSize: 13,
-                      color: chartColors.text,
-                    }}
-                  />
-                  <Bar dataKey="actors" fill={chartColors.accent} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <AnalyticsChart Chart={BarChart} data={chartData} margin={{ left: 8, right: 16 }} xAxis={{ dataKey: 'name' }}>
+                <Bar dataKey="actors" fill={chartColors.accent} radius={[4, 4, 0, 0]} />
+              </AnalyticsChart>
             </div>
 
             <div className="table-scroll">
@@ -170,17 +160,18 @@ export default function WebsiteStickinessPage() {
                   {(stickinessQuery.data?.distribution ?? []).map((row) => (
                     <tr key={row.activeDays}>
                       <td>{row.activeDays}</td>
-                      <td className="num">{row.actors.toLocaleString()}</td>
-                      <td className="num">{row.events.toLocaleString()}</td>
-                      <td className="num">{row.percentage.toFixed(1)}%</td>
+                      <td className="num">{formatNumber(row.actors)}</td>
+                      <td className="num">{formatNumber(row.events)}</td>
+                      <td className="num">{formatPercent(row.percentage, { digits: 1 })}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </>
-        )}
+        </DataViewState>
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

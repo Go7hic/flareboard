@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { PlanUpgradeBanner } from '../components/PlanUpgradeBanner';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { SegmentTabs } from '../components/SegmentTabs';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -36,7 +37,7 @@ const DEVICE_OPTIONS = [
 
 function heatColor(intensity: number): string {
   const alpha = Math.round(intensity * 0.85 * 100) / 100;
-  return `color-mix(in srgb, var(--accent) ${Math.round(alpha * 100)}%, transparent)`;
+  return `color-mix(in srgb, var(--chart-1) ${Math.round(alpha * 100)}%, transparent)`;
 }
 
 export default function HeatmapsPage() {
@@ -173,7 +174,9 @@ export default function HeatmapsPage() {
     ctx.clearRect(0, 0, displayW, displayH);
 
     const accent =
-      getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0d9488';
+      getComputedStyle(document.documentElement).getPropertyValue('--chart-1').trim() ||
+      getComputedStyle(document.documentElement).getPropertyValue('--geist-blue-700').trim() ||
+      '#006bff';
 
     for (const cell of overlay.cells) {
       const intensity = cell.count / overlay.max;
@@ -194,17 +197,17 @@ export default function HeatmapsPage() {
   }, [overlay, kind, stage]);
 
   return (
-    <div className="page">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page>
+      <PageHeader
+        title={t('heatmaps')}
+        lead={t('heatmapsLead')}
+        actions={
           <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
         }
       />
 
+      <PageBody>
       <Panel>
-        <p className="section-lead">{t('heatmapsLead')}</p>
-
         {!heatmapsAllowed && billingQuery.data ? (
           <PlanUpgradeBanner message={t('heatmapsRequiresUpgrade')} />
         ) : null}
@@ -355,6 +358,7 @@ export default function HeatmapsPage() {
         )}
         </fieldset>
       </Panel>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

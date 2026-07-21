@@ -2,9 +2,11 @@ import { useQuery } from '@tanstack/react-query';
 import { Fragment, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ExternalLink } from 'lucide-react';
+import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { api } from '../lib/api';
+import { formatDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
 
 interface SessionDetail {
@@ -126,9 +128,10 @@ export default function SessionDetailPage() {
       : '—';
 
   return (
-    <div className="page page-session-detail">
-      <PageHeader title={t('session')} subtitle={sessionId?.slice(0, 12)} />
+    <Page className="page-session-detail">
+      <PageHeader title={t('session')} lead={sessionId?.slice(0, 12)} />
 
+      <PageBody>
       {s ? (
         <section className="panel panel-accent-rail section-gap">
           <h2 className="section-title">{t('session')}</h2>
@@ -142,7 +145,7 @@ export default function SessionDetailPage() {
             <dt>{t('distinctId')}</dt>
             <dd>{s.distinctId ?? '—'}</dd>
             <dt>{t('started')}</dt>
-            <dd>{new Date(s.createdAt).toLocaleString()}</dd>
+            <dd>{formatDateTime(s.createdAt)}</dd>
           </dl>
           {websiteId && sessionId ? (
             <Button asChild variant="secondary" className="mt-4">
@@ -169,7 +172,7 @@ export default function SessionDetailPage() {
                     {formatContextProperties(item.properties) ? (
                       <span>{formatContextProperties(item.properties)}</span>
                     ) : null}
-                    <span>{new Date(item.createdAt).toLocaleString()}</span>
+                    <span>{formatDateTime(item.createdAt)}</span>
                   </div>
                 </div>
                 {sourcePath(websiteId, item.source) ? (
@@ -199,7 +202,7 @@ export default function SessionDetailPage() {
                   {a.urlPath}
                 </div>
                 <div className="activity-timeline-time">
-                  {new Date(a.createdAt).toLocaleString()}
+                  {formatDateTime(a.createdAt)}
                 </div>
               </li>
             ))}
@@ -222,6 +225,7 @@ export default function SessionDetailPage() {
           </dl>
         </section>
       ) : null}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

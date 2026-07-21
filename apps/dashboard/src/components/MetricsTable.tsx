@@ -1,7 +1,34 @@
+import { useMemo, useState } from 'react';
 import type { MetricRow } from '../lib/api';
+import { formatDurationSeconds, formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { Skeleton } from './ui/skeleton';
 import { EmptyState } from './EmptyState';
+
+type SortColumn = 'name' | 'views' | 'visitors' | 'time';
+type SortDirection = 'asc' | 'desc';
+
+function sortAriaValue(
+  column: SortColumn,
+  active: SortColumn | null,
+  direction: SortDirection,
+): 'none' | 'ascending' | 'descending' {
+  if (active !== column) return 'none';
+  return direction === 'asc' ? 'ascending' : 'descending';
+}
+
+function compareRows(a: MetricRow, b: MetricRow, column: SortColumn): number {
+  switch (column) {
+    case 'name':
+      return a.x.localeCompare(b.x, undefined, { sensitivity: 'base' });
+    case 'views':
+      return a.y - b.y;
+    case 'visitors':
+      return (a.visitors ?? 0) - (b.visitors ?? 0);
+    case 'time':
+      return (a.avgTime ?? -1) - (b.avgTime ?? -1);
+  }
+}
 
 export function MetricsTable({
   title,
@@ -12,6 +39,7 @@ export function MetricsTable({
   hideTitle = false,
   maxRows,
   primaryMetric = 'views',
+  sortable = true,
 }: {
   title: string;
   rows: MetricRow[];
@@ -21,11 +49,47 @@ export function MetricsTable({
   hideTitle?: boolean;
   maxRows?: number;
   primaryMetric?: 'views' | 'visitors';
+  sortable?: boolean;
 }) {
-  const displayRows = maxRows != null ? rows.slice(0, maxRows) : rows;
+  const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection((direction) => (direction === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortColumn(column);
+    setSortDirection('desc');
+  };
+
+  const sortedRows = useMemo(() => {
+    if (!sortable || sortColumn == null) return rows;
+    const next = [...rows];
+    next.sort((a, b) => {
+      const cmp = compareRows(a, b, sortColumn);
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+    return next;
+  }, [rows, sortable, sortColumn, sortDirection]);
+
+  const displayRows = maxRows != null ? sortedRows.slice(0, maxRows) : sortedRows;
   const rowValue = (row: MetricRow) =>
     primaryMetric === 'visitors' ? (row.visitors ?? row.y) : row.y;
   const maxY = displayRows.length ? Math.max(...displayRows.map(rowValue), 1) : 1;
+
+  const renderHeader = (label: string, column: SortColumn, className?: string) => {
+    if (!sortable) {
+      return <th className={className}>{label}</th>;
+    }
+    return (
+      <th className={className} aria-sort={sortAriaValue(column, sortColumn, sortDirection)}>
+        <button type="button" className="metrics-table-sort-btn" onClick={() => handleSort(column)}>
+          {label}
+        </button>
+      </th>
+    );
+  };
 
   const body = (
     <>
@@ -39,47 +103,49 @@ export function MetricsTable({
         <table className="data-table">
           <thead>
             <tr>
-              <th>{t('metricName')}</th>
-              <th className="num">
-                {showPageStats
-                  ? t('pagesSort_views')
-                  : primaryMetric === 'visitors'
-                    ? t('visitors')
-                    : t('views')}
-              </th>
+              {renderHeader(t('metricName'), 'name')}
               {showPageStats ? (
                 <>
-                  <th className="num">{t('pagesSort_visitors')}</th>
-                  <th className="num">{t('pagesSort_time')}</th>
+                  {renderHeader(t('pagesSort_views'), 'views', 'num')}
+                  {renderHeader(t('pagesSort_visitors'), 'visitors', 'num')}
+                  {renderHeader(t('pagesSort_time'), 'time', 'num')}
                 </>
-              ) : null}
+              ) : (
+                renderHeader(
+                  primaryMetric === 'visitors' ? t('visitors') : t('views'),
+                  primaryMetric === 'visitors' ? 'visitors' : 'views',
+                  'num',
+                )
+              )}
             </tr>
           </thead>
           <tbody>
             {displayRows.map((row) => {
               const value = rowValue(row);
               return (
-              <tr key={`${title}-${row.x}`}>
-                <td>
-                  <div>{row.x}</div>
-                  <div className="metrics-table-bar" aria-hidden>
-                    <div className="metrics-table-bar-fill">
-                      <div
-                        className="metrics-table-bar-inner"
-                        style={{ width: `${Math.round((value / maxY) * 100)}%` }}
-                      />
+                <tr key={`${title}-${row.x}`}>
+                  <td>
+                    <div>{row.x}</div>
+                    <div className="metrics-table-bar" aria-hidden>
+                      <div className="metrics-table-bar-fill">
+                        <div
+                          className="metrics-table-bar-inner"
+                          style={{ width: `${Math.round((value / maxY) * 100)}%` }}
+                        />
+                      </div>
                     </div>
-                  </div>
-                </td>
-                <td className="num">{value.toLocaleString()}</td>
-                {showPageStats ? (
-                  <>
-                    <td className="num">{(row.visitors ?? 0).toLocaleString()}</td>
-                    <td className="num">{row.avgTime != null ? `${row.avgTime}s` : '—'}</td>
-                  </>
-                ) : null}
-              </tr>
-            );
+                  </td>
+                  {showPageStats ? (
+                    <>
+                      <td className="num">{formatNumber(row.y)}</td>
+                      <td className="num">{formatNumber(row.visitors ?? 0)}</td>
+                      <td className="num">{formatDurationSeconds(row.avgTime)}</td>
+                    </>
+                  ) : (
+                    <td className="num">{formatNumber(value)}</td>
+                  )}
+                </tr>
+              );
             })}
           </tbody>
         </table>

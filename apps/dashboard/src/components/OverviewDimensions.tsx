@@ -104,7 +104,12 @@ export function OverviewDimensions({
   }, [searchParams]);
 
   return (
-    <section className="overview-dimensions section-gap-lg" aria-label={t('breakdownMetrics')}>
+    <section className="overview-dimensions section-gap" aria-labelledby="overview-dimensions-heading">
+      <header className="overview-dimensions-head">
+        <h2 id="overview-dimensions-heading" className="section-title">
+          {t('breakdownMetrics')}
+        </h2>
+      </header>
       <div className="overview-dimensions-grid">
         {OVERVIEW_CARDS.map((card) => (
           <OverviewDimensionCardSection
@@ -168,6 +173,8 @@ function OverviewDimensionCardSection({
       onTabChange={onTabChange}
       rows={rows}
       loading={metricsQuery.isLoading}
+      error={metricsQuery.isError ? metricsQuery.error : null}
+      onRetry={() => metricsQuery.refetch()}
       primaryMetric={card.primaryMetric}
       onMoreClick={() => onMoreClick(activeTab)}
     />

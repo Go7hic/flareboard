@@ -1,24 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Line, LineChart } from 'recharts';
+import { AnalyticsChart } from '../components/AnalyticsChart';
+import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
 import { StatChangeDelta } from '../components/StatChangeDelta';
 import { MetricsTable } from '../components/MetricsTable';
 import { OverviewDimensions } from '../components/OverviewDimensions';
 import { OverviewMapHeatmapPanel } from '../components/OverviewMapHeatmapPanel';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { WebsiteStatsControls } from '../components/WebsiteStatsControls';
-import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
-import { Skeleton } from '../components/ui/skeleton';
+import { StatCard, StatCardSkeleton, type StatCardSize } from '../components/ui/stat-card';
 import {
   api,
   type MetricRow,
@@ -30,40 +25,30 @@ import {
   mergePageviewsVisitors,
   type MetricsSeries,
 } from '../lib/chartTimeseries';
+import { computeCompareRange, type CompareMode } from '../lib/compare-utils';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsiteExport } from '../lib/useWebsiteExport';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 import { useChartColors } from '../lib/useChartColors';
 
-function cssVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
-function StatCard({
+function OverviewKpi({
   label,
   stat,
-  primary,
+  size = 'default',
 }: {
   label: string;
   stat?: { value: number; change?: number };
-  primary?: boolean;
+  size?: StatCardSize;
 }) {
   if (!stat) return null;
   return (
-    <div className={`stat-card${primary ? ' stat-card-primary' : ''}`}>
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{stat.value.toLocaleString()}</div>
-      {stat.change !== undefined ? <StatChangeDelta change={stat.change} /> : null}
-    </div>
-  );
-}
-
-function StatSkeleton() {
-  return (
-    <div className="stat-card stat-card-skeleton" aria-hidden>
-      <Skeleton className="h-3 w-2/3" />
-      <Skeleton className="mt-[0.65rem] h-7 w-full" />
-    </div>
+    <StatCard
+      size={size}
+      label={label}
+      value={formatNumber(stat.value)}
+      delta={stat.change !== undefined ? <StatChangeDelta change={stat.change} /> : undefined}
+    />
   );
 }
 
@@ -73,6 +58,7 @@ export default function WebsiteStatsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [segmentId, setSegmentId] = useState('');
   const [compareEnabled, setCompareEnabled] = useState(false);
+  const [compareMode, setCompareMode] = useState<CompareMode>('previous');
   const segmentFromUrl = searchParams.get('segment') ?? '';
   const activeSegmentId = segmentFromUrl || segmentId;
   const cohortId = searchParams.get('cohort') ?? '';
@@ -81,12 +67,28 @@ export default function WebsiteStatsPage() {
   const segmentQs = activeSegmentId ? `&segmentId=${encodeURIComponent(activeSegmentId)}` : '';
   const cohortQs = cohortId ? `&cohort=${encodeURIComponent(cohortId)}` : '';
   const qs = `${rangeQs}${segmentQs}${cohortQs}`;
+  const compareRange = useMemo(
+    () => computeCompareRange(range.startAt, range.endAt, compareMode),
+    [range.startAt, range.endAt, compareMode],
+  );
+  const compareQs = `${qs}&compareStartAt=${compareRange.compareStartAt}&compareEndAt=${compareRange.compareEndAt}`;
+  const compareModeLabel =
+    compareMode === 'year' ? t('compareModeYear') : t('compareModePrevious');
+  const comparePageTo = useMemo(() => {
+    if (!websiteId) return '';
+    const params = new URLSearchParams();
+    if (activeSegmentId) params.set('segment', activeSegmentId);
+    if (cohortId) params.set('cohort', cohortId);
+    params.set('compare', compareMode);
+    const q = params.toString();
+    return `/websites/${websiteId}/compare${q ? `?${q}` : ''}`;
+  }, [websiteId, activeSegmentId, cohortId, compareMode]);
   const hourly = isHourlyChartRange(range.startAt, range.endAt);
 
   const metricColors = useMemo(
     () => ({
-      pageviews: chartColors.accent,
-      visitors: cssVar('--cf-orange') || chartColors.muted,
+      pageviews: chartColors.series.pageviews,
+      visitors: chartColors.series.visitors,
     }),
     [chartColors],
   );
@@ -125,13 +127,13 @@ export default function WebsiteStatsPage() {
   });
 
   const compareQuery = useQuery({
-    queryKey: ['stats-compare', websiteId, activeSegmentId, cohortId, range, compareEnabled],
+    queryKey: ['stats-compare', websiteId, activeSegmentId, cohortId, range, compareMode, compareEnabled],
     enabled: Boolean(websiteId) && compareEnabled,
     queryFn: () =>
       api<{
         primary: { stats: WebsiteStats };
         compare: { stats: WebsiteStats };
-      }>(`/api/websites/${websiteId}/stats/compare?${qs}`),
+      }>(`/api/websites/${websiteId}/stats/compare?${compareQs}`),
   });
 
   const eventsQuery = useQuery({
@@ -157,8 +159,28 @@ export default function WebsiteStatsPage() {
     () => mergePageviewsVisitors(overviewQuery.data?.timeseries, hourly, timezone),
     [overviewQuery.data?.timeseries, hourly, timezone],
   );
-  const chartLoading = overviewQuery.isLoading;
+  const chartLoading = overviewQuery.isLoading && !overviewQuery.data;
   const statsLoading = overviewQuery.isLoading && !stats;
+  const overviewInitialLoading = overviewQuery.isLoading && !overviewQuery.data;
+
+  const overviewLoadingFallback = (
+    <>
+      <section className="page-stats-kpis section-gap" aria-hidden>
+        <div className="analytics-hero-stats">
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+        </div>
+      </section>
+      <section className="panel page-stats-chart section-gap" aria-hidden>
+        <div className="chart-wrap chart-wrap-hero chart-skeleton" aria-busy>
+          <div className="skeleton skeleton-block" />
+        </div>
+      </section>
+    </>
+  );
 
   function clearCohortFilter() {
     const next = new URLSearchParams(searchParams);
@@ -185,10 +207,11 @@ export default function WebsiteStatsPage() {
   }
 
   return (
-    <div className="page page-stats">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page className="page-stats">
+      <PageHeader
+        title={t('navOverview')}
+        lead={t('overviewPageLead')}
+        actions={
           websiteId ? (
             <WebsiteStatsControls
               websiteId={websiteId}
@@ -201,12 +224,15 @@ export default function WebsiteStatsPage() {
               segments={segmentsQuery.data ?? []}
               compareEnabled={compareEnabled}
               onCompareChange={setCompareEnabled}
+              compareMode={compareMode}
+              onCompareModeChange={setCompareMode}
               timezone={timezone}
             />
           ) : null
         }
       />
 
+      <PageBody>
       {activeSegmentId ? (
         <div className="cohort-filter-banner section-gap">
           <span>
@@ -232,39 +258,63 @@ export default function WebsiteStatsPage() {
         </div>
       ) : null}
 
-      <section className="analytics-hero panel section-gap" aria-labelledby="analytics-overview">
-        <h2 id="analytics-overview" className="visually-hidden">
-          {t('trafficOverTime')}
-        </h2>
-        <div className="analytics-hero-stats">
-          {statsLoading ? (
-            <>
-              <StatSkeleton />
-              <StatSkeleton />
-              <StatSkeleton />
-              <StatSkeleton />
-              <StatSkeleton />
-            </>
-          ) : stats ? (
-            <>
-              <StatCard label={t('pageviews')} stat={stats.pageviews} primary />
-              <StatCard label={t('visitors')} stat={stats.visitors} />
-              <StatCard label={t('visits')} stat={stats.visits} />
-              <StatCard label={t('bounces')} stat={stats.bounces} />
-              <StatCard label={t('totalTime')} stat={stats.totaltime} />
-            </>
-          ) : null}
-        </div>
+      <DataViewState
+        loading={overviewInitialLoading}
+        error={overviewQuery.isError ? overviewQuery.error : null}
+        onRetry={() => overviewQuery.refetch()}
+        loadingFallback={overviewLoadingFallback}
+      >
+        <section className="page-stats-kpis section-gap" aria-labelledby="analytics-overview">
+          <h2 id="analytics-overview" className="visually-hidden">
+            {t('trafficOverTime')}
+          </h2>
 
-        {compareEnabled && compareQuery.data ? (
-          <div className="analytics-compare-strip">
-            <StatCard label={t('comparePageviews')} stat={compareQuery.data.compare.stats.pageviews} />
-            <StatCard label={t('compareVisitors')} stat={compareQuery.data.compare.stats.visitors} />
+          <div className="analytics-hero-stats">
+            {statsLoading ? (
+              <>
+                <StatCardSkeleton />
+                <StatCardSkeleton />
+                <StatCardSkeleton />
+                <StatCardSkeleton />
+                <StatCardSkeleton />
+              </>
+            ) : stats ? (
+              <>
+                <OverviewKpi label={t('pageviews')} stat={stats.pageviews} />
+                <OverviewKpi label={t('visitors')} stat={stats.visitors} />
+                <OverviewKpi label={t('visits')} stat={stats.visits} />
+                <OverviewKpi label={t('bounces')} stat={stats.bounces} />
+                <OverviewKpi label={t('totalTime')} stat={stats.totaltime} />
+              </>
+            ) : null}
           </div>
-        ) : null}
 
-        <div className="analytics-hero-chart">
-          <h3 className="section-title">{t('trafficOverTime')}</h3>
+          {compareEnabled && compareQuery.data ? (
+            <div className="analytics-compare-strip">
+              <div className="analytics-compare-strip-head">
+                <span className="text-muted">{compareModeLabel}</span>
+                <Link className="shell-link analytics-compare-deep-link" to={comparePageTo}>
+                  {t('overviewCompareOpenFull')}
+                </Link>
+              </div>
+              <OverviewKpi
+                label={t('comparePageviews')}
+                stat={compareQuery.data.compare.stats.pageviews}
+                size="secondary"
+              />
+              <OverviewKpi
+                label={t('compareVisitors')}
+                stat={compareQuery.data.compare.stats.visitors}
+                size="secondary"
+              />
+            </div>
+          ) : null}
+        </section>
+
+        <section className="panel page-stats-chart section-gap" aria-labelledby="traffic-chart-title">
+          <h2 id="traffic-chart-title" className="section-title">
+            {t('trafficOverTime')}
+          </h2>
           {chartLoading ? (
             <div className="chart-wrap chart-wrap-hero chart-skeleton" aria-busy>
               <div className="skeleton skeleton-block" />
@@ -272,48 +322,32 @@ export default function WebsiteStatsPage() {
           ) : chartData.length > 0 ? (
             <>
               <div className="chart-wrap chart-wrap-hero">
-                <ResponsiveContainer>
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
-                    <XAxis
-                      dataKey="x"
-                      tick={{ fontSize: 11, fill: chartColors.muted }}
-                      stroke={chartColors.border}
-                      interval={hourly ? 'preserveStartEnd' : undefined}
-                      minTickGap={hourly ? 24 : 8}
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      tick={{ fontSize: 11, fill: chartColors.muted }}
-                      stroke={chartColors.border}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        background: chartColors.panel,
-                        border: `1px solid ${chartColors.border}`,
-                        borderRadius: 8,
-                        fontSize: 13,
-                        color: chartColors.text,
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="pageviews"
-                      name={t('pageviews')}
-                      stroke={metricColors.pageviews}
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="visitors"
-                      name={t('visitors')}
-                      stroke={metricColors.visitors}
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                <AnalyticsChart
+                  Chart={LineChart}
+                  data={chartData}
+                  xAxis={{
+                    dataKey: 'x',
+                    interval: hourly ? 'preserveStartEnd' : undefined,
+                    minTickGap: hourly ? 24 : 8,
+                  }}
+                >
+                  <Line
+                    type="monotone"
+                    dataKey="pageviews"
+                    name={t('pageviews')}
+                    stroke={metricColors.pageviews}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="visitors"
+                    name={t('visitors')}
+                    stroke={metricColors.visitors}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </AnalyticsChart>
               </div>
               <div className="dashboard-aggregate-legend analytics-chart-legend" aria-hidden>
                 <span className="dashboard-aggregate-legend-item">
@@ -329,8 +363,8 @@ export default function WebsiteStatsPage() {
           ) : (
             <EmptyState title={t('chartNoData')} description={t('noDataInPeriodHint')} />
           )}
-        </div>
-      </section>
+        </section>
+      </DataViewState>
 
       {websiteId ? (
         <OverviewDimensions
@@ -341,18 +375,25 @@ export default function WebsiteStatsPage() {
         />
       ) : null}
 
-      {eventsQuery.isLoading || (eventsQuery.data?.length ?? 0) > 0 ? (
-        <section className="panel section-gap custom-events-panel">
-          <MetricsTable
-            embedded
-            title={t('customEvents')}
-            rows={eventsQuery.data ?? []}
-            loading={eventsQuery.isLoading}
-          />
-        </section>
-      ) : null}
+      {eventsQuery.isLoading ||
+      (eventsQuery.data?.length ?? 0) > 0 ||
+      websiteId ? (
+        <div className="overview-secondary">
+          {eventsQuery.isLoading || (eventsQuery.data?.length ?? 0) > 0 ? (
+            <section className="panel custom-events-panel">
+              <MetricsTable
+                embedded
+                title={t('customEvents')}
+                rows={eventsQuery.data ?? []}
+                loading={eventsQuery.isLoading}
+              />
+            </section>
+          ) : null}
 
-      {websiteId ? <OverviewMapHeatmapPanel websiteId={websiteId} qs={qs} /> : null}
-    </div>
+          {websiteId ? <OverviewMapHeatmapPanel websiteId={websiteId} qs={qs} /> : null}
+        </div>
+      ) : null}
+      </PageBody>
+    </Page>
   );
 }

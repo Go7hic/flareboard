@@ -12,6 +12,7 @@ import {
   type JourneyNodeState,
   type JourneyPathRow,
 } from '../lib/journey-utils';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 
 type JourneyFlowColumnsProps = {
@@ -37,7 +38,7 @@ function ColumnHeader({ column, stepNumber }: { column: JourneyColumn; stepNumbe
           </span>
         ) : null}
         <span className="journey-column-visitors">
-          {column.visitorCount.toLocaleString()} {t('journeyVisitors')}
+          {formatNumber(column.visitorCount)} {t('journeyVisitors')}
         </span>
         {showDropoff ? <span className="journey-column-dropoff">{dropoffLabel}</span> : null}
       </div>
@@ -85,7 +86,7 @@ function FlowNode({
         <FileText size={14} strokeWidth={2} />
       </span>
       <span className="journey-flow-node-name reports-path-mono">{name}</span>
-      <span className="journey-flow-node-count">{count.toLocaleString()}</span>
+      <span className="journey-flow-node-count">{formatNumber(count)}</span>
     </button>
   );
 }

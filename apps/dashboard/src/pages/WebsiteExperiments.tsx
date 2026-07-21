@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ExternalLink, FlaskConical } from 'lucide-react';
-import { EmptyState } from '../components/EmptyState';
+import { DataViewState } from '../components/DataViewState';
 import {
   MasterDetailLayout,
   MasterDetailListItem,
@@ -10,25 +10,21 @@ import {
   useMasterDetailSelection,
 } from '../components/master-detail';
 import { ResourceEditDialog } from '../components/ResourceEditDialog';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { StatCard } from '../components/ui/stat-card';
 import { api, type Experiment, type ExperimentApplyResult, type ExperimentResults, type FeatureFlag } from '../lib/api';
+import { formatDateTime, formatNumber, formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 
-function formatTime(value: number | null | undefined) {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+function formatLift(lift: number | null) {
+  if (lift == null) return '-';
+  return formatPercent(lift, { digits: 2, signed: true });
 }
 
 function ExperimentEditDialog({
@@ -184,20 +180,20 @@ function ExperimentResultPanel({
       queryClient.invalidateQueries({ queryKey: ['feature-flags', websiteId] });
     },
   });
-  const formatLift = (lift: number | null) => {
-    if (lift == null) return '-';
-    const prefix = lift > 0 ? '+' : '';
-    return `${prefix}${lift.toFixed(2)}%`;
-  };
-  const formatPercent = (value: number | null) => (value == null ? '-' : `${value.toFixed(2)}%`);
+  const formatLiftValue = formatLift;
   const decisionClass =
     summary?.decision === 'ship_variant' || summary?.decision === 'keep_control'
-      ? 'stat-value text-success'
+      ? 'text-success'
       : summary?.decision === 'fix_setup'
-        ? 'stat-value text-danger'
-        : 'stat-value';
+        ? 'text-danger'
+        : undefined;
 
   return (
+    <DataViewState
+      loading={resultsQuery.isLoading && !resultsQuery.data}
+      error={resultsQuery.isError ? resultsQuery.error : null}
+      onRetry={() => resultsQuery.refetch()}
+    >
     <div className="experiment-results">
       {summary?.truncated ? (
         <p className="experiment-results-truncated" role="status">
@@ -210,15 +206,25 @@ function ExperimentResultPanel({
       {summary ? (
         <>
           <div className="experiment-summary-grid">
-            <div className="stat-card">
-              <span className="stat-label">{t('experimentDecision')}</span>
-              <strong className={decisionClass}>{t(`experimentDecision_${summary.decision}`)}</strong>
-              <span className="text-muted">{t(`experimentRecommendation_${summary.recommendation}`)}</span>
-              <span className="text-muted">
-                {t(`experimentConclusion_${summary.conclusion.status}`)
-                  .replace('{variant}', summary.conclusion.variant ?? '-')
-                  .replace('{confidence}', formatPercent(summary.conclusion.confidence))}
-              </span>
+            <div className="experiment-summary-decision">
+              <StatCard
+                label={t('experimentDecision')}
+                value={
+                  <span className={decisionClass}>
+                    {t(`experimentDecision_${summary.decision}`)}
+                  </span>
+                }
+                hint={
+                  <>
+                    <span className="text-muted">{t(`experimentRecommendation_${summary.recommendation}`)}</span>
+                    <span className="text-muted">
+                      {t(`experimentConclusion_${summary.conclusion.status}`)
+                        .replace('{variant}', summary.conclusion.variant ?? '-')
+                        .replace('{confidence}', formatPercent(summary.conclusion.confidence, { digits: 2 }))}
+                    </span>
+                  </>
+                }
+              />
               {canEdit && summary.decision === 'ship_variant' && experiment.status !== 'completed' ? (
                 <div className="stat-card-actions">
                   <Button
@@ -236,50 +242,55 @@ function ExperimentResultPanel({
                 <span className="text-danger">{(applyMutation.error as Error).message}</span>
               ) : null}
             </div>
-          <div className="stat-card">
-            <span className="stat-label">{t('experimentLeader')}</span>
-            <strong className="stat-value">{summary.leaderVariant ?? '-'}</strong>
-            <span className="text-muted">
-              {summary.leaderConversionRate == null
-                ? '-'
-                : `${summary.leaderConversionRate.toFixed(2)}%`}
-              {summary.leaderLift == null ? '' : ` · ${formatLift(summary.leaderLift)}`}
-            </span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-label">{t('experimentOverallConversion')}</span>
-            <strong className="stat-value">{summary.conversionRate.toFixed(2)}%</strong>
-            <span className="text-muted">
-              {summary.totalConversions.toLocaleString()} / {summary.totalExposures.toLocaleString()}
-            </span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-label">{t('experimentSignificance')}</span>
-            <strong className={summary.significantVariant ? 'stat-value text-success' : 'stat-value'}>
-              {summary.significantVariant ?? '-'}
-            </strong>
-            <span className="text-muted">
-              {t('experimentMaxConfidence')}: {formatPercent(summary.maxConfidence)}
-            </span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-label">{t('experimentSampleStatus')}</span>
-            <strong className={summary.sampleReady ? 'stat-value text-success' : 'stat-value'}>
-              {summary.sampleReady ? t('experimentSampleReady') : t('experimentSampleCollecting')}
-            </strong>
-            <span className="text-muted">
-              {t('experimentSampleTarget')
-                .replace('{exposures}', summary.sampleSize.minimumExposuresPerVariant.toLocaleString())
-                .replace('{conversions}', summary.sampleSize.minimumConversions.toLocaleString())}
-            </span>
-            <span className="text-muted">
-              {summary.sampleSize.ready
-                ? t('experimentSampleEnough')
-                : t('experimentSampleRemaining')
-                    .replace('{exposures}', summary.sampleSize.remainingExposures.toLocaleString())
-                    .replace('{conversions}', summary.sampleSize.remainingConversions.toLocaleString())}
-            </span>
-          </div>
+            <StatCard
+              label={t('experimentLeader')}
+              value={summary.leaderVariant ?? '-'}
+              hint={
+                summary.leaderConversionRate == null
+                  ? '-'
+                  : `${formatPercent(summary.leaderConversionRate, { digits: 2 })}${
+                      summary.leaderLift == null ? '' : ` · ${formatLiftValue(summary.leaderLift)}`
+                    }`
+              }
+            />
+            <StatCard
+              label={t('experimentOverallConversion')}
+              value={formatPercent(summary.conversionRate, { digits: 2 })}
+              hint={`${formatNumber(summary.totalConversions)} / ${formatNumber(summary.totalExposures)}`}
+            />
+            <StatCard
+              label={t('experimentSignificance')}
+              value={
+                <span className={summary.significantVariant ? 'text-success' : undefined}>
+                  {summary.significantVariant ?? '-'}
+                </span>
+              }
+              hint={`${t('experimentMaxConfidence')}: ${formatPercent(summary.maxConfidence, { digits: 2 })}`}
+            />
+            <StatCard
+              label={t('experimentSampleStatus')}
+              value={
+                <span className={summary.sampleReady ? 'text-success' : undefined}>
+                  {summary.sampleReady ? t('experimentSampleReady') : t('experimentSampleCollecting')}
+                </span>
+              }
+              hint={
+                <>
+                  <span className="text-muted">
+                    {t('experimentSampleTarget')
+                      .replace('{exposures}', formatNumber(summary.sampleSize.minimumExposuresPerVariant))
+                      .replace('{conversions}', formatNumber(summary.sampleSize.minimumConversions))}
+                  </span>
+                  <span className="text-muted">
+                    {summary.sampleSize.ready
+                      ? t('experimentSampleEnough')
+                      : t('experimentSampleRemaining')
+                          .replace('{exposures}', formatNumber(summary.sampleSize.remainingExposures))
+                          .replace('{conversions}', formatNumber(summary.sampleSize.remainingConversions))}
+                  </span>
+                </>
+              }
+            />
           </div>
         </>
       ) : null}
@@ -315,9 +326,9 @@ function ExperimentResultPanel({
                     <td>
                       <span className="badge">{item.variant}</span>
                     </td>
-                    <td className="num">{item.exposures.toLocaleString()}</td>
-                    <td className="num">{item.conversions.toLocaleString()}</td>
-                    <td className="num">{item.conversionRate.toFixed(2)}%</td>
+                    <td className="num">{formatNumber(item.exposures)}</td>
+                    <td className="num">{formatNumber(item.conversions)}</td>
+                    <td className="num">{formatPercent(item.conversionRate, { digits: 2 })}</td>
                   </tr>
                 ))}
               </tbody>
@@ -344,14 +355,15 @@ function ExperimentResultPanel({
               rows.map((row) => (
                 <tr key={row.variant}>
                   <td>{row.variant}</td>
-                  <td className="num">{row.exposures.toLocaleString()}</td>
-                  <td className="num">{row.conversions.toLocaleString()}</td>
-                  <td className="num">{row.conversionRate.toFixed(2)}%</td>
+                  <td className="num">{formatNumber(row.exposures)}</td>
+                  <td className="num">{formatNumber(row.conversions)}</td>
+                  <td className="num">{formatPercent(row.conversionRate, { digits: 2 })}</td>
                   <td className="num">
-                    {row.confidenceIntervalLow.toFixed(2)}–{row.confidenceIntervalHigh.toFixed(2)}%
+                    {formatPercent(row.confidenceIntervalLow, { digits: 2 })}–
+                    {formatPercent(row.confidenceIntervalHigh, { digits: 2 })}
                   </td>
                   <td className={row.significant ? 'num text-success' : 'num'}>
-                    {formatPercent(row.confidence)}
+                    {formatPercent(row.confidence, { digits: 2 })}
                   </td>
                   <td
                     className={
@@ -364,7 +376,7 @@ function ExperimentResultPanel({
                             : 'num'
                     }
                   >
-                    {row.baseline ? t('experimentBaseline') : formatLift(row.lift)}
+                    {row.baseline ? t('experimentBaseline') : formatLiftValue(row.lift)}
                   </td>
                 </tr>
               ))
@@ -411,10 +423,10 @@ function ExperimentResultPanel({
                         {item.converted ? t('yes') : t('no')}
                       </span>
                       {item.convertedAt ? (
-                        <div className="text-muted">{formatTime(item.convertedAt)}</div>
+                        <div className="text-muted">{formatDateTime(item.convertedAt)}</div>
                       ) : null}
                     </td>
-                    <td className="text-muted">{formatTime(item.exposedAt)}</td>
+                    <td className="text-muted">{formatDateTime(item.exposedAt)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -423,6 +435,7 @@ function ExperimentResultPanel({
         </div>
       ) : null}
     </div>
+    </DataViewState>
   );
 }
 
@@ -530,20 +543,15 @@ export default function WebsiteExperimentsPage() {
   const canCreate = Boolean(draft.name.trim() && draft.featureFlagId && draft.goalEvent.trim());
 
   return (
-    <div className="page page-experiments">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-experiments">
+      <PageHeader title={t('experiments')} lead={t('experimentsLead')} />
+
+      <PageBody>
 
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
       {canEdit ? (
       <section className="panel section-gap">
-        <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('experiments')}</h2>
-            <p className="text-muted">{t('experimentsLead')}</p>
-          </div>
-        </header>
-
         <div className="panel-form">
           <div className="field">
             <Label htmlFor="experiment-name">{t('name')}</Label>
@@ -611,10 +619,15 @@ export default function WebsiteExperimentsPage() {
       </section>
       ) : null}
 
-      <section className="panel section-gap">
-        {experimentsQuery.isLoading ? (
-          <div className="skeleton skeleton-block" aria-busy />
-        ) : experiments.length ? (
+      <section className="section-gap">
+        <DataViewState
+          loading={experimentsQuery.isLoading && !experimentsQuery.data}
+          error={experimentsQuery.isError ? experimentsQuery.error : null}
+          onRetry={() => experimentsQuery.refetch()}
+          isEmpty={!experimentsQuery.isLoading && !experiments.length}
+          emptyTitle={t('experimentsEmptyTitle')}
+          emptyDescription={t('experimentsEmptyBody')}
+        >
           <MasterDetailLayout
             list={experiments.map((experiment) => (
               <MasterDetailListItem
@@ -728,9 +741,7 @@ export default function WebsiteExperimentsPage() {
               ) : null
             }
           />
-        ) : (
-          <EmptyState title={t('experimentsEmptyTitle')} description={t('experimentsEmptyBody')} />
-        )}
+        </DataViewState>
       </section>
 
       {canEdit && editingExperiment ? (
@@ -743,6 +754,7 @@ export default function WebsiteExperimentsPage() {
           onSave={(experiment, patch) => updateMutation.mutate({ id: experiment.id, patch })}
         />
       ) : null}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

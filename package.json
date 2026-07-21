@@ -23,6 +23,10 @@
     "backfill:rollups": "tsx scripts/backfill-rollups.ts",
     "backfill:action-tags": "tsx scripts/backfill-action-tags.ts",
     "validate:wrangler": "node scripts/validate-wrangler.mjs",
+    "smoke:insight-ux": "bash scripts/smoke-insight-ux.sh",
+    "smoke:u21-auth-visual": "node scripts/smoke-u21-auth-visual.mjs",
+    "smoke:u22-page-frame": "node scripts/smoke-u22-page-frame.mjs",
+    "smoke:form-density": "node scripts/smoke-form-density.mjs",
     "deploy:api": "node scripts/validate-wrangler.mjs && pnpm --filter @flareboard/api run deploy",
     "deploy:ingest": "node scripts/validate-wrangler.mjs && pnpm --filter @flareboard/ingest run deploy",
     "deploy:aggregator": "node scripts/validate-wrangler.mjs && pnpm --filter @flareboard/aggregator run deploy",
@@ -36,6 +40,7 @@
     "@types/node": "^22.15.32",
     "@types/pg": "^8.11.14",
     "pg": "^8.16.0",
+    "playwright": "^1.61.1",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3",
     "wrangler": "^4.19.0"

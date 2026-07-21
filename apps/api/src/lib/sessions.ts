@@ -1,5 +1,27 @@
 import { EVENT_TYPE } from '@flareboard/shared';
 import type { Env } from '../env';
+import { buildSegmentSql, type SegmentParams } from './segment-filters';
+
+export type SessionListFilters = {
+  country?: string;
+  device?: string;
+  browser?: string;
+  path?: string;
+  referrer?: string;
+};
+
+function sessionFilterSql(filters: SessionListFilters) {
+  const params: SegmentParams = {};
+  if (filters.country) params.country = filters.country;
+  if (filters.device) params.device = filters.device;
+  if (filters.browser) params.browser = filters.browser;
+  if (filters.path) params.pathContains = filters.path;
+  if (filters.referrer) params.referrer = filters.referrer;
+  const seg = buildSegmentSql(params);
+  const clauses = [...seg.eventClauses, ...seg.sessionClauses];
+  const whereExtra = clauses.length ? ` AND ${clauses.join(' AND ')}` : '';
+  return { whereExtra, binds: seg.binds };
+}
 
 export async function listSessions(
   env: Env,
@@ -8,8 +30,11 @@ export async function listSessions(
   endAt: number,
   page = 1,
   pageSize = 20,
+  filters: SessionListFilters = {},
 ) {
   const offset = (page - 1) * pageSize;
+  const { whereExtra, binds: filterBinds } = sessionFilterSql(filters);
+  const baseWhere = 's.website_id = ? AND e.created_at >= ? AND e.created_at <= ?';
   const rows = await env.DB.prepare(
     `SELECT s.session_id as id, s.browser, s.os, s.device, s.country, s.city,
             s.created_at as createdAt,
@@ -19,12 +44,12 @@ export async function listSessions(
             MAX(e.created_at) as lastAt
      FROM session s
      INNER JOIN website_event e ON e.session_id = s.session_id
-     WHERE s.website_id = ?1 AND e.created_at >= ?2 AND e.created_at <= ?3
+     WHERE ${baseWhere}${whereExtra}
      GROUP BY s.session_id
      ORDER BY lastAt DESC
-     LIMIT ?4 OFFSET ?5`,
+     LIMIT ? OFFSET ?`,
   )
-    .bind(websiteId, startAt, endAt, pageSize, offset)
+    .bind(websiteId, startAt, endAt, ...filterBinds, pageSize, offset)
     .all<{
       id: string;
       browser: string | null;
@@ -43,9 +68,9 @@ export async function listSessions(
     `SELECT COUNT(DISTINCT s.session_id) as count
      FROM session s
      INNER JOIN website_event e ON e.session_id = s.session_id
-     WHERE s.website_id = ?1 AND e.created_at >= ?2 AND e.created_at <= ?3`,
+     WHERE ${baseWhere}${whereExtra}`,
   )
-    .bind(websiteId, startAt, endAt)
+    .bind(websiteId, startAt, endAt, ...filterBinds)
     .first<{ count: number }>();
 
   return {

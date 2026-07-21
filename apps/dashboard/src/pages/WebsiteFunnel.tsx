@@ -1,27 +1,32 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { EmptyState } from '../components/EmptyState';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Bar, BarChart } from 'recharts';
+import { AnalyticsChart } from '../components/AnalyticsChart';
+import { DataViewState } from '../components/DataViewState';
+import { EventCatalogPicker } from '../components/EventCatalogPicker';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';
-import { Input } from '../components/ui/input';
 import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
 import { api } from '../lib/api';
+import { formatNumber, formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 
 export default function WebsiteFunnelPage() {
   const chartColors = useChartColors();
   const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl, timezone } =
     useWebsiteReportContext('30d');
-  const [funnelSteps, setFunnelSteps] = useState('signup,purchase');
+  const [funnelSteps, setFunnelSteps] = useState(['signup', 'purchase']);
+
+  const funnelStepsParam = funnelSteps.join(',');
 
   const funnelQuery = useQuery({
-    queryKey: ['reports-funnel', websiteId, funnelSteps, range, segmentId],
+    queryKey: ['reports-funnel', websiteId, funnelStepsParam, range, segmentId],
     enabled: Boolean(websiteId),
     queryFn: () =>
       api<{ steps: Array<{ step: string; count: number; rate: number }>; conversion: number }>(
-        reportUrl('funnel', `&steps=${encodeURIComponent(funnelSteps)}`),
+        reportUrl('funnel', `&steps=${encodeURIComponent(funnelStepsParam)}`),
       ),
   });
 
@@ -36,10 +41,10 @@ export default function WebsiteFunnelPage() {
   );
 
   return (
-    <div className="page page-funnel">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page className="page-funnel">
+      <PageHeader
+        title={t('funnel')}
+        actions={
           <WebsiteReportControls
             range={range}
             onRangeChange={setRange}
@@ -50,67 +55,62 @@ export default function WebsiteFunnelPage() {
           />
         }
       />
-      <section className="panel section-gap">
-        <div className="field" style={{ maxWidth: '28rem' }}>
-          <Input
-            value={funnelSteps}
-            onChange={(e) => setFunnelSteps(e.target.value)}
-            placeholder={t('funnelStepsPlaceholder')}
-            aria-label={t('funnel')}
-          />
-        </div>
-        {funnelQuery.isLoading ? (
-          <div className="skeleton skeleton-block section-gap" aria-busy />
-        ) : funnelChartData.length === 0 || !funnelHasData ? (
-          <EmptyState
-            title={t('noDataInPeriod')}
-            description={funnelChartData.length > 0 ? t('funnelNoDataHint') : t('noDataInPeriodHint')}
-          />
-        ) : (
+
+      <PageBody>
+      <div className="field section-gap" style={{ maxWidth: '28rem' }}>
+        <EventCatalogPicker
+          mode="multi"
+          websiteId={websiteId}
+          value={funnelSteps}
+          onChange={setFunnelSteps}
+          placeholder={t('funnelStepsPlaceholder')}
+          aria-label={t('funnel')}
+        />
+      </div>
+      <div className="section-gap">
+        <DataViewState
+          loading={funnelQuery.isLoading}
+          error={funnelQuery.isError ? funnelQuery.error : null}
+          onRetry={() => funnelQuery.refetch()}
+          isEmpty={!funnelQuery.isLoading && (funnelChartData.length === 0 || !funnelHasData)}
+          emptyTitle={t('noDataInPeriod')}
+          emptyDescription={
+            funnelChartData.length > 0 ? t('funnelNoDataHint') : t('noDataInPeriodHint')
+          }
+        >
           <>
             <div className="chart-wrap chart-wrap-compact">
-              <ResponsiveContainer>
-                <BarChart data={funnelChartData} layout="vertical" margin={{ left: 8, right: 16 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    width={100}
-                    tick={{ fontSize: 11, fill: chartColors.muted }}
-                    stroke={chartColors.border}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      background: chartColors.panel,
-                      border: `1px solid ${chartColors.border}`,
-                      borderRadius: 8,
-                      fontSize: 13,
-                      color: chartColors.text,
-                    }}
-                  />
-                  <Bar dataKey="count" fill={chartColors.accent} radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <AnalyticsChart
+                Chart={BarChart}
+                data={funnelChartData}
+                layout="vertical"
+                margin={{ left: 8, right: 16 }}
+                grid={{ horizontal: false }}
+                xAxis={{ type: 'number' }}
+                yAxis={{ type: 'category', dataKey: 'name', width: 100 }}
+              >
+                <Bar dataKey="count" fill={chartColors.accent} radius={[0, 4, 4, 0]} />
+              </AnalyticsChart>
             </div>
             <ul className="list-plain">
               {(funnelQuery.data?.steps ?? []).map((s) => (
                 <li key={s.step} className="list-item list-row">
                   <span>{s.step}</span>
                   <span className="list-row-value">
-                    {s.count} ({s.rate}%)
+                    {formatNumber(s.count)} ({formatPercent(s.rate)})
                   </span>
                 </li>
               ))}
             </ul>
             {funnelQuery.data ? (
               <p className="text-muted reports-funnel-conversion">
-                {t('overallConversion')}: {funnelQuery.data.conversion}%
+                {t('overallConversion')}: {formatPercent(funnelQuery.data.conversion)}
               </p>
             ) : null}
           </>
-        )}
-      </section>
-    </div>
+        </DataViewState>
+      </div>
+      </PageBody>
+    </Page>
   );
 }

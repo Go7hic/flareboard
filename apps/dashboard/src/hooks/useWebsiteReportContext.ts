@@ -6,6 +6,7 @@ import { type DateRangePreset } from '../lib/dateRange';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 import { websiteReportUrl } from '../lib/websiteReportApi';
 
+/** Default `30d`: funnel/retention/UTM trend windows. Overview keeps `24h` via useWebsiteRange. */
 export function useWebsiteReportContext(fallbackPreset: DateRangePreset = '30d') {
   const { websiteId } = useParams<{ websiteId: string }>();
   const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, fallbackPreset);

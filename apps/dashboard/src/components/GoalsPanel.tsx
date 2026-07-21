@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart } from 'recharts';
+import { AnalyticsChart } from './AnalyticsChart';
 import { EmptyState } from './EmptyState';
 import { GoalFormDialog, type GoalConfigRow } from './GoalFormDialog';
+import { StatCard, StatCardSkeleton } from './ui/stat-card';
 import { Button } from './ui/button';
-import { Skeleton } from './ui/skeleton';
 import { api, type Website } from '../lib/api';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
 
@@ -40,24 +42,6 @@ function normalizeGoalConfig(
         ? goal.period
         : 'monthly',
   }));
-}
-
-function StatCard({ label, value, primary }: { label: string; value: number; primary?: boolean }) {
-  return (
-    <div className={`stat-card${primary ? ' stat-card-primary' : ''}`}>
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{value.toLocaleString()}</div>
-    </div>
-  );
-}
-
-function StatSkeleton() {
-  return (
-    <div className="stat-card stat-card-skeleton" aria-hidden>
-      <Skeleton className="h-3 w-2/3" />
-      <Skeleton className="mt-[0.65rem] h-7 w-full" />
-    </div>
-  );
 }
 
 export function GoalsPanel({
@@ -169,17 +153,17 @@ export function GoalsPanel({
       <section className="analytics-hero-stats goals-stats-grid section-gap">
         {loading ? (
           <>
-            <StatSkeleton />
-            <StatSkeleton />
-            <StatSkeleton />
-            <StatSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
           </>
         ) : (
           <>
-            <StatCard label={t('goalConfiguredCount')} value={stats.configured} primary />
-            <StatCard label={t('goalConversions')} value={stats.conversions} />
-            <StatCard label={t('goalOnTrack')} value={stats.onTrack} />
-            <StatCard label={t('goalEventsTracked')} value={stats.eventsWithData} />
+            <StatCard label={t('goalConfiguredCount')} value={formatNumber(stats.configured)} variant="primary" />
+            <StatCard label={t('goalConversions')} value={formatNumber(stats.conversions)} />
+            <StatCard label={t('goalOnTrack')} value={formatNumber(stats.onTrack)} />
+            <StatCard label={t('goalEventsTracked')} value={formatNumber(stats.eventsWithData)} />
           </>
         )}
       </section>
@@ -189,34 +173,22 @@ export function GoalsPanel({
           <h2 className="section-title goals-chart-title">{t('goalChartTitle')}</h2>
           <p className="text-muted goals-chart-lead">{t('goalChartLead')}</p>
           <div className="chart-wrap chart-wrap-compact goals-chart-wrap">
-            <ResponsiveContainer>
-              <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 16 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={120}
-                  tick={{ fontSize: 11, fill: chartColors.muted }}
-                  stroke={chartColors.border}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: chartColors.panel,
-                    border: `1px solid ${chartColors.border}`,
-                    borderRadius: 8,
-                    fontSize: 12,
-                    color: chartColors.text,
-                  }}
-                />
-                <Bar dataKey="count" fill={chartColors.accent} radius={[0, 4, 4, 0]} maxBarSize={28} />
-              </BarChart>
-            </ResponsiveContainer>
+            <AnalyticsChart
+              Chart={BarChart}
+              data={chartData}
+              layout="vertical"
+              margin={{ left: 8, right: 16 }}
+              grid={{ horizontal: false }}
+              xAxis={{ type: 'number' }}
+              yAxis={{ type: 'category', dataKey: 'name', width: 120 }}
+            >
+              <Bar dataKey="count" fill={chartColors.accent} radius={[0, 4, 4, 0]} maxBarSize={28} />
+            </AnalyticsChart>
           </div>
         </section>
       ) : null}
 
-      <section className="panel section-gap goals-panel">
+      <section className="section-gap goals-panel">
         <header className="goals-panel-head">
           <h2 className="section-title goals-list-title">{t('goalListTitle')}</h2>
           <div className="goals-panel-toolbar">
@@ -297,8 +269,8 @@ export function GoalsPanel({
                             <span className="goals-unconfigured-badge">{t('goalUnconfigured')}</span>
                           ) : null}
                         </td>
-                        <td className="stat-value">{row.count.toLocaleString()}</td>
-                        <td>{row.target != null ? row.target.toLocaleString() : '—'}</td>
+                        <td className="stat-value">{formatNumber(row.count)}</td>
+                        <td>{row.target != null ? formatNumber(row.target) : '—'}</td>
                         <td className="text-muted">{formatPeriodLabel(row)}</td>
                         <td>
                           {row.progress != null && row.target != null ? (

@@ -3,6 +3,7 @@ import { Pencil } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CollapsibleSection } from '../components/CollapsibleSection';
+import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { PlanUpgradeBanner } from '../components/PlanUpgradeBanner';
 import { WebsiteFormDialog } from '../components/WebsiteFormDialog';
@@ -11,14 +12,8 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { api, type Website } from '../lib/api';
+import { formatDateOnly } from '../lib/format';
 import { t } from '../lib/i18n';
-
-function formatCreatedAt(value?: string | number) {
-  if (value == null) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
 
 function AddWebsiteForm({
   onSuccess,
@@ -116,9 +111,10 @@ export default function Websites() {
   }
 
   return (
-    <div className="page page-websites">
-      <PageHeader title={t('websites')} subtitle={t('websitesSubtitle')} />
+    <Page className="page-websites">
+      <PageHeader title={t('websites')} lead={t('websitesSubtitle')} />
 
+      <PageBody>
       {hasSites ? (
         <CollapsibleSection title={t('collapseAddWebsite')} summary={t('addWebsiteLead')}>
           {renderAddWebsite()}
@@ -178,7 +174,7 @@ export default function Websites() {
                 </div>
                 {site.createdAt != null ? (
                   <p className="site-card-meta text-muted">
-                    {t('segmentCreated')}: {formatCreatedAt(site.createdAt)}
+                    {t('segmentCreated')}: {formatDateOnly(site.createdAt)}
                   </p>
                 ) : null}
               </article>
@@ -192,6 +188,7 @@ export default function Websites() {
         website={editingSite}
         onClose={() => setEditingSite(null)}
       />
-    </div>
+      </PageBody>
+    </Page>
   );
 }

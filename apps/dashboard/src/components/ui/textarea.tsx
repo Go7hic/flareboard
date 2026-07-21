@@ -1,29 +1,18 @@
-import * as React from 'react';
-import { cn } from '../../lib/utils';
+import * as React from "react"
 
-export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {}
+import { cn } from "../../lib/utils"
 
-const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ className, ...props }, ref) => {
-    return (
-      <textarea
-        className={cn(
-          'flex min-h-[88px] w-full rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg)] px-[var(--control-padding-x)] py-[0.55rem]',
-          'text-[length:var(--control-font-size)] leading-[1.45] font-[family-name:inherit]',
-          'placeholder:text-[var(--text-faint)]',
-          'resize-vertical',
-          'transition-[border-color,box-shadow] duration-200',
-          'hover:border-[var(--border-strong)]',
-          'focus:outline-none focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-muted)]',
-          'disabled:opacity-50 disabled:cursor-not-allowed',
-          className
-        )}
-        ref={ref}
-        {...props}
-      />
-    );
-  }
-);
-Textarea.displayName = 'Textarea';
+function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
+  return (
+    <textarea
+      data-slot="textarea"
+      className={cn(
+        "flex field-sizing-content min-h-16 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-base transition-colors outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
+        className
+      )}
+      {...props}
+    />
+  )
+}
 
-export { Textarea };
+export { Textarea }

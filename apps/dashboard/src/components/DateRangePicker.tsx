@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { type DateRangePreset, presetToRange } from '../lib/dateRange';
+import { formatDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -29,14 +30,8 @@ function toDatetimeLocal(ms: number, timezone: string): string {
 }
 
 function formatRangeLabel(startAt: number, endAt: number, timezone: string): string {
-  const opts: Intl.DateTimeFormatOptions = {
-    timeZone: timezone,
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  };
-  return `${new Date(startAt).toLocaleString(undefined, opts)} – ${new Date(endAt).toLocaleString(undefined, opts)}`;
+  const opts = { timeZone: timezone, includeYear: false as const };
+  return `${formatDateTime(startAt, opts)} – ${formatDateTime(endAt, opts)}`;
 }
 
 function presetLabel(

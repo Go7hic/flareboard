@@ -13,16 +13,10 @@ import {
 } from './master-detail';
 import { Button } from './ui/button';
 import { api, type Segment } from '../lib/api';
+import { formatDateOnly } from '../lib/format';
 import { t } from '../lib/i18n';
 
 type SegmentRow = Segment & { createdAt?: string };
-
-function formatCreatedAt(value?: string) {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
 
 export function SegmentsPanel({ websiteId }: { websiteId: string }) {
   const queryClient = useQueryClient();
@@ -84,7 +78,7 @@ export function SegmentsPanel({ websiteId }: { websiteId: string }) {
 
   return (
     <>
-      <section className="panel cohorts-panel">
+      <section className="cohorts-panel section-gap">
         <header className="cohorts-panel-head">
           <ResourceSearchField
             value={search}
@@ -111,7 +105,7 @@ export function SegmentsPanel({ websiteId }: { websiteId: string }) {
                 icon={<Layers size={16} strokeWidth={2} aria-hidden />}
                 title={row.name}
                 subtitle={row.type}
-                meta={<span className="text-muted">{formatCreatedAt(row.createdAt)}</span>}
+                meta={<span className="text-muted">{formatDateOnly(row.createdAt)}</span>}
               />
             ))}
             detail={
@@ -124,7 +118,7 @@ export function SegmentsPanel({ websiteId }: { websiteId: string }) {
                         {t('type')}: {selectedSegment.type}
                       </p>
                       <p className="text-muted">
-                        {t('segmentCreated')}: {formatCreatedAt(selectedSegment.createdAt)}
+                        {t('segmentCreated')}: {formatDateOnly(selectedSegment.createdAt)}
                       </p>
                     </>
                   }

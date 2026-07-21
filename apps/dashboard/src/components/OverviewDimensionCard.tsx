@@ -1,5 +1,6 @@
 import type { MetricRow } from '../lib/api';
 import { t } from '../lib/i18n';
+import { DataViewState } from './DataViewState';
 import { MetricsTable } from './MetricsTable';
 import { SegmentTabs } from './SegmentTabs';
 
@@ -15,6 +16,8 @@ export function OverviewDimensionCard({
   onTabChange,
   rows,
   loading,
+  error = null,
+  onRetry,
   primaryMetric = 'views',
   onMoreClick,
 }: {
@@ -24,6 +27,8 @@ export function OverviewDimensionCard({
   onTabChange: (tabId: string) => void;
   rows: MetricRow[];
   loading?: boolean;
+  error?: Error | string | null;
+  onRetry?: () => void;
   primaryMetric?: 'views' | 'visitors';
   onMoreClick: () => void;
 }) {
@@ -38,15 +43,17 @@ export function OverviewDimensionCard({
           aria-label={title}
         />
       </div>
-      <MetricsTable
-        embedded
-        hideTitle
-        maxRows={5}
-        rows={rows}
-        loading={loading}
-        primaryMetric={primaryMetric}
-        title=""
-      />
+      <DataViewState error={error} onRetry={onRetry}>
+        <MetricsTable
+          embedded
+          hideTitle
+          maxRows={5}
+          rows={rows}
+          loading={loading}
+          primaryMetric={primaryMetric}
+          title=""
+        />
+      </DataViewState>
       <div className="overview-dimension-card-footer">
         <button type="button" className="overview-dimension-more" onClick={onMoreClick}>
           {t('overviewMore')}

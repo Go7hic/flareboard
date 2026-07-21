@@ -1,18 +1,24 @@
-import { useQuery } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useMemo, useState } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
+import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
 import { SessionAvatar } from '../components/SessionAvatar';
 import { SessionTechCell } from '../components/SessionTechCell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
 import { api } from '../lib/api';
+import { formatDateTime, formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import {
   countryFlagEmoji,
   formatRelativeTime,
   formatSessionLocation,
 } from '../lib/session-display';
+import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 
 interface SessionRow {
@@ -28,37 +34,158 @@ interface SessionRow {
   lastAt: number;
 }
 
+interface SessionsPage {
+  data: SessionRow[];
+  count: number;
+  page: number;
+  pageSize: number;
+}
+
 const PAGE_SIZE = 50;
+const DEVICE_FILTERS = ['', 'desktop', 'mobile', 'tablet'] as const;
 
 export default function SessionsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
-    const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
+  const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
+  const [pathFilter, setPathFilter] = useState('');
+  const [countryFilter, setCountryFilter] = useState('');
+  const [deviceFilter, setDeviceFilter] = useState('');
+  const [browserFilter, setBrowserFilter] = useState('');
+  const [referrerFilter, setReferrerFilter] = useState('');
 
-  const sessionsQuery = useQuery({
-    queryKey: ['sessions', websiteId, range],
+  const debouncedPath = useDebouncedValue(pathFilter.trim(), 300);
+  const debouncedCountry = useDebouncedValue(countryFilter.trim(), 300);
+  const debouncedBrowser = useDebouncedValue(browserFilter.trim(), 300);
+  const debouncedReferrer = useDebouncedValue(referrerFilter.trim(), 300);
+
+  const filterQs = useMemo(() => {
+    const params = new URLSearchParams(rangeQs);
+    params.set('pageSize', String(PAGE_SIZE));
+    if (debouncedPath) params.set('path', debouncedPath);
+    if (debouncedCountry) params.set('country', debouncedCountry);
+    if (deviceFilter) params.set('device', deviceFilter);
+    if (debouncedBrowser) params.set('browser', debouncedBrowser);
+    if (debouncedReferrer) params.set('referrer', debouncedReferrer);
+    return params.toString();
+  }, [debouncedBrowser, debouncedCountry, debouncedPath, debouncedReferrer, deviceFilter, rangeQs]);
+
+  const hasFilters = Boolean(
+    debouncedPath || debouncedCountry || deviceFilter || debouncedBrowser || debouncedReferrer,
+  );
+
+  const sessionsQuery = useInfiniteQuery({
+    queryKey: [
+      'sessions',
+      websiteId,
+      range,
+      debouncedPath,
+      debouncedCountry,
+      deviceFilter,
+      debouncedBrowser,
+      debouncedReferrer,
+    ],
     enabled: Boolean(websiteId),
-    queryFn: () =>
-      api<{ data: SessionRow[]; count: number }>(
-        `/api/websites/${websiteId}/sessions?${rangeQs}&pageSize=${PAGE_SIZE}`,
-      ),
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) =>
+      api<SessionsPage>(`/api/websites/${websiteId}/sessions?${filterQs}&page=${pageParam}`),
+    getNextPageParam: (lastPage, allPages) => {
+      const loadedCount = allPages.reduce((sum, page) => sum + page.data.length, 0);
+      if (loadedCount >= lastPage.count) return undefined;
+      return lastPage.page + 1;
+    },
   });
 
-  const rows = sessionsQuery.data?.data ?? [];
-  const total = sessionsQuery.data?.count ?? rows.length;
+  const rows = sessionsQuery.data?.pages.flatMap((page) => page.data) ?? [];
+  const total = sessionsQuery.data?.pages[0]?.count ?? rows.length;
+  const hasMore = rows.length < total;
+
+  const clearFilters = () => {
+    setPathFilter('');
+    setCountryFilter('');
+    setDeviceFilter('');
+    setBrowserFilter('');
+    setReferrerFilter('');
+  };
 
   return (
-    <div className="page page-sessions">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page className="page-sessions">
+      <PageHeader
+        title={t('sessions')}
+        lead={t('sessionsPageLead')}
+        actions={
           <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
         }
       />
 
-      {sessionsQuery.isLoading ? <div className="skeleton" style={{ height: '4rem' }} /> : null}
-
-      {!sessionsQuery.isLoading && rows.length > 0 ? (
+      <PageBody>
+      <DataViewState
+        loading={sessionsQuery.isLoading}
+        error={sessionsQuery.isError ? sessionsQuery.error : null}
+        onRetry={() => sessionsQuery.refetch()}
+        loadingFallback={<div className="skeleton section-gap" style={{ height: '4rem' }} />}
+      >
         <section className="panel sessions-panel section-gap">
+          <div className="sessions-filter-row">
+            <Input
+              className="sessions-filter-input"
+              value={pathFilter}
+              onChange={(event) => setPathFilter(event.target.value)}
+              placeholder={t('sessionFilterPathPlaceholder')}
+              aria-label={t('sessionFilterPath')}
+            />
+            <Input
+              className="sessions-filter-input sessions-filter-input--narrow"
+              value={countryFilter}
+              onChange={(event) => setCountryFilter(event.target.value)}
+              placeholder={t('sessionFilterCountryPlaceholder')}
+              aria-label={t('sessionFilterCountry')}
+            />
+            <select
+              className="select sessions-filter-select"
+              value={deviceFilter}
+              onChange={(event) => setDeviceFilter(event.target.value)}
+              aria-label={t('sessionFilterDevice')}
+            >
+              <option value="">{t('allDevices')}</option>
+              {DEVICE_FILTERS.filter(Boolean).map((device) => (
+                <option key={device} value={device}>
+                  {device === 'desktop'
+                    ? t('deviceDesktop')
+                    : device === 'mobile'
+                      ? t('deviceMobile')
+                      : t('deviceTablet')}
+                </option>
+              ))}
+            </select>
+            <Input
+              className="sessions-filter-input"
+              value={browserFilter}
+              onChange={(event) => setBrowserFilter(event.target.value)}
+              placeholder={t('sessionFilterBrowserPlaceholder')}
+              aria-label={t('sessionFilterBrowser')}
+            />
+            <Input
+              className="sessions-filter-input"
+              value={referrerFilter}
+              onChange={(event) => setReferrerFilter(event.target.value)}
+              placeholder={t('sessionFilterReferrerPlaceholder')}
+              aria-label={t('sessionFilterReferrer')}
+            />
+            {hasFilters ? (
+              <Button type="button" variant="secondary" size="sm" onClick={clearFilters}>
+                {t('reset')}
+              </Button>
+            ) : null}
+          </div>
+          {rows.length === 0 ? (
+            <EmptyState
+              title={hasFilters ? t('noSessionsMatchFilters') : t('noSessionsInRange')}
+              description={
+                hasFilters ? t('noSessionsMatchFiltersHint') : t('noDataInPeriodHint')
+              }
+            />
+          ) : (
+            <>
           <div className="sessions-table-scroll">
             <table className="data-table sessions-data-table">
               <thead>
@@ -88,9 +215,9 @@ export default function SessionsPage() {
                           <SessionAvatar seed={s.id} size={32} className="sessions-table-avatar" />
                         </Link>
                       </td>
-                      <td className="num">{s.visits.toLocaleString()}</td>
-                      <td className="num">{s.pageviews.toLocaleString()}</td>
-                      <td className="num">{s.events.toLocaleString()}</td>
+                      <td className="num">{formatNumber(s.visits)}</td>
+                      <td className="num">{formatNumber(s.pageviews)}</td>
+                      <td className="num">{formatNumber(s.events)}</td>
                       <td>
                         <Link
                           to={`/websites/${websiteId}/sessions/${s.id}`}
@@ -123,7 +250,7 @@ export default function SessionsPage() {
                         <Link
                           to={`/websites/${websiteId}/sessions/${s.id}`}
                           className="sessions-row-link sessions-last-cell"
-                          title={new Date(s.lastAt).toLocaleString()}
+                          title={formatDateTime(s.lastAt)}
                         >
                           {formatRelativeTime(s.lastAt)}
                         </Link>
@@ -134,20 +261,29 @@ export default function SessionsPage() {
               </tbody>
             </table>
           </div>
-          <p className="sessions-footer">
-            {t('showingSessionsLimit').replace('{count}', String(Math.min(PAGE_SIZE, total)))}
-          </p>
+          <footer className="sessions-footer">
+            <p>
+              {t('showingSessionsOf')
+                .replace('{shown}', String(rows.length))
+                .replace('{total}', String(total))}
+            </p>
+            {hasMore ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={sessionsQuery.isFetchingNextPage}
+                onClick={() => sessionsQuery.fetchNextPage()}
+              >
+                {sessionsQuery.isFetchingNextPage ? t('loading') : t('sessionsLoadMore')}
+              </Button>
+            ) : null}
+          </footer>
+            </>
+          )}
         </section>
-      ) : null}
-
-      {!sessionsQuery.isLoading && !rows.length ? (
-        <div className="panel empty-state-rich section-gap">
-          <EmptyState
-            title={t('noSessionsInRange')}
-            description={t('noDataInPeriodHint')}
-          />
-        </div>
-      ) : null}
-    </div>
+      </DataViewState>
+      </PageBody>
+    </Page>
   );
 }

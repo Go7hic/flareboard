@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { ExternalLink, MousePointerClick } from 'lucide-react';
+import { DataViewState } from '../components/DataViewState';
 import { EventDataPanel } from '../components/EventDataPanel';
-import { EmptyState } from '../components/EmptyState';
 import { MetricsTable } from '../components/MetricsTable';
 import {
   MasterDetailLayout,
@@ -12,22 +12,12 @@ import {
   ResourceSearchField,
   useMasterDetailSelection,
 } from '../components/master-detail';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
+import { StatCard } from '../components/ui/stat-card';
 import { api, type EventCatalogDetailResponse, type EventCatalogResponse, type MetricRow } from '../lib/api';
+import { formatDateTime, formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
-
-function formatDate(value: number | null | undefined) {
-  if (value == null) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 export default function WebsiteEventsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
@@ -65,14 +55,14 @@ export default function WebsiteEventsPage() {
   const summary = detail?.summary ?? selectedEvent;
 
   return (
-    <div className="page page-events">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-events">
+      <PageHeader title={t('events')} lead={t('eventCatalogLead')} />
 
+      <PageBody>
       <section className="panel section-gap">
         <header className="panel-header">
           <div>
             <h2 className="section-title">{t('eventCatalog')}</h2>
-            <p className="text-muted">{t('eventCatalogLead')}</p>
           </div>
         </header>
 
@@ -84,10 +74,15 @@ export default function WebsiteEventsPage() {
         />
       </section>
 
-      <section className="panel section-gap">
-        {catalogQuery.isLoading ? (
-          <div className="skeleton skeleton-block" aria-busy />
-        ) : catalog.length ? (
+      <section className="section-gap">
+        <DataViewState
+          loading={catalogQuery.isLoading && !catalogQuery.data}
+          error={catalogQuery.isError ? catalogQuery.error : null}
+          onRetry={() => catalogQuery.refetch()}
+          isEmpty={!catalogQuery.isLoading && !catalog.length}
+          emptyTitle={t('eventCatalogEmptyTitle')}
+          emptyDescription={t('eventCatalogEmptyBody')}
+        >
           <MasterDetailLayout
             list={catalog.map((event) => (
               <MasterDetailListItem
@@ -96,13 +91,13 @@ export default function WebsiteEventsPage() {
                 onSelect={() => setSelectedEventName(event.eventName)}
                 icon={<MousePointerClick size={16} strokeWidth={2} aria-hidden />}
                 title={event.eventName}
-                subtitle={`${event.paths.toLocaleString()} ${t('eventCatalogPathsCount')}`}
+                subtitle={`${formatNumber(event.paths)} ${t('eventCatalogPathsCount')}`}
                 meta={
                   <>
                     <span className="badge">
-                      {event.events.toLocaleString()} {t('events')}
+                      {formatNumber(event.events)} {t('events')}
                     </span>
-                    <span className="text-muted">{formatDate(event.lastSeenAt)}</span>
+                    <span className="text-muted">{formatDateTime(event.lastSeenAt)}</span>
                   </>
                 }
               />
@@ -117,23 +112,11 @@ export default function WebsiteEventsPage() {
                       : t('eventCatalogNoProperties')
                   }
                 >
-                  <div className="detail-stats">
-                    <div>
-                      <span className="stat-label">{t('events')}</span>
-                      <strong className="stat-value">{summary.events.toLocaleString()}</strong>
-                    </div>
-                    <div>
-                      <span className="stat-label">{t('sessions')}</span>
-                      <strong className="stat-value">{summary.sessions.toLocaleString()}</strong>
-                    </div>
-                    <div>
-                      <span className="stat-label">{t('visits')}</span>
-                      <strong className="stat-value">{summary.visits.toLocaleString()}</strong>
-                    </div>
-                    <div>
-                      <span className="stat-label">{t('eventLastSeen')}</span>
-                      <strong className="stat-value">{formatDate(summary.lastSeenAt)}</strong>
-                    </div>
+                  <div className="experiment-summary-grid">
+                    <StatCard label={t('events')} value={formatNumber(summary.events)} />
+                    <StatCard label={t('sessions')} value={formatNumber(summary.sessions)} />
+                    <StatCard label={t('visits')} value={formatNumber(summary.visits)} />
+                    <StatCard label={t('eventLastSeen')} value={formatDateTime(summary.lastSeenAt)} />
                   </div>
 
                   <div className="workflow-insights-grid">
@@ -158,8 +141,8 @@ export default function WebsiteEventsPage() {
                               detail!.properties.map((property) => (
                                 <tr key={property.key}>
                                   <td>{property.key}</td>
-                                  <td className="num">{property.count.toLocaleString()}</td>
-                                  <td className="num">{property.valuesCount.toLocaleString()}</td>
+                                  <td className="num">{formatNumber(property.count)}</td>
+                                  <td className="num">{formatNumber(property.valuesCount)}</td>
                                 </tr>
                               ))
                             ) : (
@@ -187,9 +170,9 @@ export default function WebsiteEventsPage() {
                             <div key={path.path ?? 'unknown'} className="workflow-event-row">
                               <div>
                                 <strong>{path.path ?? '-'}</strong>
-                                <p className="text-muted">{formatDate(path.lastSeenAt)}</p>
+                                <p className="text-muted">{formatDateTime(path.lastSeenAt)}</p>
                               </div>
-                              <span className="badge">{path.events.toLocaleString()}</span>
+                              <span className="badge">{formatNumber(path.events)}</span>
                             </div>
                           ))
                         ) : (
@@ -226,7 +209,7 @@ export default function WebsiteEventsPage() {
                                     <ExternalLink size={12} strokeWidth={2} aria-hidden />
                                   </Link>
                                 </td>
-                                <td className="text-muted">{formatDate(event.createdAt)}</td>
+                                <td className="text-muted">{formatDateTime(event.createdAt)}</td>
                               </tr>
                             ))
                           ) : (
@@ -244,9 +227,7 @@ export default function WebsiteEventsPage() {
               ) : null
             }
           />
-        ) : (
-          <EmptyState title={t('eventCatalogEmptyTitle')} description={t('eventCatalogEmptyBody')} />
-        )}
+        </DataViewState>
       </section>
 
       <section className="panel section-gap custom-events-panel">
@@ -258,6 +239,7 @@ export default function WebsiteEventsPage() {
         />
       </section>
       {websiteId ? <EventDataPanel websiteId={websiteId} /> : null}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

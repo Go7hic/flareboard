@@ -28,7 +28,7 @@ export function OverviewMapHeatmapPanel({
   const heatmapQuery = useTrafficHeatmap({ websiteId, qs });
 
   return (
-    <section className="panel overview-map-heatmap section-gap" aria-label={t('overviewMapHeatmap')}>
+    <section className="panel overview-map-heatmap" aria-label={t('overviewMapHeatmap')}>
       <div className="overview-map-heatmap-grid">
         <div className="overview-map-heatmap-col">
           <h2 className="section-title">{t('countryMap')}</h2>

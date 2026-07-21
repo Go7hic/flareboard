@@ -1,20 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
-import { EmptyState } from '../components/EmptyState';
+import { Bar, BarChart } from 'recharts';
+import { AnalyticsChart } from '../components/AnalyticsChart';
+import { DataViewState } from '../components/DataViewState';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Panel } from '../components/ui/panel';
 import { api } from '../lib/api';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 import { useChartColors } from '../lib/useChartColors';
@@ -22,7 +17,7 @@ import { useChartColors } from '../lib/useChartColors';
 export default function RevenuePage() {
   const chartColors = useChartColors();
   const { websiteId } = useParams<{ websiteId: string }>();
-    const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
+  const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
 
   const revenueQuery = useQuery({
     queryKey: ['revenue-page', websiteId, range.startAt, range.endAt],
@@ -45,43 +40,34 @@ export default function RevenuePage() {
       .map(([date, total]) => ({ date, total: Math.round(total * 100) / 100 }));
   }, [revenueQuery.data?.byDay]);
 
+  const byEvent = revenueQuery.data?.byEvent ?? [];
+  const isEmpty = !revenueQuery.isLoading && chartData.length === 0 && byEvent.length === 0;
+
   return (
-    <div className="page">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page>
+      <PageHeader
+        title={t('revenue')}
+        lead={t('revenuePageLead')}
+        actions={
           <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
         }
       />
 
+      <PageBody>
       <Panel>
-        <p className="section-lead">{t('revenuePageLead')}</p>
-
-        {revenueQuery.isLoading ? (
-          <p className="text-muted">{t('loading')}</p>
-        ) : chartData.length === 0 && !(revenueQuery.data?.byEvent ?? []).length ? (
-          <EmptyState title={t('noDataInPeriod')} />
-        ) : (
+        <DataViewState
+          loading={revenueQuery.isLoading}
+          error={revenueQuery.isError ? revenueQuery.error : null}
+          onRetry={() => revenueQuery.refetch()}
+          isEmpty={isEmpty}
+          emptyTitle={t('noDataInPeriod')}
+        >
           <>
             {chartData.length > 0 ? (
               <div className="chart-wrap chart-wrap-compact section-gap">
-                <ResponsiveContainer>
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} />
-                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-                    <YAxis tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-                    <Tooltip
-                      contentStyle={{
-                        background: chartColors.panel,
-                        border: `1px solid ${chartColors.border}`,
-                        borderRadius: 8,
-                        fontSize: 13,
-                        color: chartColors.text,
-                      }}
-                    />
-                    <Bar dataKey="total" fill={chartColors.accent} radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <AnalyticsChart Chart={BarChart} data={chartData} xAxis={{ dataKey: 'date' }}>
+                  <Bar dataKey="total" fill={chartColors.accent} radius={[4, 4, 0, 0]} />
+                </AnalyticsChart>
               </div>
             ) : null}
 
@@ -96,20 +82,21 @@ export default function RevenuePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(revenueQuery.data?.byEvent ?? []).map((row) => (
+                  {byEvent.map((row) => (
                     <tr key={`${row.eventName}-${row.currency}`}>
                       <td>{row.eventName}</td>
                       <td>{row.currency}</td>
-                      <td className="num">{row.total.toFixed(2)}</td>
-                      <td className="num">{row.transactions}</td>
+                      <td className="num">{formatNumber(row.total, { maximumFractionDigits: 2 })}</td>
+                      <td className="num">{formatNumber(row.transactions)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </>
-        )}
+        </DataViewState>
       </Panel>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

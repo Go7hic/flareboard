@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { ShareManage } from '../components/ShareManage';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { api, type ShareLink, type Website } from '../lib/api';
 import { t } from '../lib/i18n';
@@ -35,11 +36,11 @@ export default function WebsiteShareLinksPage() {
   });
 
   return (
-    <div className="page page-share-links">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-share-links">
+      <PageHeader title={t('sharePageTitle')} lead={t('sharePageLead')} />
+
+      <PageBody>
       <section className="panel section-gap">
-        <h2 className="section-title">{t('sharePageTitle')}</h2>
-        <p className="section-lead">{t('sharePageLead')}</p>
         {websiteId ? <ShareManage websiteId={websiteId} /> : null}
         <div className="share-create-block">
           <Button
@@ -61,6 +62,7 @@ export default function WebsiteShareLinksPage() {
           ) : null}
         </div>
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

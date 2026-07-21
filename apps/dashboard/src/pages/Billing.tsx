@@ -1,7 +1,10 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { api } from '../lib/api';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import {
   CLOUD_MONTHLY_USD,
@@ -71,10 +74,9 @@ export default function Billing() {
 
   if (!data?.hosted) {
     return (
-      <div className="page">
-        <h1 className="page-title">{t('billing')}</h1>
-        <p className="text-muted">{t('billingSelfHosted')}</p>
-      </div>
+      <Page>
+        <PageHeader title={t('billing')} lead={t('billingSelfHosted')} />
+      </Page>
     );
   }
 
@@ -86,8 +88,9 @@ export default function Billing() {
   const upgradePlans = (plansData?.plans ?? []).filter((p) => p.id === 'cloud' && plan.id !== 'cloud');
 
   return (
-    <div className="page">
-      <h1 className="page-title">{t('billing')}</h1>
+    <Page>
+      <PageHeader title={t('billing')} />
+      <PageBody>
       {success ? <p className="text-muted panel-body">{t('billingSuccess')}</p> : null}
       {canceled ? <p className="text-muted panel-body">{t('billingCanceled')}</p> : null}
 
@@ -113,7 +116,7 @@ export default function Billing() {
             <div className="list-row" style={{ marginBottom: '0.35rem' }}>
               <span>{t('eventsThisMonth')}</span>
               <span className="stat-value" style={{ fontSize: '0.9375rem' }}>
-                {used.toLocaleString()} / {plan.maxEventsPerMonth.toLocaleString()}
+                {formatNumber(used)} / {formatNumber(plan.maxEventsPerMonth)}
               </span>
             </div>
             <div
@@ -185,6 +188,7 @@ export default function Billing() {
           ) : null}
         </div>
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

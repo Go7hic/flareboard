@@ -1,20 +1,17 @@
 import { useMemo, useState } from 'react';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Link } from 'react-router-dom';
+import { Bar, BarChart, Legend } from 'recharts';
 import type { RealtimeSession, RealtimeWindow30 } from '../lib/api';
+import { formatDateTime, formatNumber, formatPercent, formatTimeOfDay } from '../lib/format';
 import { t } from '../lib/i18n';
 import { getCountryLabel } from '../lib/map-format';
+import { formatRelativeTime } from '../lib/session-display';
 import { useChartColors } from '../lib/useChartColors';
+import { AnalyticsChart } from './AnalyticsChart';
+import { EmptyState } from './EmptyState';
 import { SegmentTabs } from './SegmentTabs';
 import { SessionAvatar } from './SessionAvatar';
+import { StatCard } from './ui/stat-card';
 
 const BUCKET_MS = 2 * 60 * 1000;
 const WINDOW_MS = 30 * 60 * 1000;
@@ -86,10 +83,7 @@ function buildTimeBuckets(
     const bucketStart = start + i * BUCKET_MS;
     return {
       ts: bucketStart,
-      label: new Date(bucketStart).toLocaleTimeString(undefined, {
-        hour: 'numeric',
-        minute: '2-digit',
-      }),
+      label: formatTimeOfDay(bucketStart),
       visitors: 0,
       pageviews: 0,
     };
@@ -139,8 +133,8 @@ function RealtimeRankTable({
                   <span className="realtime-path-mono">{row.label}</span>
                 </td>
                 <td className="num realtime-rank-value">
-                  <span>{row.count.toLocaleString()}</span>
-                  <span className="realtime-rank-pct">{row.pct}%</span>
+                  <span>{formatNumber(row.count)}</span>
+                  <span className="realtime-rank-pct">{formatPercent(row.pct)}</span>
                 </td>
               </tr>
             ))}
@@ -154,17 +148,15 @@ function RealtimeRankTable({
 }
 
 export function RealtimeBreakdown({
+  websiteId,
   sessions,
   visitors,
   window30,
-  onSelectSession,
-  selectedSessionId,
 }: {
+  websiteId: string;
   sessions: RealtimeSession[];
   visitors: number;
   window30?: RealtimeWindow30;
-  onSelectSession: (sessionId: string | null) => void;
-  selectedSessionId: string | null;
 }) {
   const chartColors = useChartColors();
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all');
@@ -195,28 +187,16 @@ export function RealtimeBreakdown({
     { id: 'events', label: t('realtimeFilterEvents') },
   ];
 
-  const visitorBarColor = chartColors.accent;
-  const pageviewBarColor = `color-mix(in srgb, ${chartColors.accent} 50%, white)`;
+  const visitorBarColor = chartColors.series.visitors;
+  const pageviewBarColor = chartColors.series.pageviews;
 
   return (
     <div className="realtime-breakdown section-gap">
       <div className="stat-grid realtime-kpi-grid">
-        <div className="stat-card">
-          <div className="stat-label">{t('realtimeLiveVisitors')}</div>
-          <div className="stat-value">{onlineVisitors.toLocaleString()}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">{t('realtimeLivePages')}</div>
-          <div className="stat-value">{livePages.toLocaleString()}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">{t('realtimeLiveReferrers')}</div>
-          <div className="stat-value">{liveReferrers.toLocaleString()}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">{t('realtimeLiveCountries')}</div>
-          <div className="stat-value">{liveCountries.toLocaleString()}</div>
-        </div>
+        <StatCard label={t('realtimeLiveVisitors')} value={formatNumber(onlineVisitors)} />
+        <StatCard label={t('realtimeLivePages')} value={formatNumber(livePages)} />
+        <StatCard label={t('realtimeLiveReferrers')} value={formatNumber(liveReferrers)} />
+        <StatCard label={t('realtimeLiveCountries')} value={formatNumber(liveCountries)} />
       </div>
 
       <section className="panel realtime-chart-panel">
@@ -224,58 +204,44 @@ export function RealtimeBreakdown({
           <h3 className="realtime-rank-title">{t('realtimeTrend30m')}</h3>
         </header>
         <div className="realtime-chart-wrap">
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="label"
-                tick={{ fill: chartColors.muted, fontSize: 11 }}
-                tickLine={false}
-                axisLine={{ stroke: chartColors.border }}
-                interval="preserveStartEnd"
-                minTickGap={24}
-              />
-              <YAxis
-                allowDecimals={false}
-                tick={{ fill: chartColors.muted, fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-                width={32}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: chartColors.panel,
-                  border: `1px solid ${chartColors.border}`,
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.8125rem',
-                }}
-                labelStyle={{ color: chartColors.text }}
-              />
-              <Legend
-                verticalAlign="bottom"
-                height={28}
-                iconType="circle"
-                iconSize={8}
-                wrapperStyle={{ fontSize: '0.8125rem', color: chartColors.muted }}
-              />
-              <Bar
-                dataKey="visitors"
-                name={t('realtimeChartLegendVisitors')}
-                stackId="traffic"
-                fill={visitorBarColor}
-                radius={[0, 0, 0, 0]}
-                maxBarSize={28}
-              />
-              <Bar
-                dataKey="pageviews"
-                name={t('realtimeChartLegendViews')}
-                stackId="traffic"
-                fill={pageviewBarColor}
-                radius={[2, 2, 0, 0]}
-                maxBarSize={28}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+          <AnalyticsChart
+            Chart={BarChart}
+            data={chartData}
+            margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+            responsive={{ width: '100%', height: 220 }}
+            xAxis={{
+              dataKey: 'label',
+              tickLine: false,
+              axisLine: { stroke: chartColors.border },
+              interval: 'preserveStartEnd',
+              minTickGap: 24,
+            }}
+            yAxis={{ tickLine: false, axisLine: false, width: 32 }}
+          >
+            <Legend
+              verticalAlign="bottom"
+              height={28}
+              iconType="circle"
+              iconSize={8}
+              wrapperStyle={{ fontSize: '0.8125rem', color: chartColors.muted }}
+            />
+            <Bar
+              dataKey="visitors"
+              name={t('realtimeChartLegendVisitors')}
+              stackId="traffic"
+              fill={visitorBarColor}
+              radius={[0, 0, 0, 0]}
+              maxBarSize={28}
+            />
+            <Bar
+              dataKey="pageviews"
+              name={t('realtimeChartLegendViews')}
+              stackId="traffic"
+              fill={pageviewBarColor}
+              radius={[2, 2, 0, 0]}
+              maxBarSize={28}
+            />
+          </AnalyticsChart>
         </div>
       </section>
 
@@ -289,46 +255,56 @@ export function RealtimeBreakdown({
             aria-label={t('realtimeActivityLog')}
           />
         </header>
-        <ul className="list-plain realtime-activity-feed">
-          {activityRows.map((session) => {
-            const isSelected = selectedSessionId === session.sessionId;
-            const countryLabel = session.country ? getCountryLabel(session.country) : t('unknown');
-            return (
-              <li key={session.sessionId} className="realtime-activity-item">
-                <button
-                  type="button"
-                  className={`realtime-activity-btn${isSelected ? ' is-selected' : ''}`}
-                  onClick={() =>
-                    onSelectSession(isSelected ? null : session.sessionId)
-                  }
-                >
-                  <SessionAvatar
-                    seed={session.sessionId}
-                    size={28}
-                    className="realtime-activity-avatar"
-                  />
-                  <span className="realtime-activity-body">
-                    <span className="realtime-activity-time text-muted">
-                      {new Date(session.createdAt).toLocaleTimeString()}
+        {activityRows.length ? (
+          <ul className="list-plain realtime-activity-feed">
+            {activityRows.map((session) => {
+              const countryLabel = session.country ? getCountryLabel(session.country) : t('unknown');
+              const sessionHref = `/websites/${websiteId}/sessions/${session.sessionId}`;
+              const locationHint = session.country
+                ? t('realtimeVisitorFrom').replace('{country}', countryLabel)
+                : undefined;
+              return (
+                <li key={session.sessionId} className="realtime-activity-item">
+                  <Link
+                    to={sessionHref}
+                    className="realtime-activity-link"
+                    aria-label={t('realtimeOpenSession').replace('{path}', session.urlPath || '/')}
+                  >
+                    <SessionAvatar
+                      seed={session.sessionId}
+                      size={28}
+                      className="realtime-activity-avatar"
+                    />
+                    <span className="realtime-activity-body">
+                      <span
+                        className="realtime-activity-time text-muted"
+                        title={formatDateTime(session.createdAt)}
+                      >
+                        {formatRelativeTime(session.createdAt)}
+                      </span>
+                      <span className="realtime-activity-text">
+                        <span className="realtime-path-mono">{session.urlPath || '/'}</span>
+                        {locationHint ? (
+                          <span className="text-muted realtime-activity-meta">
+                            {' · '}
+                            {locationHint}
+                          </span>
+                        ) : null}
+                      </span>
                     </span>
-                    <span className="realtime-activity-text">
-                      <span className="realtime-path-mono">{session.urlPath || '/'}</span>
-                      {session.country ? (
-                        <span className="text-muted realtime-activity-meta">
-                          {' · '}
-                          {t('realtimeVisitorFrom').replace('{country}', countryLabel)}
-                        </span>
-                      ) : null}
-                    </span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-          {!activityRows.length ? (
-            <li className="text-muted realtime-activity-empty">{t('realtimeNoActivity')}</li>
-          ) : null}
-        </ul>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <div className="realtime-activity-empty-wrap">
+            <EmptyState
+              title={t('realtimeNoActivity')}
+              description={t('realtimeEmptyHint')}
+            />
+          </div>
+        )}
       </section>
 
       <div className="realtime-tables-grid">

@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { api, authenticatedFetch, type AdminUser } from '../lib/api';
+import { formatDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
 
 interface AuditEntry {
@@ -118,11 +120,12 @@ export default function AdminPage() {
     (usersQuery.error as Error | undefined)?.message === 'Forbidden';
 
   return (
-    <div className="page">
-      <PageHeader title={t('admin')} subtitle={t('adminSubtitle')} backTo="/websites" backLabel={t('websites')} />
+    <Page>
+      <PageHeader title={t('admin')} lead={t('adminSubtitle')} backTo="/websites" backLabel={t('websites')} />
 
+      <PageBody>
       {isForbidden ? (
-        <div className="panel empty-state-rich">
+        <div className="section-gap">
           <h3>{t('adminRequired')}</h3>
           <p className="text-danger">{t('adminDenied')}</p>
         </div>
@@ -259,7 +262,7 @@ export default function AdminPage() {
                     {entry.entityId ? ` · ${entry.entityId.slice(0, 8)}` : ''}
                   </span>
                   <span className="text-muted list-row-value">
-                    {entry.createdAt ? new Date(entry.createdAt).toLocaleString() : ''}
+                    {entry.createdAt ? formatDateTime(entry.createdAt) : ''}
                   </span>
                 </li>
               ))}
@@ -267,6 +270,7 @@ export default function AdminPage() {
           </section>
         </>
       )}
-    </div>
+      </PageBody>
+    </Page>
   );
 }

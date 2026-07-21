@@ -1,3 +1,4 @@
+import { formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 
 export function statChangeDeltaClass(change: number) {
@@ -18,7 +19,7 @@ export function StatChangeDelta({
   return (
     <div className={`stat-delta ${statChangeDeltaClass(colorChange)}`}>
       {arrow ? `${arrow} ` : ''}
-      {Math.abs(change)}% {t('compareDeltaVsPrevious')}
+      {formatPercent(Math.abs(change), { digits: 0 })} {t('compareDeltaVsPrevious')}
     </div>
   );
 }

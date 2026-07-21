@@ -1,28 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { Bar, BarChart, Line, LineChart } from 'recharts';
+import { AnalyticsChart } from '../components/AnalyticsChart';
+import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
+import { EventCatalogPicker } from '../components/EventCatalogPicker';
 import {
   MasterDetailLayout,
   MasterDetailListItem,
   MasterDetailPane,
 } from '../components/master-detail';
+import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
+import { ProductLineCrossLinks } from '../components/ProductLineCrossLinks';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { api, type Insight, type InsightQuery, type InsightResult, type InsightType, type Website } from '../lib/api';
 import { presetToRange, rangeQueryString } from '../lib/dateRange';
+import { formatNumber, formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { useChartColors } from '../lib/useChartColors';
@@ -59,11 +56,8 @@ function insightTypeLabel(type: InsightType) {
   return defaultName(type);
 }
 
-function parseEvents(value: string) {
-  return value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
+function funnelStepsFromQuery(events: string[] | undefined) {
+  return events?.length ? events : ['signup', 'purchase'];
 }
 
 function ResultPreview({ result }: { result: InsightResult | null | undefined }) {
@@ -73,15 +67,9 @@ function ResultPreview({ result }: { result: InsightResult | null | undefined })
   if (result.kind === 'trend') {
     return (
       <div className="chart-wrap chart-wrap-compact">
-        <ResponsiveContainer>
-          <LineChart data={result.series} margin={{ left: 8, right: 16 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
-            <XAxis dataKey="x" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-            <YAxis tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-            <Tooltip contentStyle={{ background: chartColors.panel, border: `1px solid ${chartColors.border}`, borderRadius: 8, color: chartColors.text }} />
-            <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
+        <AnalyticsChart Chart={LineChart} data={result.series} margin={{ left: 8, right: 16 }} xAxis={{ dataKey: 'x' }}>
+          <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} />
+        </AnalyticsChart>
       </div>
     );
   }
@@ -91,17 +79,19 @@ function ResultPreview({ result }: { result: InsightResult | null | undefined })
     return (
       <>
         <div className="chart-wrap chart-wrap-compact">
-          <ResponsiveContainer>
-            <BarChart data={rows} layout="vertical" margin={{ left: 8, right: 16 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} horizontal={false} />
-              <XAxis type="number" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-              <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-              <Tooltip contentStyle={{ background: chartColors.panel, border: `1px solid ${chartColors.border}`, borderRadius: 8, color: chartColors.text }} />
-              <Bar dataKey="count" fill={chartColors.accent} radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <AnalyticsChart
+            Chart={BarChart}
+            data={rows}
+            layout="vertical"
+            margin={{ left: 8, right: 16 }}
+            grid={{ horizontal: false }}
+            xAxis={{ type: 'number' }}
+            yAxis={{ type: 'category', dataKey: 'name', width: 110 }}
+          >
+            <Bar dataKey="count" fill={chartColors.accent} radius={[0, 4, 4, 0]} />
+          </AnalyticsChart>
         </div>
-        <p className="text-muted">{t('overallConversion')}: {result.conversion}%</p>
+        <p className="text-muted">{t('overallConversion')}: {formatPercent(result.conversion)}</p>
       </>
     );
   }
@@ -110,15 +100,9 @@ function ResultPreview({ result }: { result: InsightResult | null | undefined })
     const rows = result.distribution.map((row) => ({ name: `${row.activeDays}d`, actors: row.actors }));
     return (
       <div className="chart-wrap chart-wrap-compact">
-        <ResponsiveContainer>
-          <BarChart data={rows} margin={{ left: 8, right: 16 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
-            <XAxis dataKey="name" tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-            <YAxis tick={{ fontSize: 11, fill: chartColors.muted }} stroke={chartColors.border} />
-            <Tooltip contentStyle={{ background: chartColors.panel, border: `1px solid ${chartColors.border}`, borderRadius: 8, color: chartColors.text }} />
-            <Bar dataKey="actors" fill={chartColors.accent} radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <AnalyticsChart Chart={BarChart} data={rows} margin={{ left: 8, right: 16 }} xAxis={{ dataKey: 'name' }}>
+          <Bar dataKey="actors" fill={chartColors.accent} radius={[4, 4, 0, 0]} />
+        </AnalyticsChart>
       </div>
     );
   }
@@ -141,7 +125,7 @@ function ResultPreview({ result }: { result: InsightResult | null | undefined })
             {result.next.map((row) => (
               <tr key={row.path}>
                 <td>{row.path}</td>
-                <td className="num">{row.count.toLocaleString()}</td>
+                <td className="num">{formatNumber(row.count)}</td>
               </tr>
             ))}
           </tbody>
@@ -163,7 +147,7 @@ function ResultPreview({ result }: { result: InsightResult | null | undefined })
           {result.rows.map((row) => (
             <tr key={row.x}>
               <td>{row.x}</td>
-              <td className="num">{row.y.toLocaleString()}</td>
+              <td className="num">{formatNumber(row.y)}</td>
             </tr>
           ))}
         </tbody>
@@ -253,28 +237,41 @@ export default function InsightsPage() {
   }
 
   return (
-    <div className="page page-insights">
-      <PageHeader title={t('insights')} subtitle={t('insightsSubtitle')} backTo="/websites" backLabel={t('websites')} />
+    <Page className="page-insights">
+      <PageHeader
+        title={t('insights')}
+        lead={t('insightsSubtitle')}
+        backTo="/websites"
+        backLabel={t('websites')}
+        meta={<ProductLineCrossLinks surface="insights" />}
+      />
 
+      <PageBody>
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
-      <section className="panel section-gap">
+      <section className="section-gap">
         <MasterDetailLayout
           list={
-            <>
-              {(insightsQuery.data ?? []).map((insight) => (
-                <MasterDetailListItem
-                  key={insight.id}
-                  selected={selectedId === insight.id}
-                  onSelect={() => selectInsight(insight)}
-                  title={insight.name}
-                  subtitle={insightTypeLabel(insight.type)}
-                />
-              ))}
-              {!insightsQuery.isLoading && !(insightsQuery.data ?? []).length ? (
-                <EmptyState title={t('insightsEmptyTitle')} description={t('insightsEmptyBody')} />
-              ) : null}
-            </>
+            <DataViewState
+              loading={insightsQuery.isLoading}
+              error={insightsQuery.isError ? insightsQuery.error : null}
+              onRetry={() => insightsQuery.refetch()}
+              isEmpty={!insightsQuery.isLoading && !(insightsQuery.data ?? []).length}
+              emptyTitle={t('insightsEmptyTitle')}
+              emptyDescription={t('insightsEmptyBody')}
+            >
+              <>
+                {(insightsQuery.data ?? []).map((insight) => (
+                  <MasterDetailListItem
+                    key={insight.id}
+                    selected={selectedId === insight.id}
+                    onSelect={() => selectInsight(insight)}
+                    title={insight.name}
+                    subtitle={insightTypeLabel(insight.type)}
+                  />
+                ))}
+              </>
+            </DataViewState>
           }
           detail={
             <MasterDetailPane
@@ -333,11 +330,14 @@ export default function InsightsPage() {
               {type === 'funnel' ? (
                 <div className="field">
                   <Label htmlFor="insight-events">{t('funnel')}</Label>
-                  <Input
+                  <EventCatalogPicker
+                    mode="multi"
+                    websiteId={websiteId}
                     id="insight-events"
-                    value={(query.events ?? []).join(',')}
-                    onChange={(event) => setQuery((prev) => ({ ...prev, events: parseEvents(event.target.value) }))}
-                    placeholder="signup,purchase"
+                    value={funnelStepsFromQuery(query.events)}
+                    onChange={(events) => setQuery((prev) => ({ ...prev, events }))}
+                    placeholder={t('funnelStepsPlaceholder')}
+                    aria-label={t('funnel')}
                   />
                 </div>
               ) : type === 'table' ? (
@@ -369,11 +369,14 @@ export default function InsightsPage() {
               ) : type === 'trend' || type === 'stickiness' ? (
                 <div className="field">
                   <Label htmlFor="insight-event">{t('event')}</Label>
-                  <Input
+                  <EventCatalogPicker
+                    mode="single"
+                    websiteId={websiteId}
                     id="insight-event"
                     value={query.event ?? ''}
-                    onChange={(event) => setQuery((prev) => ({ ...prev, event: event.target.value }))}
+                    onChange={(event) => setQuery((prev) => ({ ...prev, event }))}
                     placeholder={type === 'trend' ? t('insightTrendEventPlaceholder') : t('stickinessEventPlaceholder')}
+                    allowEmpty={type === 'stickiness'}
                   />
                 </div>
               ) : null}
@@ -408,6 +411,13 @@ export default function InsightsPage() {
                 </Button>
               ) : null}
             </div>
+            <p className="text-muted insight-save-share-hint">
+              {t('insightSaveShareHintBeforeBoards')}{' '}
+              <Link to="/boards">{t('boards')}</Link>
+              {t('insightSaveShareHintBeforeReports')}{' '}
+              <Link to="/reports">{t('reports')}</Link>
+              {t('insightSaveShareHintEnd')}
+            </p>
             </>
             ) : null}
 
@@ -418,16 +428,19 @@ export default function InsightsPage() {
                   <p className="text-muted">{t('insightPreviewLead')}</p>
                 </div>
               </div>
-              {previewMutation.isPending ? (
-                <div className="skeleton skeleton-block" aria-busy />
-              ) : (
+              <DataViewState
+                loading={previewMutation.isPending}
+                error={previewMutation.isError ? previewMutation.error : null}
+                onRetry={() => previewMutation.mutate()}
+              >
                 <ResultPreview result={previewMutation.data?.data} />
-              )}
+              </DataViewState>
             </div>
             </MasterDetailPane>
           }
         />
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

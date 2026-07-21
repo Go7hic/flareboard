@@ -1,20 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Bar, BarChart, Legend } from 'recharts';
+import { AnalyticsChart } from '../components/AnalyticsChart';
 import { CompareReportControls } from '../components/CompareReportControls';
 import { StatChangeDelta } from '../components/StatChangeDelta';
 import { EmptyState } from '../components/EmptyState';
 import { MetricsTable } from '../components/MetricsTable';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
+import { StatCard, StatCardSkeleton } from '../components/ui/stat-card';
 import { Skeleton } from '../components/ui/skeleton';
 import { useBreakdownMetrics } from '../hooks/useBreakdownMetrics';
 import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
@@ -37,6 +32,7 @@ import {
   type MetricsSeries,
 } from '../lib/compare-utils';
 import { rangeQueryString } from '../lib/dateRange';
+import { formatNumber, formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
 
@@ -50,41 +46,27 @@ type CompareResponse = {
   };
 };
 
-function CompareKpiCard({
-  label,
-  value,
-  change,
-  invertDelta = false,
-}: {
-  label: string;
-  value: string;
-  change: number;
-  invertDelta?: boolean;
-}) {
-  return (
-    <div className="stat-card">
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{value}</div>
-      <StatChangeDelta change={change} invertColors={invertDelta} />
-    </div>
-  );
-}
-
-function KpiSkeleton() {
-  return (
-    <div className="stat-card stat-card-skeleton" aria-hidden>
-      <Skeleton className="h-3 w-2/3" />
-      <Skeleton className="mt-[0.65rem] h-7 w-full" />
-    </div>
-  );
-}
-
 export default function WebsiteComparePage() {
   const chartColors = useChartColors();
+  const [searchParams] = useSearchParams();
+  const compareFromUrl = searchParams.get('compare');
+  const segmentFromUrl = searchParams.get('segment') ?? '';
   const { websiteId, range, setRange, segmentId, setSegmentId, segmentQs, segments, rangeQs, timezone } =
     useWebsiteReportContext('24h');
-  const [compareMode, setCompareMode] = useState<CompareMode>('previous');
+  const [compareMode, setCompareMode] = useState<CompareMode>(() =>
+    compareFromUrl === 'year' ? 'year' : 'previous',
+  );
   const [metricTab, setMetricTab] = useState<MetricTab>('path');
+
+  useEffect(() => {
+    if (segmentFromUrl) setSegmentId(segmentFromUrl);
+  }, [segmentFromUrl, setSegmentId]);
+
+  useEffect(() => {
+    if (compareFromUrl === 'year' || compareFromUrl === 'previous') {
+      setCompareMode(compareFromUrl);
+    }
+  }, [compareFromUrl]);
 
   const compareRange = useMemo(
     () => computeCompareRange(range.startAt, range.endAt, compareMode),
@@ -139,19 +121,19 @@ export default function WebsiteComparePage() {
     const previousAvg = avgDurationSecFromStats(compare.stats);
     return {
       visitors: {
-        value: primary.stats.visitors.value.toLocaleString(),
+        value: formatNumber(primary.stats.visitors.value),
         change: pctChange(primary.stats.visitors.value, compare.stats.visitors.value),
       },
       visits: {
-        value: primary.stats.visits.value.toLocaleString(),
+        value: formatNumber(primary.stats.visits.value),
         change: pctChange(primary.stats.visits.value, compare.stats.visits.value),
       },
       pageviews: {
-        value: primary.stats.pageviews.value.toLocaleString(),
+        value: formatNumber(primary.stats.pageviews.value),
         change: pctChange(primary.stats.pageviews.value, compare.stats.pageviews.value),
       },
       bounceRate: {
-        value: `${currentBounce}%`,
+        value: formatPercent(currentBounce),
         change: pctChange(currentBounce, previousBounce),
         invertDelta: true,
       },
@@ -162,15 +144,17 @@ export default function WebsiteComparePage() {
     };
   }, [compareQuery.data]);
 
-  const visitorsCurrentFill = `color-mix(in srgb, ${chartColors.accent} 42%, var(--bg-elevated))`;
-  const pageviewsPrevFill = `color-mix(in srgb, var(--text-muted) 55%, var(--accent))`;
-  const visitorsPrevFill = `color-mix(in srgb, var(--text-muted) 80%, transparent)`;
+  const pageviewsCurrentFill = chartColors.series.pageviews;
+  const visitorsCurrentFill = chartColors.series.visitors;
+  const pageviewsPrevFill = `color-mix(in srgb, ${chartColors.series.pageviews} 40%, var(--bg-elevated))`;
+  const visitorsPrevFill = `color-mix(in srgb, ${chartColors.series.visitors} 40%, var(--bg-elevated))`;
 
   return (
-    <div className="page page-compare">
-      <WebsitePageShell
-        websiteId={websiteId}
-        pageActions={
+    <Page className="page-compare">
+      <PageHeader
+        title={t('navCompare')}
+        lead={t('websiteComparePageLead')}
+        actions={
           <CompareReportControls
             range={range}
             onRangeChange={setRange}
@@ -184,108 +168,118 @@ export default function WebsiteComparePage() {
         }
       />
 
-      <section className="panel section-gap compare-panel">
-        {compareQuery.isLoading ? (
-          <>
-            <div className="analytics-hero-stats">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <KpiSkeleton key={i} />
-              ))}
-            </div>
-            <div className="compare-chart chart-skeleton" aria-busy>
-              <Skeleton className="h-64 w-full" />
-            </div>
-          </>
-        ) : !compareQuery.data ? (
+      <PageBody>
+      {compareQuery.isLoading ? (
+        <section className="panel section-gap compare-panel">
+          <div className="analytics-hero-stats">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <StatCardSkeleton key={i} />
+            ))}
+          </div>
+          <div className="compare-chart chart-skeleton" aria-busy>
+            <Skeleton className="h-64 w-full" />
+          </div>
+        </section>
+      ) : !compareQuery.data ? (
+        <div className="section-gap">
           <EmptyState title={t('noDataInPeriod')} />
-        ) : (
+        </div>
+      ) : (
+      <section className="panel section-gap compare-panel">
           <>
             <div className="analytics-hero-stats">
-              <CompareKpiCard label={t('visitors')} value={kpiMetrics!.visitors.value} change={kpiMetrics!.visitors.change} />
-              <CompareKpiCard label={t('visits')} value={kpiMetrics!.visits.value} change={kpiMetrics!.visits.change} />
-              <CompareKpiCard label={t('pageviews')} value={kpiMetrics!.pageviews.value} change={kpiMetrics!.pageviews.change} />
-              <CompareKpiCard
+              <StatCard
+                label={t('visitors')}
+                value={kpiMetrics!.visitors.value}
+                delta={<StatChangeDelta change={kpiMetrics!.visitors.change} />}
+              />
+              <StatCard
+                label={t('visits')}
+                value={kpiMetrics!.visits.value}
+                delta={<StatChangeDelta change={kpiMetrics!.visits.change} />}
+              />
+              <StatCard
+                label={t('pageviews')}
+                value={kpiMetrics!.pageviews.value}
+                delta={<StatChangeDelta change={kpiMetrics!.pageviews.change} />}
+              />
+              <StatCard
                 label={t('bounceRate')}
                 value={kpiMetrics!.bounceRate.value}
-                change={kpiMetrics!.bounceRate.change}
-                invertDelta={kpiMetrics!.bounceRate.invertDelta}
+                delta={
+                  <StatChangeDelta
+                    change={kpiMetrics!.bounceRate.change}
+                    invertColors={kpiMetrics!.bounceRate.invertDelta}
+                  />
+                }
               />
-              <CompareKpiCard
+              <StatCard
                 label={t('avgDuration')}
                 value={kpiMetrics!.avgDuration.value}
-                change={kpiMetrics!.avgDuration.change}
+                delta={<StatChangeDelta change={kpiMetrics!.avgDuration.change} />}
               />
             </div>
 
             <div className="compare-chart">
               {chartData.length > 0 ? (
                 <div className="chart-wrap chart-wrap-hero">
-                  <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                      <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" vertical={false} />
-                      <XAxis
-                        dataKey="x"
-                        tick={{ fill: chartColors.muted, fontSize: 11 }}
-                        tickLine={false}
-                        axisLine={{ stroke: chartColors.border }}
-                        interval="preserveStartEnd"
-                        minTickGap={20}
-                      />
-                      <YAxis
-                        allowDecimals={false}
-                        tick={{ fill: chartColors.muted, fontSize: 11 }}
-                        tickLine={false}
-                        axisLine={false}
-                        width={32}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          background: chartColors.panel,
-                          border: `1px solid ${chartColors.border}`,
-                          borderRadius: 'var(--radius-sm)',
-                          fontSize: '0.8125rem',
-                        }}
-                        labelStyle={{ color: chartColors.text }}
-                      />
-                      <Legend
-                        verticalAlign="bottom"
-                        height={32}
-                        iconType="circle"
-                        iconSize={8}
-                        wrapperStyle={{ fontSize: '0.8125rem', color: chartColors.muted }}
-                      />
-                      <Bar
-                        dataKey="visitorsPrev"
-                        name={t('compareChartVisitorsPrev')}
-                        stackId="previous"
-                        fill={visitorsPrevFill}
-                        maxBarSize={24}
-                      />
-                      <Bar
-                        dataKey="pageviewsPrev"
-                        name={t('compareChartPageviewsPrev')}
-                        stackId="previous"
-                        fill={pageviewsPrevFill}
-                        radius={[2, 2, 0, 0]}
-                        maxBarSize={24}
-                      />
-                      <Bar
-                        dataKey="visitors"
-                        name={t('compareChartVisitorsCurrent')}
-                        stackId="current"
-                        fill={chartColors.accent}
-                        maxBarSize={24}
-                      />
-                      <Bar
-                        dataKey="pageviews"
-                        name={t('compareChartPageviewsCurrent')}
-                        stackId="current"
-                        fill={visitorsCurrentFill}
-                        radius={[2, 2, 0, 0]}
-                        maxBarSize={24}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <AnalyticsChart
+                    Chart={BarChart}
+                    data={chartData}
+                    margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                    responsive={{ width: '100%', height: 280 }}
+                    xAxis={{
+                      dataKey: 'x',
+                      tickLine: false,
+                      axisLine: { stroke: chartColors.border },
+                      interval: 'preserveStartEnd',
+                      minTickGap: 20,
+                    }}
+                    yAxis={{
+                      tickLine: false,
+                      axisLine: false,
+                      width: 32,
+                    }}
+                    tooltip={{ labelStyle: { color: chartColors.text } }}
+                  >
+                    <Legend
+                      verticalAlign="bottom"
+                      height={32}
+                      iconType="circle"
+                      iconSize={8}
+                      wrapperStyle={{ fontSize: '0.8125rem', color: chartColors.muted }}
+                    />
+                    <Bar
+                      dataKey="visitorsPrev"
+                      name={t('compareChartVisitorsPrev')}
+                      stackId="previous"
+                      fill={visitorsPrevFill}
+                      maxBarSize={24}
+                    />
+                    <Bar
+                      dataKey="pageviewsPrev"
+                      name={t('compareChartPageviewsPrev')}
+                      stackId="previous"
+                      fill={pageviewsPrevFill}
+                      radius={[2, 2, 0, 0]}
+                      maxBarSize={24}
+                    />
+                    <Bar
+                      dataKey="visitors"
+                      name={t('compareChartVisitorsCurrent')}
+                      stackId="current"
+                      fill={visitorsCurrentFill}
+                      maxBarSize={24}
+                    />
+                    <Bar
+                      dataKey="pageviews"
+                      name={t('compareChartPageviewsCurrent')}
+                      stackId="current"
+                      fill={pageviewsCurrentFill}
+                      radius={[2, 2, 0, 0]}
+                      maxBarSize={24}
+                    />
+                  </AnalyticsChart>
                 </div>
               ) : (
                 <EmptyState title={t('chartNoData')} description={t('noDataInPeriodHint')} />
@@ -357,8 +351,9 @@ export default function WebsiteComparePage() {
               </div>
             </div>
           </>
-        )}
       </section>
-    </div>
+      )}
+      </PageBody>
+    </Page>
   );
 }

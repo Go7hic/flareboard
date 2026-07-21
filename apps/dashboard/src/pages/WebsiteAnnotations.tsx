@@ -8,11 +8,13 @@ import {
   MasterDetailListItem,
   MasterDetailPane,
 } from '../components/master-detail';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { api, type Annotation, type AnnotationsResponse } from '../lib/api';
+import { formatDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 
@@ -21,16 +23,7 @@ type AnnotationCategory = Annotation['category'];
 const CATEGORIES: AnnotationCategory[] = ['note', 'release', 'campaign', 'incident', 'experiment'];
 
 function formatDate(value: string | number | null | undefined) {
-  if (value == null) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatDateTime(value);
 }
 
 function toInputDateTime(value: number) {
@@ -135,27 +128,25 @@ export default function WebsiteAnnotationsPage() {
   const canSave = Boolean(draft.title.trim() && draft.happenedAt) && !saveMutation.isPending;
 
   return (
-    <div className="page page-annotations">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-annotations">
+      <PageHeader title={t('annotations')} lead={t('annotationsLead')} />
+
+      <PageBody>
 
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
-      <section className="panel section-gap">
-        <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('annotations')}</h2>
-            <p className="text-muted">{t('annotationsLead')}</p>
-          </div>
-          {canEdit ? (
+      {canEdit ? (
+        <section className="panel section-gap">
+          <header className="panel-header">
             <Button type="button" variant="secondary" onClick={newAnnotation}>
               <Plus size={16} strokeWidth={2} aria-hidden />
               {t('newAnnotation')}
             </Button>
-          ) : null}
-        </header>
-      </section>
+          </header>
+        </section>
+      ) : null}
 
-      <section className="panel section-gap">
+      <section className="section-gap">
         {annotationsQuery.isLoading ? (
           <div className="skeleton skeleton-block" aria-busy />
         ) : annotations.length || !selectedId ? (
@@ -264,6 +255,7 @@ export default function WebsiteAnnotationsPage() {
           <EmptyState title={t('annotationsEmptyTitle')} description={t('annotationsEmptyBody')} />
         )}
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

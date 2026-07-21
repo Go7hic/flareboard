@@ -10,14 +10,23 @@ import {
   ResourceSearchField,
   useMasterDetailSelection,
 } from '../components/master-detail';
-import { WebsitePageShell } from '../components/WebsitePageShell';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
+import { StatCard } from '../components/ui/stat-card';
 import { api, type GroupDetailResponse, type GroupRow, type GroupsResponse } from '../lib/api';
-import { formatDate } from '../lib/formatDate';
+import { formatDateOnly, formatDateTime, formatNumber, identityPrimary } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 
 function groupLabel(group: GroupRow) {
-  return group.latestName || group.groupKey;
+  return identityPrimary([group.latestName], group.groupKey);
+}
+
+function groupDetailMeta(group: GroupRow, type: string) {
+  const lastSeen = group.lastSeenAt
+    ? `${t('lastSeen')} ${formatDateTime(group.lastSeenAt)}`
+    : null;
+  return [`${type}: ${group.groupKey}`, lastSeen].filter(Boolean).join(' · ');
 }
 
 export default function WebsiteGroupsPage() {
@@ -58,15 +67,13 @@ export default function WebsiteGroupsPage() {
   });
 
   return (
-    <div className="page page-groups">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-groups">
+      <PageHeader title={t('groups')} lead={t('groupsLead')} />
+
+      <PageBody>
 
       <section className="panel section-gap">
         <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('groups')}</h2>
-            <p className="text-muted">{t('groupsLead')}</p>
-          </div>
           <select
             className="select"
             value={activeType}
@@ -97,7 +104,7 @@ export default function WebsiteGroupsPage() {
         />
       </section>
 
-      <section className="panel section-gap">
+      <section className="section-gap">
         {groupsQuery.isLoading ? (
           <div className="skeleton skeleton-block" aria-busy />
         ) : groups.length ? (
@@ -113,9 +120,9 @@ export default function WebsiteGroupsPage() {
                 meta={
                   <>
                     <span className="badge">
-                      {group.people.toLocaleString()} {t('people')}
+                      {formatNumber(group.people)} {t('people')}
                     </span>
-                    <span className="text-muted">{formatDate(group.lastSeenAt)}</span>
+                    <span className="text-muted">{formatDateOnly(group.lastSeenAt)}</span>
                   </>
                 }
               />
@@ -124,25 +131,12 @@ export default function WebsiteGroupsPage() {
               selectedGroup ? (
                 <MasterDetailPane
                   title={groupLabel(selectedGroup)}
-                  description={`${activeType}: ${selectedGroup.groupKey}`}
+                  description={groupDetailMeta(selectedGroup, activeType)}
                 >
-                  <div className="detail-stats">
-                    <div>
-                      <span className="stat-label">{t('people')}</span>
-                      <strong className="stat-value">{selectedGroup.people.toLocaleString()}</strong>
-                    </div>
-                    <div>
-                      <span className="stat-label">{t('sessions')}</span>
-                      <strong className="stat-value">{selectedGroup.sessions.toLocaleString()}</strong>
-                    </div>
-                    <div>
-                      <span className="stat-label">{t('events')}</span>
-                      <strong className="stat-value">{selectedGroup.events.toLocaleString()}</strong>
-                    </div>
-                    <div>
-                      <span className="stat-label">{t('lastSeen')}</span>
-                      <strong className="stat-value">{formatDate(selectedGroup.lastSeenAt)}</strong>
-                    </div>
+                  <div className="experiment-summary-grid">
+                    <StatCard label={t('people')} value={formatNumber(selectedGroup.people)} />
+                    <StatCard label={t('sessions')} value={formatNumber(selectedGroup.sessions)} />
+                    <StatCard label={t('events')} value={formatNumber(selectedGroup.events)} />
                   </div>
 
                   <div className="workflow-insights-grid">
@@ -194,7 +188,7 @@ export default function WebsiteGroupsPage() {
                                 {[session.distinctId, session.browser, session.country].filter(Boolean).join(' · ') || '-'}
                               </p>
                             </div>
-                            <span className="badge">{session.events.toLocaleString()}</span>
+                            <span className="badge">{formatNumber(session.events)}</span>
                           </div>
                         ))}
                       </div>
@@ -230,7 +224,7 @@ export default function WebsiteGroupsPage() {
                                     <ExternalLink size={12} strokeWidth={2} aria-hidden />
                                   </Link>
                                 </td>
-                                <td className="text-muted">{formatDate(event.createdAt)}</td>
+                                <td className="text-muted">{formatDateTime(event.createdAt)}</td>
                               </tr>
                             ))
                           ) : (
@@ -252,6 +246,7 @@ export default function WebsiteGroupsPage() {
           <EmptyState title={t('groupsEmptyTitle')} description={t('groupsEmptyBody')} />
         )}
       </section>
-    </div>
+      </PageBody>
+    </Page>
   );
 }

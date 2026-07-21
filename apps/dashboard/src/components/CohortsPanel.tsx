@@ -13,6 +13,7 @@ import {
 } from './master-detail';
 import { Button } from './ui/button';
 import { api } from '../lib/api';
+import { formatDateOnly } from '../lib/format';
 import { t } from '../lib/i18n';
 
 type CohortRow = {
@@ -23,12 +24,6 @@ type CohortRow = {
     conditions: Array<{ field: string; operator: string; value: string }>;
   };
 };
-
-function formatCreatedAt(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
 
 export function CohortsPanel({ websiteId }: { websiteId: string }) {
   const queryClient = useQueryClient();
@@ -90,7 +85,7 @@ export function CohortsPanel({ websiteId }: { websiteId: string }) {
 
   return (
     <>
-      <section className="panel cohorts-panel">
+      <section className="cohorts-panel section-gap">
         <header className="cohorts-panel-head">
           <ResourceSearchField
             value={search}
@@ -116,7 +111,7 @@ export function CohortsPanel({ websiteId }: { websiteId: string }) {
                 onSelect={() => setSelectedId(row.id)}
                 icon={<Users size={16} strokeWidth={2} aria-hidden />}
                 title={row.name}
-                subtitle={formatCreatedAt(row.createdAt)}
+                subtitle={formatDateOnly(row.createdAt)}
                 meta={
                   <span className="text-muted">
                     {row.definition.conditions.length} {t('cohortConditions').toLowerCase()}
@@ -130,7 +125,7 @@ export function CohortsPanel({ websiteId }: { websiteId: string }) {
                   title={selectedCohort.name}
                   description={
                     <span className="text-muted">
-                      {t('cohortCreated')}: {formatCreatedAt(selectedCohort.createdAt)}
+                      {t('cohortCreated')}: {formatDateOnly(selectedCohort.createdAt)}
                     </span>
                   }
                   actions={

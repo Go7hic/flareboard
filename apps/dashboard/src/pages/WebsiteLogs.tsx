@@ -3,13 +3,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { ExternalLink, Search, TerminalSquare } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
+import { DataViewState } from '../components/DataViewState';
 import { MasterDetailSidePane, MasterDetailTableLayout } from '../components/master-detail';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
 import { SegmentTabs } from '../components/SegmentTabs';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
-import { WebsitePageShell } from '../components/WebsitePageShell';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { StatCard } from '../components/ui/stat-card';
 import {
   api,
   type LogAlertRule,
@@ -18,29 +21,18 @@ import {
   type LogTraceDetail,
   type LogTraceSummary,
 } from '../lib/api';
+import { formatDateOnly, formatDateTime, formatNumber, formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 
 const LEVELS = ['', 'trace', 'debug', 'info', 'warn', 'error', 'fatal'];
-const LOG_TABS = ['events', 'traces', 'filters', 'alerts'] as const;
-type LogsTab = (typeof LOG_TABS)[number];
-
-function formatDate(value: number | null | undefined) {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
+const LOG_SECONDARY_TABS = ['traces', 'filters', 'alerts'] as const;
+type LogsSecondaryTab = (typeof LOG_SECONDARY_TABS)[number];
 
 function formatTrendDate(value: string) {
-  return new Date(`${value}T00:00:00Z`).toLocaleDateString();
+  return formatDateOnly(`${value}T00:00:00Z`);
 }
 
 const DEFAULT_ALERT = {
@@ -61,7 +53,7 @@ export default function WebsiteLogsPage() {
   const queryClient = useQueryClient();
   const { canEdit } = useWebsitePermissions(websiteId, 'logs');
   const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
-  const [tab, setTab] = useState<LogsTab>('events');
+  const [secondaryTab, setSecondaryTab] = useState<LogsSecondaryTab | ''>('');
   const [level, setLevel] = useState('');
   const [search, setSearch] = useState('');
   const [releaseFilter, setReleaseFilter] = useState('');
@@ -83,13 +75,13 @@ export default function WebsiteLogsPage() {
 
   const logsQuery = useQuery({
     queryKey: ['logs', websiteId, range, level, debouncedSearch, releaseFilter, environmentFilter],
-    enabled: Boolean(websiteId) && tab === 'events',
+    enabled: Boolean(websiteId),
     queryFn: () => api<LogEventsResponse>(`/api/websites/${websiteId}/logs?${qs}`),
   });
 
   const tracesQuery = useQuery({
     queryKey: ['log-traces', websiteId, range, level, debouncedSearch, releaseFilter, environmentFilter],
-    enabled: Boolean(websiteId) && tab === 'traces',
+    enabled: Boolean(websiteId) && secondaryTab === 'traces',
     queryFn: () => api<{ traces: LogTraceSummary[] }>(`/api/websites/${websiteId}/logs/traces?${qs}`),
   });
 
@@ -101,13 +93,13 @@ export default function WebsiteLogsPage() {
 
   const savedFiltersQuery = useQuery({
     queryKey: ['log-filters', websiteId],
-    enabled: Boolean(websiteId) && tab === 'filters',
+    enabled: Boolean(websiteId) && secondaryTab === 'filters',
     queryFn: () => api<{ filters: LogSavedFilter[] }>(`/api/websites/${websiteId}/logs/filters`),
   });
 
   const alertRulesQuery = useQuery({
     queryKey: ['log-alerts', websiteId],
-    enabled: Boolean(websiteId) && tab === 'alerts',
+    enabled: Boolean(websiteId) && secondaryTab === 'alerts',
     queryFn: () => api<{ alertRules: LogAlertRule[] }>(`/api/websites/${websiteId}/logs/alerts`),
   });
 
@@ -201,57 +193,45 @@ export default function WebsiteLogsPage() {
     setSearch(filter.filters.search ?? '');
     setReleaseFilter(filter.filters.release ?? '');
     setEnvironmentFilter(filter.filters.environment ?? '');
-    setTab('events');
+    setSecondaryTab('');
   }
 
   return (
-    <div className="page page-logs">
-      <WebsitePageShell websiteId={websiteId} />
+    <Page className="page-logs">
+      <PageHeader
+        title={t('logs')}
+        lead={t('logsLead')}
+        actions={
+          <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
+        }
+      />
 
-      <div className="stats-header-row">
-        <div>
-          <h2 className="page-title">{t('logs')}</h2>
-          <p className="text-muted">{t('logsLead')}</p>
-        </div>
-        <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
-      </div>
-
+      <PageBody>
       {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
-      <div className="section-gap">
-        <SegmentTabs
-          aria-label={t('logs')}
-          value={tab}
-          onChange={(id) => setTab(id as LogsTab)}
-          tabs={[
-            { id: 'events', label: t('logsTabEvents') },
-            { id: 'traces', label: t('logsTabTraces') },
-            { id: 'filters', label: t('logsTabFilters') },
-            { id: 'alerts', label: t('logsTabAlerts') },
-          ]}
-        />
-      </div>
-
-      {tab === 'events' ? (
-        <>
-          <section className="stat-grid section-gap" aria-label={t('logs')}>
-            <div className="stat-card">
-              <span className="stat-label">{t('logsTotal')}</span>
-              <strong className="stat-value">{(stats?.logs ?? 0).toLocaleString()}</strong>
-            </div>
-            <div className="stat-card">
-              <span className="stat-label">{t('logsAffectedSessions')}</span>
-              <strong className="stat-value">{(stats?.sessions ?? 0).toLocaleString()}</strong>
-            </div>
-            <div className="stat-card">
-              <span className="stat-label">{t('logsLastSeen')}</span>
-              <strong className="stat-value">{formatDate(stats?.lastSeenAt)}</strong>
-              {topLevel ? (
-                <span className="stat-card-note">
-                  {t('logsTopLevel')}: {topLevel.level}
-                </span>
-              ) : null}
-            </div>
+      <DataViewState
+        loading={logsQuery.isLoading && !logsQuery.data}
+        error={logsQuery.isError ? logsQuery.error : null}
+        onRetry={() => logsQuery.refetch()}
+        loadingFallback={
+          <>
+            <section className="analytics-hero-stats section-gap">
+              <div className="skeleton" style={{ height: '5.5rem' }} />
+            </section>
+            <section className="panel section-gap">
+              <div className="skeleton" style={{ height: '14rem' }} />
+            </section>
+          </>
+        }
+      >
+          <section className="analytics-hero-stats section-gap" aria-label={t('logsTabEvents')}>
+            <StatCard label={t('logsTotal')} value={formatNumber(stats?.logs ?? 0)} />
+            <StatCard label={t('logsAffectedSessions')} value={formatNumber(stats?.sessions ?? 0)} />
+            <StatCard
+              label={t('logsLastSeen')}
+              value={formatDateTime(stats?.lastSeenAt)}
+              hint={topLevel ? `${t('logsTopLevel')}: ${topLevel.level}` : undefined}
+            />
           </section>
 
           {(trendRows.length || levelRows.length) ? (
@@ -275,8 +255,8 @@ export default function WebsiteLogsPage() {
                         {trendRows.map((row) => (
                           <tr key={row.date}>
                             <td>{formatTrendDate(row.date)}</td>
-                            <td>{row.logs.toLocaleString()}</td>
-                            <td>{row.sessions.toLocaleString()}</td>
+                            <td>{formatNumber(row.logs)}</td>
+                            <td>{formatNumber(row.sessions)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -297,7 +277,7 @@ export default function WebsiteLogsPage() {
                           <div className="breakdown-meta">
                             <strong>{row.level}</strong>
                             <span className="text-muted">
-                              {row.logs.toLocaleString()} ({share}%)
+                              {formatNumber(row.logs)} ({formatPercent(share)})
                             </span>
                           </div>
                           <div className="breakdown-track" aria-hidden>
@@ -312,7 +292,7 @@ export default function WebsiteLogsPage() {
             </section>
           ) : null}
 
-          <section className="panel section-gap">
+          <section className="panel section-gap page-logs-hero">
             <header className="panel-header">
               <div>
                 <h2 className="section-title">{t('logsRecent')}</h2>
@@ -386,7 +366,9 @@ export default function WebsiteLogsPage() {
               </div>
             </header>
 
-            {logsQuery.isLoading ? <div className="skeleton" style={{ height: '8rem' }} /> : null}
+            {logsQuery.isLoading && logsQuery.data ? (
+              <div className="skeleton" style={{ height: '8rem' }} />
+            ) : null}
 
             {!logsQuery.isLoading && rows.length ? (
               <div className="table-scroll">
@@ -428,7 +410,7 @@ export default function WebsiteLogsPage() {
                             <ExternalLink size={12} strokeWidth={2} aria-hidden />
                           </Link>
                         </td>
-                        <td className="text-muted">{formatDate(row.createdAt)}</td>
+                        <td className="text-muted">{formatDateTime(row.createdAt)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -440,11 +422,31 @@ export default function WebsiteLogsPage() {
               <EmptyState title={t('logsEmptyTitle')} description={t('logsEmptyBody')} />
             ) : null}
           </section>
-        </>
-      ) : null}
+      </DataViewState>
 
-      {tab === 'traces' ? (
-        <section className="panel section-gap">
+      <section className="logs-secondary section-gap" aria-labelledby="logs-secondary-title">
+        <header className="logs-secondary-head">
+          <div>
+            <h2 id="logs-secondary-title" className="logs-secondary-title">
+              {t('overviewMore')}
+            </h2>
+            <p className="text-muted">{t('logsSecondaryLead')}</p>
+          </div>
+          <SegmentTabs
+            aria-label={t('overviewMore')}
+            size="sm"
+            value={secondaryTab}
+            onChange={(id) => setSecondaryTab(id as LogsSecondaryTab)}
+            tabs={[
+              { id: 'traces', label: t('logsTabTraces') },
+              { id: 'filters', label: t('logsTabFilters') },
+              { id: 'alerts', label: t('logsTabAlerts') },
+            ]}
+          />
+        </header>
+
+      {secondaryTab === 'traces' ? (
+        <section className="section-gap">
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('logsTraces')}</h2>
@@ -530,8 +532,8 @@ export default function WebsiteLogsPage() {
         </section>
       ) : null}
 
-      {tab === 'filters' ? (
-        <section className="panel section-gap">
+      {secondaryTab === 'filters' ? (
+        <section className="section-gap">
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('logsSavedFilters')}</h2>
@@ -606,8 +608,8 @@ export default function WebsiteLogsPage() {
         </section>
       ) : null}
 
-      {tab === 'alerts' ? (
-        <section className="panel section-gap">
+      {secondaryTab === 'alerts' ? (
+        <section className="section-gap">
           <header className="panel-header">
             <div>
               <h2 className="section-title">{t('logsAlertRules')}</h2>
@@ -796,6 +798,8 @@ export default function WebsiteLogsPage() {
           )}
         </section>
       ) : null}
-    </div>
+      </section>
+      </PageBody>
+    </Page>
   );
 }

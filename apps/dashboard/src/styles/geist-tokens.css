@@ -135,7 +135,8 @@
   --danger: var(--geist-red-800);
   --warning: var(--geist-amber-800);
   --focus-ring: var(--geist-blue-700);
-  --shell-bg: color-mix(in srgb, var(--geist-background-100) 88%, transparent);
+  --shell-bg: color-mix(in srgb, var(--geist-background-100) 92%, transparent);
+  --shell-edge-highlight: color-mix(in srgb, #ffffff 55%, transparent);
   --cf-orange: #e85d04;
   --cf-orange-muted: rgba(232, 93, 4, 0.12);
   /* Data-series hues only — never gray-1000 / --accent / --text (chrome). */
@@ -297,7 +298,8 @@
   --danger: var(--geist-red-800);
   --warning: var(--geist-amber-800);
   --focus-ring: var(--geist-blue-700);
-  --shell-bg: color-mix(in srgb, var(--geist-background-100) 88%, transparent);
+  --shell-bg: color-mix(in srgb, var(--geist-background-100) 92%, transparent);
+  --shell-edge-highlight: color-mix(in srgb, #ffffff 14%, transparent);
   --cf-orange: #e85d04;
   --cf-orange-muted: rgba(232, 93, 4, 0.12);
   /* Data-series hues only — never gray-1000 / --accent / --text (chrome). */

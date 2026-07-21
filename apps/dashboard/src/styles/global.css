@@ -200,12 +200,19 @@ textarea {
   border-radius: var(--radius-sm);
   background: var(--bg-elevated);
   cursor: pointer;
-  transition: border-color var(--transition), background var(--transition);
+  transition:
+    border-color var(--transition),
+    background var(--transition),
+    transform 100ms ease-out;
 }
 
 .theme-toggle:hover {
   border-color: var(--border-strong);
   background: var(--bg-subtle);
+}
+
+.theme-toggle:active {
+  transform: scale(0.97);
 }
 
 .theme-toggle-track {
@@ -280,12 +287,20 @@ textarea {
   font-weight: 500;
   line-height: 1;
   cursor: pointer;
-  transition: border-color var(--transition), background var(--transition), color var(--transition);
+  transition:
+    border-color var(--transition),
+    background var(--transition),
+    color var(--transition),
+    transform 100ms ease-out;
 }
 
 .locale-selector-trigger:hover {
   border-color: var(--border-strong);
   background: var(--bg-subtle);
+}
+
+.locale-selector-trigger:active {
+  transform: scale(0.97);
 }
 
 .locale-selector.is-open .locale-selector-trigger {
@@ -429,8 +444,10 @@ textarea {
   gap: 1rem;
   padding: 0 1.5rem;
   background: var(--shell-bg);
-  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
   border-bottom: 1px solid var(--border-subtle);
+  box-shadow: inset 0 1px 0 var(--shell-edge-highlight);
 }
 
 .shell-topbar--mobile {
@@ -460,13 +477,21 @@ textarea {
   color: var(--text-muted);
   cursor: pointer;
   flex-shrink: 0;
-  transition: color var(--transition), background var(--transition), border-color var(--transition);
+  transition:
+    color var(--transition),
+    background var(--transition),
+    border-color var(--transition),
+    transform 100ms ease-out;
 }
 
 .shell-menu-toggle:hover {
   color: var(--text);
   background: var(--bg-subtle);
   border-color: var(--border-strong);
+}
+
+.shell-menu-toggle:active {
+  transform: scale(0.97);
 }
 
 .app-sidebar {
@@ -799,8 +824,10 @@ textarea {
   gap: 1rem;
   padding: 0 1.5rem;
   background: var(--shell-bg);
-  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
   border-bottom: 1px solid var(--border-subtle);
+  box-shadow: inset 0 1px 0 var(--shell-edge-highlight);
 }
 
 .shell-brand {
@@ -863,12 +890,19 @@ textarea {
   color: var(--text-muted);
   text-decoration: none;
   white-space: nowrap;
-  transition: color var(--transition), background var(--transition);
+  transition:
+    color var(--transition),
+    background var(--transition),
+    transform 100ms ease-out;
 }
 
 .shell-link:hover {
   color: var(--text);
   background: var(--bg-subtle);
+}
+
+.shell-link:active {
+  transform: scale(0.97);
 }
 
 .shell-link.active {
@@ -1167,14 +1201,16 @@ img.website-switcher-icon {
   margin: 0;
   font-size: clamp(1.375rem, 2.2vw, 1.75rem);
   font-weight: 600;
-  letter-spacing: -0.04em;
-  line-height: 1.15;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
 .page-subtitle {
   margin: 0.35rem 0 0;
   color: var(--text-muted);
   font-size: 0.875rem;
+  letter-spacing: 0;
+  line-height: 1.45;
 }
 
 /* Desktop: keep PageHeader lead on one line beside actions; wrap below 900px. */
@@ -1787,7 +1823,12 @@ img.website-switcher-icon {
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background var(--transition), color var(--transition), transform 80ms ease, box-shadow var(--transition), border-color var(--transition);
+  transition:
+    background var(--transition),
+    color var(--transition),
+    transform 100ms ease-out,
+    box-shadow var(--transition),
+    border-color var(--transition);
   white-space: nowrap;
   text-decoration: none;
 }
@@ -1799,7 +1840,7 @@ a.btn:active {
 }
 
 .btn:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
 }
 
 .btn:disabled {
@@ -2035,12 +2076,37 @@ code {
     background: var(--bg-subtle);
   }
 
+  .theme-toggle,
+  .theme-toggle-thumb,
+  .locale-selector-trigger,
+  .locale-selector-chevron,
+  .shell-link,
+  .shell-menu-toggle,
+  .btn {
+    transition-duration: 0.01ms;
+  }
+
+  .theme-toggle:active,
+  .locale-selector-trigger:active,
+  .shell-link:active,
+  .shell-menu-toggle:active,
   .btn:active {
     transform: none;
   }
 
   .list-item-interactive:hover {
     transform: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .shell-nav,
+  .shell-topbar,
+  .landing-nav {
+    background: var(--bg);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
   }
 }
 
@@ -7997,9 +8063,10 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   z-index: 100;
   width: 100%;
   background: var(--shell-bg);
-  -webkit-backdrop-filter: blur(14px) saturate(160%);
-  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
   border-bottom: 1px solid var(--border-subtle);
+  box-shadow: inset 0 1px 0 var(--shell-edge-highlight);
 }
 
 .landing-nav-inner {

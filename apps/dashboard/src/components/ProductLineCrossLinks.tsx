@@ -8,7 +8,7 @@ export function ProductLineCrossLinks({ surface }: { surface: ProductLineSurface
     return (
       <p className="section-lead product-line-cross-links">
         {t('insightsCrossLinksBeforeBoards')}{' '}
-        <Link to="/boards">{t('boards')}</Link>
+        <Link to="/boards">{t('boards')}</Link>{' '}
         {t('insightsCrossLinksBeforeReports')}{' '}
         <Link to="/reports">{t('reports')}</Link>
         {t('insightsCrossLinksEnd')}
@@ -20,7 +20,7 @@ export function ProductLineCrossLinks({ surface }: { surface: ProductLineSurface
     return (
       <p className="section-lead product-line-cross-links">
         {t('boardsCrossLinksBeforeInsights')}{' '}
-        <Link to="/insights">{t('insights')}</Link>
+        <Link to="/insights">{t('insights')}</Link>{' '}
         {t('boardsCrossLinksBeforeReports')}{' '}
         <Link to="/reports">{t('reports')}</Link>
         {t('boardsCrossLinksEnd')}
@@ -31,7 +31,7 @@ export function ProductLineCrossLinks({ surface }: { surface: ProductLineSurface
   return (
     <p className="section-lead product-line-cross-links">
       {t('reportsCrossLinksBeforeInsights')}{' '}
-      <Link to="/insights">{t('insights')}</Link>
+      <Link to="/insights">{t('insights')}</Link>{' '}
       {t('reportsCrossLinksBeforeBoards')}{' '}
       <Link to="/boards">{t('boards')}</Link>
       {t('reportsCrossLinksEnd')}

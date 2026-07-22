@@ -30,16 +30,16 @@ type ReportTemplate = {
 };
 
 const REPORT_HUB_SECTIONS = [
-  { id: 'funnel', labelKey: 'funnel' as const, route: 'funnel', descriptionKey: 'funnelNoDataHint' as const },
-  { id: 'retention', labelKey: 'retentionCohorts' as const, route: 'retention', descriptionKey: 'retention' as const },
-  { id: 'journey', labelKey: 'userJourneys' as const, route: 'journeys', descriptionKey: 'navJourneys' as const },
-  { id: 'attribution', labelKey: 'attribution' as const, route: 'attribution', descriptionKey: 'attributionLead' as const },
-  { id: 'breakdown', labelKey: 'breakdownCountry' as const, route: 'breakdown', descriptionKey: 'breakdown' as const },
-  { id: 'performance', labelKey: 'webVitals' as const, route: 'performance', descriptionKey: 'performance' as const },
-  { id: 'utm', labelKey: 'utmBreakdown' as const, route: 'utm', descriptionKey: 'navUtm' as const },
-  { id: 'revenue', labelKey: 'revenue' as const, route: 'revenue', descriptionKey: 'revenue' as const },
-  { id: 'cohorts', labelKey: 'cohorts' as const, route: 'cohorts', descriptionKey: 'cohorts' as const },
-  { id: 'goals', labelKey: 'goals' as const, route: 'goals', descriptionKey: 'goals' as const },
+  { id: 'funnel', labelKey: 'funnel' as const, route: 'funnel', descriptionKey: 'featFunnelBody' as const },
+  { id: 'retention', labelKey: 'retentionCohorts' as const, route: 'retention', descriptionKey: 'featRetentionBody' as const },
+  { id: 'journey', labelKey: 'userJourneys' as const, route: 'journeys', descriptionKey: 'featJourneysBody' as const },
+  { id: 'attribution', labelKey: 'attribution' as const, route: 'attribution', descriptionKey: 'featAttributionBody' as const },
+  { id: 'breakdown', labelKey: 'breakdownCountry' as const, route: 'breakdown', descriptionKey: 'featBreakdownBody' as const },
+  { id: 'performance', labelKey: 'webVitals' as const, route: 'performance', descriptionKey: 'featWebVitalsBody' as const },
+  { id: 'utm', labelKey: 'utmBreakdown' as const, route: 'utm', descriptionKey: 'featUtmBody' as const },
+  { id: 'revenue', labelKey: 'revenue' as const, route: 'revenue', descriptionKey: 'featRevenueBody' as const },
+  { id: 'cohorts', labelKey: 'cohorts' as const, route: 'cohorts', descriptionKey: 'featCohortsBody' as const },
+  { id: 'goals', labelKey: 'goals' as const, route: 'goals', descriptionKey: 'featGoalsBody' as const },
 ] as const;
 
 function reportTypeLabel(type: string) {

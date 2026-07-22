@@ -122,16 +122,16 @@ export function MetricsTable({
           <tbody>
             {displayRows.map((row) => {
               const value = rowValue(row);
+              const barPct = Math.min(100, Math.max(0, Math.round((value / maxY) * 100)));
               return (
                 <tr key={`${title}-${row.x}`}>
-                  <td>
-                    <div>{row.x}</div>
+                  <td className="metrics-table-dim">
+                    <div className="metrics-table-label" title={row.x}>
+                      {row.x}
+                    </div>
                     <div className="metrics-table-bar" aria-hidden>
                       <div className="metrics-table-bar-fill">
-                        <div
-                          className="metrics-table-bar-inner"
-                          style={{ width: `${Math.round((value / maxY) * 100)}%` }}
-                        />
+                        <div className="metrics-table-bar-inner" style={{ width: `${barPct}%` }} />
                       </div>
                     </div>
                   </td>
@@ -142,7 +142,7 @@ export function MetricsTable({
                       <td className="num">{formatDurationSeconds(row.avgTime)}</td>
                     </>
                   ) : (
-                    <td className="num">{formatNumber(value)}</td>
+                    <td className="num metrics-table-metric">{formatNumber(value)}</td>
                   )}
                 </tr>
               );

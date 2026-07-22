@@ -172,7 +172,7 @@ export function BoardEditorForm({
   }
 
   return (
-    <form onSubmit={onFormSubmit}>
+    <form className="board-editor-form" onSubmit={onFormSubmit}>
       <div className="field">
         <Label htmlFor="board-editor-name">{t('boardName')}</Label>
         <Input

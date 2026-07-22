@@ -31,7 +31,7 @@ const compactXAxis = {
 const compactYAxis = {
   tickLine: false,
   axisLine: false,
-  width: 40,
+  width: 44,
 };
 
 function boardWidgetClassName(widget: Widget) {
@@ -119,10 +119,10 @@ function BoardWidget({
               <AnalyticsChart
                 Chart={LineChart}
                 data={chartData}
-                margin={{ top: 4, right: 4, left: 0, bottom: 0 }}
+                margin={{ top: 8, right: 8, left: 0, bottom: 4 }}
                 responsive={{ width: '100%', height: '100%' }}
-                xAxis={{ dataKey: 'x', tick: { fontSize: 10 }, ...compactXAxis }}
-                yAxis={{ allowDecimals: false, tick: { fontSize: 10 }, ...compactYAxis }}
+                xAxis={{ dataKey: 'x', tick: { fontSize: 11 }, ...compactXAxis }}
+                yAxis={{ allowDecimals: false, tick: { fontSize: 11 }, ...compactYAxis }}
               >
                 <Line
                   type="monotone"
@@ -174,9 +174,10 @@ function InsightBoardWidget({
             <AnalyticsChart
               Chart={LineChart}
               data={result.series.map((point) => ({ x: formatChartLabel(point.x), y: point.y }))}
+              margin={{ top: 8, right: 8, left: 0, bottom: 4 }}
               responsive={{ width: '100%', height: '100%' }}
-              xAxis={{ dataKey: 'x', tick: { fontSize: 10 }, ...compactXAxis }}
-              yAxis={{ allowDecimals: false, tick: { fontSize: 10 }, ...compactYAxis }}
+              xAxis={{ dataKey: 'x', tick: { fontSize: 11 }, ...compactXAxis }}
+              yAxis={{ allowDecimals: false, tick: { fontSize: 11 }, ...compactYAxis }}
             >
               <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} />
             </AnalyticsChart>

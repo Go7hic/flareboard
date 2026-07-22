@@ -1518,8 +1518,7 @@ img.website-switcher-icon {
  * NOTE: .field-label, .input, .select, .textarea are kept for native <select>
  * elements and legacy markup. New code should use src/components/ui/* components.
  *
- * Field rhythm: flex column + gap owns label→control spacing. Neutralize Label's
- * Tailwind mb-1.5 (6px) so every create/filter form inherits the same air.
+ * Field rhythm: flex column + gap owns label→control spacing.
  */
 .field {
   display: flex;
@@ -1610,7 +1609,7 @@ img.website-switcher-icon {
 
 .form-row {
   display: flex;
-  gap: 0.75rem;
+  gap: 1rem;
   flex-wrap: wrap;
   align-items: flex-end;
 }
@@ -1619,6 +1618,10 @@ img.website-switcher-icon {
   flex: 1;
   min-width: 160px;
   margin-bottom: 0;
+}
+
+.form-row > :not(.field) {
+  flex-shrink: 0;
 }
 
 .panel-form {
@@ -4085,7 +4088,7 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 }
 
 .collapsible-section-body {
-  padding: 0 1.35rem 1.35rem;
+  padding: 1.25rem 1.35rem 1.35rem;
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -4268,7 +4271,24 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 
 .reports-meta {
   font-size: 0.8125rem;
-  margin: 0;
+  margin: 0.4rem 0 0;
+  line-height: 1.45;
+}
+
+.page-reports .page-header-meta {
+  margin-top: 0.65rem;
+}
+
+.page-reports .reports-sidebar-panel {
+  padding-bottom: 1.35rem;
+}
+
+.page-reports .reports-sidebar-form .reports-template-desc {
+  margin-bottom: 0.15rem;
+}
+
+.page-reports .reports-hub-grid {
+  margin-top: 1rem;
 }
 
 .reports-path-mono {
@@ -6605,13 +6625,14 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 }
 
 .dashboard-aggregate-head .section-title {
-  margin: 0 0 0.65rem;
+  margin: 0 0 0.85rem;
 }
 
 .dashboard-aggregate-kpis {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1.25rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  max-width: 34rem;
 }
 
 .dashboard-aggregate-kpi {
@@ -7659,6 +7680,10 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
     grid-template-columns: 1fr;
   }
 
+  .dashboard-aggregate-kpis {
+    max-width: none;
+  }
+
   .dashboard-site-ranking-panel {
     border-left: none;
     padding-left: 0;
@@ -7799,7 +7824,10 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 }
 
 .board-stat-widget {
-  padding: 0.85rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.1rem 1.15rem 1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: var(--bg-subtle);
@@ -7823,7 +7851,7 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 }
 
 .board-stat-widget-title {
-  margin: 0 0 0.65rem;
+  margin: 0;
   font-size: 0.9375rem;
   font-weight: 600;
 }
@@ -7831,21 +7859,17 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 .board-stat-widget-kpis {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
-  margin-bottom: 0.65rem;
+  gap: 0.65rem;
+  margin: 0;
 }
 
-.board-stat-widget-kpis .stat-card {
-  padding: 0.5rem 0.6rem;
-}
-
-.board-stat-widget-kpis .stat-value {
-  font-size: 1rem;
+.board-stat-widget-kpis > * {
+  min-width: 0;
 }
 
 .board-stat-widget-chart {
-  height: 4.5rem;
-  min-height: 4.5rem;
+  height: 8rem;
+  min-height: 8rem;
 }
 
 .board-stat-widget-empty {
@@ -7858,8 +7882,22 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 }
 
 .board-stat-widget-period {
-  margin: 0.4rem 0 0;
-  font-size: 0.6875rem;
+  margin: 0;
+  font-size: 0.75rem;
+}
+
+.board-editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.board-editor-form > .field {
+  margin-bottom: 0.75rem;
+}
+
+.collapsible-section-body .board-editor-form {
+  padding-top: 0.15rem;
 }
 
 .board-stat-widget-skeleton {
@@ -8006,25 +8044,66 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   border-radius: var(--radius-sm);
 }
 
+/* Embedded breakdown cards are half-width; never force the wide data-table floor. */
+.metrics-table-embedded .data-table {
+  min-width: 0;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.metrics-table-embedded .data-table th:first-child,
+.metrics-table-embedded .data-table td.metrics-table-dim {
+  width: auto;
+  min-width: 0;
+}
+
+.metrics-table-embedded .data-table th.num,
+.metrics-table-embedded .data-table td.num {
+  width: 4.75rem;
+  padding-left: 0.75rem;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.metrics-table-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metrics-table-metric {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .metrics-table-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin-top: 0.35rem;
 }
 
 .metrics-table-bar-fill {
-  flex: 1;
-  height: 4px;
-  border-radius: 2px;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: 6px;
+  border-radius: 999px;
   background: var(--bg-subtle);
   overflow: hidden;
-  min-width: 48px;
 }
 
 .metrics-table-bar-inner {
+  display: block;
   height: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   background: var(--chart-line);
-  border-radius: 2px;
+  border-radius: 999px;
   transition: width var(--transition);
 }
 

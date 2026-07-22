@@ -175,10 +175,10 @@ export default function DashboardHome() {
                     {t('dashboardTotalTraffic')}
                   </h2>
                   {totals ? (
-                    <div className="analytics-hero-stats dashboard-aggregate-kpis">
-                      <StatCard label={t('pageviews')} value={formatNumber(totals.pageviews)} size="secondary" />
-                      <StatCard label={t('visitors')} value={formatNumber(totals.visitors)} size="secondary" />
-                      <StatCard label={t('visits')} value={formatNumber(totals.visits)} size="secondary" />
+                    <div className="dashboard-aggregate-kpis">
+                      <StatCard label={t('pageviews')} value={formatNumber(totals.pageviews)} />
+                      <StatCard label={t('visitors')} value={formatNumber(totals.visitors)} />
+                      <StatCard label={t('visits')} value={formatNumber(totals.visits)} />
                     </div>
                   ) : null}
                 </div>

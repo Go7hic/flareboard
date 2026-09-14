@@ -20,7 +20,7 @@ Flareboard is for product teams, developers, and Cloudflare-oriented builders wh
 
 ## Pricing Summary
 
-The Free Cloud plan includes one website, 100K events per month, and core product analytics. The Cloud plan is $15/month and includes 10 websites, 1M events per month, replay, heatmaps, teams, email reports, CSV import/export, feature flags, experiments, surveys, and warehouse workflows.
+The Free Cloud plan includes one website, 100K events per month, and core product analytics. The Cloud plan is $15/month with unlimited websites, 1M events per month pooled across those sites, replay, heatmaps, teams, email reports, CSV import/export, feature flags, experiments, surveys, and warehouse workflows.
 
 ## Try or Self-Host
 

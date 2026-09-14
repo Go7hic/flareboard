@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { currentMonthKey, getPlan, normalizePlanId, planForPublic } from './billing';
+import {
+  WEBSITE_SAFETY_CAP,
+  currentMonthKey,
+  getPlan,
+  isUnlimitedWebsites,
+  normalizePlanId,
+  planForPublic,
+  websiteLimitForEnforcement,
+} from './billing';
 
 describe('billing helpers', () => {
   it('normalizes legacy plan ids to cloud', () => {
@@ -20,7 +28,11 @@ describe('billing helpers', () => {
     expect(free.experimentationEnabled).toBe(false);
     expect(free.surveysEnabled).toBe(false);
     expect(free.maxWebsites).toBe(1);
-    expect(cloud.maxWebsites).toBe(10);
+    expect(cloud.maxWebsites).toBeNull();
+    expect(isUnlimitedWebsites(free)).toBe(false);
+    expect(isUnlimitedWebsites(cloud)).toBe(true);
+    expect(websiteLimitForEnforcement(free)).toBe(1);
+    expect(websiteLimitForEnforcement(cloud)).toBe(WEBSITE_SAFETY_CAP);
     expect(cloud.replayEnabled).toBe(true);
     expect(cloud.emailReportsEnabled).toBe(true);
     expect(cloud.heatmapsEnabled).toBe(true);
@@ -41,7 +53,7 @@ describe('billing helpers', () => {
     expect(pub).toEqual({
       id: 'cloud',
       name: 'Cloud',
-      maxWebsites: 10,
+      maxWebsites: null,
       maxEventsPerMonth: 1_000_000,
       replayEnabled: true,
       emailReportsEnabled: true,

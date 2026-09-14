@@ -5,9 +5,15 @@ Flareboard Cloud has a Free plan and a Cloud plan. Self-hosting is available for
 ## Plans
 
 | Plan | Price | Websites | Events per month | Best for |
-| --- | ---: | ---: | ---: | --- |
+| --- | ---: | --- | ---: | --- |
 | Free | $0/month | 1 | 100K | Core product analytics for one site |
-| Cloud | $15/month | 10 | 1M | Teams that need replay, heatmaps, data portability, product workflows, and higher limits |
+| Cloud | $15/month | Unlimited | 1M | Teams that need replay, heatmaps, data portability, product workflows, and a higher event pool |
+
+Cloud websites are unlimited and share one monthly event pool. Free remains one website.
+
+## What counts as an event
+
+Pageviews, custom events, errors, logs, AI events, web vitals, revenue events, and heatmap clicks/scrolls count toward the monthly limit. Session metadata, identify updates, session replay chunks, feature-flag evaluations, and survey ingest do not.
 
 ## Included in Both Plans
 

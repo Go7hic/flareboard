@@ -12,7 +12,8 @@ export const CLOUD_PROMO_LABEL = 'Limited-time launch pricing';
 export type LandingPlan = {
   id: string;
   name: string;
-  maxWebsites: number;
+  /** Null = unlimited websites in marketing (Cloud). */
+  maxWebsites: number | null;
   maxEventsPerMonth: number;
   replayEnabled: boolean;
   emailReportsEnabled: boolean;
@@ -45,7 +46,7 @@ export const LANDING_PLANS: LandingPlan[] = [
   {
     id: 'cloud',
     name: 'Cloud',
-    maxWebsites: 10,
+    maxWebsites: null,
     maxEventsPerMonth: 1_000_000,
     replayEnabled: true,
     emailReportsEnabled: true,

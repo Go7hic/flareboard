@@ -15,7 +15,7 @@ import {
 type Plan = {
   id: string;
   name: string;
-  maxWebsites: number;
+  maxWebsites: number | null;
   maxEventsPerMonth: number;
   replayEnabled: boolean;
   emailReportsEnabled: boolean;
@@ -99,7 +99,12 @@ export default function Billing() {
           <h2 className="section-title">{t('currentPlan')}</h2>
           <p className="stat-value">{plan.name}</p>
           <p className="text-muted">
-            {t('websiteLimit')}: {plan.maxWebsites} · {t('replay')}: {plan.replayEnabled ? t('yes') : t('no')} ·{' '}
+            {plan.maxWebsites != null ? (
+              <>
+                {t('websiteLimit')}: {plan.maxWebsites} ·{' '}
+              </>
+            ) : null}
+            {t('replay')}: {plan.replayEnabled ? t('yes') : t('no')} ·{' '}
             {t('emailReports')}: {plan.emailReportsEnabled ? t('yes') : t('no')} · {t('heatmaps')}:{' '}
             {plan.heatmapsEnabled ? t('yes') : t('no')} · {t('teams')}:{' '}
             {plan.teamsEnabled ? t('yes') : t('no')} · {t('featureFlags')}:{' '}

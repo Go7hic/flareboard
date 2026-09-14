@@ -61,9 +61,11 @@ function PlanCheckIcon() {
 
 export function planFeatureLines(plan: LandingPlan): string[] {
   const websiteLine =
-    plan.maxWebsites > 1
-      ? t('landingPlanWebsites').replace('{count}', String(plan.maxWebsites))
-      : t('landingPlanWebsite').replace('{count}', String(plan.maxWebsites));
+    plan.maxWebsites == null
+      ? t('landingPlanWebsitesUnlimited')
+      : plan.maxWebsites > 1
+        ? t('landingPlanWebsites').replace('{count}', String(plan.maxWebsites))
+        : t('landingPlanWebsite').replace('{count}', String(plan.maxWebsites));
 
   return [
     websiteLine,

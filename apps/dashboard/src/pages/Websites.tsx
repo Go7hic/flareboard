@@ -86,7 +86,7 @@ export default function Websites() {
     queryFn: () =>
       api<{
         hosted: boolean;
-        plan?: { maxWebsites?: number };
+        plan?: { maxWebsites?: number | null };
       }>('/api/billing/subscription'),
   });
 

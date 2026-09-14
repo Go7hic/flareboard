@@ -5,10 +5,17 @@ export type PlanId = (typeof PLAN_IDS)[number];
 /** Legacy plan ids stored before the single paid tier — treated as Cloud. */
 const LEGACY_PAID_PLAN_IDS = new Set(['hobby', 'pro']);
 
+/**
+ * Unpublished abuse cap when a plan does not advertise a website limit.
+ * Cloud marketing is unlimited websites; this stops runaway site creation.
+ */
+export const WEBSITE_SAFETY_CAP = 100;
+
 export type PlanDefinition = {
   id: PlanId;
   name: string;
-  maxWebsites: number;
+  /** Null = unlimited in marketing; enforcement still uses WEBSITE_SAFETY_CAP. */
+  maxWebsites: number | null;
   maxEventsPerMonth: number;
   replayEnabled: boolean;
   emailReportsEnabled: boolean;
@@ -44,7 +51,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
   cloud: {
     id: 'cloud',
     name: 'Cloud',
-    maxWebsites: 10,
+    maxWebsites: null,
     maxEventsPerMonth: 1_000_000,
     replayEnabled: true,
     emailReportsEnabled: true,
@@ -67,6 +74,15 @@ export function normalizePlanId(planId: string | null | undefined): PlanId {
 
 export function getPlan(planId: string | null | undefined): PlanDefinition {
   return PLANS[normalizePlanId(planId)];
+}
+
+export function isUnlimitedWebsites(plan: Pick<PlanDefinition, 'maxWebsites'>): boolean {
+  return plan.maxWebsites == null;
+}
+
+/** Website cap used at create time. Public plans with null still hit the safety cap. */
+export function websiteLimitForEnforcement(plan: Pick<PlanDefinition, 'maxWebsites'>): number {
+  return plan.maxWebsites ?? WEBSITE_SAFETY_CAP;
 }
 
 export function currentMonthKey(now = new Date()): string {

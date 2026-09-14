@@ -3,8 +3,10 @@ import {
   PLANS,
   currentMonthKey,
   getPlan,
+  isUnlimitedWebsites,
   normalizePlanId,
   planForPublic,
+  websiteLimitForEnforcement,
   type PlanId,
 } from '@flareboard/shared';
 import { eq } from 'drizzle-orm';
@@ -90,10 +92,13 @@ export async function checkWebsiteLimit(env: Env, userId: string): Promise<{ ok:
   const sub = await getUserSubscription(env, userId);
   const plan = getPlan(sub.planId);
   const count = await countUserWebsites(env, userId);
-  if (count >= plan.maxWebsites) {
+  const limit = websiteLimitForEnforcement(plan);
+  if (count >= limit) {
     return {
       ok: false,
-      message: `Website limit reached (${plan.maxWebsites} on ${plan.name} plan). Upgrade to add more.`,
+      message: isUnlimitedWebsites(plan)
+        ? `Website limit reached (${limit}). Contact hello@flareboard.dev if you need more.`
+        : `Website limit reached (${limit} on ${plan.name} plan). Upgrade to add more.`,
     };
   }
   return { ok: true };

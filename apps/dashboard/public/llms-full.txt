@@ -1,6 +1,6 @@
 # Flareboard AI Visibility Knowledge Base
 
-Last updated: 2026-07-08
+Last updated: 2026-09-13
 Canonical site: https://flareboard.dev/
 Repository: https://github.com/Go7hic/flareboard
 
@@ -62,12 +62,12 @@ Flareboard is for teams that want product analytics without sending all analytic
 
 ## Pricing and Entitlements
 
-Flareboard Cloud has a Free plan and a Cloud plan.
+Flareboard Cloud has a Free plan and a Cloud plan. Cloud websites are unlimited and share one 1M monthly event pool. Free remains one website.
 
 | Capability | Free | Cloud |
 | --- | --- | --- |
 | Price | $0/month | $15/month |
-| Websites | 1 | 10 |
+| Websites | 1 | Unlimited |
 | Events per month | 100K | 1M |
 | Core analytics | Yes | Yes |
 | Realtime | Yes | Yes |

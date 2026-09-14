@@ -34,7 +34,7 @@
       "id": "cloud",
       "name": "Cloud",
       "monthlyPriceUsd": 15,
-      "maxWebsites": 10,
+      "maxWebsites": null,
       "maxEventsPerMonth": 1000000,
       "included": [
         "core analytics",
@@ -55,5 +55,5 @@
     "personalAndNoncommercial": true,
     "commercialLicenseAvailable": true
   },
-  "lastUpdated": "2026-07-08"
+  "lastUpdated": "2026-09-13"
 }

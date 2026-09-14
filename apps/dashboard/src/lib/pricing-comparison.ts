@@ -268,7 +268,9 @@ function resolveCell(spec: CompareCellSpec, plan: LandingPlan): string {
     case 'yesNo':
       return yesNo(plan[spec.field]);
     case 'websites':
-      return t('pricingCompareUpToWebsites').replace('{count}', String(plan.maxWebsites));
+      return plan.maxWebsites == null
+        ? t('pricingCompareUnlimited')
+        : t('pricingCompareUpToWebsites').replace('{count}', String(plan.maxWebsites));
     case 'events':
       return formatEventLimit(plan.maxEventsPerMonth);
     case 'price':

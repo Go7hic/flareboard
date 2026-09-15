@@ -1,3 +1,5 @@
+
+
 # Flareboard
 
 Cloudflare-native product analytics for teams that want a PostHog-like operating surface without running ClickHouse or Kubernetes. Flareboard combines website analytics, session replay, feature flags, experiments, surveys, error tracking, logs, workflows, and a D1-backed warehouse on Workers, D1, R2, KV, Queues, and Durable Objects.
@@ -30,7 +32,7 @@ Monorepo packages: `@flareboard/db`, `@flareboard/shared`, `@flareboard/rate-lim
 
 ## Quick start
 
-Requires Node.js 20+ and pnpm 9+.
+Requires Node.js 20+ and pnpm 9+ (`apps/blog` requires Node.js 22.12+).
 
 ```bash
 pnpm install

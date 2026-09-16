@@ -12,7 +12,15 @@ import { execFileSync, execSync } from 'node:child_process';
 import { existsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { EVENT_TYPE, hashPassword, ROLES, uuid } from '@flareboard/shared';
+import {
+  ENTITY_TYPE,
+  EVENT_TYPE,
+  hashPassword,
+  PUBLIC_DEMO_SHARE_SLUG,
+  PUBLIC_DEMO_WEBSITE_ID,
+  ROLES,
+  uuid,
+} from '@flareboard/shared';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const configPath = 'apps/api/wrangler.jsonc';
@@ -24,7 +32,7 @@ const LOCAL_DEFAULT_PASSWORD = 'flareboard';
 const BATCH_SIZE = 400;
 
 const DEMO_WEBSITE_IDS = [
-  '00000000-0000-4000-8000-000000000001',
+  PUBLIC_DEMO_WEBSITE_ID,
   '00000000-0000-4000-8000-000000000002',
 ] as const;
 
@@ -115,6 +123,7 @@ Creates:
   - ~30 days of sessions, pageviews, custom events, performance samples
   - Heatmap click cells, cohorts, segments, sample revenue
   - Session replay metadata (playback needs local R2 — see docs/development.md)
+  - Public share slug "${PUBLIC_DEMO_SHARE_SLUG}" for the unauthenticated /demo console
 
 Re-running with --fresh deletes and recreates demo website data only.
 Other websites and users are left untouched.
@@ -260,14 +269,17 @@ function demoWebsitesExist(remote: boolean): boolean {
 function deleteDemoData(remote: boolean): void {
   const ids = DEMO_WEBSITE_IDS.map((id) => `'${id}'`).join(',');
   const statements = [
+    'PRAGMA foreign_keys = OFF;',
     `DELETE FROM event_data WHERE website_id IN (${ids});`,
     `DELETE FROM website_event WHERE website_id IN (${ids});`,
     `DELETE FROM session_data WHERE website_id IN (${ids});`,
     `DELETE FROM revenue WHERE website_id IN (${ids});`,
     `DELETE FROM heatmap_cell WHERE website_id IN (${ids});`,
+    `DELETE FROM heatmap_ingest_dedup WHERE website_id IN (${ids});`,
     `DELETE FROM cohort WHERE website_id IN (${ids});`,
     `DELETE FROM segment WHERE website_id IN (${ids});`,
     `DELETE FROM report WHERE website_id IN (${ids});`,
+    `DELETE FROM insight WHERE website_id IN (${ids});`,
     `DELETE FROM session_replay WHERE website_id IN (${ids});`,
     `DELETE FROM session_replay_summary WHERE website_id IN (${ids});`,
     `DELETE FROM session_replay_saved WHERE website_id IN (${ids});`,
@@ -276,9 +288,35 @@ function deleteDemoData(remote: boolean): void {
     `DELETE FROM rollup_pageview_series WHERE website_id IN (${ids});`,
     `DELETE FROM rollup_dimension_daily WHERE website_id IN (${ids});`,
     `DELETE FROM rollup_event_daily WHERE website_id IN (${ids});`,
+    `DELETE FROM rollup_series_bucket WHERE website_id IN (${ids});`,
     `DELETE FROM website_email_report WHERE website_id IN (${ids});`,
+    `DELETE FROM action_definition WHERE website_id IN (${ids});`,
+    `DELETE FROM annotation WHERE website_id IN (${ids});`,
+    `DELETE FROM experiment WHERE website_id IN (${ids});`,
+    `DELETE FROM feature_flag WHERE website_id IN (${ids});`,
+    `DELETE FROM survey_response WHERE website_id IN (${ids});`,
+    `DELETE FROM survey WHERE website_id IN (${ids});`,
+    `DELETE FROM workflow_execution WHERE website_id IN (${ids});`,
+    `DELETE FROM workflow WHERE website_id IN (${ids});`,
+    `DELETE FROM error_alert_event WHERE website_id IN (${ids});`,
+    `DELETE FROM error_alert_rule WHERE website_id IN (${ids});`,
+    `DELETE FROM error_issue_comment WHERE website_id IN (${ids});`,
+    `DELETE FROM error_issue_state WHERE website_id IN (${ids});`,
+    `DELETE FROM error_source_map WHERE website_id IN (${ids});`,
+    `DELETE FROM log_alert_event WHERE website_id IN (${ids});`,
+    `DELETE FROM log_alert_rule WHERE website_id IN (${ids});`,
+    `DELETE FROM log_saved_filter WHERE website_id IN (${ids});`,
+    `DELETE FROM person_group_membership WHERE website_id IN (${ids});`,
+    `DELETE FROM person WHERE website_id IN (${ids});`,
+    `DELETE FROM warehouse_import WHERE website_id IN (${ids});`,
+    `DELETE FROM warehouse_query_history WHERE website_id IN (${ids});`,
+    `DELETE FROM warehouse_saved_query WHERE website_id IN (${ids});`,
+    `DELETE FROM warehouse_scheduled_query WHERE website_id IN (${ids});`,
+    `DELETE FROM warehouse_data_source WHERE website_id IN (${ids});`,
     `DELETE FROM session WHERE website_id IN (${ids});`,
+    `DELETE FROM share WHERE entity_id IN (${ids}) OR slug = '${sqlEscape(PUBLIC_DEMO_SHARE_SLUG)}';`,
     `DELETE FROM website WHERE website_id IN (${ids});`,
+    'PRAGMA foreign_keys = ON;',
   ];
   runSqlBatch(statements, remote);
 }
@@ -311,6 +349,18 @@ type GeneratedStats = {
   heatmapCells: number;
   replaySummaries: number;
 };
+
+function ensureDemoShare(remote: boolean): void {
+  const now = Date.now();
+  const shareId = uuid('demo-public-share', DEMO_WEBSITE_IDS[0]);
+  const websiteId = DEMO_WEBSITE_IDS[0];
+  runSqlBatch(
+    [
+      `INSERT INTO share (share_id, entity_id, name, share_type, slug, parameters, expires_at, created_at, updated_at) VALUES ('${shareId}', '${websiteId}', 'Public demo', ${ENTITY_TYPE.website}, '${sqlEscape(PUBLIC_DEMO_SHARE_SLUG)}', ${jsonSql({ websiteId })}, NULL, ${now}, ${now}) ON CONFLICT(slug) DO UPDATE SET entity_id = excluded.entity_id, name = excluded.name, share_type = excluded.share_type, parameters = excluded.parameters, expires_at = NULL, updated_at = excluded.updated_at;`,
+    ],
+    remote,
+  );
+}
 
 function generateDemoData(
   adminUserId: string,
@@ -503,7 +553,8 @@ function main(): void {
   const adminUserId = getAdminUserId(opts.remote);
 
   if (!opts.fresh && demoWebsitesExist(opts.remote)) {
-    console.log('Demo websites already exist. Use --fresh (default) to replace demo data.');
+    ensureDemoShare(opts.remote);
+    console.log('Demo websites already exist. Public /demo share ensured. Use --fresh (default) to replace demo data.');
     process.exit(0);
   }
 
@@ -514,6 +565,9 @@ function main(): void {
 
   console.log(`Generating ${opts.days} days of analytics...`);
   const stats = generateDemoData(adminUserId, opts.days, opts.remote);
+
+  console.log('Creating public /demo share link...');
+  ensureDemoShare(opts.remote);
 
   console.log('Backfilling rollup tables...');
   backfillRollups(opts.remote);
@@ -527,6 +581,7 @@ function main(): void {
   console.log(`  Revenue rows: ${stats.revenueRows}`);
   console.log(`  Heatmap cells: ${stats.heatmapCells}`);
   console.log(`  Replay summaries: ${stats.replaySummaries} (playback needs R2 chunks)`);
+  console.log(`  Public demo: /demo (share slug ${PUBLIC_DEMO_SHARE_SLUG})`);
   console.log(`\nSign in: ${LOCAL_DEFAULT_USERNAME} / ${LOCAL_DEFAULT_PASSWORD}`);
   console.log('Start: pnpm dev:api && pnpm dev:dashboard');
 }

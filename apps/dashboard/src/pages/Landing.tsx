@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { DataClaritySection, HeroDashboardPreview } from '../components/landing/LandingCharts';
 import { LandingPlanCard, useLandingPlanActions } from '../components/landing/LandingPlanCards';
 import { LandingChrome } from '../components/landing/LandingChrome';
+import { LandingHeroBackdrop } from '../components/landing/LandingHeroBackdrop';
 import { Button } from '../components/ui/button';
 import { api } from '../lib/api';
 import { t } from '../lib/i18n';
@@ -10,7 +11,6 @@ import {
   CLOUD_MONTHLY_USD,
   FLAREBOARD_DEPLOY_DOCS,
   FLAREBOARD_ENTERPRISE_EMAIL,
-  FLAREBOARD_GITHUB,
   LANDING_PLANS,
   type LandingPlan,
 } from '../lib/landing-links';
@@ -137,26 +137,34 @@ export default function Landing() {
 
   return (
     <LandingChrome activeNav="home">
-      <section className="landing-hero">
-        <div className="landing-hero-copy landing-reveal">
-          <p className="landing-hero-brand">Flareboard</p>
-          <h1 className="landing-headline">{t('landingHeadline')}</h1>
-          <p className="landing-lead">{t('landingLead')}</p>
-          <div className="landing-cta-row">
-            <Button asChild variant="primary" size="lg">
-              <Link to={startHref}>{t('landingCreateFreeAccount')}</Link>
-            </Button>
-            <Button asChild variant="outline" size="lg">
-              <a href={FLAREBOARD_GITHUB} target="_blank" rel="noopener noreferrer">
-                {t('landingViewGithub')}
-              </a>
-            </Button>
+      <div className="landing-hero-stage">
+        <LandingHeroBackdrop />
+        <section className="landing-hero">
+          <div className="landing-hero-copy landing-reveal">
+            <p className="landing-hero-badge">
+              <span className="landing-hero-badge-dot" aria-hidden />
+              {t('landingBadge')}
+            </p>
+            <h1 className="landing-hero-title">{t('landingHeadline')}</h1>
+            <p className="landing-lead">{t('landingLead')}</p>
+            <div className="landing-cta-row">
+              <Button asChild variant="primary" size="lg">
+                <Link to={startHref}>{t('landingCreateFreeAccount')}</Link>
+              </Button>
+              <Link to="/demo" className="landing-hero-demo-text">
+                {t('landingViewDemo')}
+              </Link>
+            </div>
           </div>
-        </div>
-        <div className="landing-hero-visual landing-reveal landing-reveal-delay" aria-hidden>
-          <HeroDashboardPreview />
-        </div>
-      </section>
+          <Link
+            to="/demo"
+            className="landing-hero-visual landing-reveal landing-reveal-delay landing-hero-demo-link"
+            aria-label={t('landingViewDemo')}
+          >
+            <HeroDashboardPreview />
+          </Link>
+        </section>
+      </div>
 
       <section className="landing-compare landing-section landing-reveal-section" aria-labelledby="compare-title">
         <div className="landing-compare-inner">

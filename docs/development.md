@@ -45,6 +45,7 @@ Local API and ingest use `APP_SECRET` from `apps/api/.dev.vars` and `apps/ingest
 | Websites | **Demo Store** (`demo-store.example.com`), **Demo Docs** (`docs.example.com`) |
 | Analytics | ~30 days of sessions, pageviews, referrers, countries, browsers, custom events |
 | Extras | Heatmap clicks, cohorts, segments, goals, sample revenue, performance events |
+| Public demo | Share slug `demo` — unauthenticated Overview at `/demo` |
 | Rollups | Runs `backfill:rollups` automatically |
 
 Options:
@@ -53,8 +54,10 @@ Options:
 pnpm seed:demo                  # replace demo data (default)
 pnpm seed:demo -- --days 14     # shorter history window
 pnpm seed:demo -- --skip-admin  # keep existing admin password
-pnpm seed:demo -- --no-fresh    # skip if demo sites already exist
+pnpm seed:demo -- --no-fresh    # skip if demo sites already exist (still ensures /demo share)
 ```
+
+After seeding, open `http://localhost:5173/demo` for the public read-only sample console (Overview only). Production can set the API var `DEMO_WEBSITE_ID` to any website, or keep the seeded share slug `demo`.
 
 **Idempotency:** `--fresh` (default) deletes only the two fixed demo website IDs and their related rows, then recreates them. Your other websites and users are untouched.
 

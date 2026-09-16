@@ -60,11 +60,15 @@ export function OverviewDimensions({
   qs,
   rangeQs,
   segmentQs = '',
+  metricsPathPrefix,
+  hideExplorer = false,
 }: {
   websiteId: string;
   qs: string;
   rangeQs: string;
   segmentQs?: string;
+  metricsPathPrefix?: string;
+  hideExplorer?: boolean;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [pagesTab, setPagesTab] = useState('path');
@@ -96,12 +100,13 @@ export function OverviewDimensions({
   }, [searchParams, setSearchParams]);
 
   useEffect(() => {
+    if (hideExplorer) return;
     const explorerParam = searchParams.get('explorer');
     if (explorerParam && isMetricTab(explorerParam)) {
       setExplorerType(explorerParam);
       setExplorerOpen(true);
     }
-  }, [searchParams]);
+  }, [searchParams, hideExplorer]);
 
   return (
     <section className="overview-dimensions section-gap" aria-labelledby="overview-dimensions-heading">
@@ -116,22 +121,25 @@ export function OverviewDimensions({
             key={card.titleKey}
             websiteId={websiteId}
             qs={qs}
+            metricsPathPrefix={metricsPathPrefix}
             card={card}
             activeTab={tabState[card.titleKey].active}
             onTabChange={tabState[card.titleKey].set}
-            onMoreClick={openExplorer}
+            onMoreClick={hideExplorer ? undefined : openExplorer}
           />
         ))}
       </div>
 
-      <MetricsExplorerModal
-        open={explorerOpen}
-        onClose={closeExplorer}
-        websiteId={websiteId}
-        rangeQs={rangeQs}
-        segmentQs={segmentQs}
-        initialType={explorerType}
-      />
+      {hideExplorer ? null : (
+        <MetricsExplorerModal
+          open={explorerOpen}
+          onClose={closeExplorer}
+          websiteId={websiteId}
+          rangeQs={rangeQs}
+          segmentQs={segmentQs}
+          initialType={explorerType}
+        />
+      )}
     </section>
   );
 }
@@ -139,6 +147,7 @@ export function OverviewDimensions({
 function OverviewDimensionCardSection({
   websiteId,
   qs,
+  metricsPathPrefix,
   card,
   activeTab,
   onTabChange,
@@ -146,10 +155,11 @@ function OverviewDimensionCardSection({
 }: {
   websiteId: string;
   qs: string;
+  metricsPathPrefix?: string;
   card: CardConfig;
   activeTab: string;
   onTabChange: (tabId: string) => void;
-  onMoreClick: (type: string) => void;
+  onMoreClick?: (type: string) => void;
 }) {
   const metricsQuery = useDimensionMetrics({
     websiteId,
@@ -157,6 +167,7 @@ function OverviewDimensionCardSection({
     qs,
     limit: CARD_LIMIT,
     pathSortBy: activeTab === 'path' ? 'visitors' : undefined,
+    metricsPathPrefix,
   });
 
   const tabs = card.tabs.map((tab) => ({ id: tab.id, label: t(tab.labelKey) }));
@@ -176,7 +187,7 @@ function OverviewDimensionCardSection({
       error={metricsQuery.isError ? metricsQuery.error : null}
       onRetry={() => metricsQuery.refetch()}
       primaryMetric={card.primaryMetric}
-      onMoreClick={() => onMoreClick(activeTab)}
+      onMoreClick={onMoreClick ? () => onMoreClick(activeTab) : undefined}
     />
   );
 }

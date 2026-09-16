@@ -121,15 +121,15 @@ export function HeroDashboardPreview() {
   ];
 
   return (
-    <div className="landing-hero-dash" aria-label={t('landingHeroDashPreview')}>
+    <div className="landing-hero-dash">
       <div className="landing-hero-dash-chrome">
         <span className="landing-hero-dash-traffic" aria-hidden>
           <span className="landing-hero-dash-dot" />
           <span className="landing-hero-dash-dot" />
           <span className="landing-hero-dash-dot" />
         </span>
-        <span className="landing-hero-dash-domain">docs.example.com</span>
-        <span className="badge badge-accent landing-hero-dash-live">{t('landingHeroLive')}</span>
+        <span className="landing-hero-dash-domain">demo-store.example.com</span>
+        <span className="badge landing-hero-dash-sample">{t('landingHeroSample')}</span>
       </div>
       <div className="landing-hero-dash-stats">
         {heroStats.map((s) => (

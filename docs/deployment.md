@@ -161,6 +161,17 @@ Equivalent migrate:
 wrangler d1 migrations apply flareboard-db --remote --env production --config apps/api/wrangler.jsonc
 ```
 
+## Public sample console (`/demo`)
+
+The marketing homepage links to a read-only Overview at `/demo`. It needs a website in production D1:
+
+1. Seed sample data (attaches Demo Store to the existing admin):  
+   `pnpm seed:demo -- --remote --skip-admin`  
+   This creates share slug `demo`. Prefer this for a populated sample.
+2. Or set API var `DEMO_WEBSITE_ID` to a site you already track (e.g. flareboard.dev). Real traffic can look empty.
+
+Do not use `/demo` for session replay or settings. The public UI is Overview only.
+
 ## Post-deploy checklist
 
 - [ ] All five workers healthy (api, ingest, aggregator, dashboard, blog)

@@ -12,6 +12,7 @@ import Register from './pages/Register';
 import SharePublic from './pages/SharePublic';
 
 const DashboardHome = lazy(() => import('./pages/DashboardHome'));
+const Demo = lazy(() => import('./pages/Demo'));
 const Websites = lazy(() => import('./pages/Websites'));
 const Teams = lazy(() => import('./pages/Teams'));
 const LinksPixels = lazy(() => import('./pages/LinksPixels'));
@@ -73,6 +74,14 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/share/:slug" element={<SharePublic />} />
+        <Route
+          path="/demo"
+          element={
+            <LazyPage>
+              <Demo />
+            </LazyPage>
+          }
+        />
         <Route element={<AppShell />}>
           <Route
             path="/dashboard"

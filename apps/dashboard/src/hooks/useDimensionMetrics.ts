@@ -10,6 +10,7 @@ export function useDimensionMetrics({
   pathSortBy = 'views',
   limit = 5,
   enabled = true,
+  metricsPathPrefix,
 }: {
   websiteId: string | undefined;
   type: string;
@@ -17,15 +18,15 @@ export function useDimensionMetrics({
   pathSortBy?: PathSortBy;
   limit?: number;
   enabled?: boolean;
+  metricsPathPrefix?: string;
 }) {
+  const prefix = metricsPathPrefix ?? (websiteId ? `/api/websites/${websiteId}` : '');
   return useQuery({
-    queryKey: ['dimension-metrics', websiteId, type, pathSortBy, qs, limit],
-    enabled: Boolean(websiteId) && enabled,
+    queryKey: ['dimension-metrics', prefix, websiteId, type, pathSortBy, qs, limit],
+    enabled: Boolean(prefix) && enabled,
     queryFn: () => {
       const sortQs = type === 'path' ? `&sortBy=${pathSortBy}` : '';
-      return api<MetricRow[]>(
-        `/api/websites/${websiteId}/metrics?type=${type}&${qs}&limit=${limit}${sortQs}`,
-      );
+      return api<MetricRow[]>(`${prefix}/metrics?type=${type}&${qs}&limit=${limit}${sortQs}`);
     },
   });
 }

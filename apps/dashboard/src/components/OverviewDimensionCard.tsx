@@ -30,7 +30,7 @@ export function OverviewDimensionCard({
   error?: Error | string | null;
   onRetry?: () => void;
   primaryMetric?: 'views' | 'visitors';
-  onMoreClick: () => void;
+  onMoreClick?: () => void;
 }) {
   return (
     <section className="panel overview-dimension-card">
@@ -54,11 +54,13 @@ export function OverviewDimensionCard({
           title=""
         />
       </DataViewState>
-      <div className="overview-dimension-card-footer">
-        <button type="button" className="overview-dimension-more" onClick={onMoreClick}>
-          {t('overviewMore')}
-        </button>
-      </div>
+      {onMoreClick ? (
+        <div className="overview-dimension-card-footer">
+          <button type="button" className="overview-dimension-more" onClick={onMoreClick}>
+            {t('overviewMore')}
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }

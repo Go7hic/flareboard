@@ -33,6 +33,7 @@ import * as reports from './routes/reports';
 import * as revenue from './routes/revenue';
 import * as segments from './routes/segments';
 import * as share from './routes/share';
+import * as demo from './routes/demo';
 import * as stats from './routes/stats';
 import * as surveys from './routes/surveys';
 import * as tracking from './routes/tracking';
@@ -106,6 +107,9 @@ app.post('/api/billing/checkout', billing.handleCheckout);
 app.post('/api/billing/portal', billing.handlePortal);
 
 app.get('/api/share/:slug', share.handlePublicGet);
+app.get('/api/demo', demo.handleMeta);
+app.get('/api/demo/overview', demo.handleOverview);
+app.get('/api/demo/metrics', demo.handleMetrics);
 
 app.use('/api/me', jwtAuth);
 app.get('/api/me', me.handleMe);

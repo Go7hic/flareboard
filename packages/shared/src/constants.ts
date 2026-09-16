@@ -49,6 +49,11 @@ export const ENTITY_TYPE = {
   board: 4,
 } as const;
 
+/** Seeded Demo Store website (`pnpm seed:demo`) and public `/demo` fallback. */
+export const PUBLIC_DEMO_WEBSITE_ID = '00000000-0000-4000-8000-000000000001';
+/** Public share slug served at `/demo` after seed. */
+export const PUBLIC_DEMO_SHARE_SLUG = 'demo';
+
 export const DATA_TYPE = {
   string: 1,
   number: 2,

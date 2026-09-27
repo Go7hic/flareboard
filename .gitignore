@@ -42,3 +42,9 @@ local-docs/
 
 # Local agent/audit trails (do not commit)
 .audit/
+
+# Claude Code local preview config
+.claude/
+
+# Local design scratch images (not referenced by the app)
+apps/dashboard/public/*.png

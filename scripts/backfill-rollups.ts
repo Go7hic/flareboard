@@ -39,17 +39,28 @@ function run(sql: string, remote: boolean) {
 
 function main() {
   const { remote, websiteId } = parseArgs();
+  if (websiteId && !/^[0-9a-f-]{36}$/i.test(websiteId)) {
+    console.error('--website must be a UUID');
+    process.exit(1);
+  }
   const scope = websiteId ? `AND website_id = '${websiteId}'` : '';
   const scopeE = websiteId ? `AND e.website_id = '${websiteId}'` : '';
 
   console.log(`Backfilling rollups (${remote ? 'remote' : 'local'})…`);
 
-  run('DELETE FROM rollup_session_day;', remote);
-  run('DELETE FROM rollup_stats_daily;', remote);
-  run('DELETE FROM rollup_pageview_series;', remote);
-  run('DELETE FROM rollup_series_bucket;', remote);
-  run('DELETE FROM rollup_dimension_daily;', remote);
-  run('DELETE FROM rollup_event_daily;', remote);
+  // With --website=, clear only that site's rows; the INSERTs below are scoped the same way.
+  const clearScope = websiteId ? ` WHERE website_id = '${websiteId}'` : '';
+  for (const table of [
+    'rollup_session_day',
+    'rollup_stats_daily',
+    'rollup_pageview_series',
+    'rollup_series_bucket',
+    'rollup_dimension_daily',
+    'rollup_event_daily',
+    'session_replay_summary',
+  ]) {
+    run(`DELETE FROM ${table}${clearScope};`, remote);
+  }
 
   run(
     `INSERT INTO rollup_session_day (website_id, day, session_id, visit_id, pageviews, first_at, last_at)

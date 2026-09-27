@@ -8,7 +8,7 @@
  *   pnpm seed:demo -- --skip-admin     # assume admin already exists
  *   pnpm seed:demo -- --days 30        # history window (default 30)
  */
-import { execFileSync, execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { existsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -99,6 +99,8 @@ const BROWSERS = [
 type Options = {
   fresh: boolean;
   skipAdmin: boolean;
+  /** Username that owns the demo websites (with --skip-admin). */
+  owner: string | null;
   days: number;
   remote: boolean;
 };
@@ -113,8 +115,10 @@ Options:
   --fresh               Replace demo websites and analytics (default)
   --no-fresh            Skip if demo websites already exist
   --skip-admin          Do not create/update admin user
+  --owner <username>    Existing user who owns the demo websites (with --skip-admin;
+                        defaults to "admin", then to any admin-role user)
   --days <n>            Days of history to generate (default: 30)
-  --remote              Target production D1 (not recommended for demo data)
+  --remote              Target production D1 (use --skip-admin --owner <you>)
   --help, -h            Show this help
 
 Creates:
@@ -137,7 +141,17 @@ function parseArgs(argv: string[]): Options {
   }
 
   let days = 30;
+  let owner: string | null = null;
   for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--owner') {
+      const next = argv[i + 1];
+      if (!next || next.startsWith('-')) {
+        console.error('Missing value for --owner');
+        process.exit(1);
+      }
+      owner = argv[++i];
+      continue;
+    }
     if (argv[i] === '--days') {
       const next = argv[i + 1];
       if (!next || next.startsWith('-')) {
@@ -155,6 +169,7 @@ function parseArgs(argv: string[]): Options {
   return {
     fresh: !argv.includes('--no-fresh'),
     skipAdmin: argv.includes('--skip-admin'),
+    owner,
     days,
     remote: argv.includes('--remote'),
   };
@@ -246,13 +261,25 @@ function seedAdmin(remote: boolean): void {
   );
 }
 
-function getAdminUserId(remote: boolean): string {
+/** Owner of the demo websites: --owner, else "admin", else any live admin-role user. */
+function getOwnerUserId(remote: boolean, owner: string | null): string {
+  if (owner) {
+    const rows = queryD1<{ user_id: string }>(
+      `SELECT user_id FROM user WHERE username = '${sqlEscape(owner)}' AND deleted_at IS NULL LIMIT 1`,
+      remote,
+    );
+    if (!rows[0]?.user_id) throw new Error(`User "${owner}" not found (--owner).`);
+    return rows[0].user_id;
+  }
   const rows = queryD1<{ user_id: string }>(
-    `SELECT user_id FROM user WHERE username = '${sqlEscape(LOCAL_DEFAULT_USERNAME)}' LIMIT 1`,
+    `SELECT user_id FROM user
+     WHERE deleted_at IS NULL AND (username = '${sqlEscape(LOCAL_DEFAULT_USERNAME)}' OR role = '${ROLES.admin}')
+     ORDER BY username = '${sqlEscape(LOCAL_DEFAULT_USERNAME)}' DESC, created_at ASC
+     LIMIT 1`,
     remote,
   );
   if (!rows[0]?.user_id) {
-    throw new Error(`Admin user "${LOCAL_DEFAULT_USERNAME}" not found. Run without --skip-admin.`);
+    throw new Error(`No user found to own the demo websites. Pass --owner <username> or run without --skip-admin.`);
   }
   return rows[0].user_id;
 }
@@ -530,13 +557,13 @@ function generateDemoData(
 }
 
 function backfillRollups(remote: boolean): void {
-  // backfill-rollups.ts rebuilds summaries from session_replay but does not clear first
-  runSqlBatch(['DELETE FROM session_replay_summary;'], remote);
-  const flag = remote ? '--remote' : '';
-  execSync(`tsx scripts/backfill-rollups.ts ${flag}`.trim(), {
-    cwd: root,
-    stdio: 'inherit',
-  });
+  // Per demo website, so other sites' rollups are never cleared or rebuilt (matters on --remote).
+  for (const websiteId of DEMO_WEBSITE_IDS) {
+    execFileSync('tsx', ['scripts/backfill-rollups.ts', `--website=${websiteId}`, ...(remote ? ['--remote'] : [])], {
+      cwd: root,
+      stdio: 'inherit',
+    });
+  }
 }
 
 function main(): void {
@@ -550,7 +577,7 @@ function main(): void {
     seedAdmin(opts.remote);
   }
 
-  const adminUserId = getAdminUserId(opts.remote);
+  const adminUserId = getOwnerUserId(opts.remote, opts.owner);
 
   if (!opts.fresh && demoWebsitesExist(opts.remote)) {
     ensureDemoShare(opts.remote);
@@ -582,8 +609,8 @@ function main(): void {
   console.log(`  Heatmap cells: ${stats.heatmapCells}`);
   console.log(`  Replay summaries: ${stats.replaySummaries} (playback needs R2 chunks)`);
   console.log(`  Public demo: /demo (share slug ${PUBLIC_DEMO_SHARE_SLUG})`);
-  console.log(`\nSign in: ${LOCAL_DEFAULT_USERNAME} / ${LOCAL_DEFAULT_PASSWORD}`);
-  console.log('Start: pnpm dev:api && pnpm dev:dashboard');
+  if (!opts.skipAdmin) console.log(`\nSign in: ${LOCAL_DEFAULT_USERNAME} / ${LOCAL_DEFAULT_PASSWORD}`);
+  if (!opts.remote) console.log('Start: pnpm dev:api && pnpm dev:dashboard');
 }
 
 try {

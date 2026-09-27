@@ -59,9 +59,12 @@ cd apps/api && wrangler secret put GITHUB_CLIENT_SECRET --env production
 cd apps/api && wrangler secret put DASHBOARD_URL --env production
 cd apps/api && wrangler secret put CORS_ORIGINS --env production   # e.g. https://dashboard.your-domain.com
 cd ../ingest && wrangler secret put APP_SECRET --env production
+cd ../ingest && wrangler secret put API_URL --env production      # e.g. https://api.your-domain.com
 ```
 
 Use the same `APP_SECRET` on API and ingest. Set `CORS_ORIGINS` to your dashboard origin(s), comma-separated.
+
+Ingest needs `API_URL` (the public API origin) for **email** workflow actions: it hands the message to the API's `POST /api/internal/deliver-email`, authenticated with the shared `APP_SECRET`. Without it, email actions are recorded as failed with `API_URL not configured` (webhook actions are unaffected).
 
 ## 3. Deploy workers
 
@@ -211,6 +214,7 @@ Flareboard uses Cloudflare **Email Sending** for transactional and scheduled mai
 | Register verify | `POST /api/auth/register` | Verification link emailed |
 | Forgot password | `POST /api/auth/forgot-password` | Reset link emailed |
 | Scheduled reports | Cron `0 * * * *` on API worker | Sends when each site's `timezone` local hour is 08:00 |
+| Workflow email action | Ingest → `POST /api/internal/deliver-email` | Needs `API_URL` on the ingest worker |
 
 ### Email reports checklist
 

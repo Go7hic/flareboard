@@ -56,7 +56,9 @@ Header chrome: `--shell-bg` + `backdrop-filter` on `.shell-nav` / `.landing-nav`
 | Theme | `src/components/ThemeToggle.tsx` | `.theme-toggle`; pill track, gray `.theme-toggle-thumb` |
 | Logout | `SidebarShell` / user menu | ghost button or sidebar footer |
 
-**Buttons:** prefer `src/components/ui/button` (`default`/`primary` = gray-1000). Legacy `.btn-primary` maps to the same tokens.
+**Buttons:** always `src/components/ui/button` (`default`/`primary` = gray-1000); the legacy `.btn*` classes are gone. Row-level deletes in lists/tables use `variant="destructive-ghost" size="sm"`; the tinted `danger` variant is for the confirm button and panel-level destructive actions.
+
+**Dialogs & confirmation:** form dialogs use `ModalDialog` (Base UI, legacy `.dialog-header/-body/-footer` layout) or `ui/dialog`. Never delete on a single click and never use `window.confirm`: call `useConfirm()` from `src/components/ConfirmDialog.tsx` (`confirm({ title: deleteTitle(name), onConfirm })`). Portaled layers sit above the sticky topbar (z 100): dialogs `z-[300]`, popovers/selects/menus/tooltips `z-[310]`.
 
 **Forms:** prefer shadcn `Input` / `Label` / `Select` / `Textarea`. Legacy `.field` + `.input` still work via tokens.
 

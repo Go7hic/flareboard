@@ -1,5 +1,5 @@
 import type { Context } from 'hono';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
 import {
   createCohortSchema,
@@ -168,8 +168,14 @@ export async function handleDelete(c: Ctx) {
     return json({ message: 'Read-only access' }, 403);
   }
 
+  // Scope to the URL's website: access was checked for that site, not the cohort's.
+  const row = await getCohort(c.env, websiteId, cohortId);
+  if (!row) return notFound();
+
   const db = createDb(c.env.DB);
-  await db.delete(schema.cohort).where(eq(schema.cohort.cohortId, cohortId));
+  await db
+    .delete(schema.cohort)
+    .where(and(eq(schema.cohort.websiteId, websiteId), eq(schema.cohort.cohortId, cohortId)));
   return json({ ok: true });
 }
 

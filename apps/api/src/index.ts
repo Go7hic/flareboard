@@ -47,7 +47,8 @@ import * as emailReports from './routes/email-reports';
 import * as dataImport from './routes/import';
 import internalRoutes from './routes/internal';
 import { runScheduledMaintenance } from './lib/scheduled-jobs';
-import { getUserSubscription, isHostedMode } from './lib/billing';
+import { getWebsitePlanId, isHostedMode } from './lib/billing';
+import { getWebsiteById } from './lib/queries';
 import { json } from './lib/response';
 
 const app = new Hono<{ Bindings: Env; Variables: ApiVariables }>();
@@ -63,8 +64,15 @@ function requirePaidFeature(field: PaidFeatureFlag, message: string) {
       await next();
       return;
     }
-    const sub = await getUserSubscription(c.env, c.get('user').userId);
-    if (!getPlan(sub.planId)[field]) {
+    const websiteId = c.req.param('websiteId');
+    const website = websiteId ? await getWebsiteById(c.env, websiteId) : null;
+    // Unknown site: let the route answer 404 rather than a misleading plan error.
+    if (!website) {
+      await next();
+      return;
+    }
+    const planId = await getWebsitePlanId(c.env, website, c.get('user').userId);
+    if (!getPlan(planId)[field]) {
       return json({ message }, 403);
     }
     await next();

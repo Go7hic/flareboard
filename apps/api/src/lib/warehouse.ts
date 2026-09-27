@@ -382,6 +382,20 @@ function findForbiddenTables(normalized: string): string[] {
   return forbidden;
 }
 
+/**
+ * Execution resolves every bare table name to a scoping CTE (see scopeToWebsite).
+ * These forms name a table without going through that CTE, so they are refused.
+ */
+function findUnscopedReference(normalized: string): string | null {
+  const code = normalized.replace(/'(?:[^']|'')*'/g, "''");
+  if (/["`\[\]]/.test(code)) return 'Quoted identifiers are not allowed in warehouse queries';
+  if (/\b(?:main|temp|temporary)\s*\./i.test(code)) {
+    return 'Schema-qualified table names are not allowed in warehouse queries';
+  }
+  if (/\b(?:sqlite_|pragma_|_cf_)/i.test(code)) return 'Internal tables are not allowed in warehouse queries';
+  return null;
+}
+
 export function analyzeWarehouseQuery(sql: string): WarehouseQueryAnalysis {
   const normalized = normalizeSql(sql);
   const diagnostics: WarehouseQueryDiagnostic[] = [];
@@ -408,6 +422,10 @@ export function analyzeWarehouseQuery(sql: string): WarehouseQueryAnalysis {
       level: 'error',
       message: 'Only read-only SELECT queries are allowed',
     });
+  }
+  const unscopedRef = normalized ? findUnscopedReference(normalized) : null;
+  if (unscopedRef) {
+    diagnostics.push({ code: 'forbidden_table', level: 'error', message: unscopedRef });
   }
   const forbiddenTables = normalized ? findForbiddenTables(normalized) : [];
   if (forbiddenTables.length) {
@@ -514,11 +532,43 @@ async function withQueryTimeout<T>(promise: Promise<T>, timeoutMs: number) {
   }
 }
 
+const SAFE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+async function listDatabaseTables(env: Env): Promise<string[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT name FROM sqlite_master
+     WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND name NOT LIKE '\\_cf\\_%' ESCAPE '\\'`,
+  ).all<{ name: string }>();
+  return (results ?? []).map((row) => row.name).filter((name) => SAFE_IDENTIFIER.test(name));
+}
+
+/**
+ * Tenant isolation for user SQL. Every table in the database is shadowed by a CTE of
+ * the same name: allowlisted tables expose only this website's rows (`website_id = ?1`),
+ * everything else is an empty relation. SQLite resolves bare table names to CTEs first,
+ * so no predicate, join, or subquery the user writes can see another tenant's rows.
+ * The analyzer refuses the forms that could bypass a CTE (schema prefixes, quoting).
+ */
+export function scopeToWebsite(sql: string, tables: string[]): string {
+  const shadows = tables.map((name) =>
+    ALLOWED_TABLES.has(name.toLowerCase())
+      ? `${name} AS (SELECT * FROM main.${name} WHERE website_id = ?1)`
+      : `${name} AS (SELECT NULL AS blocked WHERE 0)`,
+  );
+  const userWith = /^with(\s+recursive)?\s+/i.exec(sql);
+  if (userWith) {
+    const recursive = userWith[1] ? ' RECURSIVE' : '';
+    return `WITH${recursive} ${shadows.join(', ')}, ${sql.slice(userWith[0].length)}`;
+  }
+  return `WITH ${shadows.join(', ')} ${sql}`;
+}
+
 export async function runWarehouseQuery(env: Env, websiteId: string, sql: string) {
   const analysis = assertReadOnlyScoped(sql);
+  const scopedSql = scopeToWebsite(analysis.executableSql!, await listDatabaseTables(env));
   const startedAt = Date.now();
   const rows = await withQueryTimeout(
-    env.DB.prepare(analysis.executableSql!).bind(websiteId).all<Record<string, unknown>>(),
+    env.DB.prepare(scopedSql).bind(websiteId).all<Record<string, unknown>>(),
     QUERY_TIMEOUT_MS,
   );
   const wallMs = Date.now() - startedAt;

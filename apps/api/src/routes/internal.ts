@@ -16,7 +16,7 @@ function timingSafeEqualString(a: string, b: string) {
   return mismatch === 0;
 }
 
-function isAuthorized(c: { env: Env }, header: string | undefined) {
+function isAuthorized(c: { env: Env; req: { url: string } }, header: string | undefined) {
   if (!header?.startsWith('Bearer ')) return false;
   let secret: string;
   try {

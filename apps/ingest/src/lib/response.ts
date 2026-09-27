@@ -32,15 +32,24 @@ export function serverError(error?: unknown) {
 
 export const DEV_APP_SECRET = 'flareboard-dev-secret';
 
+function isLocalRequest(url: string) {
+  try {
+    const host = new URL(url).hostname;
+    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host.endsWith('.localhost');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The public dev secret would let anyone forge cache tokens and reverse visitor
+ * hashes, so only local development may fall back to it; other deploys fail closed.
+ */
 export function getSecret(c: Context<{ Bindings: Env }>) {
   const secret = c.env.APP_SECRET;
-  if (c.env.ENVIRONMENT === 'production') {
-    if (!secret || secret === DEV_APP_SECRET) {
-      throw new Error('APP_SECRET must be set to a secure value in production');
-    }
-    return secret;
-  }
-  return secret || DEV_APP_SECRET;
+  if (secret && secret !== DEV_APP_SECRET) return secret;
+  if (c.env.ENVIRONMENT !== 'production' && isLocalRequest(c.req.url)) return DEV_APP_SECRET;
+  throw new Error('APP_SECRET must be set to a secure value (only local development may use the dev secret)');
 }
 
 export function getClientInfo(c: Context<{ Bindings: Env }>, payload: { ip?: string; userAgent?: string; browser?: string; os?: string; device?: string }) {

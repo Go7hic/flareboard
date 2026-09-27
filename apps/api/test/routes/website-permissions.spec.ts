@@ -85,7 +85,8 @@ describe('website permissions route', () => {
     );
     expect(member.body.modules).toEqual(
       expect.objectContaining({
-        analytics: { canView: true, canEdit: false },
+        // Members can save insights / actions (the API allows it via canMutateWebsite).
+        analytics: { canView: true, canEdit: true },
         boards: { canView: true, canEdit: true },
         featureFlags: { canView: true, canEdit: true },
         experiments: { canView: true, canEdit: true },

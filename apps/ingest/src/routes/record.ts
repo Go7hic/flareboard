@@ -7,6 +7,7 @@ import type { Env } from '../env';
 import { checkRateLimit, getTrustedClientIp } from '../lib/rate-limit';
 import { badRequest, json } from '../lib/response';
 import { getWebsiteById } from '../lib/queries';
+import { replayAllowedByPlan } from '../lib/hosted-limits';
 
 type Ctx = Context<{ Bindings: Env }>;
 
@@ -41,6 +42,11 @@ export async function handleRecord(c: Ctx) {
   const { website, sessionId, visitId, chunkIndex, events, startedAt, endedAt } = parsed.data.payload;
   const websiteRow = await getWebsiteById(c.env, website);
   if (!websiteRow) return badRequest('Website not found');
+  // Recording is opt-in per site (and plan-gated on Cloud); anything else would let
+  // any website id write replay chunks into R2.
+  if (!websiteRow.replayEnabled || !(await replayAllowedByPlan(c.env, website))) {
+    return json({ ok: true, skipped: true });
+  }
 
   const ip = getTrustedClientIp(c.req.raw);
   const rl = await checkRateLimit(c.env, website, ip);

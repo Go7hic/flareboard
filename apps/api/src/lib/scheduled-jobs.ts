@@ -6,14 +6,21 @@ import { runRetentionPurge } from './retention';
 import { runDueWarehouseScheduledQueries, runDueWarehouseDataSourceSyncs } from './warehouse';
 
 // Caps how many websites a single cron tick processes so one invocation
-// cannot blow past Worker CPU/subrequest limits; the remainder is picked up
-// on the next tick.
+// cannot blow past Worker CPU/subrequest limits; later ticks continue from a cursor.
 const MAX_ALERT_WEBSITES_PER_TICK = 100;
 const MAX_WAREHOUSE_WEBSITES_PER_TICK = 50;
 
-export async function runScheduledAlertChecks(env: Env, now = Date.now()) {
-  // Only visit websites that actually have enabled alert rules instead of
-  // iterating every website in the instance.
+const ALERT_SCAN_CURSOR_KEY = 'cron:alert-scan-cursor';
+
+export async function runScheduledAlertChecks(
+  env: Env,
+  now = Date.now(),
+  limit = MAX_ALERT_WEBSITES_PER_TICK,
+) {
+  // Only visit websites that actually have enabled alert rules, walking them in id
+  // order from a persisted cursor so every site is reached across ticks (a bare
+  // LIMIT always returned the same first sites).
+  const cursor = (await env.CACHE.get(ALERT_SCAN_CURSOR_KEY)) ?? '';
   const rows = await env.DB.prepare(
     `SELECT DISTINCT w.website_id as websiteId
      FROM website w
@@ -22,15 +29,21 @@ export async function runScheduledAlertChecks(env: Env, now = Date.now()) {
        UNION
        SELECT website_id FROM log_alert_rule WHERE enabled = 1
      ) rules ON rules.website_id = w.website_id
-     WHERE w.deleted_at IS NULL
-     LIMIT ${MAX_ALERT_WEBSITES_PER_TICK}`,
-  ).all<{ websiteId: string }>();
+     WHERE w.deleted_at IS NULL AND w.website_id > ?1
+     ORDER BY w.website_id
+     LIMIT ?2`,
+  )
+    .bind(cursor, limit)
+    .all<{ websiteId: string }>();
+  const batch = rows.results ?? [];
+  // A short page means the end was reached: start from the beginning next tick.
+  await env.CACHE.put(ALERT_SCAN_CURSOR_KEY, batch.length === limit ? batch[batch.length - 1]!.websiteId : '');
 
   let websites = 0;
   let errorAlerts = 0;
   let logAlerts = 0;
 
-  for (const row of rows.results ?? []) {
+  for (const row of batch) {
     websites++;
     const errors = await evaluateErrorAlertRules(env, row.websiteId, now);
     const logs = await evaluateLogAlertRules(env, row.websiteId, now);

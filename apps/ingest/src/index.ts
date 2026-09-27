@@ -47,6 +47,7 @@ app.get('/recorder.js', (c) => handleRecorder(c));
 app.get('/l/:slug', (c) => handleLinkRedirect(c));
 app.get('/:slug', (c) => handleLinkRedirect(c));
 app.get('/api/links/:slug/redirect', (c) => handleLinkRedirectApi(c));
-app.get('/p/:slug.gif', (c) => handlePixelGif(c));
+// `/p/:slug.gif` would name the param "slug.gif"; match the file and strip the extension.
+app.get('/p/:file{.+\\.gif}', (c) => handlePixelGif(c));
 
 export default app;

@@ -133,22 +133,22 @@ export async function handleUpdate(c: Ctx) {
   }
 
   if (parsed.data.replayEnabled === true) {
-    const { getUserSubscription, isHostedMode } = await import('../lib/billing');
+    const { getWebsitePlanId, isHostedMode } = await import('../lib/billing');
     const { getPlan } = await import('@flareboard/shared');
     if (isHostedMode(c.env)) {
-      const sub = await getUserSubscription(c.env, c.get('user').userId);
-      if (!getPlan(sub.planId).replayEnabled) {
+      const planId = await getWebsitePlanId(c.env, website, c.get('user').userId);
+      if (!getPlan(planId).replayEnabled) {
         return json({ message: 'Session replay requires a paid plan.' }, 403);
       }
     }
   }
 
   if (parsed.data.heatmapConfig?.enabled === true) {
-    const { getUserSubscription, isHostedMode } = await import('../lib/billing');
+    const { getWebsitePlanId, isHostedMode } = await import('../lib/billing');
     const { getPlan } = await import('@flareboard/shared');
     if (isHostedMode(c.env)) {
-      const sub = await getUserSubscription(c.env, c.get('user').userId);
-      if (!getPlan(sub.planId).heatmapsEnabled) {
+      const planId = await getWebsitePlanId(c.env, website, c.get('user').userId);
+      if (!getPlan(planId).heatmapsEnabled) {
         return json({ message: 'Heatmaps require a paid plan.' }, 403);
       }
     }
@@ -160,7 +160,12 @@ export async function handleUpdate(c: Ctx) {
     .set({
       name: parsed.data.name ?? website.name,
       domain: parsed.data.domain ?? website.domain,
-      resetAt: parsed.data.resetAt ? new Date(parsed.data.resetAt) : website.resetAt,
+      resetAt:
+        parsed.data.resetAt === null
+          ? null
+          : parsed.data.resetAt
+            ? new Date(parsed.data.resetAt)
+            : website.resetAt,
       replayEnabled:
         parsed.data.replayEnabled !== undefined ? parsed.data.replayEnabled : website.replayEnabled,
       replayConfig:

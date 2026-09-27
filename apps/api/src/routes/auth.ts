@@ -17,6 +17,7 @@ import {
 } from '@flareboard/shared';
 import type { Env } from '../env';
 import { readAuthToken } from '../lib/auth-credentials';
+import { csrfOriginAllowed } from '../lib/csrf';
 import { bumpTokenVersion, getTokenVersion, issueAuthToken } from '../lib/auth-token';
 import {
   buildOAuthAuthorizeUrl,
@@ -30,13 +31,15 @@ import { ensureSubscriptionRow, isHostedMode } from '../lib/billing';
 import { sendPasswordResetEmail, sendVerificationEmail } from '../lib/email';
 import { getUserByEmail, getUserById, getUserByUsername } from '../lib/queries';
 import { checkIpRateLimit, getTrustedClientIp } from '../lib/rate-limit';
-import { badRequest, getAppSecret, json, unauthorized } from '../lib/response';
+import { badRequest, forbidden, getAppSecret, json, unauthorized } from '../lib/response';
 import { clearSessionCookie, setSessionCookie } from '../lib/session-cookie';
 
 type Ctx = Context<{ Bindings: Env }>;
 
 const LOGIN_LIMIT = 10;
 const LOGIN_WINDOW_SEC = 60;
+const LOGIN_ACCOUNT_LIMIT = 20;
+const LOGIN_ACCOUNT_WINDOW_SEC = 15 * 60;
 const RESET_TTL = 3600;
 const VERIFY_TTL = 86400;
 
@@ -151,6 +154,13 @@ export async function handleLogin(c: Ctx) {
     return badRequest('Invalid credentials');
   }
 
+  // Per-account cap on top of the per-IP one, so rotating IPs cannot guess one password.
+  const accountKey = parsed.data.username.trim().toLowerCase();
+  const accountRl = await checkIpRateLimit(c.env, 'login-account', accountKey, LOGIN_ACCOUNT_LIMIT, LOGIN_ACCOUNT_WINDOW_SEC);
+  if (!accountRl.allowed) {
+    return json({ message: 'Too many login attempts' }, 429);
+  }
+
   const user = await resolveLoginUser(c.env, parsed.data.username);
   if (!user || !checkPassword(parsed.data.password, user.password)) {
     return unauthorized({ message: 'Invalid username or password' });
@@ -164,6 +174,8 @@ export async function handleLogin(c: Ctx) {
 }
 
 export async function handleLogout(c: Ctx) {
+  // Cookie-authenticated POST outside jwtAuth: without this any site could sign users out.
+  if (!csrfOriginAllowed(c)) return forbidden('Invalid origin');
   const token = readAuthToken(c);
   if (token) {
     const payload = await parseSecureToken(token, getAppSecret(c));
@@ -209,18 +221,22 @@ export async function handleSso(c: Ctx) {
   return respondWithSession(c, { userId: user.userId, role, username: user.username }, { includeToken: true });
 }
 
-export async function handleVerify(c: Ctx) {
+/** The signed-in user for public routes (same revocation rule as jwtAuth), or null. */
+async function currentSessionUser(c: Ctx) {
   const token = readAuthToken(c);
-  if (!token) {
-    return unauthorized();
-  }
-
+  if (!token) return null;
   const payload = await parseSecureToken(token, getAppSecret(c));
-  if (!payload?.userId || !payload?.role) {
-    return unauthorized();
-  }
+  if (!payload?.userId || !payload?.role) return null;
+  const userId = String(payload.userId);
+  const tokenVersion = typeof payload.tv === 'number' ? payload.tv : 0;
+  if ((await getTokenVersion(c.env, userId)) !== tokenVersion) return null;
+  return { userId, role: String(payload.role) };
+}
 
-  return json({ user: { id: String(payload.userId), role: String(payload.role) } });
+export async function handleVerify(c: Ctx) {
+  const session = await currentSessionUser(c);
+  if (!session) return unauthorized();
+  return json({ user: { id: session.userId, role: session.role } });
 }
 
 function requestOrigin(c: Ctx) {
@@ -239,9 +255,18 @@ export async function handleOAuthRedirect(c: Ctx) {
     return json({ message: 'OAuth provider not configured' }, 503);
   }
 
+  // `?link=1` from a signed-in session attaches this provider to the current account;
+  // otherwise the callback only signs in identities that are already linked.
+  let linkUserId: string | undefined;
+  if (c.req.query('link') === '1') {
+    const session = await currentSessionUser(c);
+    if (!session) return unauthorized();
+    linkUserId = session.userId;
+  }
+
   const state = crypto.randomUUID();
   const returnTo = c.req.query('returnTo') ?? undefined;
-  await storeOAuthState(c.env, state, { provider, returnTo });
+  await storeOAuthState(c.env, state, { provider, returnTo, linkUserId });
 
   const url = buildOAuthAuthorizeUrl(c.env, provider, requestOrigin(c), state);
   if (!url) return json({ message: 'OAuth provider not configured' }, 503);
@@ -316,7 +341,8 @@ export async function handleForgotPassword(c: Ctx) {
   const parsed = forgotPasswordSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
 
-  const user = await getUserByUsername(c.env, parsed.data.username);
+  // Same lookup as sign-in, so accounts registered with an email can recover too.
+  const user = await resolveLoginUser(c.env, parsed.data.username);
   if (user) {
     const token = uuid();
     await c.env.CACHE.put(`reset:${token}`, user.userId, { expirationTtl: RESET_TTL });

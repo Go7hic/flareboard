@@ -4,7 +4,7 @@ import { createDb, schema } from '@flareboard/db';
 import { createPixelSchema, updatePixelSchema, uuid } from '@flareboard/shared';
 import type { Env } from '../env';
 import { ROLES } from '@flareboard/shared';
-import { canAccessPixel, canMutatePixel, canMutateTeamResource, userHasTeamAccess } from '../lib/access';
+import { canAccessPixel, canMutatePixel, canMutateTeam, userHasTeamAccess } from '../lib/access';
 import { getAccessiblePixels, getPixelById } from '../lib/queries';
 import { badRequest, forbidden, json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
@@ -49,16 +49,8 @@ export async function handleCreate(c: Ctx) {
   if (!parsed.success) return badRequest(parsed.error.message);
 
   const user = c.get('user');
-  if (parsed.data.teamId) {
-    if (
-      !(await canMutateTeamResource(
-        c.env,
-        { userId: user.userId, teamId: parsed.data.teamId },
-        user,
-      ))
-    ) {
-      return forbidden('Read-only access');
-    }
+  if (parsed.data.teamId && !(await canMutateTeam(c.env, parsed.data.teamId, user))) {
+    return forbidden('Read-only access');
   }
 
   const pixelId = uuid();

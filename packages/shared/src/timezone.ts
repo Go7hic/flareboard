@@ -147,13 +147,56 @@ export function formatHourBucketLabel(utcBucket: string, timezone: SiteTimezone)
   }).format(new Date(ms));
 }
 
-export function formatDayBucketLabel(utcDay: string, timezone: SiteTimezone): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(utcDay)) return utcDay;
-  const ms = Date.parse(`${utcDay}T12:00:00.000Z`);
-  if (Number.isNaN(ms)) return utcDay;
+/**
+ * Day buckets are already calendar dates in the site's timezone (the API buckets by
+ * site-local day), so format the date as-is. Re-projecting it into the timezone
+ * shifted labels by a day for zones beyond ±12h.
+ */
+export function formatDayBucketLabel(day: string, _timezone?: SiteTimezone): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return day;
+  const ms = Date.parse(`${day}T12:00:00.000Z`);
+  if (Number.isNaN(ms)) return day;
   return new Intl.DateTimeFormat(undefined, {
-    timeZone: timezone,
+    timeZone: 'UTC',
     month: 'numeric',
     day: 'numeric',
   }).format(new Date(ms));
+}
+
+/** Milliseconds to add to a UTC instant to get the site's wall-clock time. */
+export function siteUtcOffsetMs(ms: number, timezone: SiteTimezone): number {
+  const whole = Math.floor(ms / 1000) * 1000;
+  const p = calendarParts(whole, timezone);
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - whole;
+}
+
+/**
+ * The site's UTC offset across [startAt, endAt], split at DST transitions: each
+ * segment applies until `until` (exclusive); the last one has `until: Infinity`.
+ * Lets SQL bucket events by local day with a CASE over a handful of boundaries.
+ */
+export function siteOffsetSegments(
+  startAt: number,
+  endAt: number,
+  timezone: SiteTimezone,
+): { until: number; offsetMs: number }[] {
+  const HOUR = 3_600_000;
+  const segments: { until: number; offsetMs: number }[] = [];
+  let current = siteUtcOffsetMs(startAt, timezone);
+  for (let t = startAt + HOUR; t <= endAt + HOUR; t += HOUR) {
+    const next = siteUtcOffsetMs(t, timezone);
+    if (next === current) continue;
+    // Narrow the transition inside the last hour to the second.
+    let lo = t - HOUR;
+    let hi = t;
+    while (hi - lo > 1000) {
+      const mid = lo + Math.floor((hi - lo) / 2);
+      if (siteUtcOffsetMs(mid, timezone) === current) lo = mid;
+      else hi = mid;
+    }
+    segments.push({ until: Math.floor(hi / 1000) * 1000, offsetMs: current });
+    current = next;
+  }
+  segments.push({ until: Infinity, offsetMs: current });
+  return segments;
 }

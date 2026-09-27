@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
 import { createSavedReplaySchema, updateSavedReplaySchema, uuid } from '@flareboard/shared';
 import type { Env } from '../env';
+import { parseStatsRange } from '../lib/parse-range';
 import { canMutateWebsite } from '../lib/access';
 import { getWebsiteReplays } from '../lib/queries';
 import { getSavedReplays } from '../lib/replays';
@@ -12,18 +13,24 @@ import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
 
+const REPLAY_LIST_LIMIT = 200;
+
 export async function handleList(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
-  const replays = await getWebsiteReplays(c.env, website!.websiteId);
+  // Filter by the selected range on the server: the list used to be the newest 50
+  // overall, so older ranges showed nothing and long ranges were silently truncated.
+  const hasRange = c.req.query('startAt') != null && c.req.query('endAt') != null;
+  const range = hasRange ? parseStatsRange(c, { clamp: true }) : undefined;
+  const replays = await getWebsiteReplays(c.env, website!.websiteId, REPLAY_LIST_LIMIT, range);
   return json(replays);
 }
 
 export async function handleGet(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
-  const replayId = c.req.param('replayId') ?? '';
-  const visitId = replayId.includes('-') && replayId.length > 20 ? replayId : replayId;
+  // The route id may be a visit id or a replay chunk id; both are matched below.
+  const visitId = c.req.param('replayId') ?? '';
 
   const chunks = await c.env.DB.prepare(
     `SELECT replay_id as id, visit_id as visitId, chunk_index as chunkIndex,

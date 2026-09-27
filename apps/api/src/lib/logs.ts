@@ -277,8 +277,12 @@ export async function getLogTail(
   limit = 100,
 ) {
   const searchPattern = filters.search?.trim() ? `%${filters.search.trim().toLowerCase()}%` : null;
+  // First load (no cursor): the newest lines, shown oldest-first. Follow-up polls keep
+  // ascending order from the cursor so no line between polls is skipped.
+  const initial = sinceAt <= 0;
   const rows = await env.DB.prepare(
     `${logTailPropsCte}
+     SELECT * FROM (
      SELECT
        e.event_id as id,
        e.session_id as sessionId,
@@ -311,8 +315,9 @@ export async function getLogTail(
        AND (?5 IS NULL OR lower(COALESCE(props.message, e.event_name, '')) LIKE ?5)
        AND (?6 IS NULL OR props.release = ?6)
        AND (?7 IS NULL OR props.environment = ?7)
-     ORDER BY e.created_at ASC
-     LIMIT ?8`,
+     ORDER BY e.created_at ${initial ? 'DESC' : 'ASC'}
+     LIMIT ?8
+     ) ORDER BY createdAt ASC`,
   )
     .bind(
       websiteId,

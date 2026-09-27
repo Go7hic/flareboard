@@ -80,6 +80,14 @@ export async function assertEventAllowed(
   return { ok: true, userId };
 }
 
+/** Session replay is a paid feature on Cloud; self-hosted instances always allow it. */
+export async function replayAllowedByPlan(env: Env, websiteId: string): Promise<boolean> {
+  if (!isHostedMode(env)) return true;
+  const userId = await getWebsiteOwnerId(env, websiteId);
+  if (!userId) return false;
+  return getPlan(await getPlanIdForUser(env, userId)).replayEnabled;
+}
+
 /** KV counter on the ingest hot path; D1 persistence runs in the aggregator. */
 export async function recordEventUsageKv(env: Env, userId: string, delta = 1): Promise<void> {
   if (!isHostedMode(env) || !userId) return;

@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from './helpers/migrations';
 import { fetchWorkerJson } from './helpers/fetch-worker';
 
@@ -32,6 +32,10 @@ describe('workflow public trigger throttling', () => {
     await seedTestWebsite(env.DB);
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('limits workflow triggers per IP and website before recording executions', async () => {
     const now = Date.now();
     await env.DB.prepare(
@@ -58,6 +62,8 @@ describe('workflow public trigger throttling', () => {
   });
 
   it('marks outbound workflow deliveries throttled after the hourly website cap', async () => {
+    // Webhook deliveries would otherwise hit the real network 60 times and time out.
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(null, { status: 204 }));
     const now = Date.now();
     await env.DB.prepare(
       `INSERT INTO workflow (workflow_id, website_id, name, trigger_event, enabled, action_type, action_config, created_at, updated_at)
@@ -86,5 +92,6 @@ describe('workflow public trigger throttling', () => {
       .first<{ status: string }>();
 
     expect(throttled).toEqual({ status: 'throttled' });
-  });
+    // 61 sequential requests: ~3s alone, slower when the whole monorepo suite runs in parallel.
+  }, 20_000);
 });

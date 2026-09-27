@@ -48,9 +48,16 @@ describe('session cookie auth', () => {
 
   it('clears the session cookie on logout', async () => {
     const token = await createSecureToken({ userId: USER_ID, role: 'admin', tv: 0 }, env.APP_SECRET);
+    // A cross-site page cannot sign the user out with their cookie.
+    const forged = await fetchWorkerJson('/api/auth/logout', {
+      method: 'POST',
+      headers: { Cookie: `${SESSION_COOKIE}=${token}`, Origin: 'https://evil.example' },
+    });
+    expect(forged.response.status).toBe(403);
+
     const logout = await fetchWorkerJson('/api/auth/logout', {
       method: 'POST',
-      headers: { Cookie: `${SESSION_COOKIE}=${token}` },
+      headers: { Cookie: `${SESSION_COOKIE}=${token}`, Origin: 'http://localhost:5173' },
     });
     expect(logout.response.status).toBe(200);
     expect(logout.response.headers.get('Set-Cookie')).toMatch(/Max-Age=0/i);

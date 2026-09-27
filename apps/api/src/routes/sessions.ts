@@ -1,7 +1,8 @@
 import type { Context } from 'hono';
 import { getPlan } from '@flareboard/shared';
 import type { Env } from '../env';
-import { getUserSubscription, isHostedMode } from '../lib/billing';
+import { getWebsitePlanId, isHostedMode } from '../lib/billing';
+import { cohortJoinFromQuery, segmentParamsFromQuery } from '../lib/report-filters';
 import { parseStatsRange } from '../lib/parse-range';
 import {
   exportEventsCsv,
@@ -29,8 +30,9 @@ export async function handleList(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
   const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
-  const page = Number(c.req.query('page') || 1);
-  const pageSize = Math.min(Number(c.req.query('pageSize') || 20), 100);
+  // Negative or NaN values would become LIMIT -n (unbounded) / a negative OFFSET.
+  const page = Math.max(1, Math.floor(Number(c.req.query('page')) || 1));
+  const pageSize = Math.min(Math.max(1, Math.floor(Number(c.req.query('pageSize')) || 20)), 100);
   const filters = {
     country: normalizeOptionalParam(c.req.query('country')),
     device: normalizeOptionalParam(c.req.query('device')),
@@ -114,14 +116,18 @@ export async function handleExport(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
   if (isHostedMode(c.env)) {
-    const sub = await getUserSubscription(c.env, c.get('user').userId);
-    if (!getPlan(sub.planId).dataPortabilityEnabled) {
+    const planId = await getWebsitePlanId(c.env, website!, c.get('user').userId);
+    if (!getPlan(planId).dataPortabilityEnabled) {
       return json({ message: 'CSV export requires a paid plan.' }, 403);
     }
   }
   const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
   const type = c.req.query('type') === 'pageviews' ? 'pageviews' : 'events';
-  const csv = await exportEventsCsv(c.env, website!.websiteId, startAt, endAt, type);
+  const [segment, cohort] = await Promise.all([
+    segmentParamsFromQuery(c, website!.websiteId),
+    cohortJoinFromQuery(c, website!.websiteId),
+  ]);
+  const csv = await exportEventsCsv(c.env, website!.websiteId, startAt, endAt, type, segment, cohort);
   return new Response(csv, {
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',

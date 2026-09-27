@@ -41,7 +41,7 @@ export async function bumpTokenVersion(env: Env, userId: string): Promise<void> 
 }
 
 /** Single source of truth for minting session tokens, stamping the current version. */
-export async function issueAuthToken(c: { env: Env }, user: { userId: string; role: string }): Promise<string> {
+export async function issueAuthToken(c: { env: Env; req: { url: string } }, user: { userId: string; role: string }): Promise<string> {
   const tv = await getTokenVersion(c.env, user.userId);
   return createSecureToken({ userId: user.userId, role: user.role, tv }, getAppSecret(c));
 }

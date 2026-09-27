@@ -5,6 +5,7 @@ import {
   ROLES,
   createAdminUserSchema,
   createAdminWebsiteSchema,
+  csvRow,
   hashPassword,
   updateAdminUserSchema,
   uuid,
@@ -23,14 +24,8 @@ function requireAdmin(c: Ctx) {
   return null;
 }
 
-function csvEscape(value: unknown): string {
-  const s = value == null ? '' : String(value);
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}
-
 function csvLine(values: unknown[]) {
-  return `${values.map(csvEscape).join(',')}\n`;
+  return `${csvRow(values)}\n`;
 }
 
 export async function handleListUsers(c: Ctx) {

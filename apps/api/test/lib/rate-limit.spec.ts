@@ -25,7 +25,9 @@ describe('getTrustedClientIp', () => {
   });
 });
 
-describe('checkIpRateLimit', () => {
+// The first Durable Object call cold-starts the class; under a full parallel run that
+// alone can pass the default 5s, which made this suite fail intermittently.
+describe('checkIpRateLimit', { timeout: 30_000 }, () => {
   it('allows requests under the limit and blocks after the limit', async () => {
     const ip = `test-${crypto.randomUUID()}`;
 

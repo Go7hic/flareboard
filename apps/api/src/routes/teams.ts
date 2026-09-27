@@ -179,10 +179,12 @@ export async function handleUpdate(c: Ctx) {
   const team = await getTeamById(c.env, teamId);
   if (!team) return notFound();
 
+  // Global admins manage any team; members need owner or manager.
+  const isAdmin = c.get('user').role === ROLES.admin;
   const membership = await userHasTeamAccess(c.env, c.get('user').userId, teamId);
   if (
-    !membership ||
-    (membership.role !== ROLES.teamOwner && membership.role !== ROLES.teamManager && c.get('user').role !== ROLES.admin)
+    !isAdmin &&
+    (!membership || (membership.role !== ROLES.teamOwner && membership.role !== ROLES.teamManager))
   ) {
     return notFound();
   }
@@ -309,8 +311,6 @@ export async function handleCreateWebsite(c: Ctx) {
   });
 
   await c.env.CACHE.put(`website:${websiteId}`, '1', { expirationTtl: 3600 });
-  const website = await getTeamWebsites(c.env, teamId);
-  const created = website.find((w) => w.websiteId === websiteId);
   return json(
     {
       id: websiteId,
@@ -386,7 +386,9 @@ export async function handleUpdateUser(c: Ctx) {
     .limit(1);
   if (!row) return notFound();
 
-  if (row.role === ROLES.teamOwner && membership?.role !== ROLES.teamOwner && c.get('user').role !== ROLES.admin) {
+  // Granting owner is as privileged as revoking it (managers could self-promote).
+  const touchesOwner = row.role === ROLES.teamOwner || parsed.data.role === ROLES.teamOwner;
+  if (touchesOwner && membership?.role !== ROLES.teamOwner && c.get('user').role !== ROLES.admin) {
     return badRequest('Only team owners can change owner roles');
   }
 

@@ -216,7 +216,9 @@ describe('POST /api/send', () => {
       )
       .run();
 
-    const { appendMatchedActionTags } = await import('../src/lib/actions');
+    const { appendMatchedActionTags, clearWebsiteActionCache } = await import('../src/lib/actions');
+    // Earlier sends in this file already cached this site's (empty) definitions for 10s.
+    clearWebsiteActionCache(TEST_WEBSITE_ID);
     const tagged = await appendMatchedActionTags(env, TEST_WEBSITE_ID, {
       eventName: 'checkout_started',
       urlPath: '/checkout',

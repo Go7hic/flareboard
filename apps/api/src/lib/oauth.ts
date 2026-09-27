@@ -1,11 +1,19 @@
 import { hashPassword, ROLES, uuid } from '@flareboard/shared';
 import { createDb, schema } from '@flareboard/db';
 import type { Env } from '../env';
+import { isHostedMode } from './billing';
 import { getUserById, getUserByUsername } from './queries';
 
 export type OAuthProvider = 'google' | 'github';
 
 const OAUTH_STATE_TTL = 600;
+
+type OAuthState = {
+  provider: OAuthProvider;
+  returnTo?: string;
+  /** Set when a signed-in user starts the flow to attach this provider to their account. */
+  linkUserId?: string;
+};
 
 export function getEnabledOAuthProviders(env: Env): OAuthProvider[] {
   const providers: OAuthProvider[] = [];
@@ -25,7 +33,7 @@ function redirectUri(origin: string, provider: OAuthProvider) {
 export async function storeOAuthState(
   env: Env,
   state: string,
-  data: { provider: OAuthProvider; returnTo?: string },
+  data: OAuthState,
 ) {
   await env.CACHE.put(`oauth:state:${state}`, JSON.stringify(data), { expirationTtl: OAUTH_STATE_TTL });
 }
@@ -36,7 +44,7 @@ export async function consumeOAuthState(env: Env, state: string) {
   if (!raw) return null;
   await env.CACHE.delete(key);
   try {
-    return JSON.parse(raw) as { provider: OAuthProvider; returnTo?: string };
+    return JSON.parse(raw) as OAuthState;
   } catch {
     return null;
   }
@@ -136,35 +144,86 @@ async function exchangeCode(
   return null;
 }
 
-async function linkOAuthUser(env: Env, provider: OAuthProvider, profile: { id: string; username: string }) {
-  const linkKey = `oauth:${provider}:${profile.id}`;
-  const linkedUserId = await env.CACHE.get(linkKey);
-  if (linkedUserId) {
-    const user = await getUserById(env, linkedUserId);
-    if (user) return user;
+async function findLinkedUser(env: Env, provider: OAuthProvider, providerUserId: string) {
+  const row = await env.DB.prepare(
+    `SELECT user_id AS userId FROM user_oauth_identity WHERE provider = ?1 AND provider_user_id = ?2`,
+  )
+    .bind(provider, providerUserId)
+    .first<{ userId: string }>();
+  if (row) return getUserById(env, row.userId);
+
+  // Links used to live only in KV; carry a still-present one over so existing
+  // OAuth users keep their account.
+  const legacyUserId = await env.CACHE.get(`oauth:${provider}:${providerUserId}`);
+  if (!legacyUserId) return null;
+  const legacyUser = await getUserById(env, legacyUserId);
+  if (legacyUser) await saveIdentity(env, provider, providerUserId, legacyUser.userId);
+  return legacyUser;
+}
+
+async function saveIdentity(env: Env, provider: OAuthProvider, providerUserId: string, userId: string) {
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO user_oauth_identity (provider, provider_user_id, user_id, created_at)
+     VALUES (?1, ?2, ?3, ?4)`,
+  )
+    .bind(provider, providerUserId, userId, Date.now())
+    .run();
+}
+
+/** The provider login if free, otherwise login plus a short random suffix. */
+async function availableUsername(env: Env, login: string) {
+  const base = login.slice(0, 40);
+  if (!(await getUserByUsername(env, base))) return base;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = `${base}-${crypto.randomUUID().slice(0, 6)}`;
+    if (!(await getUserByUsername(env, candidate))) return candidate;
+  }
+  return `${base}-${crypto.randomUUID()}`;
+}
+
+type LinkResult =
+  | { user: NonNullable<Awaited<ReturnType<typeof getUserById>>> }
+  | { error: 'oauth_account_not_linked' | 'oauth_identity_in_use' | 'User creation failed' };
+
+/**
+ * Resolves the local user for a provider identity. Never matches on username or
+ * email: a provider account that shares a name with a local user must not take it
+ * over. New accounts are only created where self-registration is open (hosted).
+ */
+async function resolveOAuthUser(
+  env: Env,
+  provider: OAuthProvider,
+  profile: { id: string; username: string },
+  linkUserId?: string,
+): Promise<LinkResult> {
+  const linked = await findLinkedUser(env, provider, profile.id);
+
+  if (linkUserId) {
+    if (linked && linked.userId !== linkUserId) return { error: 'oauth_identity_in_use' };
+    const user = await getUserById(env, linkUserId);
+    if (!user) return { error: 'User creation failed' };
+    await saveIdentity(env, provider, profile.id, user.userId);
+    return { user };
   }
 
-  let user = await getUserByUsername(env, profile.username);
-  if (!user) {
-    const userId = uuid();
-    const now = new Date();
-    const db = createDb(env.DB);
-    const randomPass = crypto.randomUUID();
-    await db.insert(schema.user).values({
+  if (linked) return { user: linked };
+  if (!isHostedMode(env)) return { error: 'oauth_account_not_linked' };
+
+  const userId = uuid();
+  const now = new Date();
+  await createDb(env.DB)
+    .insert(schema.user)
+    .values({
       userId,
-      username: profile.username,
-      password: hashPassword(randomPass),
+      username: await availableUsername(env, profile.username),
+      password: hashPassword(crypto.randomUUID()),
       role: ROLES.user,
       createdAt: now,
       updatedAt: now,
     });
-    user = await getUserById(env, userId);
-    await env.CACHE.put(linkKey, userId, { expirationTtl: 60 * 60 * 24 * 365 });
-  } else {
-    await env.CACHE.put(linkKey, user.userId, { expirationTtl: 60 * 60 * 24 * 365 });
-  }
-
-  return user;
+  await saveIdentity(env, provider, profile.id, userId);
+  const user = await getUserById(env, userId);
+  return user ? { user } : { error: 'User creation failed' };
 }
 
 export async function handleOAuthCallbackFlow(
@@ -188,10 +247,10 @@ export async function handleOAuthCallbackFlow(
   const profile = await exchangeCode(env, providerParam, code, origin);
   if (!profile) return { error: 'Token exchange failed' as const };
 
-  const user = await linkOAuthUser(env, providerParam, profile);
-  if (!user) return { error: 'User creation failed' as const };
+  const resolved = await resolveOAuthUser(env, providerParam, profile, stored.linkUserId);
+  if ('error' in resolved) return { error: resolved.error };
 
-  return { user, returnTo: stored.returnTo };
+  return { user: resolved.user, returnTo: stored.returnTo };
 }
 
 export { isProvider };

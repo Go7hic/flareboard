@@ -111,7 +111,8 @@ async function processEvent(
   db: ReturnType<typeof createDb>,
   d1: D1Database,
   msg: Extract<QueueMessage, { type: 'event' }>,
-) {
+  claimedIds: ReadonlySet<string>,
+): Promise<boolean> {
   const d = msg.data;
   await ensureSessionRow(db, d.sessionId, d.websiteId, d.createdAt);
   const inserted = await db
@@ -152,7 +153,9 @@ async function processEvent(
     .onConflictDoNothing()
     .returning({ eventId: schema.websiteEvent.eventId });
 
-  if (!inserted.length) return;
+  // An existing row means a previous delivery finished this event, unless the failed
+  // batch attempt just inserted it (then event_data and rollups are still missing).
+  if (!inserted.length && !claimedIds.has(d.id)) return false;
 
   if (msg.eventData?.length) {
     await db
@@ -175,6 +178,7 @@ async function processEvent(
 
   const sessionMeta = await getSessionMeta(db, d.sessionId);
   await maintainRollupsForEvent(d1, d, sessionMeta);
+  return true;
 }
 
 async function processSessionData(
@@ -208,16 +212,20 @@ async function processSessionData(
     .onConflictDoNothing();
 }
 
-async function processHeatmap(d1: D1Database, msg: Extract<QueueMessage, { type: 'heatmap' }>) {
+async function processHeatmap(
+  d1: D1Database,
+  msg: Extract<QueueMessage, { type: 'heatmap' }>,
+  claimedIds: ReadonlySet<string>,
+): Promise<boolean> {
   const d = msg.data;
-  if (d.id) {
+  if (d.id && !claimedIds.has(d.id)) {
     const dedup = await d1
       .prepare(
         `INSERT INTO heatmap_ingest_dedup (id, website_id, created_at) VALUES (?1, ?2, ?3) ON CONFLICT(id) DO NOTHING`,
       )
       .bind(d.id, d.websiteId, d.createdAt)
       .run();
-    if (!dedup.meta.changes) return;
+    if (!dedup.meta.changes) return false;
   }
 
   const day = dayKey(d.createdAt);
@@ -242,6 +250,7 @@ async function processHeatmap(d1: D1Database, msg: Extract<QueueMessage, { type:
       d.viewportH,
     )
     .run();
+  return true;
 }
 
 async function processRevenue(
@@ -302,33 +311,36 @@ async function flushUsageToD1(d1: D1Database, usageByUser: Map<string, number>) 
   }
 }
 
+/** Billed units are events and heatmap samples; a revenue message rides on its event. */
 function billableWebsiteId(msg: QueueMessage): string | null {
-  if (msg.type === 'event' || msg.type === 'revenue' || msg.type === 'heatmap') {
+  if (msg.type === 'event' || msg.type === 'heatmap') {
     return msg.data.websiteId;
   }
   return null;
 }
 
-async function processMessage(db: ReturnType<typeof createDb>, d1: D1Database, msg: QueueMessage) {
+/** Returns true when the message wrote a new billable row (event or heatmap sample). */
+async function processMessage(
+  db: ReturnType<typeof createDb>,
+  d1: D1Database,
+  msg: QueueMessage,
+  claimedIds: ReadonlySet<string>,
+): Promise<boolean> {
   if (msg.type === 'session') {
     await processSession(d1, msg);
-    return;
+    return false;
   }
-  if (msg.type === 'event') {
-    await processEvent(db, d1, msg);
-    return;
-  }
+  if (msg.type === 'event') return processEvent(db, d1, msg, claimedIds);
   if (msg.type === 'session_data') {
     await processSessionData(db, msg);
-    return;
+    return false;
   }
   if (msg.type === 'revenue') {
     await processRevenue(db, msg);
-    return;
+    return false;
   }
-  if (msg.type === 'heatmap') {
-    await processHeatmap(d1, msg);
-  }
+  if (msg.type === 'heatmap') return processHeatmap(d1, msg, claimedIds);
+  return false;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -351,6 +363,12 @@ class BatchProcessingError extends Error {
   constructor(
     message: string,
     readonly fallbackSafe: boolean,
+    /**
+     * Event / heatmap ids this attempt inserted before failing. Their core row now
+     * exists but rollups never ran, so the per-message fallback must still apply them
+     * instead of treating the existing row as "already processed".
+     */
+    readonly claimedIds: ReadonlySet<string> = new Set(),
   ) {
     super(message);
   }
@@ -469,6 +487,7 @@ async function processBatchOptimized(
 ): Promise<Map<string, number>> {
   const db = env.DB;
   let fallbackSafe = true;
+  const claimedIds = new Set<string>();
 
   try {
     const sessionMsgs = messages.filter((m): m is Extract<QueueMessage, { type: 'session' }> => m.type === 'session');
@@ -604,6 +623,7 @@ async function processBatchOptimized(
     }
     const eventInsertResults = await runBatched(db, eventInsertStmts);
     const insertedEventMsgs = eventMsgs.filter((_, index) => statementChanged(eventInsertResults[index]));
+    for (const m of insertedEventMsgs) claimedIds.add(m.data.id);
 
     const relatedCoreStmts: D1PreparedStatement[] = [];
     for (const m of eventMsgs) {
@@ -682,6 +702,7 @@ async function processBatchOptimized(
     for (let i = 0; i < heatmapWithIds.length; i++) {
       if (statementChanged(heatmapDedupResults[i]) && heatmapWithIds[i].data.id) {
         dedupedHeatmapIds.add(heatmapWithIds[i].data.id!);
+        claimedIds.add(heatmapWithIds[i].data.id!);
       }
     }
     const dedupedHeatmapMsgs = heatmapMsgs.filter(
@@ -816,11 +837,13 @@ async function processBatchOptimized(
     ]);
     await runBatched(db, buildStatsRefreshStatements(db, [...statsDays.values()]));
 
-    return getUsageByUser(db, messages, hostedBilling);
+    // Bill what this attempt actually wrote: redelivered or duplicate messages are no-ops.
+    return getUsageByUser(db, [...insertedEventMsgs, ...dedupedHeatmapMsgs], hostedBilling);
   } catch (error) {
     throw new BatchProcessingError(
       error instanceof Error ? error.message : String(error),
       fallbackSafe,
+      claimedIds,
     );
   }
 }
@@ -830,6 +853,7 @@ async function processPerMessageFallback(
   batch: MessageBatch<QueueMessage>,
   env: Env,
   hostedBilling: boolean,
+  claimedIds: ReadonlySet<string> = new Set(),
 ) {
   const db = createDb(env.DB);
   const messages = [...batch.messages].sort(
@@ -847,10 +871,10 @@ async function processPerMessageFallback(
 
   for (const message of messages) {
     try {
-      await processMessage(db, env.DB, message.body);
+      const wroteBillable = await processMessage(db, env.DB, message.body, claimedIds);
       message.ack();
 
-      if (hostedBilling) {
+      if (hostedBilling && wroteBillable) {
         const websiteId = billableWebsiteId(message.body);
         if (websiteId) {
           const userId = owners.get(websiteId);
@@ -940,7 +964,8 @@ export default {
         }),
       );
       if (fallbackSafe) {
-        await processPerMessageFallback(batch, env, hostedBilling);
+        const claimedIds = error instanceof BatchProcessingError ? error.claimedIds : new Set<string>();
+        await processPerMessageFallback(batch, env, hostedBilling, claimedIds);
         return;
       }
 

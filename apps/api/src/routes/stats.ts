@@ -7,7 +7,6 @@ import {
   getMetrics,
   getPageviews,
   getPageMetrics,
-  getSegmentById,
   getTrafficHeatmap,
   getWebsiteMetricsSeries,
   getWebsiteStats,
@@ -20,25 +19,14 @@ import {
   getWebsiteMetricsSeriesFiltered,
   getWebsiteStatsFiltered,
 } from '../lib/segment-stats';
-import { resolveCohortMemberJoin } from '../lib/cohorts';
+import { cohortJoinFromQuery, segmentParamsFromQuery } from '../lib/report-filters';
 import { badRequest, json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
 
-async function segmentParams(c: Ctx, websiteId: string) {
-  const segmentId = c.req.query('segmentId');
-  if (!segmentId) return null;
-  const segment = await getSegmentById(c.env, segmentId);
-  if (!segment || segment.websiteId !== websiteId) return null;
-  return segment.parameters as Record<string, unknown>;
-}
-
-async function cohortJoin(c: Ctx, websiteId: string) {
-  const cohortId = c.req.query('cohort') || c.req.query('cohortId');
-  if (!cohortId) return null;
-  return resolveCohortMemberJoin(c.env, websiteId, cohortId);
-}
+const segmentParams = segmentParamsFromQuery;
+const cohortJoin = cohortJoinFromQuery;
 
 function useFilteredQueries(segment: Record<string, unknown> | null, cohort: Awaited<ReturnType<typeof cohortJoin>>) {
   return Boolean(segment || cohort);
@@ -63,8 +51,8 @@ export async function handlePageviews(c: Ctx) {
   const segment = await segmentParams(c, website.websiteId);
   const cohort = await cohortJoin(c, website.websiteId);
   const data = useFilteredQueries(segment, cohort)
-    ? await getPageviewsFiltered(c.env, website.websiteId, startAt, endAt, unit, segment, cohort)
-    : await getPageviews(c.env, website.websiteId, startAt, endAt, unit);
+    ? await getPageviewsFiltered(c.env, website.websiteId, startAt, endAt, unit, segment, cohort, website.timezone)
+    : await getPageviews(c.env, website.websiteId, startAt, endAt, unit, website.timezone);
   return json(data);
 }
 
@@ -82,8 +70,8 @@ export async function handleMetrics(c: Ctx) {
 
   if (type === 'heatmap') {
     const data = filtered
-      ? await getTrafficHeatmapFiltered(c.env, website.websiteId, startAt, endAt, segment)
-      : await getTrafficHeatmap(c.env, website.websiteId, startAt, endAt);
+      ? await getTrafficHeatmapFiltered(c.env, website.websiteId, startAt, endAt, segment, website.timezone)
+      : await getTrafficHeatmap(c.env, website.websiteId, startAt, endAt, website.timezone);
     return json(data);
   }
 
@@ -146,7 +134,7 @@ export async function handleOverview(c: Ctx) {
           );
     const [stats, pageviews, metrics, timeseries] = await Promise.all([
       getWebsiteStatsFiltered(c.env, website.websiteId, startAt, endAt, segment, cohort),
-      getPageviewsFiltered(c.env, website.websiteId, startAt, endAt, unit, segment, cohort),
+      getPageviewsFiltered(c.env, website.websiteId, startAt, endAt, unit, segment, cohort, website.timezone),
       metricsPromise,
       getWebsiteMetricsSeriesFiltered(
         c.env,
@@ -156,6 +144,7 @@ export async function handleOverview(c: Ctx) {
         compareChartUnit(startAt, endAt),
         segment,
         cohort,
+        website.timezone,
       ),
     ]);
     return json({ stats, pageviews, metrics, timeseries });
@@ -168,7 +157,7 @@ export async function handleOverview(c: Ctx) {
 
   const [stats, pageviews, metrics, timeseries] = await Promise.all([
     getWebsiteStats(c.env, website.websiteId, startAt, endAt),
-    getPageviews(c.env, website.websiteId, startAt, endAt, unit),
+    getPageviews(c.env, website.websiteId, startAt, endAt, unit, website.timezone),
     metricsPromise,
     getWebsiteMetricsSeries(
       c.env,
@@ -176,6 +165,7 @@ export async function handleOverview(c: Ctx) {
       startAt,
       endAt,
       compareChartUnit(startAt, endAt),
+      website.timezone,
     ),
   ]);
 
@@ -215,8 +205,8 @@ export async function handleCompare(c: Ctx) {
 
   const loadSeries = (from: number, to: number) =>
     useFiltered
-      ? getWebsiteMetricsSeriesFiltered(c.env, website.websiteId, from, to, unit, segment, cohort)
-      : getWebsiteMetricsSeries(c.env, website.websiteId, from, to, unit);
+      ? getWebsiteMetricsSeriesFiltered(c.env, website.websiteId, from, to, unit, segment, cohort, website.timezone)
+      : getWebsiteMetricsSeries(c.env, website.websiteId, from, to, unit, website.timezone);
 
   const [primary, compare, primarySeries, compareSeries] = await Promise.all([
     load(startAt, endAt),

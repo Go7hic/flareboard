@@ -5,6 +5,8 @@ import { ENTITY_TYPE, createShareSchema, statsQuerySchema, updateShareSchema, uu
 import { rolling24hRange } from '@flareboard/shared/date-range';
 import { siteCalendarDaysRange } from '@flareboard/shared/timezone';
 import type { Env } from '../env';
+import { checkIpRateLimit, getTrustedClientIp } from '../lib/rate-limit';
+import { clampReportRange } from '../lib/report-range';
 import { canAccessTeamResource, canAccessWebsite, canMutateTeamResource, canMutateWebsite } from '../lib/access';
 import {
   filterBoardWidgetsForPublicShare,
@@ -186,18 +188,30 @@ function parsePublicRange(
   timezone = 'UTC',
 ) {
   const query = statsQuerySchema.safeParse(c.req.query());
-  if (query.success && query.data.startAt != null && query.data.endAt != null) {
-    const unit = query.data.unit ?? 'day';
-    return { startAt: query.data.startAt, endAt: query.data.endAt, unit };
-  }
-  const { startAt, endAt } = presetRange(defaultPreset ?? '24h', timezone);
-  const unit = query.success && query.data.unit ? query.data.unit : 'day';
+  // Anonymous callers pick the window; bound it like authenticated reports.
+  const { startAt, endAt } =
+    query.success && query.data.startAt != null && query.data.endAt != null
+      ? clampReportRange(query.data.startAt, query.data.endAt)
+      : presetRange(defaultPreset ?? '24h', timezone);
+  // Default to hourly points for short windows (the default view is 24h).
+  const unit =
+    query.success && query.data.unit ? query.data.unit : endAt - startAt <= 48 * 60 * 60 * 1000 ? 'hour' : 'day';
   return { startAt, endAt, unit };
 }
+
+const PUBLIC_SHARE_REQUESTS_PER_MINUTE = 60;
 
 export async function handlePublicGet(c: Context<{ Bindings: Env }>) {
   const slug = c.req.param('slug');
   if (!slug) return notFound();
+  const rl = await checkIpRateLimit(
+    c.env,
+    'public-share',
+    getTrustedClientIp(c.req.raw),
+    PUBLIC_SHARE_REQUESTS_PER_MINUTE,
+    60,
+  );
+  if (!rl.allowed) return json({ message: 'Too many requests' }, 429);
   const share = await getShareBySlug(c.env, slug);
   if (!share || isShareExpired(share)) return notFound();
 
@@ -279,7 +293,7 @@ export async function handlePublicGet(c: Context<{ Bindings: Env }>) {
       c.env,
       `share-pageviews:${slug}:${startAt}:${endAt}:${unit}`,
       60,
-      () => getPageviews(c.env, website.websiteId, startAt, endAt, unit),
+      () => getPageviews(c.env, website.websiteId, startAt, endAt, unit, website.timezone),
     );
     return json(pageviews);
   }
@@ -290,7 +304,7 @@ export async function handlePublicGet(c: Context<{ Bindings: Env }>) {
     60,
     async () => {
       const stats = await getWebsiteStats(c.env, website.websiteId, startAt, endAt);
-      const series = await getPageviews(c.env, website.websiteId, startAt, endAt, unit);
+      const series = await getPageviews(c.env, website.websiteId, startAt, endAt, unit, website.timezone);
       return {
         website: { id: website.websiteId, name: website.name, domain: website.domain, timezone: website.timezone ?? 'UTC' },
         share: { name: share.name, slug: share.slug },

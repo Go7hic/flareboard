@@ -34,13 +34,17 @@ export async function bumpRealtimeVisitor(
     updatedAt: Date.now(),
   };
 
-  const exists = existing;
-  await env.CACHE.put(sessionKey, JSON.stringify(payload), { expirationTtl: TTL });
+  // `u` in the key metadata lets the API count active sessions from a key listing
+  // alone. (A separate running counter only ever went up and was replaced by this.)
+  await env.CACHE.put(sessionKey, JSON.stringify(payload), {
+    expirationTtl: TTL,
+    metadata: { u: payload.updatedAt },
+  });
+}
 
-  if (exists) return;
-
-  const countKey = `rt:${websiteId}:visitors`;
-  const current = await env.CACHE.get(countKey);
-  const n = current ? parseInt(current, 10) : 0;
-  await env.CACHE.put(countKey, String(n + 1), { expirationTtl: TTL });
+/** Sessions seen in the realtime window, counted from key metadata (first 1000 keys). */
+export async function countActiveVisitors(env: Env, websiteId: string, now = Date.now()) {
+  const since = now - TTL * 1000;
+  const page = await env.CACHE.list<{ u?: number }>({ prefix: `rt:${websiteId}:s:`, limit: 1000 });
+  return page.keys.filter((key) => key.metadata?.u === undefined || key.metadata.u >= since).length;
 }

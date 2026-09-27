@@ -1,12 +1,13 @@
 import { EVENT_TYPE } from '@flareboard/shared';
 import type { Env } from '../env';
+import { seriesTimezone, siteLocalMsSql } from './site-time';
 import { channelCaseSql } from './channel';
 import type { CohortMemberJoin } from './cohorts';
 import type { PageMetricRow, TrafficHeatmapData } from './queries';
 import { queryPeriodStats } from './period-stats';
 import { buildSegmentSql, type SegmentParams } from './segment-filters';
 
-function cohortJoinSql(cohortJoin?: CohortMemberJoin | null) {
+export function cohortJoinSql(cohortJoin?: CohortMemberJoin | null) {
   if (!cohortJoin) {
     return { sql: '', binds: [] as (string | number)[] };
   }
@@ -215,6 +216,7 @@ export async function getPageviewsFiltered(
   unit: string,
   segment?: SegmentParams | null,
   cohortJoin?: CohortMemberJoin | null,
+  timezone = 'UTC',
 ) {
   const seg = buildSegmentSql(segment);
   const cohort = cohortJoinSql(cohortJoin);
@@ -246,7 +248,7 @@ export async function getPageviewsFiltered(
   ];
 
   const rows = await env.DB.prepare(
-    `SELECT strftime('${format}', datetime(e.created_at / 1000, 'unixepoch')) as x,
+    `SELECT strftime('${format}', datetime(${siteLocalMsSql('e.created_at', startAt, endAt, seriesTimezone(unit, timezone))} / 1000, 'unixepoch')) as x,
             COUNT(*) as y
      FROM website_event e${joins}
      WHERE ${clauses.join(' AND ')}
@@ -266,6 +268,7 @@ export async function getWebsiteMetricsSeriesFiltered(
   unit: string,
   segment?: SegmentParams | null,
   cohortJoin?: CohortMemberJoin | null,
+  timezone = 'UTC',
 ) {
   const seg = buildSegmentSql(segment);
   const cohort = cohortJoinSql(cohortJoin);
@@ -296,7 +299,7 @@ export async function getWebsiteMetricsSeriesFiltered(
   ];
 
   const rows = await env.DB.prepare(
-    `SELECT strftime('${format}', datetime(e.created_at / 1000, 'unixepoch')) as x,
+    `SELECT strftime('${format}', datetime(${siteLocalMsSql('e.created_at', startAt, endAt, seriesTimezone(unit, timezone))} / 1000, 'unixepoch')) as x,
             SUM(CASE WHEN e.event_type = ? THEN 1 ELSE 0 END) as pageviews,
             COUNT(DISTINCT e.session_id) as visitors
      FROM website_event e${joins}
@@ -423,7 +426,9 @@ export async function getTrafficHeatmapFiltered(
   startAt: number,
   endAt: number,
   segment?: SegmentParams | null,
+  timezone = 'UTC',
 ): Promise<TrafficHeatmapData> {
+  const local = siteLocalMsSql('e.created_at', startAt, endAt, timezone);
   const seg = buildSegmentSql(segment);
   const joins = seg.joinSession ? ' INNER JOIN session s ON e.session_id = s.session_id' : '';
   const clauses = [
@@ -443,8 +448,8 @@ export async function getTrafficHeatmapFiltered(
   ];
 
   const rows = await env.DB.prepare(
-    `SELECT CAST(strftime('%w', datetime(e.created_at / 1000, 'unixepoch')) AS INTEGER) as dow,
-            CAST(strftime('%H', datetime(e.created_at / 1000, 'unixepoch')) AS INTEGER) as hour,
+    `SELECT CAST(strftime('%w', datetime(${local} / 1000, 'unixepoch')) AS INTEGER) as dow,
+            CAST(strftime('%H', datetime(${local} / 1000, 'unixepoch')) AS INTEGER) as hour,
             COUNT(*) as count
      FROM website_event e${joins}
      WHERE ${clauses.join(' AND ')}

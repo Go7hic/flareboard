@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./client": "./src/client.ts",
+    "./csv": "./src/csv.ts",
     "./date-range": "./src/date-range.ts",
     "./timezone": "./src/timezone.ts"
   },

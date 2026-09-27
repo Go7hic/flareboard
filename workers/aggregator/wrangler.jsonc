@@ -24,6 +24,8 @@
         "queue": "flareboard-events",
         "max_batch_size": 50,
         "max_batch_timeout": 2,
+        // Matches MAX_RETRIES in src/index.ts so the logged dead-letter path runs.
+        "max_retries": 5,
         "dead_letter_queue": "flareboard-events-dlq"
       },
       {
@@ -61,6 +63,7 @@
             "queue": "flareboard-events",
             "max_batch_size": 50,
             "max_batch_timeout": 2,
+            "max_retries": 5,
             "dead_letter_queue": "flareboard-events-dlq"
           },
           {

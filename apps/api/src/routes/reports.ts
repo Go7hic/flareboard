@@ -20,7 +20,7 @@ import {
   getRetentionReport,
   getStickinessReport,
 } from '../lib/advanced-reports';
-import { parseStatsRange } from '../lib/parse-range';
+import { applyStatsResetFloor, parseStatsRange } from '../lib/parse-range';
 import {
   getGoalReport,
   getReportById,
@@ -169,6 +169,8 @@ async function loadSegmentParams(c: Ctx, websiteId: string) {
   return segment.parameters as Record<string, unknown>;
 }
 
+const MAX_FUNNEL_STEPS = 20;
+
 async function requireReportWebsite(c: Ctx) {
   const websiteId = c.req.query('websiteId');
   if (!websiteId) return { error: badRequest('websiteId required') as Response };
@@ -176,6 +178,7 @@ async function requireReportWebsite(c: Ctx) {
   if (!website || !(await canAccessWebsite(c.env, website, c.get('user')))) {
     return { error: notFound() as Response };
   }
+  applyStatsResetFloor(c, website.resetAt);
   return { websiteId, segment: await loadSegmentParams(c, websiteId) };
 }
 
@@ -185,6 +188,8 @@ export async function handleFunnel(c: Ctx) {
   const stepsRaw = c.req.query('steps') ?? '';
   const steps = stepsRaw.split(',').map((s) => s.trim()).filter(Boolean);
   if (!steps.length) return badRequest('steps required (comma-separated event names)');
+  // Each step adds bound parameters and a join; keep well under D1's 100-parameter cap.
+  if (steps.length > MAX_FUNNEL_STEPS) return badRequest(`At most ${MAX_FUNNEL_STEPS} funnel steps`);
   const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
   const data = await getFunnelReport(c.env, ctx.websiteId!, startAt, endAt, steps, ctx.segment);
   return json(data);

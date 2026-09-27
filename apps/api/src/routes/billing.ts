@@ -114,7 +114,22 @@ export async function handlePortal(c: Ctx) {
   return json({ url: session.url });
 }
 
-async function verifyStripeSignature(payload: string, sigHeader: string, secret: string): Promise<boolean> {
+/** Stripe's own default: reject signatures older than five minutes (replay window). */
+const STRIPE_SIGNATURE_TOLERANCE_SEC = 300;
+
+function timingSafeEqualHex(a: string, b: string) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+export async function verifyStripeSignature(
+  payload: string,
+  sigHeader: string,
+  secret: string,
+  nowSec = Math.floor(Date.now() / 1000),
+): Promise<boolean> {
   const parts = sigHeader.split(',').reduce(
     (acc, part) => {
       const [k, v] = part.split('=');
@@ -125,6 +140,8 @@ async function verifyStripeSignature(payload: string, sigHeader: string, secret:
     { t: '', v1: [] as string[] },
   );
   if (!parts.t || !parts.v1.length) return false;
+  const timestamp = Number(parts.t);
+  if (!Number.isFinite(timestamp) || Math.abs(nowSec - timestamp) > STRIPE_SIGNATURE_TOLERANCE_SEC) return false;
 
   const signed = `${parts.t}.${payload}`;
   const encoder = new TextEncoder();
@@ -138,7 +155,7 @@ async function verifyStripeSignature(payload: string, sigHeader: string, secret:
   const mac = await crypto.subtle.sign('HMAC', key, encoder.encode(signed));
   const expected = [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, '0')).join('');
 
-  return parts.v1.some((v) => v === expected);
+  return parts.v1.some((v) => timingSafeEqualHex(v, expected));
 }
 
 export async function handleStripeWebhook(c: Ctx) {

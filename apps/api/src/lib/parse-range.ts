@@ -29,6 +29,19 @@ export type ParseStatsRangeOptions = {
   clamp?: boolean;
 };
 
+/** Per-request "statistics reset" floor for the website this request was authorized for. */
+const resetFloors = new WeakMap<object, number>();
+
+/**
+ * Records the website's `resetAt` so every stats range parsed for this request starts
+ * no earlier than it. Called where the website is authorized (requireWebsiteById,
+ * report routes), which always precedes range parsing.
+ */
+export function applyStatsResetFloor(c: Context, resetAt: Date | number | null | undefined) {
+  const floor = resetAt instanceof Date ? resetAt.getTime() : resetAt;
+  if (typeof floor === 'number' && Number.isFinite(floor) && floor > 0) resetFloors.set(c, floor);
+}
+
 /** Shared stats date-range parsing for API routes (replaces 14 local copies). */
 export function parseStatsRange(
   c: Context,
@@ -39,8 +52,12 @@ export function parseStatsRange(c: Context, options: ParseStatsRangeOptions = {}
   const { defaultSpan = '24h', withUnit = false, clamp = false } = options;
   const query = statsQuerySchema.safeParse(c.req.query());
   const endAt = query.success && query.data.endAt != null ? query.data.endAt : Date.now();
-  const startAt =
+  const requestedStart =
     query.success && query.data.startAt != null ? query.data.startAt : endAt - SPAN_MS[defaultSpan];
+  // Events before a statistics reset are excluded. A range entirely before the reset
+  // collapses to an empty window at its end.
+  const floor = resetFloors.get(c);
+  const startAt = floor ? Math.min(Math.max(requestedStart, floor), endAt) : requestedStart;
   const unit = withUnit ? (query.success && query.data.unit ? query.data.unit : 'day') : undefined;
   const range: ParsedStatsRange = unit ? { startAt, endAt, unit } : { startAt, endAt };
   if (!clamp) return withUnit ? (range as ParsedStatsRangeWithUnit) : range;

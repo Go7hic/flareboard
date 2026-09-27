@@ -1,6 +1,7 @@
 import { eq, and, isNull, sql, gte, lte, count, countDistinct, inArray, desc, asc, or } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
 import { EVENT_TYPE, type UtmReportResponse } from '@flareboard/shared';
+import { seriesTimezone, siteLocalMsSql } from './site-time';
 import type { Env } from '../env';
 import { cachedRead } from './cache';
 import { channelCaseSql } from './channel';
@@ -48,17 +49,31 @@ export async function getUserWebsites(env: Env, userId: string) {
 
 export async function getAccessibleWebsites(env: Env, userId: string) {
   const db = createDb(env.DB);
+  // Only live teams count; see canAccessWebsite for the matching per-site rule.
   const memberships = await db
     .select({ teamId: schema.teamUser.teamId })
     .from(schema.teamUser)
-    .where(eq(schema.teamUser.userId, userId));
-  const teamIds = memberships.map((m) => m.teamId);
-  const owned = await getUserWebsites(env, userId);
-  if (!teamIds.length) return owned;
+    .innerJoin(schema.team, eq(schema.team.teamId, schema.teamUser.teamId))
+    .where(and(eq(schema.teamUser.userId, userId), isNull(schema.team.deletedAt)));
+  const teamIds = new Set(memberships.map((m) => m.teamId));
+  // Sites the user created stay theirs unless they sit in a live team they are no longer in.
+  const created = await getUserWebsites(env, userId);
+  const otherTeamIds = [
+    ...new Set(created.map((w) => w.teamId).filter((id): id is string => Boolean(id) && !teamIds.has(id!))),
+  ];
+  const liveOtherTeams = otherTeamIds.length
+    ? await db
+        .select({ teamId: schema.team.teamId })
+        .from(schema.team)
+        .where(and(inArray(schema.team.teamId, otherTeamIds), isNull(schema.team.deletedAt)))
+    : [];
+  const liveOtherTeamIds = new Set(liveOtherTeams.map((t) => t.teamId));
+  const owned = created.filter((w) => !w.teamId || !liveOtherTeamIds.has(w.teamId));
+  if (!teamIds.size) return owned;
   const teamSites = await db
     .select()
     .from(schema.website)
-    .where(and(inArray(schema.website.teamId, teamIds), isNull(schema.website.deletedAt)));
+    .where(and(inArray(schema.website.teamId, [...teamIds]), isNull(schema.website.deletedAt)));
   const seen = new Set(owned.map((w) => w.websiteId));
   return [...owned, ...teamSites.filter((w) => !seen.has(w.websiteId))];
 }
@@ -91,8 +106,9 @@ function eventTimeFilter(websiteId: string, startAt: number, endAt: number) {
   );
 }
 
-function timeBucketExpr(format: string) {
-  return sql<string>`strftime(${format}, datetime(${schema.websiteEvent.createdAt} / 1000, 'unixepoch'))`;
+function timeBucketExpr(format: string, startAt: number, endAt: number, timezone: string) {
+  const local = siteLocalMsSql('created_at', startAt, endAt, timezone);
+  return sql<string>`strftime(${format}, datetime(${sql.raw(local)} / 1000, 'unixepoch'))`;
 }
 
 function statChange(current: number, previous: number) {
@@ -130,10 +146,15 @@ export async function getPageviews(
   startAt: number,
   endAt: number,
   unit: string,
+  timezone = 'UTC',
 ) {
-  const { getPageviewsFromRollups } = await import('./rollups');
-  const rollupSeries = await getPageviewsFromRollups(env, websiteId, startAt, endAt, unit);
-  if (rollupSeries) return rollupSeries;
+  const bucketTz = seriesTimezone(unit, timezone);
+  // Rollups are keyed by UTC day; site-local day buckets come from raw events.
+  if (bucketTz === 'UTC') {
+    const { getPageviewsFromRollups } = await import('./rollups');
+    const rollupSeries = await getPageviewsFromRollups(env, websiteId, startAt, endAt, unit);
+    if (rollupSeries) return rollupSeries;
+  }
 
   const db = createDb(env.DB);
   const format =
@@ -144,7 +165,7 @@ export async function getPageviews(
         : unit === 'year'
           ? '%Y'
           : '%Y-%m-%d';
-  const bucket = timeBucketExpr(format);
+  const bucket = timeBucketExpr(format, startAt, endAt, bucketTz);
   const rows = await db
     .select({
       x: bucket,
@@ -175,10 +196,14 @@ export async function getWebsiteMetricsSeries(
   startAt: number,
   endAt: number,
   unit: string,
+  timezone = 'UTC',
 ): Promise<WebsiteMetricsSeries> {
-  const { getWebsiteMetricsSeriesFromRollups } = await import('./rollups');
-  const rollupSeries = await getWebsiteMetricsSeriesFromRollups(env, websiteId, startAt, endAt, unit);
-  if (rollupSeries) return rollupSeries;
+  const bucketTz = seriesTimezone(unit, timezone);
+  if (bucketTz === 'UTC') {
+    const { getWebsiteMetricsSeriesFromRollups } = await import('./rollups');
+    const rollupSeries = await getWebsiteMetricsSeriesFromRollups(env, websiteId, startAt, endAt, unit);
+    if (rollupSeries) return rollupSeries;
+  }
 
   const format =
     unit === 'hour'
@@ -188,8 +213,9 @@ export async function getWebsiteMetricsSeries(
         : unit === 'year'
           ? '%Y'
           : '%Y-%m-%d';
+  const local = siteLocalMsSql('created_at', startAt, endAt, bucketTz);
   const { results } = await env.DB.prepare(
-    `SELECT strftime('${format}', datetime(created_at / 1000, 'unixepoch')) as x,
+    `SELECT strftime('${format}', datetime(${local} / 1000, 'unixepoch')) as x,
             SUM(CASE WHEN event_type = ?4 THEN 1 ELSE 0 END) as pageviews,
             COUNT(DISTINCT CASE WHEN event_type = ?4 THEN session_id END) as visitors
      FROM website_event
@@ -214,11 +240,20 @@ export type DashboardSiteMetric = {
   visits: number;
 };
 
+/** D1 allows 100 bound parameters per statement; site lists are queried in chunks. */
+const D1_SAFE_IN_LIST = 90;
+
+function chunkIds(ids: string[]): string[][] {
+  const out: string[][] = [];
+  for (let i = 0; i < ids.length; i += D1_SAFE_IN_LIST) out.push(ids.slice(i, i + D1_SAFE_IN_LIST));
+  return out;
+}
+
 function sqlInPlaceholders(count: number, startIndex = 1) {
   return Array.from({ length: count }, (_, i) => `?${startIndex + i}`).join(', ');
 }
 
-/** Per-site totals for dashboard ranking — one query for all sites. */
+/** Per-site totals for dashboard ranking. */
 export async function getDashboardMetricsByWebsite(
   env: Env,
   websiteIds: string[],
@@ -231,22 +266,24 @@ export async function getDashboardMetricsByWebsite(
   const rollupMetrics = await getDashboardMetricsFromRollups(env, websiteIds, startAt, endAt);
   if (rollupMetrics) return rollupMetrics;
 
-  const inClause = sqlInPlaceholders(websiteIds.length, 4);
-  const { results } = await env.DB.prepare(
-    `SELECT website_id as websiteId,
-            SUM(CASE WHEN event_type = ?1 THEN 1 ELSE 0 END) as pageviews,
-            COUNT(DISTINCT session_id) as visitors,
-            COUNT(DISTINCT visit_id) as visits
-     FROM website_event
-     WHERE website_id IN (${inClause})
-       AND created_at >= ?2 AND created_at <= ?3
-     GROUP BY website_id
-     ORDER BY pageviews DESC`,
-  )
-    .bind(EVENT_TYPE.pageView, startAt, endAt, ...websiteIds)
-    .all<DashboardSiteMetric>();
-
-  return results ?? [];
+  // Rows are per site, so chunk results concatenate.
+  const metrics: DashboardSiteMetric[] = [];
+  for (const ids of chunkIds(websiteIds)) {
+    const { results } = await env.DB.prepare(
+      `SELECT website_id as websiteId,
+              SUM(CASE WHEN event_type = ?1 THEN 1 ELSE 0 END) as pageviews,
+              COUNT(DISTINCT session_id) as visitors,
+              COUNT(DISTINCT visit_id) as visits
+       FROM website_event
+       WHERE website_id IN (${sqlInPlaceholders(ids.length, 4)})
+         AND created_at >= ?2 AND created_at <= ?3
+       GROUP BY website_id`,
+    )
+      .bind(EVENT_TYPE.pageView, startAt, endAt, ...ids)
+      .all<DashboardSiteMetric>();
+    metrics.push(...(results ?? []));
+  }
+  return metrics.sort((a, b) => b.pageviews - a.pageviews);
 }
 
 export type AggregateMetricsSeries = {
@@ -255,7 +292,7 @@ export type AggregateMetricsSeries = {
   visits: { x: string; y: number }[];
 };
 
-/** Combined pageview / visitor / visit series across many sites — one query. */
+/** Combined pageview / visitor / visit series across many sites. */
 export async function getAggregateMetricsForWebsites(
   env: Env,
   websiteIds: string[],
@@ -272,22 +309,34 @@ export async function getAggregateMetricsForWebsites(
 
   const format =
     unit === 'hour' ? '%Y-%m-%d %H:00' : unit === 'month' ? '%Y-%m' : '%Y-%m-%d';
-  const inClause = sqlInPlaceholders(websiteIds.length, 4);
-  const { results } = await env.DB.prepare(
-    `SELECT strftime('${format}', datetime(created_at / 1000, 'unixepoch')) as x,
-            SUM(CASE WHEN event_type = ?1 THEN 1 ELSE 0 END) as pageviews,
-            COUNT(DISTINCT session_id) as visitors,
-            COUNT(DISTINCT visit_id) as visits
-     FROM website_event
-     WHERE website_id IN (${inClause})
-       AND created_at >= ?2 AND created_at <= ?3
-     GROUP BY x
-     ORDER BY x`,
-  )
-    .bind(EVENT_TYPE.pageView, startAt, endAt, ...websiteIds)
-    .all<{ x: string; pageviews: number; visitors: number; visits: number }>();
+  // Sessions and visits belong to one site, so per-chunk bucket counts add up exactly.
+  const byBucket = new Map<string, { pageviews: number; visitors: number; visits: number }>();
+  for (const ids of chunkIds(websiteIds)) {
+    const { results } = await env.DB.prepare(
+      `SELECT strftime('${format}', datetime(created_at / 1000, 'unixepoch')) as x,
+              SUM(CASE WHEN event_type = ?1 THEN 1 ELSE 0 END) as pageviews,
+              COUNT(DISTINCT session_id) as visitors,
+              COUNT(DISTINCT visit_id) as visits
+       FROM website_event
+       WHERE website_id IN (${sqlInPlaceholders(ids.length, 4)})
+         AND created_at >= ?2 AND created_at <= ?3
+       GROUP BY x`,
+    )
+      .bind(EVENT_TYPE.pageView, startAt, endAt, ...ids)
+      .all<{ x: string; pageviews: number; visitors: number; visits: number }>();
+    for (const row of results ?? []) {
+      const cur = byBucket.get(row.x) ?? { pageviews: 0, visitors: 0, visits: 0 };
+      byBucket.set(row.x, {
+        pageviews: cur.pageviews + row.pageviews,
+        visitors: cur.visitors + row.visitors,
+        visits: cur.visits + row.visits,
+      });
+    }
+  }
 
-  const rows = results ?? [];
+  const rows = [...byBucket.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([x, totals]) => ({ x, ...totals }));
   return {
     pageviews: rows.map((r) => ({ x: r.x, y: r.pageviews })),
     visitors: rows.map((r) => ({ x: r.x, y: r.visitors })),
@@ -356,10 +405,13 @@ export async function getTrafficHeatmap(
   websiteId: string,
   startAt: number,
   endAt: number,
+  timezone = 'UTC',
 ): Promise<TrafficHeatmapData> {
+  // Weekday/hour cells are shown as-is, so compute them in the site's timezone.
+  const local = siteLocalMsSql('created_at', startAt, endAt, timezone);
   const rows = await env.DB.prepare(
-    `SELECT CAST(strftime('%w', datetime(created_at / 1000, 'unixepoch')) AS INTEGER) as dow,
-            CAST(strftime('%H', datetime(created_at / 1000, 'unixepoch')) AS INTEGER) as hour,
+    `SELECT CAST(strftime('%w', datetime(${local} / 1000, 'unixepoch')) AS INTEGER) as dow,
+            CAST(strftime('%H', datetime(${local} / 1000, 'unixepoch')) AS INTEGER) as hour,
             COUNT(*) as count
      FROM website_event
      WHERE website_id = ?1 AND event_type = ?2
@@ -491,10 +543,11 @@ export async function getEventSeries(
   endAt: number,
   eventName: string,
   unit: string,
+  timezone = 'UTC',
 ) {
   const db = createDb(env.DB);
   const format = unit === 'hour' ? "%Y-%m-%d %H:00" : '%Y-%m-%d';
-  const bucket = timeBucketExpr(format);
+  const bucket = timeBucketExpr(format, startAt, endAt, seriesTimezone(unit, timezone));
   const rows = await db
     .select({
       x: bucket,
@@ -616,20 +669,34 @@ type RealtimeSessionRow = {
   createdAt: number;
 };
 
+/** Upper bound on keys scanned per poll (5 KV list pages). */
+const REALTIME_MAX_LISTED = 5000;
+
 async function getRealtimeFromKv(
   env: Env,
   websiteId: string,
   since: number,
 ): Promise<{ visitors: number; sessions: RealtimeSessionRow[] } | null> {
-  const listed = await env.CACHE.list({
-    prefix: REALTIME_KV_PREFIX(websiteId),
-    limit: REALTIME_SESSION_LIMIT,
-  });
-  if (!listed.keys.length) return null;
-
   const prefix = REALTIME_KV_PREFIX(websiteId);
+  // Count active sessions from key metadata (written by ingest) without reading every value.
+  const active: { name: string; updatedAt: number }[] = [];
+  let cursor: string | undefined;
+  let listed = 0;
+  do {
+    const page = await env.CACHE.list<{ u?: number }>({ prefix, cursor, limit: 1000 });
+    for (const key of page.keys) {
+      const updatedAt = key.metadata?.u;
+      // Keys from before metadata existed still count; their TTL bounds them to the window.
+      if (updatedAt === undefined || updatedAt >= since) active.push({ name: key.name, updatedAt: updatedAt ?? 0 });
+    }
+    listed += page.keys.length;
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor && listed < REALTIME_MAX_LISTED);
+  if (!active.length) return null;
+
+  active.sort((a, b) => b.updatedAt - a.updatedAt);
   const rows = await Promise.all(
-    listed.keys.map(async (key) => {
+    active.slice(0, REALTIME_SESSION_LIMIT).map(async (key) => {
       const raw = await env.CACHE.get(key.name);
       if (!raw) return null;
       try {
@@ -649,19 +716,10 @@ async function getRealtimeFromKv(
     }),
   );
   const sessions = rows.filter((r): r is RealtimeSessionRow => r !== null);
-
   if (!sessions.length) return null;
-
   sessions.sort((a, b) => b.createdAt - a.createdAt);
 
-  let visitors = sessions.length;
-  const kvCount = await env.CACHE.get(`rt:${websiteId}:visitors`);
-  if (kvCount !== null) {
-    const kvN = parseInt(kvCount, 10) || 0;
-    if (kvN > visitors) visitors = kvN;
-  }
-
-  return { visitors, sessions: sessions.slice(0, REALTIME_SESSION_LIMIT) };
+  return { visitors: Math.max(active.length, sessions.length), sessions };
 }
 
 export async function getRealtime(env: Env, websiteId: string) {
@@ -708,37 +766,30 @@ export async function getLinkStats(
   startAt: number,
   endAt: number,
 ) {
-  const clicksRow = await env.DB.prepare(
-    `SELECT COUNT(*) as clicks FROM website_event
-     WHERE website_id = ?1 AND event_type = ?2
-       AND created_at >= ?3 AND created_at <= ?4`,
+  const totals = await env.DB.prepare(
+    `SELECT COUNT(*) as clicks, COUNT(DISTINCT visitor_id) as visitors
+     FROM link_pixel_hit
+     WHERE source_type = 'link' AND source_id = ?1
+       AND created_at >= ?2 AND created_at <= ?3`,
   )
-    .bind(linkId, EVENT_TYPE.linkEvent, startAt, endAt)
-    .first<{ clicks: number }>();
-
-  const visitorsRow = await env.DB.prepare(
-    `SELECT COUNT(DISTINCT session_id) as visitors FROM website_event
-     WHERE website_id = ?1 AND event_type = ?2
-       AND created_at >= ?3 AND created_at <= ?4`,
-  )
-    .bind(linkId, EVENT_TYPE.linkEvent, startAt, endAt)
-    .first<{ visitors: number }>();
+    .bind(linkId, startAt, endAt)
+    .first<{ clicks: number; visitors: number }>();
 
   const series = await env.DB.prepare(
     `SELECT strftime('%Y-%m-%d', datetime(created_at / 1000, 'unixepoch')) as x,
             COUNT(*) as y
-     FROM website_event
-     WHERE website_id = ?1 AND event_type = ?2
-       AND created_at >= ?3 AND created_at <= ?4
+     FROM link_pixel_hit
+     WHERE source_type = 'link' AND source_id = ?1
+       AND created_at >= ?2 AND created_at <= ?3
      GROUP BY x
      ORDER BY x`,
   )
-    .bind(linkId, EVENT_TYPE.linkEvent, startAt, endAt)
+    .bind(linkId, startAt, endAt)
     .all<{ x: string; y: number }>();
 
   return {
-    clicks: clicksRow?.clicks ?? 0,
-    visitors: visitorsRow?.visitors ?? 0,
+    clicks: totals?.clicks ?? 0,
+    visitors: totals?.visitors ?? 0,
     series: series.results ?? [],
   };
 }
@@ -1118,7 +1169,12 @@ export async function getPageMetrics(
   }));
 }
 
-export async function getWebsiteReplays(env: Env, websiteId: string, limit = 50) {
+export async function getWebsiteReplays(
+  env: Env,
+  websiteId: string,
+  limit = 50,
+  range?: { startAt: number; endAt: number },
+) {
   const rows = await env.DB.prepare(
     `WITH replay_meta AS (
        SELECT visit_id as visitId,
@@ -1129,6 +1185,7 @@ export async function getWebsiteReplays(env: Env, websiteId: string, limit = 50)
               chunks
        FROM session_replay_summary
        WHERE website_id = ?1
+         AND (?8 IS NULL OR started_at >= ?8) AND (?9 IS NULL OR started_at <= ?9)
        UNION ALL
        SELECT r.visit_id as visitId,
               r.session_id as sessionId,
@@ -1144,6 +1201,7 @@ export async function getWebsiteReplays(env: Env, websiteId: string, limit = 50)
            WHERE s.website_id = r.website_id AND s.visit_id = r.visit_id
          )
        GROUP BY r.visit_id, r.session_id
+       HAVING (?8 IS NULL OR MIN(r.started_at) >= ?8) AND (?9 IS NULL OR MIN(r.started_at) <= ?9)
      ),
      context_counts AS (
        SELECT e.visit_id as visitId,
@@ -1184,6 +1242,8 @@ export async function getWebsiteReplays(env: Env, websiteId: string, limit = 50)
       EVENT_TYPE.error,
       EVENT_TYPE.log,
       EVENT_TYPE.ai,
+      range?.startAt ?? null,
+      range?.endAt ?? null,
     )
     .all<{
       visitId: string;

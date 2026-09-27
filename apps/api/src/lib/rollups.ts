@@ -82,18 +82,33 @@ function seriesEndBucket(unitKey: string, endAt: number) {
         : dayKey(endAt);
 }
 
+/**
+ * D1 caps a statement at 100 bound parameters, so long ranges cannot bind one
+ * parameter per day. Day lists from daysInRange are contiguous: bind the ends.
+ */
+function dayBounds(days: string[]): [string, string] {
+  return [days[0]!, days[days.length - 1]!];
+}
+
+const D1_SAFE_IN_LIST = 90;
+
+function chunks<T>(items: T[], size = D1_SAFE_IN_LIST): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
 function sqlInPlaceholders(count: number, startIndex = 1) {
   return Array.from({ length: count }, (_, i) => `?${startIndex + i}`).join(', ');
 }
 
 async function rollupDaysComplete(env: Env, websiteId: string, days: string[]) {
   if (!days.length) return false;
-  const dayPlaceholders = sqlInPlaceholders(days.length, 2);
   const row = await env.DB.prepare(
     `SELECT COUNT(*) as count FROM rollup_stats_daily
-     WHERE website_id = ?1 AND day IN (${dayPlaceholders})`,
+     WHERE website_id = ?1 AND day >= ?2 AND day <= ?3`,
   )
-    .bind(websiteId, ...days)
+    .bind(websiteId, ...dayBounds(days))
     .first<{ count: number }>();
   return (row?.count ?? 0) === days.length;
 }
@@ -119,7 +134,6 @@ export async function getWebsiteStatsFromRollups(
     if (!targetDays.length) {
       return { pageviews: 0, visits: 0, bounces: 0, totaltime_sec: 0 };
     }
-    const dayPlaceholders = sqlInPlaceholders(targetDays.length, 2);
     return (
       (await env.DB.prepare(
         `SELECT
@@ -128,9 +142,9 @@ export async function getWebsiteStatsFromRollups(
            COALESCE(SUM(bounces), 0) as bounces,
            COALESCE(SUM(totaltime_sec), 0) as totaltime_sec
          FROM rollup_stats_daily
-         WHERE website_id = ?1 AND day IN (${dayPlaceholders})`,
+         WHERE website_id = ?1 AND day >= ?2 AND day <= ?3`,
       )
-        .bind(websiteId, ...targetDays)
+        .bind(websiteId, ...dayBounds(targetDays))
         .first<{
           pageviews: number;
           visits: number;
@@ -147,13 +161,12 @@ export async function getWebsiteStatsFromRollups(
 
   const countDistinctVisitors = async (targetDays: string[]) => {
     if (!targetDays.length) return 0;
-    const dayPlaceholders = sqlInPlaceholders(targetDays.length, 2);
     const row = await env.DB.prepare(
       `SELECT COUNT(DISTINCT session_id) as visitors
        FROM rollup_session_day
-       WHERE website_id = ?1 AND day IN (${dayPlaceholders})`,
+       WHERE website_id = ?1 AND day >= ?2 AND day <= ?3`,
     )
-      .bind(websiteId, ...targetDays)
+      .bind(websiteId, ...dayBounds(targetDays))
       .first<{ visitors: number }>();
     return row?.visitors ?? 0;
   };
@@ -250,17 +263,15 @@ export async function getMetricsFromRollups(
   const days = daysInRange(startAt, endAt);
   if (!(await rollupDaysComplete(env, websiteId, days))) return null;
 
-  const dayPlaceholders = sqlInPlaceholders(days.length, 3);
-  const limitIndex = days.length + 3;
   const rows = await env.DB.prepare(
     `SELECT value, SUM(count) as count
      FROM rollup_dimension_daily
-     WHERE website_id = ?1 AND dimension = ?2 AND day IN (${dayPlaceholders})
+     WHERE website_id = ?1 AND dimension = ?2 AND day >= ?3 AND day <= ?4
      GROUP BY value
      ORDER BY count DESC
-     LIMIT ?${limitIndex}`,
+     LIMIT ?5`,
   )
-    .bind(websiteId, dimension, ...days, limit)
+    .bind(websiteId, dimension, ...dayBounds(days), limit)
     .all<{ value: string; count: number }>();
 
   if (!rows.results?.length) return null;
@@ -282,15 +293,14 @@ export async function getCustomEventsFromRollups(
   const days = daysInRange(startAt, endAt);
   if (!(await rollupDaysComplete(env, websiteId, days))) return null;
 
-  const dayPlaceholders = sqlInPlaceholders(days.length, 2);
   const rows = await env.DB.prepare(
     `SELECT event_name as eventName, SUM(count) as count
      FROM rollup_event_daily
-     WHERE website_id = ?1 AND day IN (${dayPlaceholders})
+     WHERE website_id = ?1 AND day >= ?2 AND day <= ?3
      GROUP BY event_name
      ORDER BY count DESC`,
   )
-    .bind(websiteId, ...days)
+    .bind(websiteId, ...dayBounds(days))
     .all<{ eventName: string; count: number }>();
 
   if (!rows.results?.length) return null;
@@ -330,15 +340,14 @@ async function loadDailyVisitorsFromSessionDay(
   days: string[],
 ): Promise<{ x: string; y: number }[]> {
   if (!days.length) return [];
-  const dayPlaceholders = sqlInPlaceholders(days.length, 2);
   const rows = await env.DB.prepare(
     `SELECT day as x, COUNT(DISTINCT session_id) as y
      FROM rollup_session_day
-     WHERE website_id = ?1 AND day IN (${dayPlaceholders})
+     WHERE website_id = ?1 AND day >= ?2 AND day <= ?3
      GROUP BY day
      ORDER BY day ASC`,
   )
-    .bind(websiteId, ...days)
+    .bind(websiteId, ...dayBounds(days))
     .all<{ x: string; y: number }>();
   return rows.results ?? [];
 }
@@ -404,37 +413,43 @@ export async function getDashboardMetricsFromRollups(
   const days = daysInRange(startAt, endAt);
   if (!days.length) return null;
 
-  const sitePlaceholders = sqlInPlaceholders(websiteIds.length, 1);
-  const dayPlaceholders = sqlInPlaceholders(days.length, websiteIds.length + 1);
   const completeChecks = await Promise.all(
     websiteIds.map((id) => rollupDaysComplete(env, id, days)),
   );
   if (!completeChecks.every(Boolean)) return null;
 
-  const statsRows = await env.DB.prepare(
-    `SELECT website_id as websiteId,
-            COALESCE(SUM(pageviews), 0) as pageviews,
-            COALESCE(SUM(visits), 0) as visits
-     FROM rollup_stats_daily
-     WHERE website_id IN (${sitePlaceholders}) AND day IN (${dayPlaceholders})
-     GROUP BY website_id`,
-  )
-    .bind(...websiteIds, ...days)
-    .all<{ websiteId: string; pageviews: number; visits: number }>();
+  // Rows are per site, so site chunks can be queried separately and concatenated.
+  const statsResults: { websiteId: string; pageviews: number; visits: number }[] = [];
+  const visitorResults: { websiteId: string; visitors: number }[] = [];
+  for (const ids of chunks(websiteIds)) {
+    const sitePlaceholders = sqlInPlaceholders(ids.length, 1);
+    const dayStart = ids.length + 1;
+    const statsRows = await env.DB.prepare(
+      `SELECT website_id as websiteId,
+              COALESCE(SUM(pageviews), 0) as pageviews,
+              COALESCE(SUM(visits), 0) as visits
+       FROM rollup_stats_daily
+       WHERE website_id IN (${sitePlaceholders}) AND day >= ?${dayStart} AND day <= ?${dayStart + 1}
+       GROUP BY website_id`,
+    )
+      .bind(...ids, ...dayBounds(days))
+      .all<{ websiteId: string; pageviews: number; visits: number }>();
+    const visitorRows = await env.DB.prepare(
+      `SELECT website_id as websiteId, COUNT(DISTINCT session_id) as visitors
+       FROM rollup_session_day
+       WHERE website_id IN (${sitePlaceholders}) AND day >= ?${dayStart} AND day <= ?${dayStart + 1}
+       GROUP BY website_id`,
+    )
+      .bind(...ids, ...dayBounds(days))
+      .all<{ websiteId: string; visitors: number }>();
+    statsResults.push(...(statsRows.results ?? []));
+    visitorResults.push(...(visitorRows.results ?? []));
+  }
 
-  const visitorRows = await env.DB.prepare(
-    `SELECT website_id as websiteId, COUNT(DISTINCT session_id) as visitors
-     FROM rollup_session_day
-     WHERE website_id IN (${sitePlaceholders}) AND day IN (${dayPlaceholders})
-     GROUP BY website_id`,
-  )
-    .bind(...websiteIds, ...days)
-    .all<{ websiteId: string; visitors: number }>();
+  if (!statsResults.length) return null;
 
-  if (!statsRows.results?.length) return null;
-
-  const visitorsBySite = new Map((visitorRows.results ?? []).map((r) => [r.websiteId, r.visitors]));
-  return statsRows.results.map((row) => ({
+  const visitorsBySite = new Map(visitorResults.map((r) => [r.websiteId, r.visitors]));
+  return statsResults.map((row) => ({
     websiteId: row.websiteId,
     pageviews: row.pageviews,
     visitors: visitorsBySite.get(row.websiteId) ?? 0,
@@ -469,32 +484,41 @@ export async function getAggregateMetricsFromRollups(
     if (!completeChecks.every(Boolean)) return null;
   }
 
-  const siteCount = websiteIds.length;
-  const sitePlaceholders = sqlInPlaceholders(siteCount, 1);
-  const unitIndex = siteCount + 1;
-  const startIndex = siteCount + 2;
-  const endIndex = siteCount + 3;
-  const pageviewRows = await env.DB.prepare(
-    `SELECT bucket as x, SUM(pageviews) as pageviews
-     FROM rollup_pageview_series
-     WHERE website_id IN (${sitePlaceholders}) AND unit = ?${unitIndex} AND bucket >= ?${startIndex} AND bucket <= ?${endIndex}
-     GROUP BY bucket
-     ORDER BY bucket ASC`,
-  )
-    .bind(...websiteIds, unitKey, startBucket, endBucket)
-    .all<{ x: string; pageviews: number }>();
-
-  const identityRows = await env.DB.prepare(
-    `SELECT bucket as x,
-            COUNT(DISTINCT session_id) as visitors,
-            COUNT(DISTINCT visit_id) as visits
-     FROM rollup_series_bucket
-     WHERE website_id IN (${sitePlaceholders}) AND unit = ?${unitIndex} AND bucket >= ?${startIndex} AND bucket <= ?${endIndex}
-     GROUP BY bucket
-     ORDER BY bucket ASC`,
-  )
-    .bind(...websiteIds, unitKey, startBucket, endBucket)
-    .all<{ x: string; visitors: number; visits: number }>();
+  // Sessions and visits belong to one site, so per-chunk bucket counts add up exactly.
+  const pageviewByBucket = new Map<string, number>();
+  const identityByBucket = new Map<string, { visitors: number; visits: number }>();
+  for (const ids of chunks(websiteIds)) {
+    const sitePlaceholders = sqlInPlaceholders(ids.length, 1);
+    const unitIndex = ids.length + 1;
+    const pageviewChunk = await env.DB.prepare(
+      `SELECT bucket as x, SUM(pageviews) as pageviews
+       FROM rollup_pageview_series
+       WHERE website_id IN (${sitePlaceholders}) AND unit = ?${unitIndex} AND bucket >= ?${unitIndex + 1} AND bucket <= ?${unitIndex + 2}
+       GROUP BY bucket`,
+    )
+      .bind(...ids, unitKey, startBucket, endBucket)
+      .all<{ x: string; pageviews: number }>();
+    for (const row of pageviewChunk.results ?? []) {
+      pageviewByBucket.set(row.x, (pageviewByBucket.get(row.x) ?? 0) + row.pageviews);
+    }
+    const identityChunk = await env.DB.prepare(
+      `SELECT bucket as x,
+              COUNT(DISTINCT session_id) as visitors,
+              COUNT(DISTINCT visit_id) as visits
+       FROM rollup_series_bucket
+       WHERE website_id IN (${sitePlaceholders}) AND unit = ?${unitIndex} AND bucket >= ?${unitIndex + 1} AND bucket <= ?${unitIndex + 2}
+       GROUP BY bucket`,
+    )
+      .bind(...ids, unitKey, startBucket, endBucket)
+      .all<{ x: string; visitors: number; visits: number }>();
+    for (const row of identityChunk.results ?? []) {
+      const cur = identityByBucket.get(row.x) ?? { visitors: 0, visits: 0 };
+      identityByBucket.set(row.x, { visitors: cur.visitors + row.visitors, visits: cur.visits + row.visits });
+    }
+  }
+  const byBucket = <T,>(map: Map<string, T>) => [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+  const pageviewRows = { results: byBucket(pageviewByBucket).map(([x, pageviews]) => ({ x, pageviews })) };
+  const identityRows = { results: byBucket(identityByBucket).map(([x, v]) => ({ x, ...v })) };
 
   if (!pageviewRows.results?.length || !identityRows.results?.length) return null;
 
@@ -518,6 +542,13 @@ export async function getAggregateMetricsFromRollups(
 /** Recompute rollup_stats_daily for one website/day from rollup_session_day. */
 export async function invalidateDailyRollups(env: Env, websiteId: string, days: string[]) {
   if (!days.length) return;
+  // Imported days need not be contiguous; chunk them under D1's parameter cap.
+  for (const dayChunk of chunks(days)) {
+    await invalidateDailyRollupChunk(env, websiteId, dayChunk);
+  }
+}
+
+async function invalidateDailyRollupChunk(env: Env, websiteId: string, days: string[]) {
   const dayPlaceholders = sqlInPlaceholders(days.length, 2);
   const binds = [websiteId, ...days];
   const dayTables = [

@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
 import { ROLES, createLinkSchema, statsQuerySchema, updateLinkSchema, uuid } from '@flareboard/shared';
 import type { Env } from '../env';
-import { canAccessLink, canMutateLink, canMutateTeamResource, userHasTeamAccess } from '../lib/access';
+import { canAccessLink, canMutateLink, canMutateTeam, userHasTeamAccess } from '../lib/access';
 import { getAccessibleLinks, getLinkById, getLinkStats } from '../lib/queries';
 import { clampReportRange } from '../lib/report-range';
 import { badRequest, forbidden, json, notFound } from '../lib/response';
@@ -50,16 +50,8 @@ export async function handleCreate(c: Ctx) {
   if (!parsed.success) return badRequest(parsed.error.message);
 
   const user = c.get('user');
-  if (parsed.data.teamId) {
-    if (
-      !(await canMutateTeamResource(
-        c.env,
-        { userId: user.userId, teamId: parsed.data.teamId },
-        user,
-      ))
-    ) {
-      return forbidden('Read-only access');
-    }
+  if (parsed.data.teamId && !(await canMutateTeam(c.env, parsed.data.teamId, user))) {
+    return forbidden('Read-only access');
   }
 
   const linkId = uuid();

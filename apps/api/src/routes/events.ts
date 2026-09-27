@@ -54,7 +54,7 @@ export async function handleEventSeries(c: Ctx) {
     return badRequest('event query parameter required');
   }
   const { startAt, endAt, unit } = parseStatsRange(c, { withUnit: true });
-  const data = await getEventSeries(c.env, website.websiteId, startAt, endAt, eventName, unit);
+  const data = await getEventSeries(c.env, website.websiteId, startAt, endAt, eventName, unit, website.timezone);
   return json(data);
 }
 

@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import { isValidSiteTimezone } from './timezone';
 
-export const urlOrPathParam = z.string().max(500);
+/**
+ * Collected page context is truncated rather than rejected: landing URLs with ad click
+ * ids or long email-redirect referrers routinely pass 500 chars, and a 400 there
+ * silently loses the pageview. (The request body itself is capped at 64 KB.)
+ */
+const truncatedString = (max: number) => z.string().transform((value) => value.slice(0, max));
 
 const vitalMetric = (max: number) => z.coerce.number().nonnegative().max(max).optional();
 
@@ -59,15 +64,15 @@ export const sendPayloadSchema = z
       .optional(),
     hostname: z.string().max(100).optional(),
     language: z.string().max(35).optional(),
-    referrer: urlOrPathParam.optional(),
+    referrer: truncatedString(500).optional(),
     screen: z.string().max(11).optional(),
     width: z.string().max(20).optional(),
-    title: z.string().max(500).optional(),
-    url: urlOrPathParam.optional(),
+    title: truncatedString(500).optional(),
+    url: truncatedString(500).optional(),
     name: z.string().max(50).optional(),
     tag: z.string().max(50).optional(),
     ip: z.string().max(45).optional(),
-    userAgent: z.string().max(500).optional(),
+    userAgent: truncatedString(500).optional(),
     timestamp: z.coerce.number().int().optional(),
     id: z.string().max(128).optional(),
     browser: z.string().max(100).optional(),
@@ -126,7 +131,7 @@ export const sendPayloadSchema = z
 export const heatmapPayloadSchema = z
   .object({
     website: z.string().uuid(),
-    url: urlOrPathParam.optional(),
+    url: truncatedString(500).optional(),
     hostname: z.string().max(100).optional(),
     kind: z.enum(['click', 'scroll']),
     x: z.coerce.number().int().min(0).max(10000).optional(),
@@ -552,7 +557,8 @@ export const updateWarehouseDataSourceSchema = z.object({
 export const updateWebsiteSchema = z.object({
   name: z.string().max(100).optional(),
   domain: z.string().max(500).optional(),
-  resetAt: z.string().datetime().optional(),
+  /** ISO time before which events are excluded from stats; `null` clears it. */
+  resetAt: z.string().datetime().nullable().optional(),
   replayEnabled: z.boolean().optional(),
   replayConfig: z.record(z.unknown()).nullable().optional(),
   heatmapConfig: heatmapConfigSchema.nullable().optional(),

@@ -334,6 +334,33 @@ export const pixel = sqliteTable(
   ],
 );
 
+/** OAuth account -> local user. Only an explicit link or first sign-up creates a row. */
+export const userOauthIdentity = sqliteTable(
+  'user_oauth_identity',
+  {
+    provider: text('provider').notNull(),
+    providerUserId: text('provider_user_id').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.userId, { onDelete: 'cascade' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.provider, t.providerUserId] }), index('user_oauth_identity_user_idx').on(t.userId)],
+);
+
+/** One row per link redirect or pixel view (not website events: no website_id). */
+export const linkPixelHit = sqliteTable(
+  'link_pixel_hit',
+  {
+    hitId: text('hit_id').primaryKey(),
+    sourceType: text('source_type').notNull(),
+    sourceId: text('source_id').notNull(),
+    visitorId: text('visitor_id').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [index('link_pixel_hit_source_idx').on(t.sourceType, t.sourceId, t.createdAt)],
+);
+
 export const board = sqliteTable(
   'board',
   {

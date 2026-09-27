@@ -1,6 +1,8 @@
-import { EVENT_TYPE } from '@flareboard/shared';
+import { EVENT_TYPE, csvRow } from '@flareboard/shared';
 import type { Env } from '../env';
 import { buildSegmentSql, type SegmentParams } from './segment-filters';
+import type { CohortMemberJoin } from './cohorts';
+import { cohortJoinSql } from './segment-stats';
 
 export type SessionListFilters = {
   country?: string;
@@ -185,18 +187,27 @@ export async function exportEventsCsv(
   startAt: number,
   endAt: number,
   type: 'events' | 'pageviews',
+  segment?: SegmentParams | null,
+  cohortJoin?: CohortMemberJoin | null,
 ) {
-  const eventType = type === 'pageviews' ? EVENT_TYPE.pageView : undefined;
-  const typeClause = eventType !== undefined ? ' AND event_type = ?4' : '';
-  const binds: (string | number)[] = [websiteId, startAt, endAt];
-  if (eventType !== undefined) binds.push(eventType);
+  // Same segment / cohort filters as the charts the user is looking at.
+  const seg = buildSegmentSql(segment);
+  const cohort = cohortJoinSql(cohortJoin);
+  const clauses = ['e.website_id = ?', 'e.created_at >= ?', 'e.created_at <= ?'];
+  const binds: (string | number)[] = [...cohort.binds, websiteId, startAt, endAt];
+  if (type === 'pageviews') {
+    clauses.push('e.event_type = ?');
+    binds.push(EVENT_TYPE.pageView);
+  }
+  clauses.push(...seg.eventClauses, ...seg.sessionClauses);
+  binds.push(...seg.binds);
 
   const rows = await env.DB.prepare(
     `SELECT e.created_at, e.session_id, e.visit_id, e.url_path, e.event_name,
             e.referrer_domain, s.country
      FROM website_event e
-     LEFT JOIN session s ON s.session_id = e.session_id AND s.website_id = e.website_id
-     WHERE e.website_id = ?1 AND e.created_at >= ?2 AND e.created_at <= ?3${typeClause}
+     LEFT JOIN session s ON s.session_id = e.session_id AND s.website_id = e.website_id${cohort.sql}
+     WHERE ${clauses.join(' AND ')}
      ORDER BY e.created_at DESC
      LIMIT 10000`,
   )
@@ -212,9 +223,8 @@ export async function exportEventsCsv(
     }>();
 
   const header = 'createdAt,sessionId,visitId,urlPath,eventName,referrer,country\n';
-  const lines = (rows.results ?? []).map(
-    (r) =>
-      `${r.created_at},${r.session_id},${r.visit_id},"${(r.url_path ?? '').replace(/"/g, '""')}",${r.event_name ?? ''},${r.referrer_domain ?? ''},${r.country ?? ''}`,
+  const lines = (rows.results ?? []).map((r) =>
+    csvRow([r.created_at, r.session_id, r.visit_id, r.url_path, r.event_name, r.referrer_domain, r.country]),
   );
   return header + lines.join('\n');
 }

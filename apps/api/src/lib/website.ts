@@ -2,6 +2,7 @@ import type { Context } from 'hono';
 import type { Website } from '@flareboard/db';
 import type { Env } from '../env';
 import { canAccessWebsite, canMutateWebsite } from './access';
+import { applyStatsResetFloor } from './parse-range';
 import { getWebsiteById } from './queries';
 import { json, notFound } from './response';
 import type { ApiVariables } from '../middleware/auth';
@@ -19,6 +20,7 @@ export async function requireWebsiteById(c: Ctx, websiteId: string): Promise<Web
   if (!website || !(await canAccessWebsite(c.env, website, c.get('user')))) {
     return null;
   }
+  applyStatsResetFloor(c, website.resetAt);
   return website;
 }
 

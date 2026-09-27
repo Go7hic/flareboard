@@ -28,6 +28,15 @@ export function getStripePriceId(env: Env, planId: PlanId): string | null {
   return map[plan.stripePriceEnvKey] ?? env.STRIPE_PRICE_HOBBY ?? env.STRIPE_PRICE_PRO ?? null;
 }
 
+/**
+ * Plan that governs a website's features: its owner's (website.user_id), the same
+ * account ingest bills events to. Team members use the site under the owner's plan.
+ */
+export async function getWebsitePlanId(env: Env, website: { userId: string | null }, fallbackUserId: string) {
+  const sub = await getUserSubscription(env, website.userId ?? fallbackUserId);
+  return sub.planId;
+}
+
 export async function getUserSubscription(env: Env, userId: string) {
   const db = createDb(env.DB);
   const [row] = await db

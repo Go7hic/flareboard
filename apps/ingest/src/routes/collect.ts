@@ -30,6 +30,7 @@ import {
   serverError,
 } from '../lib/response';
 import { getWebsiteById } from '../lib/queries';
+import { hitAllowed, recordHit, sourceExists, type HitSource } from '../lib/link-pixel-hits';
 import { bumpRealtimeVisitor } from '../lib/realtime-kv';
 import { appendMatchedActionTags } from '../lib/actions';
 import { assertEventAllowed, recordEventUsageKv } from '../lib/hosted-limits';
@@ -73,8 +74,16 @@ export function buildLogEventDataPayload(input: LogEventDataInput) {
   };
 }
 
+/**
+ * HTTP libraries (server SDKs, curl) are deliberate API callers, not crawlers
+ * replaying pages, and isbot flags them all. Letting them through opens nothing
+ * new: any sender can already pick a browser UA. Crawlers are still filtered.
+ */
+const HTTP_CLIENT_UA =
+  /^(?:node|undici|node-fetch|axios|got|python-requests|python-httpx|python-urllib|aiohttp|go-http-client|curl|wget|okhttp|java|apache-httpclient|ruby|faraday|guzzlehttp|php|dart|reqwest)\b/i;
+
 function isBot(userAgent: string) {
-  if (!userAgent) return false;
+  if (!userAgent || HTTP_CLIENT_UA.test(userAgent)) return false;
   return isbot(userAgent);
 }
 
@@ -365,13 +374,50 @@ function applyCacheToken(
   return cache;
 }
 
-function parseEventTimestamp(timestamp: unknown): Date | null {
+/**
+ * Page URL resolved against the reported hostname. Client input is not trusted to be
+ * well-formed ("exa mple.com", "http://[" ...): a bad value degrades to the site root
+ * instead of throwing and turning the whole request into a 500.
+ */
+function parsePageUrl(url: string | undefined, hostname: string | undefined): URL {
+  let base = 'https://localhost';
+  if (hostname) {
+    try {
+      base = new URL(`https://${hostname}`).origin;
+    } catch {
+      // keep the neutral base
+    }
+  }
+  try {
+    return new URL(url || '/', base);
+  } catch {
+    return new URL('/', base);
+  }
+}
+
+function parseReferrerUrl(referrer: string, base: URL): URL | null {
+  try {
+    return new URL(referrer, base);
+  } catch {
+    return null;
+  }
+}
+
+/** Backfilled events may be this old; anything earlier (or in the future) is rejected. */
+const MAX_EVENT_AGE_MS = 90 * 24 * 60 * 60 * 1000;
+const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
+/**
+ * Client `timestamp` is seconds since the epoch; SDKs that send milliseconds are
+ * accepted too. Values outside [now - 90 days, now + 5 min] fall back to server time,
+ * so a bad clock or unit cannot write rollups for 1970 or year 55840.
+ */
+export function parseEventTimestamp(timestamp: unknown, nowMs = Date.now()): Date | null {
   if (timestamp == null) return null;
-  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) return null;
-  const ms = timestamp * 1000;
-  if (!Number.isFinite(ms) || ms <= 0) return null;
-  const date = new Date(ms);
-  return Number.isNaN(date.getTime()) ? null : date;
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp) || timestamp <= 0) return null;
+  const ms = timestamp > 1e11 ? timestamp : timestamp * 1000;
+  if (ms < nowMs - MAX_EVENT_AGE_MS || ms > nowMs + MAX_CLOCK_SKEW_MS) return null;
+  return new Date(ms);
 }
 
 async function processSend(
@@ -420,8 +466,7 @@ async function processSend(
       const client = getClientInfoFromRequest(req, {});
 
       const createdAt = parseEventTimestamp(payload.timestamp) ?? new Date();
-      const base = payload.hostname ? `https://${payload.hostname}` : 'https://localhost';
-      const currentUrl = new URL(payload.url || '/', base);
+      const currentUrl = parsePageUrl(payload.url, payload.hostname);
       const urlPath =
         currentUrl.pathname === '/undefined' ? '' : currentUrl.pathname + currentUrl.hash;
       const { normX, normY, viewportW, viewportH } = heatmapNorm(payload.kind, payload);
@@ -449,10 +494,21 @@ async function processSend(
       return json({ ok: true });
     }
 
+    // Link and pixel ids are not websites: queueing them as website events fails the
+    // website_id foreign key. Record a hit instead, with the existence check and
+    // per-IP cap the website path gets from its own rate limit.
+    if (!payload.website && (payload.link || payload.pixel)) {
+      const source: HitSource = payload.link ? 'link' : 'pixel';
+      const sourceId = (payload.link ?? payload.pixel)!;
+      if (!(await sourceExists(env, source, sourceId))) return badRequest(`Unknown ${source}.`);
+      if (await hitAllowed(env, source, sourceId, req)) {
+        defer(() => recordHit(env, source, sourceId, req));
+      }
+      return json({ ok: true });
+    }
+
     const {
       website: websiteId,
-      pixel: pixelId,
-      link: linkId,
       hostname,
       screen,
       language,
@@ -496,7 +552,7 @@ async function processSend(
       groupKey,
     } = payload;
 
-    const sourceId = websiteId || pixelId || linkId!;
+    const sourceId = websiteId!;
     const secret = getSecret(appSecret);
     const trustedIp = getTrustedClientIp(req);
     const client = getClientInfoFromRequest(req, payload);
@@ -544,9 +600,14 @@ async function processSend(
     const sessionSalt = getSalt(createdAt);
     const vSalt = visitSalt(createdAt);
 
-    const sessionId = id
-      ? uuid(sourceId, id)
-      : uuid(sourceId, client.ip, client.userAgent, sessionSalt);
+    // Keyed with the deployment secret: session ids reach browsers and exports, and an
+    // unkeyed hash of (site, IP, UA, month) lets anyone brute-force the IPv4 back out.
+    // identify() mid-visit must not open a second session (double-counting the visitor
+    // and bouncing the anonymous visit): keep this tab's session and attach the id to it.
+    const tabSessionId = id && cache?.websiteId === sourceId ? cache.sessionId : undefined;
+    const sessionId =
+      tabSessionId ??
+      (id ? uuid(sourceId, id) : uuid(sourceId, client.ip, client.userAgent, sessionSalt, secret));
 
     cache = applyCacheToken(cache, sourceId, sessionId);
 
@@ -554,7 +615,9 @@ async function processSend(
     let iat = cache?.iat || now;
 
     if (!timestamp && now - iat > 1800) {
-      visitId = uuid(sessionId, vSalt);
+      // New visit after 30 idle minutes. Include the rotation time: the hour salt alone
+      // gave the same id when the visitor returned within the same UTC hour.
+      visitId = uuid(sessionId, vSalt, String(now));
       iat = now;
     }
 
@@ -586,8 +649,7 @@ async function processSend(
     }
 
     if (type === COLLECTION_TYPE.event || type === COLLECTION_TYPE.error || type === COLLECTION_TYPE.log || type === COLLECTION_TYPE.ai) {
-      const base = hostname ? `https://${hostname}` : 'https://localhost';
-      const currentUrl = new URL(url || '/', base);
+      const currentUrl = parsePageUrl(url, hostname);
       let urlPath =
         currentUrl.pathname === '/undefined' ? '' : currentUrl.pathname + currentUrl.hash;
       const urlQuery = currentUrl.search.substring(1);
@@ -609,8 +671,8 @@ async function processSend(
       const lifatid = currentUrl.searchParams.get('li_fat_id');
       const twclid = currentUrl.searchParams.get('twclid');
 
-      if (referrer) {
-        const referrerUrl = new URL(referrer, base);
+      const referrerUrl = referrer ? parseReferrerUrl(referrer, currentUrl) : null;
+      if (referrerUrl) {
         referrerPath = referrerUrl.pathname;
         referrerQuery = referrerUrl.search.substring(1);
         referrerDomain = referrerUrl.hostname.replace(/^www\./, '');
@@ -623,13 +685,9 @@ async function processSend(
             ? EVENT_TYPE.log
           : type === COLLECTION_TYPE.ai
             ? EVENT_TYPE.ai
-          : linkId
-            ? EVENT_TYPE.linkEvent
-            : pixelId
-              ? EVENT_TYPE.pixelEvent
-              : name
-                ? EVENT_TYPE.customEvent
-                : EVENT_TYPE.pageView;
+          : name
+            ? EVENT_TYPE.customEvent
+            : EVENT_TYPE.pageView;
 
       const eventId = crypto.randomUUID();
       let eventDataPayload =
@@ -680,8 +738,10 @@ async function processSend(
               }
           : data;
 
-      if (websiteId && eventDataPayload && typeof eventDataPayload === 'object') {
-        eventDataPayload = await appendMatchedActionTags(env, websiteId, {
+      // Tag even when there is no `data`: the tracker's default pageview sends none, and
+      // url_path actions must still match it.
+      if (websiteId && (eventDataPayload == null || typeof eventDataPayload === 'object')) {
+        const tagged = await appendMatchedActionTags(env, websiteId, {
           eventName:
             type === COLLECTION_TYPE.error
               ? (message ?? name ?? 'error')
@@ -691,8 +751,9 @@ async function processSend(
                   ? (name ?? 'ai_generation')
                   : (name ?? null),
           urlPath: safeDecodeURI(urlPath) ?? urlPath,
-          data: eventDataPayload as Record<string, unknown>,
+          data: (eventDataPayload ?? undefined) as Record<string, unknown> | undefined,
         });
+        if (eventDataPayload || Object.keys(tagged).length) eventDataPayload = tagged;
       }
 
       const eventData = eventDataPayload
@@ -790,22 +851,24 @@ async function processSend(
               distinctId: canonicalDistinctId,
               seenAt: createdAt.getTime(),
             })
-              .then((canonicalPersonId) =>
+              .then(() =>
                 patchPersonProperties(
                   env.DB,
                   websiteId,
                   canonicalDistinctId,
                   { $alias: alias },
                   createdAt.getTime(),
-                ).then(() =>
-                  upsertPerson(env.DB, {
-                    websiteId,
-                    distinctId: alias,
-                    personId: canonicalPersonId,
-                    properties: { $alias: alias, $canonical_distinct_id: canonicalDistinctId },
-                    seenAt: createdAt.getTime(),
-                  }),
                 ),
+              )
+              // The alias gets its own person row pointing at the canonical id. Reusing the
+              // canonical person_id (the primary key) made this insert fail every time.
+              .then(() =>
+                upsertPerson(env.DB, {
+                  websiteId,
+                  distinctId: alias,
+                  properties: { $alias: alias, $canonical_distinct_id: canonicalDistinctId },
+                  seenAt: createdAt.getTime(),
+                }),
               )
               .then(() => undefined),
           );
@@ -873,8 +936,7 @@ async function processSend(
         );
       }
     } else if (type === COLLECTION_TYPE.performance) {
-      const base = hostname ? `https://${hostname}` : 'https://localhost';
-      const currentUrl = new URL(url || '/', base);
+      const currentUrl = parsePageUrl(url, hostname);
       const urlPath = currentUrl.pathname === '/undefined' ? '' : currentUrl.pathname;
       const vitals = extractWebVitals(payload);
 
@@ -960,26 +1022,31 @@ function getClientInfoFromRequest(
   return { ip, userAgent, browser, os, device, ...geo };
 }
 
-function parseBrowser(ua: string): string {
-  if (/chrome/i.test(ua) && !/edge/i.test(ua)) return 'Chrome';
-  if (/firefox/i.test(ua)) return 'Firefox';
-  if (/safari/i.test(ua) && !/chrome/i.test(ua)) return 'Safari';
-  if (/edge/i.test(ua)) return 'Edge';
+// Order matters: Edge/Opera UAs also say "Chrome", Chrome says "Safari", and iOS UAs
+// say "like Mac OS X".
+export function parseBrowser(ua: string): string {
+  if (/\bedg(e|a|ios)?\//i.test(ua)) return 'Edge';
+  if (/\bopr\/|opera/i.test(ua)) return 'Opera';
+  if (/firefox|fxios/i.test(ua)) return 'Firefox';
+  if (/chrome|crios|chromium/i.test(ua)) return 'Chrome';
+  if (/safari/i.test(ua)) return 'Safari';
   return 'Unknown';
 }
 
-function parseOs(ua: string): string {
+export function parseOs(ua: string): string {
   if (/windows/i.test(ua)) return 'Windows';
-  if (/mac os/i.test(ua)) return 'macOS';
+  if (/iphone|ipad|ipod/i.test(ua)) return 'iOS';
   if (/android/i.test(ua)) return 'Android';
-  if (/iphone|ipad/i.test(ua)) return 'iOS';
+  if (/mac os/i.test(ua)) return 'macOS';
+  if (/cros/i.test(ua)) return 'ChromeOS';
   if (/linux/i.test(ua)) return 'Linux';
   return 'Unknown';
 }
 
-function parseDevice(ua: string): string {
-  if (/mobile/i.test(ua)) return 'mobile';
-  if (/tablet/i.test(ua)) return 'tablet';
+export function parseDevice(ua: string): string {
+  // Android tablets omit "Mobile"; iPads say "Mobile" but are tablets.
+  if (/ipad|tablet/i.test(ua) || (/android/i.test(ua) && !/mobile/i.test(ua))) return 'tablet';
+  if (/mobile|iphone|ipod/i.test(ua)) return 'mobile';
   return 'desktop';
 }
 
@@ -1090,15 +1157,24 @@ export async function handleHeartbeat(c: Context<{ Bindings: Env }>) {
 }
 
 export function handleRecorder(_c: Context<{ Bindings: Env }>) {
+  // rrweb calls emit() once per event; batch them so each POST carries an array.
+  // chunkIndex is a per-visit counter in sessionStorage so later page loads in the
+  // same visit keep appending (playback orders chunks by index).
   const script = `(function(){'use strict';
 var w=window,d=document,s=d.currentScript;
 function ingestOrigin(){if(s&&s.src)try{return new URL(s.src).origin}catch(_){}return location.origin}
-function post(body){return fetch(ingestOrigin()+'/api/record',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),keepalive:true})}
+function post(body,unloading){var b=JSON.stringify(body);return fetch(ingestOrigin()+'/api/record',{method:'POST',headers:{'Content-Type':'application/json'},body:b,keepalive:!!unloading&&b.length<60000}).catch(function(){})}
 function start(){var website=s&&s.getAttribute('data-website-id');if(!website||!w.rrweb)return;
 var sid=sessionStorage.getItem('flareboard.sid');if(!sid){setTimeout(start,300);return;}
 var vid=sessionStorage.getItem('flareboard.vid')||sid;
-var idx=0,started=Date.now();
-w.rrweb.record({emit:function(events){var ended=Date.now();post({type:'record',payload:{website:website,sessionId:sid,visitId:vid,chunkIndex:idx++,events:events,startedAt:started,endedAt:ended}});started=ended}})}
+var idxKey='flareboard.rec.'+vid,buf=[],started=Date.now();
+function nextIdx(){var n=parseInt(sessionStorage.getItem(idxKey)||'0',10)||0;sessionStorage.setItem(idxKey,String(n+1));return n}
+function flush(unloading){if(!buf.length)return;var events=buf,ended=Date.now();buf=[];post({type:'record',payload:{website:website,sessionId:sid,visitId:vid,chunkIndex:nextIdx(),events:events,startedAt:started,endedAt:ended}},unloading);started=ended}
+w.rrweb.record({emit:function(e){buf.push(e);if(buf.length>=200)flush(false)}});
+setInterval(function(){flush(false)},5000);
+w.addEventListener('pagehide',function(){flush(true)});
+d.addEventListener('visibilitychange',function(){if(d.visibilityState==='hidden')flush(true)});
+}
 if(d.readyState==='complete')start();else w.addEventListener('load',start);
 })();`;
 
@@ -1113,10 +1189,12 @@ if(d.readyState==='complete')start();else w.addEventListener('load',start);
 export function handleScript(_c: Context<{ Bindings: Env }>) {
   const script = `(function(){'use strict';
 /*
- * SPA pageviews: pushState/replaceState/popstate + hash routes (#/path).
+ * SPA pageviews: pushState/replaceState/popstate + hash routes (#/path). In-page anchors
+ *   (#section) are not new pages. Hash routes keep the real ?query (utm_*) merged in.
  * Declarative events (Umami-compatible): data-flareboard-event / data-umami-event (event delegation).
  * Heatmap: sample rate from data-heatmap-sample-rate or GET /api/tracker-config (cached per session).
  * Error tracking: window error/unhandledrejection + flareboard.captureException(error, extra).
+ *   Failed <img>/<script> loads also fire 'error' (capture phase) but are not code errors; skipped.
  * Logs: flareboard.log(level, message, data) keeps app messages connected to sessions.
  * AI observability: flareboard.ai({ model, inputTokens, outputTokens, costUsd, latencyMs }).
  * Sends use text/plain + cache token in body to avoid CORS preflight.
@@ -1125,8 +1203,9 @@ var t=window,d=document,l=location,s=sessionStorage,k='flareboard.cache',idKey='
 function scriptEl(){if(me)return me;return d.querySelector('script[data-website-id]')}
 function postBody(type,payload){var o={type:type,payload:payload},c=s.getItem(k);if(c)o.cache=c;return JSON.stringify(o)}
 function p(u,type,payload){return fetch(u,{method:'POST',headers:{'Content-Type':'text/plain'},body:postBody(type,payload),keepalive:true})}
-function appPath(){var h=l.hash;if(h.length>2&&h.charAt(1)==='/'){var q=h.indexOf('?');return q>=0?h.slice(1,q+1)+h.slice(q+1):h.slice(1)}return l.pathname+l.search}
-function routeKey(){return l.pathname+l.search+l.hash}
+function isHashRoute(h){return h.length>2&&h.charAt(1)==='/'}
+function appPath(){var h=l.hash;if(isHashRoute(h)){var q=h.indexOf('?'),qs=[l.search.slice(1),q>=0?h.slice(q+1):''].filter(Boolean).join('&');return(q>=0?h.slice(1,q):h.slice(1))+(qs?'?'+qs:'')}return l.pathname+l.search}
+function routeKey(){var h=l.hash;return l.pathname+l.search+(isHashRoute(h)?h:'')}
 function r(){return{width:t.innerWidth+'x'+t.innerHeight,language:navigator.language,screen:screen.width+'x'+screen.height,title:d.title,hostname:l.hostname,url:appPath(),referrer:d.referrer}}
 function ingestOrigin(){var el=scriptEl();if(el&&el.src)try{return new URL(el.src).origin}catch(_){}return l.protocol+'//'+l.host}
 function websiteId(a){var el=a||scriptEl();return el&&el.getAttribute('data-website-id')}
@@ -1152,7 +1231,7 @@ function sendHeatmap(payload){var w=websiteId();if(!w)return;var o=r();o.website
 function sdkMeta(extra){var el=scriptEl(),o=Object.assign(r(),extra||{}),did=getDistinctId();if(did&&!o.id)o.id=did;if(el){var rel=el.getAttribute('data-release'),env=el.getAttribute('data-environment');if(rel&&!o.release)o.release=rel;if(env&&!o.environment)o.environment=env}return o}
 function normalizeError(err,extra){var o=sdkMeta(extra),e=err&&err.error?err.error:err,reason=err&&err.reason?err.reason:null,msg='Unknown error',name='Error',stack,src,ln,cn;if(e){if(typeof e==='string')msg=e;else{msg=e.message||String(e);name=e.name||name;stack=e.stack}}else if(reason){msg=reason.message||String(reason);name=reason.name||name;stack=reason.stack}if(err){src=err.filename||err.source;ln=err.lineno;cn=err.colno}o.message=o.message||msg;o.errorName=o.errorName||name;if(stack&&!o.stack)o.stack=String(stack).slice(0,12000);if(src&&!o.source)o.source=String(src);if(ln!=null&&!o.lineno)o.lineno=ln;if(cn!=null&&!o.colno)o.colno=cn;if(o.handled==null)o.handled=false;if(!o.severity)o.severity='error';return o}
 function captureException(err,extra){var w=websiteId();if(!w)return;var o=normalizeError(err,extra);o.website=w;return send('error',o)}
-function setupErrors(){t.addEventListener('error',function(e){captureException(e,{handled:false})},true);t.addEventListener('unhandledrejection',function(e){captureException(e,{handled:false,message:e.reason&&e.reason.message?e.reason.message:String(e.reason||'Unhandled rejection'),errorName:e.reason&&e.reason.name?e.reason.name:'UnhandledRejection',stack:e.reason&&e.reason.stack?e.reason.stack:undefined})})}
+function setupErrors(){t.addEventListener('error',function(e){if(e&&e.target&&e.target!==t)return;captureException(e,{handled:false})},true);t.addEventListener('unhandledrejection',function(e){captureException(e,{handled:false,message:e.reason&&e.reason.message?e.reason.message:String(e.reason||'Unhandled rejection'),errorName:e.reason&&e.reason.name?e.reason.name:'UnhandledRejection',stack:e.reason&&e.reason.stack?e.reason.stack:undefined})})}
 function onHmClick(e){if(!hmSample())return;var vw=t.innerWidth,vh=t.innerHeight;if(!vw||!vh)return;sendHeatmap({kind:'click',x:Math.round(e.clientX),y:Math.round(e.clientY),viewportWidth:vw,viewportHeight:vh})}
 function scrollDepth(){var docH=Math.max(d.body.scrollHeight,d.documentElement.scrollHeight),vh=t.innerHeight,st=t.scrollY||d.documentElement.scrollTop;return docH<=vh?100:Math.min(100,Math.round((st+vh)/docH*100))}
 function onHmScroll(){var depth=scrollDepth(),path=appPath(),key=scrollKey+':'+path,prev=parseInt(s.getItem(key)||'0',10)||0;if(depth<=prev)return;s.setItem(key,String(depth));if(!hmSample())return;sendHeatmap({kind:'scroll',scrollDepth:depth})}

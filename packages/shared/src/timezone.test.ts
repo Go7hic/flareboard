@@ -93,3 +93,33 @@ describe('America/New_York DST edge', () => {
     expect(end - start).toBeLessThan(25 * 60 * 60 * 1000);
   });
 });
+
+describe('siteOffsetSegments', () => {
+  it('is a single segment for UTC', async () => {
+    const { siteOffsetSegments } = await import('./timezone');
+    expect(siteOffsetSegments(Date.UTC(2026, 0, 1), Date.UTC(2026, 11, 31), 'UTC')).toEqual([
+      { until: Infinity, offsetMs: 0 },
+    ]);
+  });
+
+  it('splits at DST transitions', async () => {
+    const { siteOffsetSegments } = await import('./timezone');
+    // US DST 2026 starts 2026-03-08 07:00 UTC (2am EST) and ends 2026-11-01 06:00 UTC.
+    const segments = siteOffsetSegments(Date.UTC(2026, 0, 1), Date.UTC(2026, 11, 31), 'America/New_York');
+    expect(segments).toEqual([
+      { until: Date.UTC(2026, 2, 8, 7), offsetMs: -5 * 3_600_000 },
+      { until: Date.UTC(2026, 10, 1, 6), offsetMs: -4 * 3_600_000 },
+      { until: Infinity, offsetMs: -5 * 3_600_000 },
+    ]);
+  });
+});
+
+describe('formatDayBucketLabel for far-east zones', () => {
+  it('keeps the bucket date in UTC+13', () => {
+    expect(formatDayBucketLabel('2026-03-05', 'Pacific/Tongatapu')).toBe(
+      new Intl.DateTimeFormat(undefined, { timeZone: 'UTC', month: 'numeric', day: 'numeric' }).format(
+        new Date(Date.UTC(2026, 2, 5, 12)),
+      ),
+    );
+  });
+});

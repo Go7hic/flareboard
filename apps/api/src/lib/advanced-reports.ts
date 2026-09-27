@@ -108,7 +108,9 @@ export async function getRetentionReport(
     ),
     cohort AS (
       SELECT session_id,
-        date(first_at / 1000, 'unixepoch', 'weekday 0') as cohort_week
+        -- 'weekday 0' alone jumps FORWARD to the next Sunday; step back 6 days first so
+        -- the cohort starts on the Sunday on or before the first visit.
+        date(first_at / 1000, 'unixepoch', '-6 days', 'weekday 0') as cohort_week
       FROM first_touch
     ),
     activity AS (

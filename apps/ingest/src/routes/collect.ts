@@ -35,6 +35,7 @@ import { bumpRealtimeVisitor } from '../lib/realtime-kv';
 import { appendMatchedActionTags } from '../lib/actions';
 import { assertEventAllowed, recordEventUsageKv } from '../lib/hosted-limits';
 import { checkIpRateLimit, checkRateLimit, getTrustedClientIp } from '../lib/rate-limit';
+import { fetchApi } from '../lib/api-client';
 
 const SEND_BODY_MAX_BYTES = 65_536;
 const WORKFLOW_DELIVERIES_PER_HOUR = 60;
@@ -265,12 +266,9 @@ async function deliverWorkflowAction(
   if (input.actionType === 'email') {
     const to = input.actionConfig.email?.trim();
     if (!to) return { status: 'failed', error: 'Missing email recipient' };
-    const apiUrl = env.API_URL?.trim();
-    if (!apiUrl) return { status: 'failed', error: 'API_URL not configured' };
-
     const subject = `Flareboard workflow: ${input.workflowName}`;
     const text = `Workflow ${input.workflowName} fired for event ${input.eventName} on website ${input.websiteId}.`;
-    const response = await fetch(`${apiUrl.replace(/\/$/, '')}/api/internal/deliver-email`, {
+    const request = fetchApi(env, '/api/internal/deliver-email', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${env.APP_SECRET}`,
@@ -278,6 +276,8 @@ async function deliverWorkflowAction(
       },
       body: JSON.stringify({ to, subject, text, websiteId: input.websiteId }),
     });
+    if (!request) return { status: 'failed', error: 'API binding / API_URL not configured' };
+    const response = await request;
     if (!response.ok) {
       return { status: 'failed', error: `Email delivery failed (${response.status})` };
     }

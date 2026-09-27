@@ -7,6 +7,8 @@ export interface Env {
   APP_SECRET: string;
   ENVIRONMENT: string;
   HOSTED_MODE?: string;
-  /** API worker base URL for workflow email delivery (optional). */
+  /** Service binding to the API worker (production); preferred over API_URL. */
+  API?: Fetcher;
+  /** API base URL fallback for local dev when no `API` binding exists. */
   API_URL?: string;
 }

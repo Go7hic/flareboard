@@ -12,8 +12,7 @@
   },
   "vars": {
     "ENVIRONMENT": "development",
-    // Email workflow actions hand off to the API worker (`/api/internal/deliver-email`).
-    // Production: `wrangler secret put API_URL --env production`.
+    // Local fallback for email workflow actions; production uses the `API` service binding.
     "API_URL": "http://localhost:8788"
   },
   "dev": {
@@ -75,6 +74,13 @@
         "ENVIRONMENT": "production",
         "HOSTED_MODE": "true"
       },
+      // Workflow email actions call the API worker in-network (no public hop, no WAF challenge).
+      "services": [
+        {
+          "binding": "API",
+          "service": "flareboard-api-production"
+        }
+      ],
       "d1_databases": [
         {
           "binding": "DB",

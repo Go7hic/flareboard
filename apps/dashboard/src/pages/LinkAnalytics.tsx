@@ -95,7 +95,7 @@ export default function LinkAnalyticsPage() {
       ) : null}
 
       {link ? (
-        <p className="section-lead text-muted" style={{ marginTop: 0 }}>
+        <p className="section-lead">
           {t('trackedViaSlug')} <code>{link.slug}</code>
         </p>
       ) : linkId ? (

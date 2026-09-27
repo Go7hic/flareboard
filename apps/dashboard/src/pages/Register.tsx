@@ -65,7 +65,7 @@ export default function Register() {
           </div>
           {message ? (
             <>
-              <p className="text-muted" style={{ marginBottom: '1rem' }}>{message}</p>
+              <p className="text-muted mb-4">{message}</p>
               <Button variant="primary" className="w-full" asChild>
                 <Link to="/login">{t('backToSignIn')}</Link>
               </Button>
@@ -104,13 +104,13 @@ export default function Register() {
                   autoComplete="name"
                 />
               </div>
-              {error ? <p className="text-danger" style={{ marginBottom: '1rem' }}>{error}</p> : null}
+              {error ? <p className="text-danger mb-4">{error}</p> : null}
               <Button variant="primary" className="w-full" type="submit">
                 {t('createAccount')}
               </Button>
             </form>
           )}
-          <p className="login-footer-link" style={{ marginTop: '1rem' }}>
+          <p className="login-footer-link">
             <Link to="/login">{t('alreadyHaveAccount')}</Link>
           </p>
         </div>

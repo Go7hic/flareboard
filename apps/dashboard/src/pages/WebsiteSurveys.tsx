@@ -21,6 +21,7 @@ import { t } from '../lib/i18n';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { formatDateOnly, formatDateTime, formatNumber, formatPercent } from '../lib/format';
+import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
 
 const DEFAULT_SURVEY = {
   name: '',
@@ -312,6 +313,7 @@ function SurveyEditDialog({
 }
 
 export default function WebsiteSurveysPage() {
+  const confirm = useConfirm();
   const { websiteId } = useParams<{ websiteId: string }>();
   const { canEdit } = useWebsitePermissions(websiteId, 'surveys');
   const [searchParams, setSearchParams] = useSearchParams();
@@ -654,10 +656,9 @@ export default function WebsiteSurveysPage() {
                         </Button>
                         <Button
                           type="button"
-                          variant="ghost"
+                          variant="destructive-ghost"
                           size="sm"
-                          className="btn-danger-text"
-                          onClick={() => deleteMutation.mutate(selectedSurvey.id)}
+                          onClick={() => confirm({ title: deleteTitle(selectedSurvey.name), onConfirm: () => deleteMutation.mutate(selectedSurvey.id) })}
                         >
                           {t('delete')}
                         </Button>

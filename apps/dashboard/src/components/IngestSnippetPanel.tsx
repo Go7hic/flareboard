@@ -202,6 +202,11 @@ export function IngestSnippetPanel({
         <span className="snippet-panel-toggle">{open ? t('hideEmbedCode') : t('showEmbedCode')}</span>
       </summary>
       <div className="snippet-panel-body">
+        {!INGEST_URL ? (
+          <p className="text-danger" role="alert">
+            {t('ingestUrlMissing')}
+          </p>
+        ) : null}
         <pre className="code-block snippet-code">{mainSnippet}</pre>
         <details className="snippet-advanced">
           <summary>{t('embedAdvanced')}</summary>

@@ -20,6 +20,7 @@ import { api, type FeatureFlag, type FeatureFlagEvaluateResult } from '../lib/ap
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { formatDateOnly, formatDateTime, formatNumber, formatPercent } from '../lib/format';
+import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
 
 const DEFAULT_FLAG = {
   key: '',
@@ -328,6 +329,7 @@ function FeatureFlagRolloutInput({
 }
 
 export default function WebsiteFeatureFlagsPage() {
+  const confirm = useConfirm();
   const { websiteId } = useParams<{ websiteId: string }>();
   const { canEdit } = useWebsitePermissions(websiteId, 'featureFlags');
   const [searchParams, setSearchParams] = useSearchParams();
@@ -343,12 +345,6 @@ export default function WebsiteFeatureFlagsPage() {
     release: '',
   });
   const [evaluateResult, setEvaluateResult] = useState<FeatureFlagEvaluateResult | null>(null);
-  const requestedFlagKey = searchParams.get('flag') ?? '';
-
-  useEffect(() => {
-    if (requestedFlagKey) setSearch(requestedFlagKey);
-  }, [requestedFlagKey]);
-
   const flagsQuery = useQuery({
     queryKey: ['feature-flags', websiteId],
     enabled: Boolean(websiteId),
@@ -663,16 +659,7 @@ export default function WebsiteFeatureFlagsPage() {
         <header className="cohorts-panel-head">
           <ResourceSearchField
             value={search}
-            onChange={(value) => {
-              setSearch(value);
-              if (requestedFlagKey) {
-                setSearchParams((current) => {
-                  const next = new URLSearchParams(current);
-                  next.delete('flag');
-                  return next;
-                }, { replace: true });
-              }
-            }}
+            onChange={setSearch}
             placeholder={t('featureFlagSearch')}
             aria-label={t('featureFlagSearch')}
           />
@@ -765,10 +752,9 @@ export default function WebsiteFeatureFlagsPage() {
                         </Button>
                         <Button
                           type="button"
-                          variant="ghost"
+                          variant="destructive-ghost"
                           size="sm"
-                          className="btn-danger-text"
-                          onClick={() => deleteMutation.mutate(selectedFlag.id)}
+                          onClick={() => confirm({ title: deleteTitle(selectedFlag.name), onConfirm: () => deleteMutation.mutate(selectedFlag.id) })}
                         >
                           {t('delete')}
                         </Button>

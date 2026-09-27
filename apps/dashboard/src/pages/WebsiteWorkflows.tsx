@@ -21,6 +21,7 @@ import { t } from '../lib/i18n';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { formatDateOnly, formatDateTime, formatNumber, formatPercent } from '../lib/format';
+import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
 
 const DEFAULT_WORKFLOW = {
   name: '',
@@ -207,6 +208,7 @@ function WorkflowEditDialog({
 }
 
 export default function WebsiteWorkflowsPage() {
+  const confirm = useConfirm();
   const { websiteId } = useParams<{ websiteId: string }>();
   const { canEdit } = useWebsitePermissions(websiteId);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -509,10 +511,9 @@ export default function WebsiteWorkflowsPage() {
                         </Button>
                         <Button
                           type="button"
-                          variant="ghost"
+                          variant="destructive-ghost"
                           size="sm"
-                          className="btn-danger-text"
-                          onClick={() => deleteMutation.mutate(selectedWorkflow.id)}
+                          onClick={() => confirm({ title: deleteTitle(selectedWorkflow.name), onConfirm: () => deleteMutation.mutate(selectedWorkflow.id) })}
                         >
                           {t('delete')}
                         </Button>

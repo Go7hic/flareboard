@@ -69,7 +69,7 @@ export function ReplayConfigWizard({ enabled, config, onChange }: Props) {
 
   if (!enabled) {
     return (
-      <p className="text-muted" style={{ fontSize: '0.875rem' }}>
+      <p className="section-lead">
         {t('replayWizardDisabledHint')}
       </p>
     );
@@ -104,9 +104,9 @@ export function ReplayConfigWizard({ enabled, config, onChange }: Props) {
             step={1}
             value={samplePct}
             onChange={(e) => update({ sampleRate: parseInt(e.target.value, 10) / 100 })}
-            style={{ width: '100%', maxWidth: '24rem' }}
+            className="w-full max-w-96"
           />
-          <p className="text-muted" style={{ fontSize: '0.8125rem', marginTop: '0.25rem' }}>
+          <p className="field-hint">
             {t('replaySampleRateHint')}
           </p>
         </div>
@@ -114,7 +114,7 @@ export function ReplayConfigWizard({ enabled, config, onChange }: Props) {
 
       {step === 2 ? (
         <>
-          <label className="field" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <label className="field field-inline">
             <input
               type="checkbox"
               checked={config.maskInputs !== false}
@@ -132,19 +132,19 @@ export function ReplayConfigWizard({ enabled, config, onChange }: Props) {
               onChange={(e) => update({ blockSelectors: e.target.value })}
               placeholder=".secret, #payment-form, [data-private]"
             />
-            <p className="text-muted" style={{ fontSize: '0.8125rem', marginTop: '0.25rem' }}>
+            <p className="field-hint">
               {t('replayBlockSelectorsHint')}
             </p>
           </div>
         </>
       ) : null}
 
-      <div style={{ marginTop: '1rem' }}>
+      <div className="mt-4">
         <Button type="button" variant="ghost" size="sm" onClick={() => setShowAdvanced((v) => !v)}>
           {showAdvanced ? t('replayHideAdvanced') : t('replayShowAdvanced')}
         </Button>
         {showAdvanced ? (
-          <div className="field" style={{ marginTop: '0.5rem' }}>
+          <div className="field mt-2">
             <Label>{t('replayConfigJson')}</Label>
             <Textarea
               className="textarea-mono"
@@ -153,7 +153,7 @@ export function ReplayConfigWizard({ enabled, config, onChange }: Props) {
               rows={6}
             />
             {jsonError ? <p className="text-danger">{jsonError}</p> : null}
-            <Button type="button" variant="secondary" size="sm" onClick={applyAdvancedJson} style={{ marginTop: '0.5rem' }}>
+            <Button type="button" variant="secondary" size="sm" onClick={applyAdvancedJson} className="mt-2 self-start">
               {t('applyJson')}
             </Button>
           </div>

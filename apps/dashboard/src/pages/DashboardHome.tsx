@@ -12,6 +12,7 @@ import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { StatCard } from '../components/ui/stat-card';
+import { EmptyState } from '../components/EmptyState';
 import { api } from '../lib/api';
 import { formatChartTimeLabel, isHourlyChartRange } from '../lib/chartTimeseries';
 import { formatNumber } from '../lib/format';
@@ -154,9 +155,12 @@ export default function DashboardHome() {
         }
       >
         {!hasWebsites ? (
-          <div className="panel empty-state-rich section-gap">
-            <h3>{t('noWebsitesDashboard')}</h3>
-            <p className="text-muted">{t('noWebsitesHint')}</p>
+          <EmptyState
+            variant="rich"
+            className="section-gap"
+            title={t('noWebsitesDashboard')}
+            description={t('noWebsitesHint')}
+          >
             <ol className="empty-state-steps">
               <li data-step="1">{t('emptyStep1')}</li>
               <li data-step="2">{t('emptyStep2')}</li>
@@ -165,7 +169,7 @@ export default function DashboardHome() {
             <Button asChild variant="primary" className="empty-state-cta">
               <Link to="/websites">{t('addWebsiteCta')}</Link>
             </Button>
-          </div>
+          </EmptyState>
         ) : (
           <>
             <section className="panel dashboard-aggregate section-gap" aria-labelledby="dashboard-total-traffic">

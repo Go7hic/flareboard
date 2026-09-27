@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
@@ -85,6 +85,8 @@ export default function SessionsPage() {
       debouncedReferrer,
     ],
     enabled: Boolean(websiteId),
+    // Keep the current rows on screen while a new filter loads instead of a skeleton per keystroke.
+    placeholderData: keepPreviousData,
     initialPageParam: 1,
     queryFn: ({ pageParam }) =>
       api<SessionsPage>(`/api/websites/${websiteId}/sessions?${filterQs}&page=${pageParam}`),
@@ -118,12 +120,6 @@ export default function SessionsPage() {
       />
 
       <PageBody>
-      <DataViewState
-        loading={sessionsQuery.isLoading}
-        error={sessionsQuery.isError ? sessionsQuery.error : null}
-        onRetry={() => sessionsQuery.refetch()}
-        loadingFallback={<div className="skeleton section-gap" style={{ height: '4rem' }} />}
-      >
         <section className="panel sessions-panel section-gap">
           <div className="sessions-filter-row">
             <Input
@@ -177,6 +173,13 @@ export default function SessionsPage() {
               </Button>
             ) : null}
           </div>
+          {/* Filters stay outside the loading/error state so typing never unmounts them. */}
+          <DataViewState
+            loading={sessionsQuery.isLoading}
+            error={sessionsQuery.isError ? sessionsQuery.error : null}
+            onRetry={() => sessionsQuery.refetch()}
+            loadingFallback={<div className="skeleton section-gap" style={{ height: '4rem' }} />}
+          >
           {rows.length === 0 ? (
             <EmptyState
               title={hasFilters ? t('noSessionsMatchFilters') : t('noSessionsInRange')}
@@ -281,8 +284,8 @@ export default function SessionsPage() {
           </footer>
             </>
           )}
+          </DataViewState>
         </section>
-      </DataViewState>
       </PageBody>
     </Page>
   );

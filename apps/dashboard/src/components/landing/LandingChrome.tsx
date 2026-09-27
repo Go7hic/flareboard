@@ -4,17 +4,14 @@ import { BrandLogo } from '../BrandLogo';
 import { LanguageSelector } from '../LanguageSelector';
 import { ThemeToggle } from '../ThemeToggle';
 import { Button } from '../ui/button';
-import { api, bootstrapSession, hasSession } from '../../lib/api';
+import { bootstrapSession } from '../../lib/api';
 import {
   FLAREBOARD_DEPLOY_DOCS,
   FLAREBOARD_GITHUB,
   FLAREBOARD_README,
 } from '../../lib/landing-links';
 import { t } from '../../lib/i18n';
-
-type AppConfig = {
-  registrationEnabled?: boolean;
-};
+import { useStartHref } from '../../lib/useAppConfig';
 
 type LandingChromeProps = {
   children: ReactNode;
@@ -112,17 +109,12 @@ function LandingBrandLink({ className }: { className?: string }) {
 }
 
 export function LandingChrome({ children, activeNav = 'home' }: LandingChromeProps) {
-  const [config, setConfig] = useState<AppConfig>({});
+  const startHref = useStartHref();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    api<AppConfig>('/api/config')
-      .then((cfg) => setConfig(cfg))
-      .catch(() => {});
     void bootstrapSession().then(setIsLoggedIn);
   }, []);
-
-  const startHref = config.registrationEnabled ? '/register' : '/login';
 
   const navItems: NavItem[] = [
     { kind: 'home', labelKey: 'landingNavHome', active: activeNav === 'home' },
@@ -152,11 +144,11 @@ export function LandingChrome({ children, activeNav = 'home' }: LandingChromePro
               </Button>
             ) : (
               <>
-                <Button asChild variant="ghost" size="sm">
+                <Button asChild variant="ghost" size="sm" className="landing-nav-signin">
                   <Link to="/login">{t('signIn')}</Link>
                 </Button>
                 <Button asChild variant="primary" size="sm">
-                  <Link to={startHref}>{t('landingGetStarted')}</Link>
+                  <Link to={startHref}>{t('landingCreateFreeAccount')}</Link>
                 </Button>
               </>
             )}
@@ -170,39 +162,38 @@ export function LandingChrome({ children, activeNav = 'home' }: LandingChromePro
         <div className="landing-footer-inner">
           <div className="landing-footer-brand">
             <LandingBrandLink className="shell-brand" />
+            <p className="landing-footer-copy">{t('landingFooterCopy')}</p>
           </div>
-          <nav className="landing-footer-links" aria-label={t('landingFooterAria')}>
-            <Link to="/features">{t('landingNavFeatures')}</Link>
-            <Link to="/compare">{t('landingNavCompare')}</Link>
-            <Link to="/pricing">{t('landingNavPricing')}</Link>
-            <a href="/blog">{t('landingNavBlog')}</a>
-            <Link to="/login">{t('signIn')}</Link>
-            <Link to={startHref}>{t('landingGetStarted')}</Link>
-            <a href={FLAREBOARD_GITHUB} target="_blank" rel="noopener noreferrer">
-              {t('landingFooterGithub')}
-            </a>
-            <a href={FLAREBOARD_README} target="_blank" rel="noopener noreferrer">
-              {t('landingNavDocs')}
-            </a>
-            <a href={FLAREBOARD_DEPLOY_DOCS} target="_blank" rel="noopener noreferrer">
-              {t('landingSelfHost')}
-            </a>
+          <nav className="landing-footer-cols" aria-label={t('landingFooterAria')}>
+            <div className="landing-footer-col">
+              <p className="landing-footer-heading">{t('homeFooterProduct')}</p>
+              <Link to="/features">{t('landingNavFeatures')}</Link>
+              <Link to="/compare">{t('landingNavCompare')}</Link>
+              <Link to="/pricing">{t('landingNavPricing')}</Link>
+              <Link to="/demo">{t('homeFooterDemo')}</Link>
+            </div>
+            <div className="landing-footer-col">
+              <p className="landing-footer-heading">{t('homeFooterResources')}</p>
+              <a href={FLAREBOARD_README} target="_blank" rel="noopener noreferrer">
+                {t('landingNavDocs')}
+              </a>
+              <a href="/blog">{t('landingNavBlog')}</a>
+              <a href={FLAREBOARD_DEPLOY_DOCS} target="_blank" rel="noopener noreferrer">
+                {t('landingSelfHost')}
+              </a>
+              <a href={FLAREBOARD_GITHUB} target="_blank" rel="noopener noreferrer">
+                {t('landingFooterGithub')}
+              </a>
+            </div>
+            <div className="landing-footer-col">
+              <p className="landing-footer-heading">{t('homeFooterAccount')}</p>
+              <Link to="/login">{t('signIn')}</Link>
+              <Link to={startHref}>{t('landingCreateFreeAccount')}</Link>
+            </div>
           </nav>
-          <p className="landing-footer-copy">{t('landingFooterCopy')}</p>
+          <p className="landing-footer-legal">© {new Date().getFullYear()} Flareboard</p>
         </div>
       </footer>
     </div>
   );
-}
-
-export function useLandingStartHref() {
-  const [startHref, setStartHref] = useState('/register');
-
-  useEffect(() => {
-    api<AppConfig>('/api/config')
-      .then((cfg) => setStartHref(cfg.registrationEnabled ? '/register' : '/login'))
-      .catch(() => {});
-  }, []);
-
-  return startHref;
 }

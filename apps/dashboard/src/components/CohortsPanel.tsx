@@ -11,6 +11,7 @@ import {
   ResourceSearchField,
   useMasterDetailSelection,
 } from './master-detail';
+import { ConfirmDialog } from './ConfirmDialog';
 import { Button } from './ui/button';
 import { api } from '../lib/api';
 import { formatDateOnly } from '../lib/format';
@@ -140,9 +141,8 @@ export function CohortsPanel({ websiteId }: { websiteId: string }) {
                       </Button>
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="destructive-ghost"
                         size="sm"
-                        className="btn-danger-text"
                         onClick={() => setDeleteTarget(selectedCohort)}
                       >
                         {t('delete')}
@@ -179,44 +179,18 @@ export function CohortsPanel({ websiteId }: { websiteId: string }) {
 
       <CohortFormDialog open={formOpen} onClose={closeForm} websiteId={websiteId} cohortId={editId} />
 
-      {deleteTarget ? (
-        <div className="dialog-backdrop" onClick={() => setDeleteTarget(null)}>
-          <div
-            className="dialog-panel cohort-delete-dialog"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="cohort-delete-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <header className="dialog-header">
-              <h2 id="cohort-delete-title" className="dialog-title">
-                {t('delete')}
-              </h2>
-            </header>
-            <p className="dialog-body cohort-delete-message">
-              {t('cohortDeleteConfirm').replace('{name}', deleteTarget.name)}
-            </p>
-            <footer className="dialog-footer">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setDeleteTarget(null)}
-                disabled={deleteMutation.isPending}
-              >
-                {t('cancel')}
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                disabled={deleteMutation.isPending}
-                onClick={() => deleteMutation.mutate(deleteTarget.id)}
-              >
-                {t('delete')}
-              </Button>
-            </footer>
-          </div>
-        </div>
-      ) : null}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title={t('confirmDeleteTitle').replace('{name}', deleteTarget?.name ?? '')}
+        description={t('confirmDeleteBody')}
+        pending={deleteMutation.isPending}
+        onConfirm={() => {
+          if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
+        }}
+      />
     </>
   );
 }

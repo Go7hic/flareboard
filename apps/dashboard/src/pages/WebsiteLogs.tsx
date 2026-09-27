@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { ExternalLink, Search, TerminalSquare } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
@@ -26,6 +26,7 @@ import { t } from '../lib/i18n';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
+import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
 
 const LEVELS = ['', 'trace', 'debug', 'info', 'warn', 'error', 'fatal'];
 const LOG_SECONDARY_TABS = ['traces', 'filters', 'alerts'] as const;
@@ -49,6 +50,7 @@ const DEFAULT_ALERT = {
 };
 
 export default function WebsiteLogsPage() {
+  const confirm = useConfirm();
   const { websiteId } = useParams<{ websiteId: string }>();
   const queryClient = useQueryClient();
   const { canEdit } = useWebsitePermissions(websiteId, 'logs');
@@ -76,12 +78,16 @@ export default function WebsiteLogsPage() {
   const logsQuery = useQuery({
     queryKey: ['logs', websiteId, range, level, debouncedSearch, releaseFilter, environmentFilter],
     enabled: Boolean(websiteId),
+    // The filters live inside the DataViewState below; keeping the previous result while a
+    // new filter loads stops each debounced keystroke from unmounting (and blurring) them.
+    placeholderData: keepPreviousData,
     queryFn: () => api<LogEventsResponse>(`/api/websites/${websiteId}/logs?${qs}`),
   });
 
   const tracesQuery = useQuery({
     queryKey: ['log-traces', websiteId, range, level, debouncedSearch, releaseFilter, environmentFilter],
     enabled: Boolean(websiteId) && secondaryTab === 'traces',
+    placeholderData: keepPreviousData,
     queryFn: () => api<{ traces: LogTraceSummary[] }>(`/api/websites/${websiteId}/logs/traces?${qs}`),
   });
 
@@ -587,10 +593,9 @@ export default function WebsiteLogsPage() {
                           {canEdit ? (
                             <Button
                               type="button"
-                              variant="ghost"
+                              variant="destructive-ghost"
                               size="sm"
-                              className="btn-danger-text"
-                              onClick={() => deleteFilterMutation.mutate(filter.id)}
+                              onClick={() => confirm({ title: deleteTitle(filter.name), onConfirm: () => deleteFilterMutation.mutate(filter.id) })}
                             >
                               {t('delete')}
                             </Button>
@@ -778,10 +783,9 @@ export default function WebsiteLogsPage() {
                             </Button>
                             <Button
                               type="button"
-                              variant="ghost"
+                              variant="destructive-ghost"
                               size="sm"
-                              className="btn-danger-text"
-                              onClick={() => deleteAlertMutation.mutate(rule.id)}
+                              onClick={() => confirm({ title: deleteTitle(rule.name), onConfirm: () => deleteAlertMutation.mutate(rule.id) })}
                             >
                               {t('delete')}
                             </Button>

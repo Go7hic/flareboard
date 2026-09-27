@@ -2,12 +2,22 @@ import { apiReturnedHtmlError, apiUrlConfigError, resolveApiUrl } from './api-ur
 
 const LEGACY_TOKEN_KEY = 'flareboard_token';
 
-export const INGEST_URL =
-  (import.meta.env.VITE_INGEST_URL ?? 'http://localhost:8787').replace(/\/$/, '');
+/**
+ * Collection endpoint used in tracking snippets. Only local dev falls back to the local
+ * ingest worker; a production build without VITE_INGEST_URL gets '' (callers show a
+ * configuration hint) rather than handing customers a localhost snippet.
+ */
+export const INGEST_URL = (
+  import.meta.env.VITE_INGEST_URL ?? (import.meta.env.DEV ? 'http://localhost:8787' : '')
+).replace(/\/$/, '');
+
+/** Placeholder origin for docs/marketing snippets when no ingest URL is configured. */
+export const INGEST_URL_FOR_DOCS = INGEST_URL || 'https://YOUR_INGEST_HOST';
 
 export const API_URL = resolveApiUrl();
 
 let sessionActive: boolean | null = null;
+let sessionCheck: Promise<boolean> | null = null;
 
 function assertApiUrl(): void {
   if (API_URL) return;
@@ -27,10 +37,6 @@ export function hasSession(): boolean {
   return sessionActive === true;
 }
 
-export function isSessionReady(): boolean {
-  return sessionActive !== null;
-}
-
 export function markSession(active: boolean) {
   sessionActive = active;
 }
@@ -38,14 +44,16 @@ export function markSession(active: boolean) {
 export async function bootstrapSession(): Promise<boolean> {
   clearLegacyTokenStorage();
   if (sessionActive !== null) return sessionActive;
-  try {
-    await api('/api/auth/verify');
-    sessionActive = true;
-    return true;
-  } catch {
-    sessionActive = false;
-    return false;
-  }
+  // Concurrent callers (nav + page) share one /verify round trip.
+  sessionCheck ??= api('/api/auth/verify')
+    .then(() => true)
+    .catch(() => false)
+    .then((active) => {
+      sessionActive = active;
+      sessionCheck = null;
+      return active;
+    });
+  return sessionCheck;
 }
 
 export async function logoutSession(): Promise<void> {
@@ -970,14 +978,6 @@ export interface UtmReportResponse {
   segmentId: string | null;
   startAt: number;
   endAt: number;
-}
-
-/** @deprecated Use UtmReportResponse — legacy flat rows removed from API. */
-export interface UtmRow {
-  source: string;
-  medium: string;
-  campaign: string;
-  pageviews: number;
 }
 
 export interface AdminUser {

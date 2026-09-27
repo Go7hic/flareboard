@@ -11,6 +11,8 @@ import { Button } from '../components/ui/button';
 import { boardConfigToDrafts, emptyStatsWidgetDraft, parseBoardConfig } from '../lib/board-config';
 import { api, type Insight, type Website } from '../lib/api';
 import { t } from '../lib/i18n';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { EmptyState } from '../components/EmptyState';
 
 interface Board {
   id: string;
@@ -78,9 +80,11 @@ export default function BoardsPage() {
     },
   });
 
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api(`/api/boards/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
+      setPendingDelete(null);
       if (editingId) setEditingId(null);
       queryClient.invalidateQueries({ queryKey: ['boards'] });
     },
@@ -229,9 +233,9 @@ export default function BoardsPage() {
                       </Button>
                       <Button
                         type="button"
-                        variant="danger"
+                        variant="destructive-ghost"
                         size="sm"
-                        onClick={() => deleteMutation.mutate(b.id)}
+                        onClick={() => setPendingDelete({ id: b.id, name: b.name })}
                       >
                         {t('delete')}
                       </Button>
@@ -254,13 +258,18 @@ export default function BoardsPage() {
           );
         })}
         {!boardsQuery.isLoading && !hasBoards ? (
-          <li className="panel empty-state-rich">
-            <h3>{t('noBoards')}</h3>
-            <p className="text-muted">{t('noBoardsHint')}</p>
-          </li>
+          <EmptyState as="li" variant="rich" title={t('noBoards')} description={t('noBoardsHint')} />
         ) : null}
       </ul>
       </PageBody>
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title={t('confirmDeleteTitle').replace('{name}', pendingDelete?.name ?? '')}
+        description={t('confirmDeleteBody')}
+        pending={deleteMutation.isPending}
+        onConfirm={() => pendingDelete && deleteMutation.mutate(pendingDelete.id)}
+      />
     </Page>
   );
 }

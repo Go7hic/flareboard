@@ -7,6 +7,7 @@ import {
   type JourneyColumnSelection,
   type JourneyFlowResponse,
 } from '../lib/journey-utils';
+import { Button } from './ui/button';
 import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 
@@ -42,9 +43,9 @@ export function JourneyFlowPanel({
           <p className="journey-flow-hint">
             {`${formatNumber(matchingVisits)} ${t('journeyMatchingVisits')}`}
           </p>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={onClear}>
+          <Button type="button" variant="ghost" size="sm" onClick={onClear}>
             {t('journeyClearSelection')}
-          </button>
+          </Button>
         </div>
       ) : null}
 

@@ -1,358 +1,249 @@
-import { useEffect, useState } from 'react';
+import { ArrowRight, Check, Cookie, Database, Layers, ShieldCheck } from 'lucide-react';
+import { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { DataClaritySection, HeroDashboardPreview } from '../components/landing/LandingCharts';
-import { LandingPlanCard, useLandingPlanActions } from '../components/landing/LandingPlanCards';
+import { LandingCapabilities } from '../components/landing/LandingCapabilities';
 import { LandingChrome } from '../components/landing/LandingChrome';
-import { LandingHeroBackdrop } from '../components/landing/LandingHeroBackdrop';
+import { LandingHowItWorks } from '../components/landing/LandingHowItWorks';
+import { LandingPlanCard, useLandingPlanActions } from '../components/landing/LandingPlanCards';
+import { LandingProductPreview } from '../components/landing/LandingProductPreview';
 import { Button } from '../components/ui/button';
-import { api } from '../lib/api';
 import { t } from '../lib/i18n';
-import {
-  CLOUD_MONTHLY_USD,
-  FLAREBOARD_DEPLOY_DOCS,
-  FLAREBOARD_ENTERPRISE_EMAIL,
-  LANDING_PLANS,
-  type LandingPlan,
-} from '../lib/landing-links';
+import { FLAREBOARD_DEPLOY_DOCS, FLAREBOARD_ENTERPRISE_EMAIL, LANDING_PLANS } from '../lib/landing-links';
+import { useAppConfig, useStartHref } from '../lib/useAppConfig';
+import '../styles/landing-home.css';
 
-type AppConfig = {
-  hosted?: boolean;
-  registrationEnabled?: boolean;
-  plans?: LandingPlan[];
-};
+const FACTS = [
+  { valueKey: 'homeFactScriptValue', bodyKey: 'homeFactScriptBody' },
+  { valueKey: 'homeFactCookiesValue', bodyKey: 'homeFactCookiesBody' },
+  { valueKey: 'homeFactEdgeValue', bodyKey: 'homeFactEdgeBody' },
+  { valueKey: 'homeFactCodeValue', bodyKey: 'homeFactCodeBody' },
+];
 
-const gaCompareKeys = [
-  { titleKey: 'landingGaPrivacyTitle', bodyKey: 'landingGaPrivacyBody' },
-  { titleKey: 'landingGaCookiesTitle', bodyKey: 'landingGaCookiesBody' },
-  { titleKey: 'landingGaOwnTitle', bodyKey: 'landingGaOwnBody' },
-  { titleKey: 'landingGaEdgeTitle', bodyKey: 'landingGaEdgeBody' },
-] as const;
+const REASONS = [
+  { icon: ShieldCheck, titleKey: 'homeWhyPrivacyTitle', bodyKey: 'homeWhyPrivacyBody' },
+  { icon: Cookie, titleKey: 'homeWhyCookiesTitle', bodyKey: 'homeWhyCookiesBody' },
+  { icon: Database, titleKey: 'homeWhyOwnTitle', bodyKey: 'homeWhyOwnBody' },
+  { icon: Layers, titleKey: 'homeWhyToolsTitle', bodyKey: 'homeWhyToolsBody' },
+];
 
-const stackKeys = [
-  { titleKey: 'landingStackWorkers', bodyKey: 'landingStackWorkersBody', slug: 'cloudflareworkers' },
-  { titleKey: 'landingStackQueues', bodyKey: 'landingStackQueuesBody', slug: 'cloudflare' },
-  { titleKey: 'landingStackD1', bodyKey: 'landingStackD1Body', slug: 'cloudflare' },
-  { titleKey: 'landingStackR2', bodyKey: 'landingStackR2Body', slug: 'cloudflare' },
-  { titleKey: 'landingStackKv', bodyKey: 'landingStackKvBody', slug: 'cloudflare' },
-  { titleKey: 'landingStackDo', bodyKey: 'landingStackDoBody', slug: 'cloudflare' },
-] as const;
+const SELF_HOST_FEATURES = ['homeSelfHostFeatureAll', 'homeSelfHostFeatureStack', 'homeSelfHostFeatureLicense'];
 
-const featureKeys = [
-  { titleKey: 'landingFeatureRealtimeTitle', bodyKey: 'landingFeatureRealtimeBody', variant: 'accent' },
-  { titleKey: 'landingFeatureAdvancedTitle', bodyKey: 'landingFeatureAdvancedBody', variant: 'default' },
-  { titleKey: 'landingFeatureReplayTitle', bodyKey: 'landingFeatureReplayBody', variant: 'default' },
-  { titleKey: 'landingFeatureTeamsTitle', bodyKey: 'landingFeatureTeamsBody', variant: 'default' },
-  { titleKey: 'landingFeatureCloudTitle', bodyKey: 'landingFeatureCloudBody', variant: 'highlight' },
-  { titleKey: 'landingFeatureSelfHostTitle', bodyKey: 'landingFeatureSelfHostBody', variant: 'default' },
-] as const;
+const FAQ = [1, 2, 3, 4, 5].map((n) => ({ q: `homeFaqQ${n}`, a: `homeFaqA${n}` }));
 
-function StackIcon({ slug }: { slug: string }) {
+function useScrollToHash() {
+  const location = useLocation();
+  useEffect(() => {
+    const stateScroll = (location.state as { scrollTo?: string } | null)?.scrollTo;
+    const targetId = stateScroll || location.hash.replace(/^#/, '');
+    if (!targetId) return;
+    const el = document.getElementById(targetId);
+    if (!el) return;
+    requestAnimationFrame(() => el.scrollIntoView());
+  }, [location.hash, location.state]);
+}
+
+function SectionHeader({ id, titleKey, leadKey }: { id: string; titleKey: string; leadKey: string }) {
   return (
-    <img
-      src={`https://cdn.simpleicons.org/${slug}/F38020`}
-      alt=""
-      width={28}
-      height={28}
-      className="landing-stack-icon"
-      loading="lazy"
-    />
+    <header className="home-section-head">
+      <h2 id={id} className="home-h2">
+        {t(titleKey)}
+      </h2>
+      <p className="home-section-lead">{t(leadKey)}</p>
+    </header>
   );
 }
 
-function EdgeMap() {
-  const nodes = [
-    [12, 18],
-    [28, 12],
-    [45, 22],
-    [62, 8],
-    [78, 20],
-    [88, 14],
-    [22, 38],
-    [38, 42],
-    [55, 35],
-    [72, 48],
-    [15, 58],
-    [48, 62],
-    [65, 55],
-    [82, 68],
-    [35, 72],
-  ];
-
+function SelfHostCard() {
   return (
-    <div className="landing-edge-map" aria-hidden>
-      <svg viewBox="0 0 100 80" className="landing-edge-map-svg" preserveAspectRatio="none">
-        <path
-          d="M12,18 Q40,8 62,8 T88,14 M22,38 Q48,28 72,48 M15,58 Q48,65 82,68"
-          fill="none"
-          stroke="var(--border-strong)"
-          strokeWidth="0.4"
-          strokeDasharray="2 3"
-          opacity="0.65"
-          className="landing-edge-path"
-        />
-        {nodes.map(([cx, cy], i) => (
-          <circle
-            key={i}
-            cx={cx}
-            cy={cy}
-            r={i % 3 === 0 ? 1.8 : 1.2}
-            className="landing-edge-node"
-          />
+    <article className="landing-plan-card home-selfhost-card">
+      <div className="landing-plan-card-top">
+        <p className="landing-plan-label">{t('landingSelfHost')}</p>
+        <h3 className="landing-plan-name">{t('homeSelfHostName')}</h3>
+        <p className="landing-plan-price">
+          <span className="landing-plan-price-value">$0</span>
+          <span className="landing-plan-price-period">{t('homeSelfHostPeriod')}</span>
+        </p>
+      </div>
+      <p className="landing-plan-tagline">{t('homeSelfHostTagline')}</p>
+      <ul className="landing-plan-features">
+        {SELF_HOST_FEATURES.map((key) => (
+          <li key={key}>
+            <Check size={16} strokeWidth={1.75} aria-hidden />
+            <span>{t(key)}</span>
+          </li>
         ))}
-      </svg>
-    </div>
+      </ul>
+      <Button asChild variant="secondary" className="landing-plan-cta">
+        <a href={FLAREBOARD_DEPLOY_DOCS} target="_blank" rel="noopener noreferrer">
+          {t('landingPathDeployGuide')}
+        </a>
+      </Button>
+    </article>
   );
 }
 
 export default function Landing() {
-  const [config, setConfig] = useState<AppConfig>({});
-  const location = useLocation();
-
-  useEffect(() => {
-    api<AppConfig>('/api/config')
-      .then((cfg) => setConfig(cfg))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    const stateScroll = (location.state as { scrollTo?: string } | null)?.scrollTo;
-    const hashId = location.hash.replace(/^#/, '');
-    const targetId = stateScroll || hashId;
-    if (!targetId) return;
-
-    const el = document.getElementById(targetId);
-    if (!el) return;
-
-    requestAnimationFrame(() => {
-      el.scrollIntoView();
-    });
-  }, [location.hash, location.state]);
-
-  const startHref = config.registrationEnabled ? '/register' : '/login';
+  useScrollToHash();
+  const config = useAppConfig();
+  const startHref = useStartHref();
   const planActions = useLandingPlanActions();
   const plans = (config.plans?.length ? config.plans : LANDING_PLANS).filter(
     (p) => p.id === 'free' || p.id === 'cloud',
   );
-  const showCloudPaths = config.hosted !== false;
 
   return (
     <LandingChrome activeNav="home">
-      <div className="landing-hero-stage">
-        <LandingHeroBackdrop />
-        <section className="landing-hero">
-          <div className="landing-hero-copy landing-reveal">
-            <p className="landing-hero-badge">
-              <span className="landing-hero-badge-dot" aria-hidden />
-              {t('landingBadge')}
-            </p>
-            <h1 className="landing-hero-title">{t('landingHeadline')}</h1>
-            <p className="landing-lead">{t('landingLead')}</p>
-            <div className="landing-cta-row">
-              <Button asChild variant="primary" size="lg">
-                <Link to={startHref}>{t('landingCreateFreeAccount')}</Link>
-              </Button>
-              <Link to="/demo" className="landing-hero-demo-text">
-                {t('landingViewDemo')}
-              </Link>
-            </div>
+      <section className="home-hero" aria-labelledby="home-hero-title">
+        <div className="home-container home-hero-copy">
+          <a href="#product" className="home-eyebrow home-reveal">
+            <span className="home-eyebrow-mark" aria-hidden />
+            {t('homeHeroEyebrow')}
+            <ArrowRight aria-hidden />
+          </a>
+          <h1 id="home-hero-title" className="home-h1 home-reveal">
+            {t('homeHeroTitle')}
+          </h1>
+          <p className="home-hero-lead home-reveal">{t('homeHeroLead')}</p>
+          <div className="home-hero-ctas home-reveal">
+            <Button asChild variant="primary" size="lg" className="home-btn-lg">
+              <Link to={startHref}>{t('landingCreateFreeAccount')}</Link>
+            </Button>
+            <Button asChild variant="outline" size="lg" className="home-btn-lg">
+              <Link to="/demo">{t('homeHeroDemoCta')}</Link>
+            </Button>
           </div>
-          <Link
-            to="/demo"
-            className="landing-hero-visual landing-reveal landing-reveal-delay landing-hero-demo-link"
-            aria-label={t('landingViewDemo')}
-          >
-            <HeroDashboardPreview />
-          </Link>
-        </section>
-      </div>
+        </div>
+        <div className="home-hero-stage">
+          <div className="home-container home-reveal home-reveal-late">
+            <LandingProductPreview />
+          </div>
+        </div>
+      </section>
 
-      <section className="landing-compare landing-section landing-reveal-section" aria-labelledby="compare-title">
-        <div className="landing-compare-inner">
-          <h2 id="compare-title" className="landing-compare-title">
-            {t('landingCompareTitle')}
-          </h2>
-          <ul className="landing-compare-grid">
-            {gaCompareKeys.map((item) => (
-              <li key={item.titleKey} className="landing-compare-item">
-                <h3 className="landing-compare-item-title">{t(item.titleKey)}</h3>
-                <p className="landing-compare-item-body">{t(item.bodyKey)}</p>
+      <section className="home-facts" aria-label={t('homeFactsAria')}>
+        <dl className="home-container home-facts-grid">
+          {FACTS.map((fact) => (
+            <div key={fact.valueKey} className="home-fact">
+              <dt className="home-fact-value">{t(fact.valueKey)}</dt>
+              <dd className="home-fact-body">{t(fact.bodyKey)}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      <section id="features" className="home-section" aria-labelledby="home-features-title">
+        <div className="home-container">
+          <SectionHeader id="home-features-title" titleKey="homeBentoTitle" leadKey="homeBentoLead" />
+          <LandingCapabilities />
+        </div>
+      </section>
+
+      <section id="product" className="home-section home-section-subtle" aria-labelledby="home-how-title">
+        <div className="home-container">
+          <SectionHeader id="home-how-title" titleKey="homeHowTitle" leadKey="homeHowLead" />
+          <LandingHowItWorks />
+        </div>
+      </section>
+
+      <section className="home-section" aria-labelledby="home-why-title">
+        <div className="home-container home-why">
+          <div className="home-why-intro">
+            <h2 id="home-why-title" className="home-h2">
+              {t('homeWhyTitle')}
+            </h2>
+            <p className="home-section-lead">{t('homeWhyLead')}</p>
+            <Link to="/compare" className="home-text-link">
+              {t('compareViewAll')}
+              <ArrowRight aria-hidden />
+            </Link>
+          </div>
+          <ul className="home-why-grid">
+            {REASONS.map(({ icon: Icon, titleKey, bodyKey }) => (
+              <li key={titleKey} className="home-why-item">
+                <span className="home-why-icon" aria-hidden>
+                  <Icon />
+                </span>
+                <h3 className="home-why-title">{t(titleKey)}</h3>
+                <p className="home-why-body">{t(bodyKey)}</p>
               </li>
             ))}
           </ul>
         </div>
       </section>
 
-      <DataClaritySection />
-
-      {showCloudPaths ? (
-        <section className="landing-paths landing-section landing-reveal-section" aria-labelledby="paths-title">
-          <div className="landing-section-intro">
-            <h2 id="paths-title" className="landing-section-title">
-              {t('landingPathsTitle')}
-            </h2>
-            <p className="landing-section-lead">{t('landingPathsLead')}</p>
+      <section id="pricing" className="home-section home-section-subtle" aria-labelledby="home-pricing-title">
+        <div className="home-container">
+          <SectionHeader id="home-pricing-title" titleKey="landingPricingTitle" leadKey="homePricingLead" />
+          <div className="home-plans">
+            {plans.map((plan) => (
+              <LandingPlanCard
+                key={plan.id}
+                plan={plan}
+                compact
+                featured={plan.id === 'cloud'}
+                startHref={startHref}
+                isLoggedIn={planActions.isLoggedIn}
+                isCheckoutPending={planActions.isCheckoutPending}
+                checkoutError={planActions.checkoutError}
+                onCloudCheckout={planActions.startCloudCheckout}
+              />
+            ))}
+            <SelfHostCard />
           </div>
-          <div className="landing-path-grid">
-            <article className="landing-path-card landing-path-cloud">
-              <h3 className="landing-path-title">{t('landingPathCloudTitle')}</h3>
-              <p className="landing-path-body">{t('landingPathCloudBody')}</p>
-              <Button asChild variant="primary">
-                <Link to={startHref}>{t('landingPlanCloudCta')}</Link>
-              </Button>
-            </article>
-            <article className="landing-path-card">
-              <h3 className="landing-path-title">{t('landingPathSelfTitle')}</h3>
-              <p className="landing-path-body">{t('landingPathSelfBody')}</p>
-              <Button asChild variant="secondary">
-                <a href={FLAREBOARD_DEPLOY_DOCS} target="_blank" rel="noopener noreferrer">
-                  {t('landingPathDeployGuide')}
+          <div className="home-enterprise">
+            <div>
+              <h3 className="home-enterprise-title">{t('landingEnterpriseTitle')}</h3>
+              <p className="home-enterprise-body">{t('homeEnterpriseBody')}</p>
+            </div>
+            <div className="home-enterprise-actions">
+              <Link to="/pricing" className="home-text-link">
+                {t('pricingViewAll')}
+                <ArrowRight aria-hidden />
+              </Link>
+              <Button asChild variant="outline">
+                <a href={`mailto:${FLAREBOARD_ENTERPRISE_EMAIL}?subject=Flareboard%20commercial%20license`}>
+                  {t('landingEnterpriseCta')}
                 </a>
               </Button>
-            </article>
-          </div>
-        </section>
-      ) : null}
-
-      <section
-        id="product"
-        className="landing-stack-section landing-section landing-reveal-section"
-        aria-labelledby="stack-title"
-      >
-        <div className="landing-stack-header">
-          <h2 id="stack-title" className="landing-section-title">
-            {t('landingStackTitle')}
-          </h2>
-          <p className="landing-section-lead">{t('landingStackLead')}</p>
-        </div>
-        <ul className="landing-stack-grid">
-          {stackKeys.map((item) => (
-            <li key={item.titleKey} className="landing-stack-card">
-              <StackIcon slug={item.slug} />
-              <div className="landing-stack-card-copy">
-                <h3 className="landing-stack-card-title">{t(item.titleKey)}</h3>
-                <p className="landing-stack-card-body">{t(item.bodyKey)}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section
-        id="features"
-        className="landing-features landing-section landing-reveal-section"
-        aria-labelledby="features-title"
-      >
-        <div className="landing-section-intro">
-          <h2 id="features-title" className="landing-section-title">
-            {t('landingFeaturesTitle')}
-          </h2>
-        </div>
-        <div className="landing-feature-grid landing-feature-grid-6">
-          {featureKeys.map((f) => (
-            <article key={f.titleKey} className={`landing-feature-card landing-feature-${f.variant}`}>
-              <h3 className="landing-feature-title">{t(f.titleKey)}</h3>
-              <p className="landing-feature-body">
-                {f.bodyKey === 'landingFeatureCloudBody'
-                  ? t(f.bodyKey).replace('{price}', String(CLOUD_MONTHLY_USD))
-                  : t(f.bodyKey)}
-              </p>
-            </article>
-          ))}
-        </div>
-        <div className="landing-features-cta">
-          <Button asChild variant="secondary">
-            <Link to="/compare">{t('compareViewAll')}</Link>
-          </Button>
-          <Button asChild variant="secondary">
-            <Link to="/features">{t('featuresViewAll')}</Link>
-          </Button>
-        </div>
-      </section>
-
-      <section
-        id="pricing"
-        className="landing-plans landing-section landing-reveal-section"
-        aria-labelledby="pricing-title"
-      >
-        <div className="landing-plans-header">
-          <h2 id="pricing-title" className="landing-section-title">
-            {t('landingPricingTitle')}
-          </h2>
-          <p className="landing-section-lead landing-plans-lead">
-            {t('landingPricingLead')}{' '}
-            <a href={FLAREBOARD_DEPLOY_DOCS} target="_blank" rel="noopener noreferrer">
-              {t('landingPathDeployGuide')}
-            </a>
-            .
-          </p>
-        </div>
-
-        <div className="landing-plans-row">
-          {plans.map((plan) => (
-            <LandingPlanCard
-              key={plan.id}
-              plan={plan}
-              featured={plan.id === 'cloud'}
-              startHref={startHref}
-              isLoggedIn={planActions.isLoggedIn}
-              isCheckoutPending={planActions.isCheckoutPending}
-              checkoutError={planActions.checkoutError}
-              onCloudCheckout={planActions.startCloudCheckout}
-            />
-          ))}
-        </div>
-
-        <div className="landing-plans-cta">
-          <Button asChild variant="secondary">
-            <Link to="/pricing">{t('pricingViewAll')}</Link>
-          </Button>
-        </div>
-
-        <aside className="landing-plans-enterprise" aria-labelledby="enterprise-title">
-          <div className="landing-plans-enterprise-copy">
-            <p className="landing-plan-label">{t('landingEnterpriseLabel')}</p>
-            <h3 id="enterprise-title" className="landing-plans-enterprise-title">
-              {t('landingEnterpriseTitle')}
-            </h3>
-            <p className="landing-plans-enterprise-body">{t('landingEnterpriseBody')}</p>
-          </div>
-          <Button asChild variant="secondary" className="landing-plans-enterprise-cta">
-            <a href={`mailto:${FLAREBOARD_ENTERPRISE_EMAIL}?subject=Flareboard%20commercial%20license`}>
-              {t('landingEnterpriseCta')}
-            </a>
-          </Button>
-        </aside>
-      </section>
-
-      <section className="landing-network landing-reveal-section" aria-labelledby="network-title">
-        <div className="landing-network-inner">
-          <div className="landing-network-copy">
-            <h2 id="network-title" className="landing-section-title">
-              {t('landingNetworkTitle')}
-            </h2>
-            <p className="landing-section-lead">{t('landingNetworkLead')}</p>
-            <div className="landing-network-logos" aria-label={t('landingNetworkAria')}>
-              <img
-                src="https://cdn.simpleicons.org/cloudflare/F38020"
-                alt=""
-                width={120}
-                height={32}
-                className="landing-network-logo"
-                loading="lazy"
-              />
             </div>
           </div>
-          <EdgeMap />
         </div>
       </section>
 
-      <section className="landing-cta-band landing-reveal-section">
-        <div className="landing-cta-inner">
-          <h2 className="landing-cta-title">{t('landingCtaTitle')}</h2>
-          <p className="landing-cta-lead">{t('landingCtaLead')}</p>
-          <Button asChild variant="primary" size="lg" className="landing-cta-deploy">
-            <Link to={startHref}>{t('landingCreateFreeAccount')}</Link>
-          </Button>
+      <section className="home-section" aria-labelledby="home-faq-title">
+        <div className="home-container home-faq">
+          <h2 id="home-faq-title" className="home-h2">
+            {t('homeFaqTitle')}
+          </h2>
+          <div className="home-faq-list">
+            {FAQ.map((item) => (
+              <details key={item.q} className="home-faq-item">
+                <summary>{t(item.q)}</summary>
+                <p>{t(item.a)}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="home-cta-section" aria-labelledby="home-cta-title">
+        <div className="home-container">
+          <div className="home-cta">
+            <div>
+              <h2 id="home-cta-title" className="home-h2">
+                {t('homeCtaTitle')}
+              </h2>
+              <p className="home-section-lead">{t('homeCtaLead')}</p>
+            </div>
+            <div className="home-hero-ctas">
+              <Button asChild variant="primary" size="lg" className="home-btn-lg">
+                <Link to={startHref}>{t('landingCreateFreeAccount')}</Link>
+              </Button>
+              <Button asChild variant="outline" size="lg" className="home-btn-lg">
+                <Link to="/demo">{t('homeHeroDemoCta')}</Link>
+              </Button>
+            </div>
+          </div>
         </div>
       </section>
     </LandingChrome>

@@ -1,11 +1,16 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { API_URL } from '../lib/api';
 import { getLocale, LOCALE_LABELS, LOCALES, setLocale, t, type Locale } from '../lib/i18n';
 import { resolveTheme, setTheme, themeChangeEventName, type Theme } from '../lib/theme';
 
 type SidebarUserMenuProps = {
   userLabel: string;
+  /** Configured OAuth providers the signed-in user can link to this account. */
+  oauthProviders?: string[];
   onLogout: () => void;
 };
+
+const OAUTH_PROVIDER_LABELS: Record<string, string> = { github: 'GitHub', google: 'Google' };
 
 type Flyout = 'language' | 'theme';
 
@@ -70,7 +75,7 @@ function positionFlyout(flyoutEl: HTMLElement, anchorEl: HTMLElement) {
   flyoutEl.style.visibility = '';
 }
 
-export function SidebarUserMenu({ userLabel, onLogout }: SidebarUserMenuProps) {
+export function SidebarUserMenu({ userLabel, oauthProviders = [], onLogout }: SidebarUserMenuProps) {
   const [open, setOpen] = useState(false);
   const [activeFlyout, setActiveFlyout] = useState<Flyout | null>(null);
   const [theme, setThemeState] = useState<Theme>(() =>
@@ -262,6 +267,24 @@ export function SidebarUserMenu({ userLabel, onLogout }: SidebarUserMenuProps) {
               </ul>
             ) : null}
           </div>
+
+          {oauthProviders.length ? (
+            <>
+              <div className="sidebar-user-menu-separator" role="separator" />
+              {oauthProviders.map((provider) => (
+                <a
+                  key={provider}
+                  role="menuitem"
+                  className="sidebar-user-menu-item"
+                  href={`${API_URL}/api/auth/oauth/${provider}?link=1&returnTo=${encodeURIComponent('/dashboard')}`}
+                >
+                  <span className="sidebar-user-menu-item-label">
+                    {t('oauthLinkProvider').replace('{provider}', OAUTH_PROVIDER_LABELS[provider] ?? provider)}
+                  </span>
+                </a>
+              ))}
+            </>
+          ) : null}
 
           <div className="sidebar-user-menu-separator" role="separator" />
 

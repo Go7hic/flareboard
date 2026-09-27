@@ -18,6 +18,7 @@ import { formatDateOnly, formatDateTime, formatNumber, formatPercent } from '../
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
+import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
 
 function formatTime(value: number | null | undefined) {
   return formatDateTime(value);
@@ -39,6 +40,7 @@ const ERROR_SECONDARY_TABS = ['events', 'source-maps', 'alerts'] as const;
 type ErrorSecondaryTab = (typeof ERROR_SECONDARY_TABS)[number];
 
 export default function WebsiteErrorsPage() {
+  const confirm = useConfirm();
   const { websiteId } = useParams<{ websiteId: string }>();
   const queryClient = useQueryClient();
   const { canEdit } = useWebsitePermissions(websiteId, 'errors');
@@ -410,15 +412,17 @@ export default function WebsiteErrorsPage() {
                     actions={
                       <div className="error-issue-actions">
                         {(['open', 'resolved', 'ignored'] as const).map((status) => (
-                          <button
+                          <Button
                             key={status}
                             type="button"
-                            className={status === selectedIssue.status ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}
+                            size="sm"
+                            variant={status === selectedIssue.status ? 'default' : 'outline'}
+                            aria-pressed={status === selectedIssue.status}
                             disabled={updateIssueMutation.isPending || !canEdit}
                             onClick={() => updateIssueMutation.mutate({ fingerprint: selectedIssue.fingerprint, status })}
                           >
                             {t(`errorIssueAction_${status}`)}
-                          </button>
+                          </Button>
                         ))}
                       </div>
                     }
@@ -785,10 +789,9 @@ export default function WebsiteErrorsPage() {
                                 </Button>
                                 <Button
                                   type="button"
-                                  variant="ghost"
+                                  variant="destructive-ghost"
                                   size="sm"
-                                  className="btn-danger-text"
-                                  onClick={() => deleteAlertMutation.mutate(rule.id)}
+                                  onClick={() => confirm({ title: deleteTitle(rule.name), onConfirm: () => deleteAlertMutation.mutate(rule.id) })}
                                 >
                                   {t('delete')}
                                 </Button>

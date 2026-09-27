@@ -13,6 +13,7 @@ import { Label } from '../components/ui/label';
 import { Skeleton } from '../components/ui/skeleton';
 import { api, type Team, type Website } from '../lib/api';
 import { t } from '../lib/i18n';
+import { useConfirm } from '../components/ConfirmDialog';
 
 interface TeamDetail extends Team {
   websites?: Array<{ id: string; name: string; domain?: string }>;
@@ -43,6 +44,7 @@ function formatTeamRole(role: string | undefined): string {
 }
 
 export default function Teams() {
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
@@ -301,9 +303,14 @@ export default function Teams() {
                               </select>
                               <Button
                                 type="button"
-                                variant="danger"
+                                variant="destructive-ghost"
                                 size="sm"
-                                onClick={() => removeMemberMutation.mutate(m.userId)}
+                                onClick={() => confirm({
+                                    title: t('removeMemberConfirmTitle').replace('{name}', m.username),
+                                    description: t('removeMemberConfirmBody'),
+                                    confirmLabel: t('remove'),
+                                    onConfirm: () => removeMemberMutation.mutate(m.userId),
+                                  })}
                               >
                                 {t('remove')}
                               </Button>
@@ -329,7 +336,7 @@ export default function Teams() {
                             id="team-access-code"
                             readOnly
                             value={teamDetailQuery.data.accessCode}
-                            style={{ fontFamily: 'var(--font-mono)' }}
+                            className="font-mono"
                           />
                           <Button type="button" variant="secondary" onClick={() => void copyAccessCode()}>
                             {accessCodeCopied ? t('accessCodeCopied') : t('copyToClipboard')}

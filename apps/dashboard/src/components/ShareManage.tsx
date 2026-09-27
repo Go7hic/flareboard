@@ -3,8 +3,10 @@ import { Button } from './ui/button';
 import { Skeleton } from './ui/skeleton';
 import { api, type ShareLink } from '../lib/api';
 import { t } from '../lib/i18n';
+import { useConfirm } from './ConfirmDialog';
 
 export function ShareManage({ websiteId }: { websiteId: string }) {
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
 
   const sharesQuery = useQuery({
@@ -30,14 +32,14 @@ export function ShareManage({ websiteId }: { websiteId: string }) {
       {sharesQuery.isLoading ? (
         <Skeleton className="h-8 w-full" aria-hidden />
       ) : !shares.length ? (
-        <p className="text-muted section-lead">No share links yet. Create one below.</p>
+        <p className="text-muted section-lead">{t('shareLinksEmpty')}</p>
       ) : (
         <ul className="list-plain">
           {shares.map((s) => (
             <li key={s.id} className="list-item list-row">
               <div>
                 <strong>{s.name}</strong>
-                <div style={{ fontSize: '0.8125rem', wordBreak: 'break-all' }}>
+                <div className="text-[0.8125rem] break-all">
                   <a href={`${window.location.origin}/share/${s.slug}`} target="_blank" rel="noreferrer">
                     {window.location.origin}/share/{s.slug}
                   </a>
@@ -45,10 +47,15 @@ export function ShareManage({ websiteId }: { websiteId: string }) {
               </div>
               <Button
                 type="button"
-                variant="danger"
+                variant="destructive-ghost"
                 size="sm"
                 disabled={revokingId === s.id}
-                onClick={() => deleteMutation.mutate(s.id)}
+                onClick={() => confirm({
+                    title: t('revokeShareConfirmTitle').replace('{name}', s.name),
+                    description: t('revokeShareConfirmBody'),
+                    confirmLabel: t('revokeShareLink'),
+                    onConfirm: () => deleteMutation.mutate(s.id),
+                  })}
               >
                 {revokingId === s.id ? t('revokingShareLink') : t('revokeShareLink')}
               </Button>

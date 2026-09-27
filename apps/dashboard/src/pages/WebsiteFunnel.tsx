@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Bar, BarChart } from 'recharts';
 import { AnalyticsChart } from '../components/AnalyticsChart';
 import { DataViewState } from '../components/DataViewState';
@@ -17,7 +18,15 @@ export default function WebsiteFunnelPage() {
   const chartColors = useChartColors();
   const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl, timezone } =
     useWebsiteReportContext('30d');
-  const [funnelSteps, setFunnelSteps] = useState(['signup', 'purchase']);
+  const [searchParams] = useSearchParams();
+  // Saved funnel reports open with `?steps=a,b,c`.
+  const [funnelSteps, setFunnelSteps] = useState(() => {
+    const fromUrl = (searchParams.get('steps') ?? '')
+      .split(',')
+      .map((step) => step.trim())
+      .filter(Boolean);
+    return fromUrl.length ? fromUrl : ['signup', 'purchase'];
+  });
 
   const funnelStepsParam = funnelSteps.join(',');
 
@@ -57,7 +66,7 @@ export default function WebsiteFunnelPage() {
       />
 
       <PageBody>
-      <div className="field section-gap" style={{ maxWidth: '28rem' }}>
+      <div className="field section-gap max-w-md">
         <EventCatalogPicker
           mode="multi"
           websiteId={websiteId}

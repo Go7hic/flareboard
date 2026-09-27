@@ -5,6 +5,8 @@ import { subscribeRealtimeStream } from '../lib/realtime-stream';
 
 /** Fallback poll when SSE is unavailable. */
 const REALTIME_POLL_MS = 2_000;
+const SSE_RETRY_BASE_MS = 5_000;
+const SSE_RETRY_MAX_MS = 60_000;
 
 export function useRealtimeData(websiteId: string) {
   const [sseData, setSseData] = useState<RealtimeData | null>(null);
@@ -16,20 +18,39 @@ export function useRealtimeData(websiteId: string) {
     setSseConnected(false);
     setSseLoading(true);
 
-    const stop = subscribeRealtimeStream(
-      websiteId,
-      (payload) => {
-        setSseData(payload);
-        setSseConnected(true);
-        setSseLoading(false);
-      },
-      () => {
-        setSseConnected(false);
-        setSseLoading(false);
-      },
-    );
+    let stop: (() => void) | null = null;
+    let retryTimer: number | undefined;
+    let attempt = 0;
+    let disposed = false;
 
-    return stop;
+    // Streams end (Worker time limits, deploys, network blips). Polling covers the gap
+    // while we reconnect with backoff; previously a dropped stream never came back.
+    const connect = () => {
+      stop = subscribeRealtimeStream(
+        websiteId,
+        (payload) => {
+          attempt = 0;
+          setSseData(payload);
+          setSseConnected(true);
+          setSseLoading(false);
+        },
+        () => {
+          setSseConnected(false);
+          setSseLoading(false);
+          if (disposed) return;
+          const delay = Math.min(SSE_RETRY_MAX_MS, SSE_RETRY_BASE_MS * 2 ** attempt);
+          attempt += 1;
+          retryTimer = window.setTimeout(connect, delay);
+        },
+      );
+    };
+    connect();
+
+    return () => {
+      disposed = true;
+      window.clearTimeout(retryTimer);
+      stop?.();
+    };
   }, [websiteId]);
 
   const poll = useQuery({

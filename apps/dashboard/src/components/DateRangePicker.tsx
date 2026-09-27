@@ -125,6 +125,11 @@ export function DateRangePicker({
 
   const showCustomControls = !compact || detailsOpen || value.preset === 'custom' || popover;
 
+  // datetime-local values compare correctly as strings. An empty field used to fall back
+  // to a rolling 24h labelled "custom", and an inverted range was sent to the API.
+  const customInverted = Boolean(customStart && customEnd && customEnd <= customStart);
+  const customValid = Boolean(customStart && customEnd) && !customInverted;
+
   const customControls = (
     <>
       <div className="date-range-picker-field">
@@ -156,10 +161,16 @@ export function DateRangePicker({
         size="sm"
         variant="primary"
         className="date-range-picker-apply"
+        disabled={!customValid}
         onClick={() => applyPreset('custom', popover)}
       >
         {t('applyRange')}
       </Button>
+      {customInverted ? (
+        <p className="date-range-picker-error" role="alert">
+          {t('customRangeInvalid')}
+        </p>
+      ) : null}
     </>
   );
 

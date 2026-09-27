@@ -11,6 +11,7 @@ type AppSidebarProps = {
   isAdmin: boolean;
   mobileOpen: boolean;
   userLabel: string;
+  oauthProviders?: string[];
   onNavigate?: () => void;
   onLogout: () => void;
 };
@@ -20,6 +21,7 @@ export function AppSidebar({
   isAdmin,
   mobileOpen,
   userLabel,
+  oauthProviders,
   onNavigate,
   onLogout,
 }: AppSidebarProps) {
@@ -60,7 +62,7 @@ export function AppSidebar({
         )}
       </nav>
       <div className="app-sidebar-footer">
-        <SidebarUserMenu userLabel={userLabel} onLogout={onLogout} />
+        <SidebarUserMenu userLabel={userLabel} oauthProviders={oauthProviders} onLogout={onLogout} />
       </div>
     </aside>
   );

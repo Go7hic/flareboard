@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../lib/api';
+import { t } from '../lib/i18n';
 
 interface StatRow {
   value: string;
@@ -33,14 +34,19 @@ export function EventDataPanel({ websiteId }: { websiteId: string }) {
 
   return (
     <section className="panel section-gap-lg">
-      <h2 className="section-title">Event & session properties</h2>
-      <p className="section-lead">From custom event data and identify calls</p>
+      <h2 className="section-title">{t('eventDataTitle')}</h2>
+      <p className="section-lead">{t('eventDataLead')}</p>
       {propertiesQuery.isLoading ? (
         <div className="skeleton skeleton-block section-gap" aria-hidden />
       ) : properties.length ? (
         <>
-          <select className="select" value={property} onChange={(e) => setProperty(e.target.value)}>
-            <option value="">Select event property…</option>
+          <select
+            className="select"
+            value={property}
+            onChange={(e) => setProperty(e.target.value)}
+            aria-label={t('eventDataSelectProperty')}
+          >
+            <option value="">{t('eventDataSelectProperty')}</option>
             {properties.map((p) => (
               <option key={p} value={p}>
                 {p}
@@ -59,20 +65,17 @@ export function EventDataPanel({ websiteId }: { websiteId: string }) {
               ))}
             </ul>
           ) : property ? (
-            <p className="text-muted" style={{ fontSize: '0.875rem' }}>
-              No values for this property yet.
-            </p>
+            <p className="text-muted event-data-note">{t('eventDataNoValues')}</p>
           ) : null}
         </>
       ) : (
-        <p className="text-muted" style={{ fontSize: '0.875rem' }}>
-          No event properties yet. Track with{' '}
-          <code>flareboard.track('event', {'{'} key: 'value' {'}'})</code>
+        <p className="text-muted event-data-note">
+          {t('eventDataEmpty')} <code>flareboard.track('event', {'{'} key: 'value' {'}'})</code>
         </p>
       )}
       {sessionPropsQuery.data?.length ? (
-        <p className="text-muted" style={{ marginTop: '1rem', fontSize: '0.8125rem' }}>
-          Session traits: {sessionPropsQuery.data.join(', ')}
+        <p className="text-muted event-data-note event-data-traits">
+          {t('eventDataSessionTraits')}: {sessionPropsQuery.data.join(', ')}
         </p>
       ) : null}
     </section>

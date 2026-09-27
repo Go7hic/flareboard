@@ -5,10 +5,22 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { api, API_URL, bootstrapSession, hasSession, logoutSession, markSession, type LoginResponse } from '../lib/api';
+import { api, API_URL, bootstrapSession, markSession, type LoginResponse } from '../lib/api';
 import { t } from '../lib/i18n';
 
 const POST_LOGIN_PATH = '/dashboard';
+
+/** Same-origin path to continue to after sign-in (from `?next=`); anything else goes to the dashboard. */
+function safeNextPath(raw: string | null): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.includes('\\')) return POST_LOGIN_PATH;
+  return raw;
+}
+
+/** Callback error codes from the API that have a readable explanation. */
+const OAUTH_ERROR_KEYS: Record<string, string> = {
+  oauth_account_not_linked: 'oauthErrorNotLinked',
+  oauth_identity_in_use: 'oauthErrorIdentityInUse',
+};
 
 interface AppConfig {
   oauth?: string[];
@@ -60,7 +72,7 @@ export default function Login() {
     }
 
     const code = searchParams.get('code');
-    const next = searchParams.get('next') ?? POST_LOGIN_PATH;
+    const next = safeNextPath(searchParams.get('next'));
     if (code) {
       void (async () => {
         try {
@@ -89,8 +101,17 @@ export default function Login() {
 
     const oauthError = searchParams.get('error');
     if (oauthError) {
-      setError(oauthError);
+      const known = OAUTH_ERROR_KEYS[oauthError];
+      setError(known ? t(known) : oauthError);
       setSearchParams({}, { replace: true });
+      return;
+    }
+
+    // Already signed in (e.g. an old tab or a bookmarked /login): continue instead of asking again.
+    if (!reset) {
+      void bootstrapSession().then((active) => {
+        if (active) navigate(next, { replace: true });
+      });
     }
   }, [navigate, searchParams, setSearchParams]);
 
@@ -104,7 +125,7 @@ export default function Login() {
       });
       markSession(true);
       window.flareboard?.track('login_success');
-      navigate(POST_LOGIN_PATH);
+      navigate(safeNextPath(searchParams.get('next')));
     } catch (err) {
       setError(err instanceof Error ? err.message : t('loginFailed'));
     }
@@ -141,7 +162,8 @@ export default function Login() {
   }
 
   function oauthStart(provider: string) {
-    window.location.href = `${API_URL}/api/auth/oauth/${provider}?returnTo=${encodeURIComponent(POST_LOGIN_PATH)}`;
+    const returnTo = safeNextPath(searchParams.get('next'));
+    window.location.href = `${API_URL}/api/auth/oauth/${provider}?returnTo=${encodeURIComponent(returnTo)}`;
   }
 
   const emailLoginUi = registrationEnabled && environment === 'production';
@@ -158,7 +180,7 @@ export default function Login() {
         <div className="login-card">
           <span className="login-edge-badge">
             <span className="live-dot" aria-hidden />
-            Privacy-first analytics
+            {t('loginBadge')}
           </span>
           <div className="login-brand">
             <BrandLogo showWordmark={false} size={32} />
@@ -189,25 +211,25 @@ export default function Login() {
                     autoComplete="current-password"
                   />
                 </div>
-                {error ? <p className="text-danger" style={{ marginBottom: '1rem' }}>{error}</p> : null}
-                {message ? <p className="text-muted" style={{ marginBottom: '1rem' }}>{message}</p> : null}
+                {error ? <p className="text-danger mb-4">{error}</p> : null}
+                {message ? <p className="text-muted mb-4">{message}</p> : null}
                 <Button variant="primary" className="w-full" type="submit">
                   {t('continueToDashboard')}
                 </Button>
               </form>
-              <p style={{ marginTop: '0.75rem', textAlign: 'center' }}>
+              <p className="mt-3 text-center">
                 <Button type="button" variant="ghost" size="sm" onClick={() => setMode('forgot')}>
                   {t('forgotPassword')}
                 </Button>
               </p>
               {registrationEnabled ? (
-                <p style={{ marginTop: '0.75rem', textAlign: 'center' }} className="text-muted">
+                <p className="login-footer-link text-muted">
                   {t('noAccount')}{' '}
                   <Link to="/register">{t('createAccount')}</Link>
                 </p>
               ) : null}
               {oauthProviders.length ? (
-                <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div className="mt-4 flex flex-col gap-2">
                   {oauthProviders.includes('google') ? (
                     <Button type="button" variant="secondary" className="w-full" onClick={() => oauthStart('google')}>
                       {t('signInWithGoogle')}

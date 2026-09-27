@@ -214,7 +214,7 @@ export default function HeatmapsPage() {
 
         <fieldset
           disabled={!heatmapsAllowed}
-          style={{ border: 'none', margin: 0, padding: 0, opacity: heatmapsAllowed ? 1 : 0.6 }}
+          className={`fieldset-plain${heatmapsAllowed ? '' : ' is-locked'}`}
         >
         <div className="heatmap-toolbar">
           <div className="field heatmap-toolbar-path">

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type RrwebPlayer from 'rrweb-player';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { EmptyState } from '../components/EmptyState';
@@ -13,6 +14,7 @@ import { api, type Website } from '../lib/api';
 import { formatDateTime, formatDurationMs, formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
+import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
 
 interface ReplayRow {
   visitId: string;
@@ -78,14 +80,15 @@ function ReplayMetaBadges({ replay }: { replay: ReplayRow | SavedReplay }) {
 }
 
 export default function ReplaysPage() {
+  const confirm = useConfirm();
   const { websiteId } = useParams<{ websiteId: string }>();
     const queryClient = useQueryClient();
-  const { range, setRange, timezone } = useWebsiteRange(websiteId, '24h');
+  const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
   const [selectedVisit, setSelectedVisit] = useState<string | null>(null);
   const [saveName, setSaveName] = useState('');
   const [replayFilter, setReplayFilter] = useState<ReplayFilter>('all');
   const playerRef = useRef<HTMLDivElement>(null);
-  const playerInstance = useRef<unknown>(null);
+  const playerInstance = useRef<RrwebPlayer | null>(null);
 
   const websiteQuery = useQuery({
     queryKey: ['website', websiteId],
@@ -95,9 +98,9 @@ export default function ReplaysPage() {
   });
 
   const listQuery = useQuery({
-    queryKey: ['replays', websiteId],
+    queryKey: ['replays', websiteId, rangeQs],
     enabled: Boolean(websiteId),
-    queryFn: () => api<ReplayRow[]>(`/api/websites/${websiteId}/replays`),
+    queryFn: () => api<ReplayRow[]>(`/api/websites/${websiteId}/replays?${rangeQs}`),
   });
 
   const savedQuery = useQuery({
@@ -136,7 +139,6 @@ export default function ReplaysPage() {
   useEffect(() => {
     if (!playerRef.current) return;
     playerRef.current.innerHTML = '';
-    playerInstance.current = null;
 
     const events = detailQuery.data?.events;
     if (!events?.length) return;
@@ -164,6 +166,10 @@ export default function ReplaysPage() {
 
     return () => {
       cancelled = true;
+      // Stop the replayer; clearing the ref alone left its timers and iframe running
+      // after switching replays or leaving the page.
+      playerInstance.current?.pause();
+      playerInstance.current?.getReplayer().destroy();
       playerInstance.current = null;
     };
   }, [detailQuery.data]);
@@ -259,13 +265,14 @@ export default function ReplaysPage() {
                       </span>
                       <ReplayMetaBadges replay={saved} />
                     </button>
-                    <button
+                    <Button
                       type="button"
-                      className="btn btn-ghost btn-sm btn-danger-text"
-                      onClick={() => deleteSavedMutation.mutate(saved.id)}
+                      variant="destructive-ghost"
+                      size="sm"
+                      onClick={() => confirm({ title: deleteTitle(saved.name), onConfirm: () => deleteSavedMutation.mutate(saved.id) })}
                     >
                       {t('delete')}
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -282,7 +289,7 @@ export default function ReplaysPage() {
                   onSelect={() => setSelectedVisit(r.visitId)}
                 >
                   <div>{formatDateTime(r.startedAt)}</div>
-                  <div className="text-muted" style={{ fontSize: '0.8125rem', marginTop: '0.2rem' }}>
+                  <div className="field-hint">
                     {formatNumber(r.eventCount)} {t('replayEventsLabel')} · {formatNumber(r.chunks)} {t('replayChunksLabel')}
                   </div>
                   <ReplayMetaBadges replay={r} />

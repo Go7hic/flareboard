@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { LandingChrome, useLandingStartHref } from '../components/landing/LandingChrome';
+import { LandingChrome } from '../components/landing/LandingChrome';
+import { useStartHref } from '../lib/useAppConfig';
 import { Button } from '../components/ui/button';
 import { COMPARE_COMPETITORS, COMPARE_PILLARS } from '../lib/compare-catalog';
 import { t } from '../lib/i18n';
@@ -19,7 +20,7 @@ function CompareCheckIcon() {
 }
 
 export default function Compare() {
-  const startHref = useLandingStartHref();
+  const startHref = useStartHref();
 
   return (
     <LandingChrome activeNav="compare">

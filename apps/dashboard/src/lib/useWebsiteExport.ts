@@ -2,11 +2,12 @@ import { useCallback } from 'react';
 import { authenticatedFetch } from './api';
 import { t } from './i18n';
 
-export function useWebsiteExport(websiteId: string | undefined, rangeQs: string) {
+/** `filterQs`: range plus any segment / cohort params, as sent to the stats endpoints. */
+export function useWebsiteExport(websiteId: string | undefined, filterQs: string) {
   return useCallback(
     (type: 'events' | 'pageviews') => {
       if (!websiteId) return;
-      const path = `/api/websites/${websiteId}/export?type=${type}&${rangeQs}`;
+      const path = `/api/websites/${websiteId}/export?type=${type}&${filterQs}`;
       authenticatedFetch(path)
         .then(async (r) => {
           if (!r.ok) {
@@ -16,15 +17,17 @@ export function useWebsiteExport(websiteId: string | undefined, rangeQs: string)
           return r.blob();
         })
         .then((blob) => {
+          const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
-          a.href = URL.createObjectURL(blob);
+          a.href = url;
           a.download = `${websiteId}-${type}.csv`;
           a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 0);
         })
         .catch((err) => {
           window.alert(err instanceof Error ? err.message : t('exportFailed'));
         });
     },
-    [websiteId, rangeQs],
+    [websiteId, filterQs],
   );
 }

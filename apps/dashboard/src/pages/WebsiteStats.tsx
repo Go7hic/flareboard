@@ -63,10 +63,11 @@ export default function WebsiteStatsPage() {
   const activeSegmentId = segmentFromUrl || segmentId;
   const cohortId = searchParams.get('cohort') ?? '';
   const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
-  const exportCsv = useWebsiteExport(websiteId, rangeQs);
   const segmentQs = activeSegmentId ? `&segmentId=${encodeURIComponent(activeSegmentId)}` : '';
   const cohortQs = cohortId ? `&cohort=${encodeURIComponent(cohortId)}` : '';
   const qs = `${rangeQs}${segmentQs}${cohortQs}`;
+  // Export exactly what the page shows, including the active segment and cohort.
+  const exportCsv = useWebsiteExport(websiteId, qs);
   const compareRange = useMemo(
     () => computeCompareRange(range.startAt, range.endAt, compareMode),
     [range.startAt, range.endAt, compareMode],

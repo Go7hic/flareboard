@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useCallback } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { api, type Segment } from '../lib/api';
 import { type DateRangePreset } from '../lib/dateRange';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
@@ -10,7 +10,23 @@ import { websiteReportUrl } from '../lib/websiteReportApi';
 export function useWebsiteReportContext(fallbackPreset: DateRangePreset = '30d') {
   const { websiteId } = useParams<{ websiteId: string }>();
   const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, fallbackPreset);
-  const [segmentId, setSegmentId] = useState('');
+  // Segment lives in the URL so saved reports (`?segmentId=`) and shared links restore it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const segmentId = searchParams.get('segmentId') ?? '';
+  const setSegmentId = useCallback(
+    (next: string) => {
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          if (next) params.set('segmentId', next);
+          else params.delete('segmentId');
+          return params;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const segmentsQuery = useQuery({
     queryKey: ['segments', websiteId],

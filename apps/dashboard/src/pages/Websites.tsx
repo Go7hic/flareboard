@@ -11,6 +11,7 @@ import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { EmptyState } from '../components/EmptyState';
 import { api, type Website } from '../lib/api';
 import { formatDateOnly } from '../lib/format';
 import { t } from '../lib/i18n';
@@ -136,15 +137,13 @@ export default function Websites() {
         ) : null}
         {error ? <p className="text-danger">{(error as Error).message}</p> : null}
         {!isLoading && !hasSites ? (
-          <div className="panel empty-state-rich">
-            <h3>{t('noWebsites')}</h3>
-            <p className="text-muted">{t('noWebsitesHint')}</p>
+          <EmptyState variant="rich" title={t('noWebsites')} description={t('noWebsitesHint')}>
             <ol className="empty-state-steps">
               <li data-step="1">{t('emptyStep1')}</li>
               <li data-step="2">{t('emptyStep2')}</li>
               <li data-step="3">{t('emptyStep3')}</li>
             </ol>
-          </div>
+          </EmptyState>
         ) : null}
         <ul className="list-plain site-grid">
           {sites.map((site) => (

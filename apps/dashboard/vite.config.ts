@@ -18,14 +18,10 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
+        // Only name chunks the entry needs anyway. A manual chunk also absorbs its
+        // shared deps (clsx, react-is, ...), so naming recharts/maps here made the
+        // landing page preload them; lazy routes get them via automatic splitting.
         manualChunks(id) {
-          if (id.includes('node_modules/recharts')) return 'recharts';
-          if (id.includes('node_modules/rrweb') || id.includes('node_modules/rrweb-player')) {
-            return 'rrweb';
-          }
-          if (id.includes('node_modules/react-simple-maps') || id.includes('node_modules/d3-')) {
-            return 'maps';
-          }
           if (id.includes('node_modules/@tanstack/react-query')) return 'query';
         },
       },

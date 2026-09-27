@@ -59,30 +59,48 @@ function PlanCheckIcon() {
   );
 }
 
-export function planFeatureLines(plan: LandingPlan): string[] {
+type PlanFeatureLine = { text: string; included: boolean };
+
+function planFeatureItems(plan: LandingPlan): PlanFeatureLine[] {
   const websiteLine =
     plan.maxWebsites == null
       ? t('landingPlanWebsitesUnlimited')
       : plan.maxWebsites > 1
         ? t('landingPlanWebsites').replace('{count}', String(plan.maxWebsites))
         : t('landingPlanWebsite').replace('{count}', String(plan.maxWebsites));
+  const toggle = (enabled: boolean, onKey: string, offKey: string): PlanFeatureLine => ({
+    text: t(enabled ? onKey : offKey),
+    included: enabled,
+  });
 
   return [
-    websiteLine,
-    t('landingPlanEventsPerMonth').replace('{limit}', formatEventLimit(plan.maxEventsPerMonth)),
-    plan.replayEnabled ? t('landingPlanReplayIncluded') : t('landingPlanReplayExcluded'),
-    plan.emailReportsEnabled
-      ? t('landingPlanEmailReportsIncluded')
-      : t('landingPlanEmailReportsExcluded'),
-    plan.heatmapsEnabled ? t('landingPlanHeatmapsIncluded') : t('landingPlanHeatmapsExcluded'),
-    plan.teamsEnabled ? t('landingPlanTeamsIncluded') : t('landingPlanTeamsExcluded'),
-    plan.experimentationEnabled
-      ? t('landingPlanExperimentationIncluded')
-      : t('landingPlanExperimentationExcluded'),
-    plan.surveysEnabled ? t('landingPlanSurveysIncluded') : t('landingPlanSurveysExcluded'),
-    plan.warehouseEnabled ? t('landingPlanWarehouseIncluded') : t('landingPlanWarehouseExcluded'),
-    plan.teamsEnabled ? t('landingPlanFeaturesCloudShared') : t('landingPlanFeaturesFreeShared'),
+    { text: websiteLine, included: true },
+    {
+      text: t('landingPlanEventsPerMonth').replace('{limit}', formatEventLimit(plan.maxEventsPerMonth)),
+      included: true,
+    },
+    toggle(plan.replayEnabled, 'landingPlanReplayIncluded', 'landingPlanReplayExcluded'),
+    toggle(plan.emailReportsEnabled, 'landingPlanEmailReportsIncluded', 'landingPlanEmailReportsExcluded'),
+    toggle(plan.heatmapsEnabled, 'landingPlanHeatmapsIncluded', 'landingPlanHeatmapsExcluded'),
+    toggle(plan.teamsEnabled, 'landingPlanTeamsIncluded', 'landingPlanTeamsExcluded'),
+    toggle(
+      plan.experimentationEnabled,
+      'landingPlanExperimentationIncluded',
+      'landingPlanExperimentationExcluded',
+    ),
+    toggle(plan.surveysEnabled, 'landingPlanSurveysIncluded', 'landingPlanSurveysExcluded'),
+    toggle(plan.warehouseEnabled, 'landingPlanWarehouseIncluded', 'landingPlanWarehouseExcluded'),
+    {
+      text: plan.teamsEnabled ? t('landingPlanFeaturesCloudShared') : t('landingPlanFeaturesFreeShared'),
+      included: true,
+    },
   ];
+}
+
+/** Plan feature bullets; `compact` keeps only what the plan includes. */
+export function planFeatureLines(plan: LandingPlan, compact = false): string[] {
+  const items = planFeatureItems(plan);
+  return (compact ? items.filter((item) => item.included) : items).map((item) => item.text);
 }
 
 type LandingPlanCardProps = {
@@ -93,6 +111,8 @@ type LandingPlanCardProps = {
   isCheckoutPending?: boolean;
   checkoutError?: string | null;
   onCloudCheckout?: (planId: string) => void;
+  /** Only list included features (landing page). */
+  compact?: boolean;
 };
 
 export function LandingPlanCard({
@@ -103,6 +123,7 @@ export function LandingPlanCard({
   isCheckoutPending = false,
   checkoutError,
   onCloudCheckout,
+  compact = false,
 }: LandingPlanCardProps) {
   const priceUsd = plan.monthlyPriceUsd ?? (plan.id === 'cloud' ? CLOUD_MONTHLY_USD : 0);
   const tagline =
@@ -151,7 +172,7 @@ export function LandingPlanCard({
       </div>
       <p className="landing-plan-tagline">{tagline}</p>
       <ul className="landing-plan-features">
-        {planFeatureLines(plan).map((line) => (
+        {planFeatureLines(plan, compact).map((line) => (
           <li key={line}>
             <PlanCheckIcon />
             <span>{line}</span>
@@ -170,7 +191,7 @@ export function LandingPlanCard({
             {ctaLabel}
           </Button>
           {checkoutError ? (
-            <p className="text-danger" style={{ marginTop: '0.75rem' }}>
+            <p className="text-danger mt-3">
               {checkoutError}
             </p>
           ) : null}

@@ -21,6 +21,7 @@ import {
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { formatDateOnly, formatDateTime, formatNumber, formatPercent } from '../lib/format';
+import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
 
 const EXAMPLE_SQL = `SELECT event_name as eventName, url_path as urlPath, created_at as createdAt
 FROM website_event
@@ -42,6 +43,7 @@ function formatTime(value: number | null | undefined) {
 }
 
 export default function WebsiteWarehousePage() {
+  const confirm = useConfirm();
   const { websiteId } = useParams<{ websiteId: string }>();
   const queryClient = useQueryClient();
   const { canEdit } = useWebsitePermissions(websiteId, 'warehouse');
@@ -361,10 +363,9 @@ export default function WebsiteWarehousePage() {
                           {canEdit ? (
                             <Button
                               type="button"
-                              variant="ghost"
+                              variant="destructive-ghost"
                               size="sm"
-                              className="btn-danger-text"
-                              onClick={() => deleteSavedMutation.mutate(item.id)}
+                              onClick={() => confirm({ title: deleteTitle(item.name), onConfirm: () => deleteSavedMutation.mutate(item.id) })}
                             >
                               {t('delete')}
                             </Button>
@@ -521,10 +522,9 @@ export default function WebsiteWarehousePage() {
                             </Button>
                             <Button
                               type="button"
-                              variant="ghost"
+                              variant="destructive-ghost"
                               size="sm"
-                              className="btn-danger-text"
-                              onClick={() => deleteScheduleMutation.mutate(item.id)}
+                              onClick={() => confirm({ title: deleteTitle(item.name), onConfirm: () => deleteScheduleMutation.mutate(item.id) })}
                             >
                               {t('delete')}
                             </Button>
@@ -641,10 +641,9 @@ export default function WebsiteWarehousePage() {
                             </Button>
                             <Button
                               type="button"
-                              variant="ghost"
+                              variant="destructive-ghost"
                               size="sm"
-                              className="btn-danger-text"
-                              onClick={() => deleteSourceMutation.mutate(item.id)}
+                              onClick={() => confirm({ title: deleteTitle(item.name), onConfirm: () => deleteSourceMutation.mutate(item.id) })}
                             >
                               {t('delete')}
                             </Button>

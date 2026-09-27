@@ -23,6 +23,7 @@ import { formatNumber, formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { useChartColors } from '../lib/useChartColors';
+import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
 
 const DEFAULT_QUERY: InsightQuery = {
   metric: 'pageviews',
@@ -157,6 +158,7 @@ function ResultPreview({ result }: { result: InsightResult | null | undefined })
 }
 
 export default function InsightsPage() {
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const [websiteId, setWebsiteId] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -353,7 +355,7 @@ export default function InsightsPage() {
                     <option value="event">{t('event')}</option>
                     <option value="browser">{t('browser')}</option>
                     <option value="country">{t('country')}</option>
-                    <option value="channel">{t('channel')}</option>
+                    <option value="channel">{t('overviewTabChannel')}</option>
                   </select>
                 </div>
               ) : type === 'path' ? (
@@ -406,7 +408,7 @@ export default function InsightsPage() {
                 {selectedId ? t('saveChanges') : t('saveInsight')}
               </Button>
               {selectedId ? (
-                <Button type="button" variant="danger" onClick={() => deleteMutation.mutate(selectedId)}>
+                <Button type="button" variant="danger" onClick={() => confirm({ title: deleteTitle(name), onConfirm: () => deleteMutation.mutate(selectedId) })}>
                   {t('delete')}
                 </Button>
               ) : null}

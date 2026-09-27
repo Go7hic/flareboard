@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { DataViewState } from '../components/DataViewState';
 import { Page, PageBody } from '../components/Page';
@@ -9,7 +10,9 @@ import { ProductLineCrossLinks } from '../components/ProductLineCrossLinks';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { EmptyState } from '../components/EmptyState';
 import { api, type Website } from '../lib/api';
+import { isMetricTab } from '../lib/breakdown-dimensions';
 import { type DateRangePreset, presetToRange } from '../lib/dateRange';
 import { t } from '../lib/i18n';
 
@@ -53,7 +56,7 @@ function reportTypeLabel(type: string) {
     case 'attribution':
       return t('attribution');
     case 'breakdown':
-      return t('breakdown');
+      return t('breakdownMetrics');
     case 'performance':
       return t('webVitals');
     case 'utm':
@@ -87,6 +90,15 @@ function reportDestination(
       search.set('type', parameters.attributionType);
     }
     if (typeof parameters.step === 'string' && parameters.step.trim()) search.set('step', parameters.step.trim());
+  }
+
+  if (type === 'funnel' && Array.isArray(parameters.steps)) {
+    const steps = parameters.steps.filter((step): step is string => typeof step === 'string' && step.trim() !== '');
+    if (steps.length) search.set('steps', steps.map((step) => step.trim()).join(','));
+  }
+
+  if (type === 'breakdown' && typeof parameters.dimension === 'string' && isMetricTab(parameters.dimension)) {
+    search.set('type', parameters.dimension);
   }
 
   const qs = search.toString();
@@ -168,9 +180,13 @@ export default function ReportsPage() {
     },
   });
 
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const deleteReportMutation = useMutation({
     mutationFn: (reportId: string) => api(`/api/reports/${reportId}`, { method: 'DELETE' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['saved-reports'] }),
+    onSuccess: () => {
+      setPendingDelete(null);
+      queryClient.invalidateQueries({ queryKey: ['saved-reports'] });
+    },
   });
 
   const noWebsite = !websitesQuery.isLoading && !(websitesQuery.data ?? []).length;
@@ -224,10 +240,7 @@ export default function ReportsPage() {
 
       <PageBody>
       {noWebsite ? (
-        <div className="panel empty-state-rich section-gap">
-          <h3>{t('noWebsites')}</h3>
-          <p className="text-muted">{t('noWebsitesHint')}</p>
-        </div>
+        <EmptyState variant="rich" className="section-gap" title={t('noWebsites')} description={t('noWebsitesHint')} />
       ) : (
         <div className="reports-layout">
           <aside className="reports-sidebar">
@@ -333,10 +346,10 @@ export default function ReportsPage() {
                         </Button>
                         <Button
                           type="button"
-                          variant="danger"
+                          variant="destructive-ghost"
                           size="sm"
                           disabled={deleteReportMutation.isPending}
-                          onClick={() => deleteReportMutation.mutate(r.id)}
+                          onClick={() => setPendingDelete({ id: r.id, name: r.name })}
                         >
                           {t('delete')}
                         </Button>
@@ -374,6 +387,14 @@ export default function ReportsPage() {
         </div>
       )}
       </PageBody>
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title={t('confirmDeleteTitle').replace('{name}', pendingDelete?.name ?? '')}
+        description={t('confirmDeleteBody')}
+        pending={deleteReportMutation.isPending}
+        onConfirm={() => pendingDelete && deleteReportMutation.mutate(pendingDelete.id)}
+      />
     </Page>
   );
 }

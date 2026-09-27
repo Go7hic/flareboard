@@ -14,6 +14,8 @@ import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/da
 import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
+import { SegmentTabs } from '../components/SegmentTabs';
+import { EmptyState } from '../components/EmptyState';
 
 type PublicWebsiteShare = WebsiteStats & {
   website: { id: string; name: string; domain?: string; timezone?: string };
@@ -30,6 +32,14 @@ type PublicBoardShare = {
   share: { name: string; slug: string };
 };
 
+const SHARE_PRESETS = ['24h', '7d', '30d', '90d'] as const;
+const PRESET_LABEL_KEYS: Record<(typeof SHARE_PRESETS)[number], string> = {
+  '24h': 'datePreset24h',
+  '7d': 'datePreset7d',
+  '30d': 'datePreset30d',
+  '90d': 'datePreset90d',
+};
+
 export default function SharePublic() {
   const chartColors = useChartColors();
   const { slug } = useParams<{ slug: string }>();
@@ -39,7 +49,10 @@ export default function SharePublic() {
     () => (preset === 'default' ? null : presetToRange(preset, undefined, undefined, siteTimezone)),
     [preset, siteTimezone],
   );
-  const rangeQs = range ? rangeQueryString(range.startAt, range.endAt) : '';
+  // Ask for hourly points on short ranges; without `unit` the API bucketed by day.
+  const rangeQs = range
+    ? `${rangeQueryString(range.startAt, range.endAt)}&unit=${isHourlyChartRange(range.startAt, range.endAt) ? 'hour' : 'day'}`
+    : '';
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['public-share', slug, range],
@@ -63,12 +76,12 @@ export default function SharePublic() {
   const chartTimezone = !isBoard && data && 'website' in data ? data.website.timezone ?? 'UTC' : siteTimezone;
   const chartData = useMemo(() => {
     if (!data || !('timeseries' in data)) return [];
-    const hourly = range ? isHourlyChartRange(range.startAt, range.endAt) : false;
+    const hourly = range ? isHourlyChartRange(range.startAt, range.endAt) : activePreset === '24h';
     return data.timeseries.pageviews.map((p) => ({
       ...p,
       x: formatChartTimeLabel(p.x, hourly, chartTimezone),
     }));
-  }, [data, range, chartTimezone]);
+  }, [data, range, chartTimezone, activePreset]);
 
   if (isLoading) {
     return (
@@ -81,10 +94,12 @@ export default function SharePublic() {
   if (error || !data) {
     return (
       <div className="page">
-        <div className="panel empty-state-rich">
-          <h3>{t('shareNotFound')}</h3>
-          <p className="text-danger">{(error as Error)?.message ?? t('shareExpired')}</p>
-        </div>
+        <EmptyState
+          variant="rich"
+          tone="danger"
+          title={t('shareNotFound')}
+          description={(error as Error)?.message ?? t('shareExpired')}
+        />
       </div>
     );
   }
@@ -111,18 +126,13 @@ export default function SharePublic() {
         <p className="page-subtitle">
           {t('shared')}: {data.share.name}
         </p>
-        <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.75rem' }}>
-          {(['24h', '7d', '30d', '90d'] as const).map((p) => (
-            <button
-              key={p}
-              type="button"
-              className={`btn btn-sm${activePreset === p ? ' btn-primary' : ' btn-secondary'}`}
-              onClick={() => setPreset(p)}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
+        <SegmentTabs
+          className="share-range-tabs"
+          aria-label={t('dateRange')}
+          value={activePreset}
+          onChange={(id) => setPreset(id as DateRangePreset)}
+          tabs={SHARE_PRESETS.map((p) => ({ id: p, label: t(PRESET_LABEL_KEYS[p]) }))}
+        />
       </header>
 
       {isBoard ? (

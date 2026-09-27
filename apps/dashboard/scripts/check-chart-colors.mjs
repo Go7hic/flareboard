@@ -205,6 +205,28 @@ assert(
   'pageviews series must not equal chrome --accent',
 );
 
+// Data bars (share / progress / meter fills) are data, not chrome: they must not use
+// FORBIDDEN_SERIES_VARS either. Checks every global.css rule whose selector names a
+// bar, fill, or track element.
+{
+  const css = readFileSync(globalCssPath, 'utf8');
+  const ruleRe = /([^{}]+)\{([^{}]*)\}/g;
+  let m;
+  while ((m = ruleRe.exec(css))) {
+    const selector = m[1].trim();
+    if (!/(bar|fill|track)\b[^,]*$/i.test(selector.split(',').pop() ?? '')) continue;
+    if (!/(-bar|-fill|-track)/.test(selector)) continue;
+    const bg = m[2].match(/background(?:-color)?:\s*([^;]+);/);
+    if (!bg) continue;
+    for (const v of ['--accent', '--primary', '--text', '--geist-gray-1000']) {
+      assert(
+        !new RegExp(`var\\(${v}\\)`).test(bg[1]),
+        `data bar "${selector}" uses chrome color ${v}; use --chart-1 (or another --chart-*)`,
+      );
+    }
+  }
+}
+
 if (process.exitCode) {
   console.error('chart color check failed');
   process.exit(1);

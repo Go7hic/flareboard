@@ -1,8 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { api, type Website } from './api';
-import { type DateRangePreset, presetToRange, rangeQueryString } from './dateRange';
-import { defaultRange, loadWebsiteRange, saveWebsiteRange, type StoredRange } from './websiteRangeStorage';
+import { type DateRangePreset, rangeQueryString } from './dateRange';
+import {
+  defaultRange,
+  loadWebsiteRange,
+  resolveRange,
+  saveWebsiteRange,
+  type StoredRange,
+} from './websiteRangeStorage';
 
 /** Default `24h`: overview / realtime pulse. Report pages pass `30d` via useWebsiteReportContext. */
 export function useWebsiteRange(websiteId: string | undefined, fallbackPreset: DateRangePreset = '24h') {
@@ -14,34 +20,15 @@ export function useWebsiteRange(websiteId: string | undefined, fallbackPreset: D
   });
   const timezone = websiteQuery.data?.timezone ?? 'UTC';
 
-  const [range, setRangeState] = useState<StoredRange>(() => {
-    if (websiteId) {
-      const stored = loadWebsiteRange(websiteId);
-      if (stored) return stored;
-    }
-    return defaultRange(fallbackPreset, timezone);
-  });
-
-  useEffect(() => {
-    if (!websiteId) return;
-    const stored = loadWebsiteRange(websiteId);
-    if (stored) setRangeState(stored);
-    else setRangeState(defaultRange(fallbackPreset, timezone));
-  }, [websiteId, fallbackPreset, timezone]);
-
-  useEffect(() => {
-    if (!websiteId) return;
-    setRangeState((prev) => {
-      if (prev.preset === 'custom') return prev;
-      const { startAt, endAt } = presetToRange(prev.preset, undefined, undefined, timezone);
-      const next = { preset: prev.preset, startAt, endAt };
-      saveWebsiteRange(websiteId, next);
-      return next;
-    });
-  }, [websiteId, timezone]);
+  // Keep the user's choice; derive bounds from it. Storing computed bounds (and
+  // re-setting them from effects) refetched every query 2-3 times per mount.
+  const [selection, setSelection] = useState<StoredRange>(
+    () => (websiteId ? loadWebsiteRange(websiteId) : null) ?? defaultRange(fallbackPreset),
+  );
+  const range = useMemo(() => resolveRange(selection, timezone), [selection, timezone]);
 
   function setRange(next: StoredRange) {
-    setRangeState(next);
+    setSelection(next);
     if (websiteId) saveWebsiteRange(websiteId, next);
   }
 

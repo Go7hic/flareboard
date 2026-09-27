@@ -117,35 +117,27 @@ export default function Billing() {
                 ? ' · Free'
                 : ''}
           </p>
-          <div style={{ marginTop: '1.25rem' }}>
-            <div className="list-row" style={{ marginBottom: '0.35rem' }}>
+          <div className="billing-usage">
+            <div className="list-row billing-usage-row">
               <span>{t('eventsThisMonth')}</span>
-              <span className="stat-value" style={{ fontSize: '0.9375rem' }}>
+              <span className="stat-value billing-usage-value">
                 {formatNumber(used)} / {formatNumber(plan.maxEventsPerMonth)}
               </span>
             </div>
             <div
+              className="billing-usage-track"
               role="progressbar"
               aria-valuenow={pct}
               aria-valuemin={0}
               aria-valuemax={100}
-              style={{
-                height: '6px',
-                borderRadius: '999px',
-                background: 'var(--bg-subtle)',
-                overflow: 'hidden',
-              }}
             >
               <div
-                style={{
-                  width: `${pct}%`,
-                  height: '100%',
-                  background: pct >= 90 ? 'var(--danger)' : 'var(--accent)',
-                }}
+                className={`billing-usage-fill${pct >= 90 ? ' is-near-limit' : ''}`}
+                style={{ width: `${pct}%` }}
               />
             </div>
           </div>
-          <div style={{ marginTop: '1.25rem' }}>
+          <div className="mt-5">
             {upgradePlans.length > 0 ? (
               <div className="billing-cloud-promo">
                 <p className="promo-price billing-promo-price">
@@ -157,14 +149,7 @@ export default function Billing() {
                 <p className="promo-price-label">{CLOUD_PROMO_LABEL}</p>
               </div>
             ) : null}
-            <div
-              style={{
-                marginTop: upgradePlans.length > 0 ? '0.75rem' : 0,
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '0.5rem',
-              }}
-            >
+            <div className={`flex flex-wrap gap-2${upgradePlans.length > 0 ? ' mt-3' : ''}`}>
             {upgradePlans.map((p) => (
               <Button
                 key={p.id}
@@ -187,7 +172,7 @@ export default function Billing() {
             </div>
           </div>
           {checkout.isError ? (
-            <p className="text-danger" style={{ marginTop: '0.75rem' }}>
+            <p className="text-danger mt-3">
               {checkout.error instanceof Error ? checkout.error.message : t('requestFailed')}
             </p>
           ) : null}

@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom';
-import { LandingChrome, useLandingStartHref } from '../components/landing/LandingChrome';
+import { LandingChrome } from '../components/landing/LandingChrome';
+import { useStartHref } from '../lib/useAppConfig';
 import { Button } from '../components/ui/button';
 import { FEATURE_CATEGORIES } from '../lib/features-catalog';
 import { t } from '../lib/i18n';
 
 export default function Features() {
-  const startHref = useLandingStartHref();
+  const startHref = useStartHref();
 
   return (
     <LandingChrome activeNav="features">

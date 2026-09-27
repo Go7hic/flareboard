@@ -249,35 +249,35 @@ export default function WebsiteComparePage() {
                       iconSize={8}
                       wrapperStyle={{ fontSize: '0.8125rem', color: chartColors.muted }}
                     />
+                    {/* Grouped, not stacked: visitors are a subset of pageviews, so stacking
+                        drew each bar at pageviews + visitors. */}
                     <Bar
                       dataKey="visitorsPrev"
                       name={t('compareChartVisitorsPrev')}
-                      stackId="previous"
                       fill={visitorsPrevFill}
-                      maxBarSize={24}
+                      radius={[2, 2, 0, 0]}
+                      maxBarSize={14}
                     />
                     <Bar
                       dataKey="pageviewsPrev"
                       name={t('compareChartPageviewsPrev')}
-                      stackId="previous"
                       fill={pageviewsPrevFill}
                       radius={[2, 2, 0, 0]}
-                      maxBarSize={24}
+                      maxBarSize={14}
                     />
                     <Bar
                       dataKey="visitors"
                       name={t('compareChartVisitorsCurrent')}
-                      stackId="current"
                       fill={visitorsCurrentFill}
-                      maxBarSize={24}
+                      radius={[2, 2, 0, 0]}
+                      maxBarSize={14}
                     />
                     <Bar
                       dataKey="pageviews"
                       name={t('compareChartPageviewsCurrent')}
-                      stackId="current"
                       fill={pageviewsCurrentFill}
                       radius={[2, 2, 0, 0]}
-                      maxBarSize={24}
+                      maxBarSize={14}
                     />
                   </AnalyticsChart>
                 </div>

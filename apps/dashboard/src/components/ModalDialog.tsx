@@ -1,60 +1,44 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 
 /**
- * Shared accessible modal: backdrop + dialog panel using the existing
- * `.dialog-backdrop` / `.dialog-panel` classes. Handles Escape-to-close,
- * backdrop click to close, and moves focus into the dialog on open
- * (restoring it on close).
+ * Shared modal for form dialogs: Base UI Dialog (portal, focus trap, scroll lock,
+ * Escape / outside-press dismissal) wrapped around the legacy `.dialog-panel`
+ * layout so `.dialog-header` / `.dialog-body` / `.dialog-footer` children keep working.
  */
 export function ModalDialog({
   className,
   'aria-label': ariaLabel,
+  role,
   onClose,
   children,
 }: {
   /** Extra class(es) appended to `.dialog-panel`, e.g. "survey-dialog". */
   className?: string;
-  'aria-label': string;
+  'aria-label'?: string;
+  role?: 'dialog' | 'alertdialog';
   onClose: () => void;
   children: ReactNode;
 }) {
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const previouslyFocused =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const panel = panelRef.current;
-    const firstField = panel?.querySelector<HTMLElement>(
-      'input, select, textarea, button, [href], [tabindex]:not([tabindex="-1"])',
-    );
-    (firstField ?? panel)?.focus();
-    return () => previouslyFocused?.focus();
-  }, []);
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        event.stopPropagation();
-        onClose();
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
   return (
-    <div className="dialog-backdrop" onClick={onClose}>
-      <div
-        ref={panelRef}
-        className={className ? `dialog-panel ${className}` : 'dialog-panel'}
-        role="dialog"
-        aria-modal="true"
-        aria-label={ariaLabel}
-        tabIndex={-1}
-        onClick={(event) => event.stopPropagation()}
-      >
-        {children}
-      </div>
-    </div>
+    <DialogPrimitive.Root
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Backdrop className="dialog-backdrop" />
+        <DialogPrimitive.Viewport className="dialog-viewport">
+          <DialogPrimitive.Popup
+            className={className ? `dialog-panel ${className}` : 'dialog-panel'}
+            aria-label={ariaLabel}
+            {...(role ? { role } : {})}
+          >
+            {children}
+          </DialogPrimitive.Popup>
+        </DialogPrimitive.Viewport>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }

@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { EmptyState } from '../components/EmptyState';
 import { api, authenticatedFetch, type AdminUser } from '../lib/api';
 import { formatDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
@@ -28,7 +30,15 @@ interface AuditResponse {
 }
 
 export default function AdminPage() {
-    const queryClient = useQueryClient();
+  const confirm = useConfirm();
+  const queryClient = useQueryClient();
+  // Shares the sidebar's ['me'] cache; the API refuses self-deletion, so hide that button.
+  const meQuery = useQuery({
+    queryKey: ['me'],
+    queryFn: () => api<{ id: string }>('/api/me'),
+    staleTime: 60_000,
+  });
+  const myUserId = meQuery.data?.id;
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [editUserId, setEditUserId] = useState<string | null>(null);
@@ -125,15 +135,18 @@ export default function AdminPage() {
 
       <PageBody>
       {isForbidden ? (
-        <div className="section-gap">
-          <h3>{t('adminRequired')}</h3>
-          <p className="text-danger">{t('adminDenied')}</p>
-        </div>
+        <EmptyState
+          variant="rich"
+          tone="danger"
+          className="section-gap"
+          title={t('adminRequired')}
+          description={t('adminDenied')}
+        />
       ) : (
         <>
           <section className="panel section-gap">
             <h2 className="section-title">{t('exportData')}</h2>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <div className="flex flex-wrap items-center gap-2">
               <Button type="button" variant="secondary" size="sm" onClick={() => downloadExport('users')}>
                 {t('exportUsers')}
               </Button>
@@ -141,7 +154,7 @@ export default function AdminPage() {
                 {t('exportWebsites')}
               </Button>
               <Input
-                style={{ maxWidth: '16rem' }}
+                className="max-w-64"
                 placeholder="website UUID"
                 value={eventsWebsiteId}
                 onChange={(e) => setEventsWebsiteId(e.target.value)}
@@ -185,14 +198,16 @@ export default function AdminPage() {
               {(usersQuery.data ?? []).map((u) => (
                 <li key={u.id} className="list-item list-row">
                   <span>{u.username}</span>
-                  <span style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                  <span className="flex items-center gap-1.5">
                     <span className="badge admin-role-badge">{u.role}</span>
                     <Button type="button" variant="secondary" size="sm" onClick={() => { setEditUserId(u.id); setEditRole(u.role); }}>
                       {t('edit')}
                     </Button>
-                    <Button type="button" variant="danger" size="sm" onClick={() => deleteUser.mutate(u.id)}>
-                      {t('delete')}
-                    </Button>
+                    {u.id !== myUserId ? (
+                      <Button type="button" variant="destructive-ghost" size="sm" onClick={() => confirm({ title: deleteTitle(u.username), onConfirm: () => deleteUser.mutate(u.id) })}>
+                        {t('delete')}
+                      </Button>
+                    ) : null}
                   </span>
                 </li>
               ))}

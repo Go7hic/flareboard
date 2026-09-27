@@ -11,36 +11,30 @@ import {
 } from '../lib/breakdown-dimensions';
 import { useBreakdownMetrics, type PathSortBy } from '../hooks/useBreakdownMetrics';
 import type { MetricRow } from '../lib/api';
+import { csvRow } from '@flareboard/shared/csv';
 import { t } from '../lib/i18n';
 
 function exportMetricsCsv(rows: MetricRow[], filename: string, showPageStats: boolean) {
-  const escape = (value: string | number) => {
-    const str = String(value);
-    return str.includes(',') || str.includes('"') || str.includes('\n')
-      ? `"${str.replace(/"/g, '""')}"`
-      : str;
-  };
-
   const headers = showPageStats
     ? [t('metricName'), t('pagesSort_views'), t('pagesSort_visitors'), t('pagesSort_time')]
     : [t('metricName'), t('views')];
 
   const lines = [
-    headers.map(escape).join(','),
-    ...rows.map((row) => {
-      if (showPageStats) {
-        return [row.x, row.y, row.visitors ?? 0, row.avgTime ?? ''].map(escape).join(',');
-      }
-      return [row.x, row.y].map(escape).join(',');
-    }),
+    csvRow(headers),
+    ...rows.map((row) =>
+      csvRow(showPageStats ? [row.x, row.y, row.visitors ?? 0, row.avgTime ?? ''] : [row.x, row.y]),
+    ),
   ];
 
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  // BOM so Excel reads UTF-8 (CJK paths/titles) instead of the system code page.
+  const blob = new Blob(['\uFEFF', lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  a.href = url;
   a.download = filename;
   a.click();
-  URL.revokeObjectURL(a.href);
+  // Revoking synchronously can cancel the download in some browsers.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 export function MetricsExplorerModal({

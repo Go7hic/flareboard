@@ -6,6 +6,7 @@ import { AnalyticsChart } from './AnalyticsChart';
 import { EmptyState } from './EmptyState';
 import { GoalFormDialog, type GoalConfigRow } from './GoalFormDialog';
 import { StatCard, StatCardSkeleton } from './ui/stat-card';
+import { ConfirmDialog } from './ConfirmDialog';
 import { Button } from './ui/button';
 import { api, type Website } from '../lib/api';
 import { formatNumber } from '../lib/format';
@@ -295,9 +296,8 @@ export function GoalsPanel({
                             {isConfigured ? (
                               <Button
                                 type="button"
-                                variant="ghost"
+                                variant="destructive-ghost"
                                 size="sm"
-                                className="btn-danger-text"
                                 onClick={() => {
                                   const config = configuredGoals.find((g) => g.event === row.event);
                                   if (config) setDeleteTarget(config);
@@ -348,44 +348,18 @@ export function GoalsPanel({
 
       <GoalFormDialog open={formOpen} onClose={closeForm} websiteId={websiteId} editGoal={editGoal} />
 
-      {deleteTarget ? (
-        <div className="dialog-backdrop" onClick={() => setDeleteTarget(null)}>
-          <div
-            className="dialog-panel cohort-delete-dialog"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="goal-delete-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <header className="dialog-header">
-              <h2 id="goal-delete-title" className="dialog-title">
-                {t('delete')}
-              </h2>
-            </header>
-            <p className="dialog-body cohort-delete-message">
-              {t('goalDeleteConfirm').replace('{event}', deleteTarget.event)}
-            </p>
-            <footer className="dialog-footer">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setDeleteTarget(null)}
-                disabled={deleteMutation.isPending}
-              >
-                {t('cancel')}
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                disabled={deleteMutation.isPending}
-                onClick={() => deleteMutation.mutate(deleteTarget.event)}
-              >
-                {t('delete')}
-              </Button>
-            </footer>
-          </div>
-        </div>
-      ) : null}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title={t('confirmDeleteTitle').replace('{name}', deleteTarget?.event ?? '')}
+        description={t('confirmDeleteBody')}
+        pending={deleteMutation.isPending}
+        onConfirm={() => {
+          if (deleteTarget) deleteMutation.mutate(deleteTarget.event);
+        }}
+      />
     </div>
   );
 }

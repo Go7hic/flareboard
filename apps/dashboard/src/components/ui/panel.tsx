@@ -13,13 +13,11 @@ const Panel = React.forwardRef<
 >(({ className, variant = 'default', ...props }, ref) => (
   <div
     ref={ref}
+    // Same box as the legacy .panel class (6px radius, 1.5rem padding) so both read as one system.
     className={cn(
-      'rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-elevated)] shadow-[var(--shadow-sm)]',
-      variant === 'default' && 'p-[1.35rem]',
-      variant === 'flush' && 'overflow-hidden',
-      variant === 'accent-rail' && 'p-[1.35rem]',
-      variant === 'danger-zone' &&
-        'p-[1.35rem] border-[color-mix(in_srgb,var(--danger)_40%,var(--border))]',
+      variant === 'flush' ? 'panel-flush' : 'panel',
+      variant === 'accent-rail' && 'panel-accent-rail',
+      variant === 'danger-zone' && 'panel-danger-zone',
       className
     )}
     {...props}
@@ -32,7 +30,7 @@ const PanelHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDi
     <div
       ref={ref}
       className={cn(
-        'px-[1.35rem] py-[0.9rem] border-b border-[var(--border-subtle)]',
+        'px-6 py-[0.9rem] border-b border-[var(--border-subtle)]',
         'text-[0.75rem] font-semibold uppercase tracking-[0.06em] text-[var(--text-muted)]',
         className
       )}
@@ -44,7 +42,7 @@ PanelHeader.displayName = 'PanelHeader';
 
 const PanelBody = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn('p-[1.35rem]', className)} {...props} />
+    <div ref={ref} className={cn('p-6', className)} {...props} />
   )
 );
 PanelBody.displayName = 'PanelBody';

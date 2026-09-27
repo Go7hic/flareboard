@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { LandingPlanCard, useLandingPlanActions } from '../components/landing/LandingPlanCards';
-import { LandingChrome, useLandingStartHref } from '../components/landing/LandingChrome';
+import { LandingChrome } from '../components/landing/LandingChrome';
+import { useStartHref } from '../lib/useAppConfig';
 import { Button } from '../components/ui/button';
 import { t } from '../lib/i18n';
 import {
@@ -11,7 +12,7 @@ import {
 import { buildPricingCompareRows } from '../lib/pricing-comparison';
 
 export default function Pricing() {
-  const startHref = useLandingStartHref();
+  const startHref = useStartHref();
   const planActions = useLandingPlanActions();
   const compareRows = buildPricingCompareRows();
 

@@ -147,7 +147,7 @@ export default function LinksPixelsPage() {
                     </Button>
                   </div>
                   <div className="list-item-row-copy">
-                    <code className="code-block" style={{ fontSize: '0.75rem', flex: 1 }}>
+                    <code className="code-block flex-1 text-xs">
                       {ingestUrl}
                     </code>
                     <CopyButton text={ingestUrl} />
@@ -187,7 +187,7 @@ export default function LinksPixelsPage() {
                   <strong>{p.name}</strong>
                   {p.teamId ? <span className="badge badge-accent admin-role-badge">{t('teamBadge')}</span> : null}
                   <div className="list-item-row-copy">
-                    <code className="code-block" style={{ fontSize: '0.75rem', flex: 1 }}>
+                    <code className="code-block flex-1 text-xs">
                       {snippet}
                     </code>
                     <CopyButton text={snippet} />

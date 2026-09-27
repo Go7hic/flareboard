@@ -14,6 +14,7 @@ import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
 import { api } from '../lib/api';
 import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
+import { useDebouncedValue } from '../lib/useDebouncedValue';
 
 type AttributionModel = 'first' | 'last';
 type AttributionType = 'path' | 'event';
@@ -80,17 +81,19 @@ export default function WebsiteAttributionPage() {
   const [convType, setConvType] = useState<AttributionType>(initialType);
   const [step, setStep] = useState(initialStep);
 
+  // Typing a step name should not fire a report request per keystroke.
+  const debouncedStep = useDebouncedValue(step);
   const queryExtra = useMemo(() => {
     const params = new URLSearchParams();
     params.set('model', model);
     params.set('type', convType);
-    params.set('step', step.trim());
+    params.set('step', debouncedStep.trim());
     return `&${params.toString()}`;
-  }, [model, convType, step]);
+  }, [model, convType, debouncedStep]);
 
   const attributionQuery = useQuery({
-    queryKey: ['reports-attribution', websiteId, range, segmentId, model, convType, step],
-    enabled: Boolean(websiteId) && step.trim().length > 0,
+    queryKey: ['reports-attribution', websiteId, range, segmentId, model, convType, debouncedStep],
+    enabled: Boolean(websiteId) && debouncedStep.trim().length > 0,
     queryFn: () => api<AttributionConversionResponse>(reportUrl('attribution', queryExtra)),
   });
 
@@ -117,7 +120,7 @@ export default function WebsiteAttributionPage() {
 
       <PageBody>
       <section className="panel section-gap">
-        <div className="stats-toolbar attribution-filters" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div className="stats-toolbar">
           <SegmentTabs
             tabs={[
               { id: 'last', label: t('attributionModelLast') },
@@ -136,7 +139,7 @@ export default function WebsiteAttributionPage() {
             onChange={(id) => setConvType(id as AttributionType)}
             aria-label={t('attributionStep')}
           />
-          <div className="field" style={{ minWidth: '14rem', flex: '1 1 14rem', maxWidth: '24rem' }}>
+          <div className="field max-w-96">
             <label className="field-label" htmlFor="attribution-step">
               {t('attributionStep')}
             </label>

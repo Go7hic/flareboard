@@ -34,3 +34,12 @@ export function defaultRange(preset: DateRangePreset = '7d', timezone = 'UTC'): 
   const { startAt, endAt } = presetToRange(preset, undefined, undefined, timezone);
   return { preset, startAt, endAt };
 }
+
+/**
+ * Concrete bounds for a stored selection. Presets are recomputed so "Last 7 days" moves
+ * with the clock and the site timezone; only custom ranges keep their saved bounds.
+ */
+export function resolveRange(selection: StoredRange, timezone = 'UTC'): StoredRange {
+  if (selection.preset === 'custom') return selection;
+  return defaultRange(selection.preset, timezone);
+}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, bootstrapSession, hasSession, logoutSession } from '../lib/api';
 import { LazyRouteFallback } from './LazyRouteFallback';
 import { t } from '../lib/i18n';
@@ -13,7 +13,9 @@ type MeResponse = {
 
 export function SidebarShell() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [hosted, setHosted] = useState(false);
+  const [oauthProviders, setOauthProviders] = useState<string[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
@@ -35,10 +37,11 @@ export function SidebarShell() {
   const userLabel = meQuery.data?.username || t('username');
 
   useEffect(() => {
-    api<{ hosted?: boolean; role?: string }>('/api/config')
+    api<{ hosted?: boolean; role?: string; oauth?: string[] }>('/api/config')
       .then((cfg) => {
         setHosted(Boolean(cfg.hosted));
         setIsAdmin(cfg.role === 'admin');
+        setOauthProviders(cfg.oauth ?? []);
       })
       .catch(() => {});
   }, []);
@@ -54,6 +57,8 @@ export function SidebarShell() {
 
   async function logout() {
     await logoutSession();
+    // Drop the previous account's cached websites/stats before anyone else signs in.
+    queryClient.clear();
     navigate('/login');
   }
 
@@ -76,6 +81,7 @@ export function SidebarShell() {
           isAdmin={isAdmin}
           mobileOpen={mobileNavOpen}
           userLabel={userLabel}
+          oauthProviders={oauthProviders}
           onNavigate={closeMobileNav}
           onLogout={logout}
         />
@@ -83,7 +89,7 @@ export function SidebarShell() {
           <button
             type="button"
             className="shell-sidebar-overlay"
-            aria-label="Close navigation menu"
+            aria-label={t('closeNavigationMenu')}
             onClick={closeMobileNav}
           />
         ) : null}

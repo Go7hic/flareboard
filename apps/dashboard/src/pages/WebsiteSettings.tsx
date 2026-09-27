@@ -19,12 +19,20 @@ import { Panel } from '../components/ui/panel';
 import { SITE_TIMEZONE_OPTIONS } from '@flareboard/shared/timezone';
 import { api, authenticatedFetch, type Website } from '../lib/api';
 import { t } from '../lib/i18n';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 type HeatmapConfig = {
   sampleRate?: number;
   enabled?: boolean;
   previewUrl?: string;
 };
+
+/** `<input type="datetime-local">` value in the browser's local time (toISOString is UTC). */
+function toDateTimeLocalValue(value: string | number | Date): string {
+  const d = new Date(value);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 export default function WebsiteSettingsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
@@ -110,7 +118,7 @@ export default function WebsiteSettingsPage() {
       setHeatmapConfigJson(JSON.stringify(heatmapConfig, null, 2));
       setHeatmapPreviewUrl(heatmapConfig.previewUrl ?? '');
     }
-    if (w.resetAt) setResetAt(new Date(w.resetAt).toISOString().slice(0, 16));
+    setResetAt(w.resetAt ? toDateTimeLocalValue(w.resetAt) : '');
   }, [websiteQuery.data]);
 
   const heatmapJsonValid = useMemo(() => {
@@ -136,7 +144,8 @@ export default function WebsiteSettingsPage() {
           replayConfig: replayConfigToJson(replayConfig),
           heatmapConfig,
           timezone: siteTimezone || 'UTC',
-          resetAt: resetAt ? new Date(resetAt).toISOString() : undefined,
+          // datetime-local is local time; `null` clears a previous reset.
+          resetAt: resetAt ? new Date(resetAt).toISOString() : null,
         }),
       });
     },
@@ -217,11 +226,9 @@ export default function WebsiteSettingsPage() {
     },
   });
 
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   function onDelete() {
-    const name = websiteQuery.data?.name ?? websiteId;
-    const message = t('deleteWebsiteConfirm').replace('{name}', name ?? '');
-    if (!window.confirm(message)) return;
-    deleteMutation.mutate();
+    setConfirmDeleteOpen(true);
   }
 
   function onSubmit(e: FormEvent) {
@@ -246,7 +253,8 @@ export default function WebsiteSettingsPage() {
         ) : null}
 
         <div className="page-settings-main">
-          <Panel variant="flush" className="page-settings-group">
+          {/* Sections are sibling panels; the old outer card nested cards inside a card. */}
+          <div className="page-settings-group">
             <form className="page-settings-form" onSubmit={onSubmit}>
               <Panel variant="accent-rail">
                 <h2 className="section-title">{t('siteTimezone')}</h2>
@@ -273,7 +281,7 @@ export default function WebsiteSettingsPage() {
 
               <Panel variant="accent-rail">
                 <h2 className="section-title">{t('sessionReplay')}</h2>
-                <label className="field" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <label className="field field-inline">
                   <input
                     type="checkbox"
                     checked={replayEnabled}
@@ -296,7 +304,7 @@ export default function WebsiteSettingsPage() {
                 ) : null}
                 <fieldset
                   disabled={!heatmapsAllowed}
-                  style={{ border: 'none', margin: 0, padding: 0, opacity: heatmapsAllowed ? 1 : 0.6 }}
+                  className={`fieldset-plain${heatmapsAllowed ? '' : ' is-locked'}`}
                 >
                   <div className="field">
                     <Label htmlFor="heatmap-preview-url">{t('heatmapPreviewUrl')}</Label>
@@ -306,7 +314,7 @@ export default function WebsiteSettingsPage() {
                       onChange={(e) => setHeatmapPreviewUrl(e.target.value)}
                       placeholder="https://yoursite.com/test-page"
                     />
-                    <p className="text-muted" style={{ fontSize: '0.8125rem', marginTop: '0.25rem' }}>
+                    <p className="field-hint">
                       {t('heatmapPreviewUrlHint')}
                     </p>
                   </div>
@@ -329,9 +337,9 @@ export default function WebsiteSettingsPage() {
                 ) : null}
                 <fieldset
                   disabled={!emailReportsAllowed}
-                  style={{ border: 'none', margin: 0, padding: 0, opacity: emailReportsAllowed ? 1 : 0.6 }}
+                  className={`fieldset-plain${emailReportsAllowed ? '' : ' is-locked'}`}
                 >
-                  <label className="field" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <label className="field field-inline">
                     <input
                       type="checkbox"
                       checked={emailEnabled}
@@ -354,7 +362,7 @@ export default function WebsiteSettingsPage() {
                       <option value="monthly">{t('emailMonthly')}</option>
                     </select>
                   </div>
-                  <p className="text-muted" style={{ fontSize: '0.8125rem' }}>
+                  <p className="field-hint">
                     {t('emailUsesSiteTimezone').replace('{timezone}', siteTimezone)}
                   </p>
                   <div className="field">
@@ -365,7 +373,7 @@ export default function WebsiteSettingsPage() {
                       onChange={(e) => setRecipientEmail(e.target.value)}
                       placeholder="you@example.com, team@example.com"
                     />
-                    <p className="text-muted" style={{ fontSize: '0.8125rem', marginTop: '0.25rem' }}>
+                    <p className="field-hint">
                       {t('recipientEmailHint')}
                     </p>
                   </div>
@@ -386,11 +394,11 @@ export default function WebsiteSettingsPage() {
                 {!dataPortabilityAllowed ? (
                   <PlanUpgradeBanner message={t('dataPortabilityRequiresUpgrade')} />
                 ) : null}
-                <p className="text-muted" style={{ fontSize: '0.8125rem' }}>{t('importFormatsDoc')}</p>
-                <p className="text-muted" style={{ fontSize: '0.8125rem' }}>{t('importMultipartHint')}</p>
+                <p className="field-hint">{t('importFormatsDoc')}</p>
+                <p className="field-hint">{t('importMultipartHint')}</p>
                 <fieldset
                   disabled={!dataPortabilityAllowed}
-                  style={{ border: 'none', margin: 0, padding: 0, opacity: dataPortabilityAllowed ? 1 : 0.6 }}
+                  className={`fieldset-plain${dataPortabilityAllowed ? '' : ' is-locked'}`}
                 >
                   <div className="field">
                     <Label htmlFor="import-format">{t('importFormat')}</Label>
@@ -444,7 +452,7 @@ export default function WebsiteSettingsPage() {
                     <p className="text-muted">{t('importErrors')}:</p>
                     <ul className="list-plain">
                       {importErrors.slice(0, 10).map((err, i) => (
-                        <li key={i} className="text-muted" style={{ fontSize: '0.8125rem' }}>
+                        <li key={i} className="field-hint">
                           {err}
                         </li>
                       ))}
@@ -477,7 +485,7 @@ export default function WebsiteSettingsPage() {
                 {saveMutation.isSuccess ? <p className="text-muted">{t('saved')}</p> : null}
               </div>
             </form>
-          </Panel>
+          </div>
 
           <Panel variant="danger-zone">
             <h2 className="section-title">{t('deleteWebsite')}</h2>
@@ -497,6 +505,14 @@ export default function WebsiteSettingsPage() {
         </div>
       </div>
       </PageBody>
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        title={t('confirmDeleteTitle').replace('{name}', websiteQuery.data?.name ?? websiteId ?? '')}
+        description={t('confirmDeleteBody')}
+        pending={deleteMutation.isPending}
+        onConfirm={() => deleteMutation.mutate()}
+      />
     </Page>
   );
 }

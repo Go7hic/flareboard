@@ -48,8 +48,10 @@ export function WebsiteSwitcher() {
       setOpen(false);
       return;
     }
-    const suffix = location.pathname.replace(`/websites/${websiteId}`, '') || '';
-    navigate(`/websites/${nextId}${suffix}${location.search}`);
+    // Keep the section (/sessions, /errors, ...) but drop detail ids and query params:
+    // they name the old site's records (segment, flag, cohort, session) and 404 or mislead.
+    const section = location.pathname.replace(`/websites/${websiteId}`, '').split('/')[1];
+    navigate(`/websites/${nextId}${section ? `/${section}` : ''}`);
     setOpen(false);
   }
 

@@ -1,16 +1,17 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AppShell } from './components/AppShell';
 import { WebsiteShell } from './components/WebsiteShell';
 import { LazyRouteFallback } from './components/LazyRouteFallback';
+import { RouteErrorBoundary } from './components/RouteErrorBoundary';
 import Features from './pages/Features';
 import Compare from './pages/Compare';
 import Landing from './pages/Landing';
 import Pricing from './pages/Pricing';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import SharePublic from './pages/SharePublic';
 
+const SharePublic = lazy(() => import('./pages/SharePublic'));
 const DashboardHome = lazy(() => import('./pages/DashboardHome'));
 const Demo = lazy(() => import('./pages/Demo'));
 const Websites = lazy(() => import('./pages/Websites'));
@@ -60,7 +61,13 @@ const WebsiteAuditLog = lazy(() => import('./pages/WebsiteAuditLog'));
 const Billing = lazy(() => import('./pages/Billing'));
 
 function LazyPage({ children }: { children: React.ReactNode }) {
-  return <Suspense fallback={<LazyRouteFallback />}>{children}</Suspense>;
+  const { pathname } = useLocation();
+  // Inside the shell, so a failed page keeps the sidebar and can be navigated away from.
+  return (
+    <RouteErrorBoundary resetKey={pathname}>
+      <Suspense fallback={<LazyRouteFallback />}>{children}</Suspense>
+    </RouteErrorBoundary>
+  );
 }
 
 export default function App() {
@@ -73,7 +80,14 @@ export default function App() {
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/share/:slug" element={<SharePublic />} />
+        <Route
+          path="/share/:slug"
+          element={
+            <LazyPage>
+              <SharePublic />
+            </LazyPage>
+          }
+        />
         <Route
           path="/demo"
           element={

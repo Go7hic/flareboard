@@ -21,6 +21,7 @@ import { formatDateTime, formatNumber, formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
+import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
 
 function formatLift(lift: number | null) {
   if (lift == null) return '-';
@@ -440,6 +441,7 @@ function ExperimentResultPanel({
 }
 
 export default function WebsiteExperimentsPage() {
+  const confirm = useConfirm();
   const { websiteId } = useParams<{ websiteId: string }>();
   const { canEdit } = useWebsitePermissions(websiteId, 'experiments');
   const [searchParams, setSearchParams] = useSearchParams();
@@ -719,10 +721,9 @@ export default function WebsiteExperimentsPage() {
                         </Button>
                         <Button
                           type="button"
-                          variant="ghost"
+                          variant="destructive-ghost"
                           size="sm"
-                          className="btn-danger-text"
-                          onClick={() => deleteMutation.mutate(selectedExperiment.id)}
+                          onClick={() => confirm({ title: deleteTitle(selectedExperiment.name), onConfirm: () => deleteMutation.mutate(selectedExperiment.id) })}
                         >
                           {t('delete')}
                         </Button>

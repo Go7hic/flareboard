@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { type DateRangePreset, rangeQueryString } from './dateRange';
-import { defaultRange, type StoredRange } from './websiteRangeStorage';
+import { defaultRange, resolveRange, type StoredRange } from './websiteRangeStorage';
 
 const STORAGE_KEY = 'flareboard_dashboard_range';
 
@@ -27,18 +27,14 @@ function saveDashboardRange(range: StoredRange) {
 }
 
 export function useDashboardRange(fallbackPreset: DateRangePreset = '24h') {
-  const [range, setRangeState] = useState<StoredRange>(() => {
-    return loadDashboardRange() ?? defaultRange(fallbackPreset);
-  });
-
-  useEffect(() => {
-    const stored = loadDashboardRange();
-    if (stored) setRangeState(stored);
-    else setRangeState(defaultRange(fallbackPreset));
-  }, [fallbackPreset]);
+  // Presets are recomputed on mount so a returning tab does not keep a stale window.
+  const [selection, setSelection] = useState<StoredRange>(
+    () => loadDashboardRange() ?? defaultRange(fallbackPreset),
+  );
+  const range = useMemo(() => resolveRange(selection), [selection]);
 
   function setRange(next: StoredRange) {
-    setRangeState(next);
+    setSelection(next);
     saveDashboardRange(next);
   }
 

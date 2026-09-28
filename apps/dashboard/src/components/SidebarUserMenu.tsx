@@ -8,6 +8,7 @@ type SidebarUserMenuProps = {
   /** Configured OAuth providers the signed-in user can link to this account. */
   oauthProviders?: string[];
   onLogout: () => void;
+  onDeleteAccount?: () => void;
 };
 
 const OAUTH_PROVIDER_LABELS: Record<string, string> = { github: 'GitHub', google: 'Google' };
@@ -75,7 +76,7 @@ function positionFlyout(flyoutEl: HTMLElement, anchorEl: HTMLElement) {
   flyoutEl.style.visibility = '';
 }
 
-export function SidebarUserMenu({ userLabel, oauthProviders = [], onLogout }: SidebarUserMenuProps) {
+export function SidebarUserMenu({ userLabel, oauthProviders = [], onLogout, onDeleteAccount }: SidebarUserMenuProps) {
   const [open, setOpen] = useState(false);
   const [activeFlyout, setActiveFlyout] = useState<Flyout | null>(null);
   const [theme, setThemeState] = useState<Theme>(() =>
@@ -176,6 +177,12 @@ export function SidebarUserMenu({ userLabel, oauthProviders = [], onLogout }: Si
     setOpen(false);
     setActiveFlyout(null);
     onLogout();
+  }
+
+  function handleDeleteAccount() {
+    setOpen(false);
+    setActiveFlyout(null);
+    onDeleteAccount?.();
   }
 
   return (
@@ -288,6 +295,11 @@ export function SidebarUserMenu({ userLabel, oauthProviders = [], onLogout }: Si
 
           <div className="sidebar-user-menu-separator" role="separator" />
 
+          {onDeleteAccount ? (
+            <button type="button" role="menuitem" className="sidebar-user-menu-item" onClick={handleDeleteAccount}>
+              <span className="sidebar-user-menu-item-label">{t('deleteAccountMenu')}</span>
+            </button>
+          ) : null}
           <button
             type="button"
             role="menuitem"

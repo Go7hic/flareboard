@@ -15,7 +15,7 @@ import { useStartHref } from '../../lib/useAppConfig';
 
 type LandingChromeProps = {
   children: ReactNode;
-  activeNav?: 'home' | 'features' | 'compare' | 'pricing';
+  activeNav?: 'home' | 'features' | 'compare' | 'pricing' | 'none';
 };
 
 type NavItem =
@@ -191,7 +191,13 @@ export function LandingChrome({ children, activeNav = 'home' }: LandingChromePro
               <Link to={startHref}>{t('landingCreateFreeAccount')}</Link>
             </div>
           </nav>
-          <p className="landing-footer-legal">© {new Date().getFullYear()} Flareboard</p>
+          <div className="landing-footer-legal">
+            <span>© {new Date().getFullYear()} Flareboard</span>
+            <nav className="landing-footer-legal-links" aria-label={t('termsOfService')}>
+              <Link to="/terms">{t('termsOfService')}</Link>
+              <Link to="/privacy">{t('privacyPolicy')}</Link>
+            </nav>
+          </div>
         </div>
       </footer>
     </div>

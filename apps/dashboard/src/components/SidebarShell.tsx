@@ -6,9 +6,11 @@ import { LazyRouteFallback } from './LazyRouteFallback';
 import { t } from '../lib/i18n';
 import { AppSidebar } from './AppSidebar';
 import { AppTopBar } from './AppTopBar';
+import { DeleteAccountDialog } from './DeleteAccountDialog';
 
 type MeResponse = {
   username: string;
+  passwordRequired?: boolean;
 };
 
 export function SidebarShell() {
@@ -19,6 +21,7 @@ export function SidebarShell() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
 
   useEffect(() => {
     void bootstrapSession().then((ok) => {
@@ -62,6 +65,13 @@ export function SidebarShell() {
     navigate('/login');
   }
 
+  async function afterAccountDeleted() {
+    setDeleteAccountOpen(false);
+    await logoutSession();
+    queryClient.clear();
+    navigate('/', { replace: true });
+  }
+
   function closeMobileNav() {
     setMobileNavOpen(false);
   }
@@ -84,6 +94,7 @@ export function SidebarShell() {
           oauthProviders={oauthProviders}
           onNavigate={closeMobileNav}
           onLogout={logout}
+          onDeleteAccount={meQuery.data ? () => setDeleteAccountOpen(true) : undefined}
         />
         {mobileNavOpen ? (
           <button
@@ -105,6 +116,15 @@ export function SidebarShell() {
           </main>
         </div>
       </div>
+      {meQuery.data ? (
+        <DeleteAccountDialog
+          open={deleteAccountOpen}
+          onOpenChange={setDeleteAccountOpen}
+          username={meQuery.data.username}
+          passwordRequired={meQuery.data.passwordRequired !== false}
+          onDeleted={() => void afterAccountDeleted()}
+        />
+      ) : null}
     </div>
   );
 }

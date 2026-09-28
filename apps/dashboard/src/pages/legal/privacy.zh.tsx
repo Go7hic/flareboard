@@ -1,0 +1,439 @@
+import { Link } from 'react-router-dom';
+import type { LegalDoc, LegalSection } from '../../components/landing/LegalPage';
+import { External, Mail, UPDATED } from './shared';
+
+/* Translation of privacy.en.tsx (binding). Keep section ids and content in sync. */
+const sections: LegalSection[] = [
+  {
+    id: 'who-we-are',
+    title: '我们是谁',
+    body: (
+      <>
+        <p>
+          Flareboard（下称“Flareboard”或“我们”）是由一名独立开发者运营的产品分析服务。本政策适用于{' '}
+          <code>flareboard.dev</code> 上的托管服务，包括我们的网站、控制台、API（<code>api.flareboard.dev</code>
+          ）以及数据采集端点（<code>t.flareboard.dev</code>）。如对本政策有任何疑问，请通过 <Mail /> 联系我们。
+        </p>
+        <p>
+          Flareboard 同时以源代码形式公开发布，任何人都可以在自己的基础设施上运行。如果你使用的是自托管的
+          Flareboard，数据如何处理由运行该实例的个人或组织决定；我们无法访问这些数据，本政策也不适用于这些数据。
+        </p>
+      </>
+    ),
+  },
+  {
+    id: 'roles',
+    title: '两类数据，两种角色',
+    body: (
+      <>
+        <p>我们以两种不同的身份处理个人数据：</p>
+        <ul>
+          <li>
+            <strong>客户数据。</strong>
+            关于访问我们网站或注册 Flareboard 账户的人（下称“客户”）的信息。对于这类数据，由我们决定处理的目的和方式，因此我们是
+            <strong>控制者</strong>（controller）。
+          </li>
+          <li>
+            <strong>分析数据。</strong>
+            我们的采集脚本和 API 收集的、关于客户网站和应用的访客（下称“访客”）的信息。是否安装 Flareboard
+            以及采集哪些数据由客户决定；我们仅为向客户提供服务而处理这些数据。对于分析数据，客户是
+            <strong>控制者</strong>，我们是按照客户指示行事的<strong>处理者</strong>（processor，或称服务提供者），具体见我们的
+            <Link to="/terms?lang=zh-CN#data-processing">服务条款</Link>。
+          </li>
+        </ul>
+        <p>
+          如果你是某个使用 Flareboard 的网站的访客，并希望行使你的隐私权利，请先联系该网站的所有者，我们会协助其作出回应。
+        </p>
+      </>
+    ),
+  },
+  {
+    id: 'customer-data',
+    title: '我们收集的客户数据',
+    body: (
+      <>
+        <h3>账户信息</h3>
+        <ul>
+          <li>电子邮箱地址（同时用作你的用户名），以及可选的显示名称和徽标。</li>
+          <li>你的密码，仅以加盐的 bcrypt 哈希形式存储。我们绝不会以明文形式存储或查看你的密码。</li>
+          <li>
+            如果你使用 Google 或 GitHub 登录（在提供该功能时），我们会保存该服务商的账户标识符，以及其返回的邮箱或用户名。我们不会存储服务商的访问令牌。
+          </li>
+          <li>邮箱验证状态、角色、团队成员关系以及账户相关的时间戳。</li>
+        </ul>
+        <h3>账单信息</h3>
+        <p>
+          付款由 Stripe 处理。银行卡信息在 Stripe 的页面上填写，不会经过我们的服务器。我们会接收并保存你的 Stripe
+          客户和订阅标识符、套餐、订阅状态和计费周期；为创建订阅，我们会向 Stripe 提供你的邮箱地址和账户标识符。我们还会统计你的网站每月发送的事件数量，以执行套餐限额。
+        </p>
+        <h3>你创建的内容</h3>
+        <p>
+          你在控制台中创建的网站、看板、报告、洞察、细分、用户队列、目标、功能开关、实验、问卷、工作流、告警规则、保存的查询、注释、上传的
+          Source Map 及类似配置。
+        </p>
+        <h3>操作与安全记录</h3>
+        <ul>
+          <li>账户内管理操作的审计日志（例如创建或删除网站），记录谁在何时做了什么。审计日志不记录 IP 地址。</li>
+          <li>
+            我们的托管服务商在我们的服务器处理请求时生成的技术日志，例如请求路径、状态码和错误信息。这些日志可能包含
+            IP 地址，只会保留很短时间（见<a href="#retention">保留与删除</a>）。
+          </li>
+          <li>IP 地址会被短暂用于限流和防止滥用（例如限制登录尝试次数），我们不会将其存入数据库。</li>
+        </ul>
+        <h3>沟通记录</h3>
+        <p>你发送给我们的消息（例如客服邮件）以及我们的回复。</p>
+      </>
+    ),
+  },
+  {
+    id: 'website-analytics',
+    title: '我们自己网站上的统计分析',
+    body: (
+      <>
+        <p>
+          为了改进 <code>flareboard.dev</code>，我们会统计人们如何使用它。我们使用以下两个工具，两者都不设置 Cookie：
+        </p>
+        <ul>
+          <li>
+            <strong>Flareboard 本身。</strong>我们自己的采集脚本记录的数据类型与下文
+            <a href="#analytics-data">分析数据</a>
+            中描述的相同（浏览的页面、来源、浏览器、设备类型、大致位置），另外还会记录少量产品事件，例如登录成功。
+          </li>
+          <li>
+            <strong>Cloudflare Web Analytics。</strong>Cloudflare 会统计页面加载性能和汇总访问量。详见{' '}
+            <External href="https://www.cloudflare.com/web-analytics/">Cloudflare Web Analytics</External>。
+          </li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    id: 'analytics-data',
+    title: '我们为客户处理的分析数据',
+    body: (
+      <>
+        <p>
+          当客户添加 Flareboard 脚本或通过我们的 API 发送数据时，我们代表客户处理以下数据。客户可以自行选择启用哪些功能，因此并非每个网站都会采集以下全部数据。
+        </p>
+        <h3>采集脚本自动收集的数据</h3>
+        <ul>
+          <li>
+            页面地址（路径、查询字符串和片段）、页面标题和主机名，以及来源页面，和地址中包含的推广参数（例如{' '}
+            <code>utm_source</code>）或广告点击标识符（例如 <code>gclid</code>）。
+          </li>
+          <li>浏览器、操作系统和设备类型（从 User-Agent 解析得出，不存储完整的 User-Agent 字符串）、屏幕尺寸和浏览器语言。</li>
+          <li>大致位置（国家、地区和城市），由我们的托管服务商在请求发生时根据 IP 地址推断。</li>
+          <li>页面性能指标（Core Web Vitals），在启用时采集。</li>
+          <li>用于热力图的汇总点击位置，在启用时采集。热力图数据不与任何访客关联。</li>
+        </ul>
+        <h3>访客是如何计数的</h3>
+        <div className="legal-callout">
+          <p>
+            <strong>我们从不存储 IP 地址。</strong>
+            为了在不使用 Cookie 的情况下统计独立访客，我们会对 IP 地址、User-Agent、网站标识符和一个密钥值计算单向哈希。该密钥值在每个自然月初轮换，因此同一网络下的同一浏览器在一个月内会被计为一位访客，但不同月份之间无法关联。请求处理完成后，IP
+            地址本身即被丢弃。
+          </p>
+        </div>
+        <p>
+          采集脚本<strong>不设置任何 Cookie</strong>。它把短期会话信息保存在浏览器的 <code>sessionStorage</code>
+          中，关闭标签页后即被清除。只有当客户标识已登录用户或展示问卷时，脚本才会使用 <code>localStorage</code>{' '}
+          来记住该标识或问卷状态。
+        </p>
+        <h3>客户选择发送的数据</h3>
+        <ul>
+          <li>
+            <strong>自定义事件和属性</strong>，包括通过 <code>identify()</code>{' '}
+            发送的用户标识和用户资料属性、所属分组以及收入金额。这些内容由客户控制，可能包含电子邮箱等个人数据。
+          </li>
+          <li>
+            <strong>会话回放</strong>
+            （默认关闭，仅付费套餐可用）。客户开启后，脚本会记录页面结构和访客的交互（点击、滚动、鼠标移动和页面变化），以便回放会话。默认情况下，所有在表单字段中输入的内容都会被遮盖，密码字段始终会被遮盖。客户可以把页面的其他部分排除在录制之外，也可以只录制部分访问。页面上显示的其他文字会被录制，因此客户必须配置回放，避免录下敏感信息。
+          </li>
+          <li>
+            <strong>错误和日志</strong>：错误信息、堆栈跟踪、版本和环境名称，以及日志消息和客户附加的数据。
+          </li>
+          <li>
+            <strong>问卷回答</strong>，包括访客自愿提交的文字回答。
+          </li>
+          <li>
+            <strong>AI 使用数据</strong>：模型、Token 数量、费用和延迟。只有当客户在发送的数据中包含提示词和回复时，这些内容才会被存储。
+          </li>
+        </ul>
+        <p>
+          采集脚本会忽略大部分自动化流量（机器人和爬虫）。目前它不会根据浏览器的 Do Not Track 或 Global Privacy Control
+          信号改变行为；需要遵从这些信号的客户可以有条件地加载脚本。
+        </p>
+        <p>我们不会将分析数据用于我们自己的目的，不会在客户之间合并这些数据，也绝不会出售这些数据或将其用于广告。</p>
+      </>
+    ),
+  },
+  {
+    id: 'use',
+    title: '我们如何使用客户数据',
+    body: (
+      <>
+        <ul>
+          <li>创建并保护你的账户、让你登录，并提供你所注册的服务。</li>
+          <li>处理付款、执行套餐限额并管理你的订阅。</li>
+          <li>
+            发送服务邮件：邮箱验证、密码重置，以及你配置的告警、报告或工作流邮件。未经你的同意，我们不会发送营销邮件，你也可以随时退订。
+          </li>
+          <li>回复客服请求。</li>
+          <li>防止滥用、欺诈和安全事件，并排查问题。</li>
+          <li>以汇总方式了解产品的使用情况，以便改进产品。</li>
+          <li>履行法律义务，并执行我们的服务条款。</li>
+        </ul>
+        <p>我们不出售个人数据，也不会与广告商共享个人数据。</p>
+      </>
+    ),
+  },
+  {
+    id: 'legal-bases',
+    title: '法律依据（欧洲经济区和英国）',
+    body: (
+      <>
+        <p>如果你位于欧洲经济区或英国，我们处理客户数据所依据的法律基础如下：</p>
+        <ul>
+          <li>
+            <strong>合同</strong>：提供服务、管理你的账户以及处理付款。
+          </li>
+          <li>
+            <strong>正当利益</strong>
+            ：保障并改进服务、防止滥用、统计我们网站的使用情况，以及就你的账户与你沟通。我们会在这些利益与你的权利之间进行权衡，你可以随时提出反对。
+          </li>
+          <li>
+            <strong>法律义务</strong>：按照税务和会计法律的要求保存记录。
+          </li>
+          <li>
+            <strong>同意</strong>：在法律要求时（例如可选的营销邮件）征得你的同意。你可以随时撤回同意。
+          </li>
+        </ul>
+        <p>对于分析数据，由安装 Flareboard 的客户确定其法律依据。</p>
+      </>
+    ),
+  },
+  {
+    id: 'cookies',
+    title: 'Cookie 与浏览器存储',
+    body: (
+      <>
+        <div className="legal-table-wrap">
+          <table className="legal-table">
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>位置</th>
+                <th>用途</th>
+                <th>有效期</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <code>flareboard_session</code>
+                </td>
+                <td>控制台（Cookie）</td>
+                <td>保持你的登录状态。严格必要；带有 HttpOnly 和 Secure 属性。</td>
+                <td>7 天</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>__cf_bm</code>、<code>cf_clearance</code>
+                </td>
+                <td>我们的所有域名（Cookie）</td>
+                <td>由 Cloudflare 设置，用于识别机器人并保护服务。严格必要。</td>
+                <td>最长 30 分钟 / 以 Cloudflare 的设置为准</td>
+              </tr>
+              <tr>
+                <td>主题、语言和界面偏好</td>
+                <td>控制台（localStorage）</td>
+                <td>记住你的显示设置。</td>
+                <td>直到被清除</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>flareboard.*</code>
+                </td>
+                <td>使用 Flareboard 的网站（sessionStorage、localStorage）</td>
+                <td>
+                  采集脚本的会话信息，详见<a href="#analytics-data">分析数据</a>。不使用 Cookie。
+                </td>
+                <td>关闭标签页时清除；用户标识和问卷状态保留至被清除</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>我们不使用广告 Cookie，也不使用跨站跟踪 Cookie。</p>
+      </>
+    ),
+  },
+  {
+    id: 'sharing',
+    title: '服务提供商与数据共享',
+    body: (
+      <>
+        <p>我们只与运营 Flareboard 所必需的服务提供商共享个人数据：</p>
+        <div className="legal-table-wrap">
+          <table className="legal-table">
+            <thead>
+              <tr>
+                <th>服务商</th>
+                <th>用途</th>
+                <th>数据</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Cloudflare, Inc.</td>
+                <td>托管、数据库、文件存储、队列、内容分发、安全、邮件发送、日志和网站统计</td>
+                <td>全部客户数据和分析数据</td>
+              </tr>
+              <tr>
+                <td>Stripe, Inc.</td>
+                <td>付款和订阅计费</td>
+                <td>邮箱、账户标识符、支付信息（直接在 Stripe 填写）</td>
+              </tr>
+              <tr>
+                <td>Google LLC、GitHub, Inc.</td>
+                <td>可选的第三方登录，仅在你选择时使用</td>
+                <td>账户标识符以及邮箱或用户名</td>
+              </tr>
+              <tr>
+                <td>jsDelivr、unpkg、CARTO、Simple Icons</td>
+                <td>你使用控制台时，浏览器加载的字体、地图数据和图标</td>
+                <td>请求中包含的你的 IP 地址和浏览器信息</td>
+              </tr>
+              <tr>
+                <td>favicon.so</td>
+                <td>在控制台中显示每个网站的图标</td>
+                <td>你添加的网站域名，以及请求中包含的你的 IP 地址</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>在以下情况下，我们也可能披露个人数据：</p>
+        <ul>
+          <li>
+            <strong>按照你的指示</strong>
+            ，例如发送到你配置的 Webhook 地址、邮箱或数据源，或通过你创建的公开分享链接。任何持有分享链接的人都能看到该链接公开的汇总统计数据。
+          </li>
+          <li>
+            <strong>出于法律原因</strong>，在法律或有效的法律要求规定时，或为保护我们的用户、公众或我们自身的权利、财产或安全。
+          </li>
+          <li>
+            <strong>在业务转让时</strong>，如果 Flareboard 被出售或转让，本政策将继续适用于你的数据。
+          </li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    id: 'transfers',
+    title: '跨境传输',
+    body: (
+      <p>
+        Flareboard 运行在 Cloudflare
+        的全球网络上，因此数据可能在多个国家（包括你所在国家以外）的数据中心中处理。在法律要求时，我们依靠适当的保障措施进行这些传输，例如我们的服务商数据处理条款中所包含的欧盟委员会标准合同条款（SCC）。
+      </p>
+    ),
+  },
+  {
+    id: 'retention',
+    title: '保留与删除',
+    body: (
+      <>
+        <ul>
+          <li>
+            <strong>账户数据</strong>
+            在你的账户存续期间保留。你可以随时在控制台的账户菜单中注销账户；账户会立即关闭，你的账户和内容会在 30 天内被永久清除。
+          </li>
+          <li>
+            <strong>账单记录</strong>按照税务和会计法律要求的期限保留，一般为七年。
+          </li>
+          <li>
+            <strong>分析数据</strong>保留至客户将其删除，或达到客户为每个网站设置的数据保留期限（1 天至 10
+            年）后过期。默认不会过期。会话回放录像会与其所属的原始事件一起删除。由原始事件汇总得出的统计数据可能在网站存续期间一直保留。
+          </li>
+          <li>
+            <strong>删除网站</strong>后，该网站会立即从你的账户中移除，其存储的全部数据（包括会话回放录像）会在 30 天内被永久清除。
+          </li>
+          <li>
+            <strong>技术日志</strong>由我们的托管服务商自动删除，通常在 7 天内。
+          </li>
+          <li>
+            <strong>备份。</strong>已删除的数据在被覆盖之前，可能会在数据库备份中保留最多 30 天。
+          </li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    id: 'rights',
+    title: '你的权利',
+    body: (
+      <>
+        <p>
+          根据你所在地的法律，你可能有权访问、更正、删除或导出你的个人数据，反对或限制某些处理，以及撤回同意。你可以在控制台中查看和编辑大部分账户信息，在账户菜单中注销账户；付费套餐还可以将分析数据导出为
+          CSV。其他请求请使用账户邮箱发送邮件至 <Mail />。我们会在 30 天内回复。
+        </p>
+        <p>
+          如果你对我们处理数据的方式不满意，请先告诉我们。你也有权向当地的数据保护机构投诉，例如欧洲经济区的监管机构、英国信息专员办公室（ICO），或香港个人资料私隐专员公署。
+        </p>
+        <p>
+          <strong>客户网站的访客：</strong>
+          我们与你没有直接关系，通常也无法识别你的身份。请联系你所访问网站的所有者，我们会协助其回应你的请求。
+        </p>
+      </>
+    ),
+  },
+  {
+    id: 'security',
+    title: '安全',
+    body: (
+      <p>
+        我们通过传输加密（HTTPS）、托管服务商提供的静态加密、密码哈希、加密且可吊销的会话令牌、基于角色的访问控制以及限流来保护数据。然而，没有任何系统是绝对安全的，我们无法保证绝对安全。如果发生影响你个人数据的安全事件，我们会依法通知你和相关监管机构。
+      </p>
+    ),
+  },
+  {
+    id: 'children',
+    title: '儿童',
+    body: (
+      <p>
+        Flareboard 是一款面向企业的工具，并非为儿童设计。你必须年满 16
+        周岁才能注册账户。我们不会在知情的情况下收集儿童的个人数据；如果你认为有儿童向我们提供了个人数据，请联系我们，我们会将其删除。客户不得违反适用法律，使用
+        Flareboard 收集儿童的数据。
+      </p>
+    ),
+  },
+  {
+    id: 'changes',
+    title: '本政策的变更',
+    body: (
+      <p>
+        我们可能会随着服务的变化更新本政策。届时我们会修改上方的“最后更新”日期；如果变更较为重大，我们会在变更生效前通过邮件或控制台通知客户。
+      </p>
+    ),
+  },
+  {
+    id: 'contact',
+    title: '联系我们',
+    body: (
+      <p>
+        有关隐私的问题或请求，请联系：<Mail />。
+      </p>
+    ),
+  },
+];
+
+export const privacyZh: LegalDoc = {
+  title: '隐私政策',
+  updated: UPDATED['zh-CN'],
+  intro: (
+    <p>
+      本政策说明 Flareboard 收集哪些个人数据、为什么收集、保留多久，以及你拥有哪些选择。我们打造 Flareboard
+      的初衷，是在不使用 Cookie、不存储 IP 地址的前提下统计网站数据，并尽量只收集服务所必需的数据。
+    </p>
+  ),
+  sections,
+};

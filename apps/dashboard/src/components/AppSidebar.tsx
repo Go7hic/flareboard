@@ -14,6 +14,7 @@ type AppSidebarProps = {
   oauthProviders?: string[];
   onNavigate?: () => void;
   onLogout: () => void;
+  onDeleteAccount?: () => void;
 };
 
 export function AppSidebar({
@@ -24,6 +25,7 @@ export function AppSidebar({
   oauthProviders,
   onNavigate,
   onLogout,
+  onDeleteAccount,
 }: AppSidebarProps) {
   const websiteMatch = useMatch('/websites/:websiteId/*');
   const isWebsiteContext = Boolean(websiteMatch);
@@ -62,7 +64,12 @@ export function AppSidebar({
         )}
       </nav>
       <div className="app-sidebar-footer">
-        <SidebarUserMenu userLabel={userLabel} oauthProviders={oauthProviders} onLogout={onLogout} />
+        <SidebarUserMenu
+          userLabel={userLabel}
+          oauthProviders={oauthProviders}
+          onLogout={onLogout}
+          onDeleteAccount={onDeleteAccount}
+        />
       </div>
     </aside>
   );

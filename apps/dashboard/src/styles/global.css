@@ -7492,7 +7492,8 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   display: flex;
   flex-direction: column;
   position: relative;
-  overflow-x: hidden;
+  /* clip (not hidden) so .landing is not a scroll container and position: sticky keeps working. */
+  overflow-x: clip;
   padding-top: var(--nav-height);
 }
 
@@ -8402,11 +8403,44 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 
 .landing-footer-legal {
   grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
   margin: 0;
   padding-top: 1.5rem;
   border-top: 1px solid var(--border-subtle);
   font-size: 0.8125rem;
   color: var(--text-faint);
+}
+
+.landing-footer-legal-links {
+  display: flex;
+  gap: 1.25rem;
+}
+
+.landing-footer-legal-links a {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.landing-footer-legal-links a:hover {
+  color: var(--text);
+}
+
+.register-legal-consent {
+  margin: 0.875rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.register-legal-consent a {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
 }
 
 @media (max-width: 720px) {

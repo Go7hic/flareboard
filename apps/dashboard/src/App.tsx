@@ -14,6 +14,8 @@ import Register from './pages/Register';
 const SharePublic = lazy(() => import('./pages/SharePublic'));
 const DashboardHome = lazy(() => import('./pages/DashboardHome'));
 const Demo = lazy(() => import('./pages/Demo'));
+const Privacy = lazy(() => import('./pages/Privacy'));
+const Terms = lazy(() => import('./pages/Terms'));
 const Websites = lazy(() => import('./pages/Websites'));
 const Teams = lazy(() => import('./pages/Teams'));
 const LinksPixels = lazy(() => import('./pages/LinksPixels'));
@@ -93,6 +95,22 @@ export default function App() {
           element={
             <LazyPage>
               <Demo />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/privacy"
+          element={
+            <LazyPage>
+              <Privacy />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/terms"
+          element={
+            <LazyPage>
+              <Terms />
             </LazyPage>
           }
         />

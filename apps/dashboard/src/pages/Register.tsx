@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, Fragment, useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BrandLogo } from '../components/BrandLogo';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -108,6 +108,9 @@ export default function Register() {
               <Button variant="primary" className="w-full" type="submit">
                 {t('createAccount')}
               </Button>
+              <p className="register-legal-consent">
+                <LegalConsentText />
+              </p>
             </form>
           )}
           <p className="login-footer-link">
@@ -116,5 +119,31 @@ export default function Register() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Renders `registerAgree` with its {terms} / {privacy} placeholders as links. */
+function LegalConsentText() {
+  const links: Record<string, ReactNode> = {
+    terms: (
+      <Link to="/terms" target="_blank">
+        {t('termsOfService')}
+      </Link>
+    ),
+    privacy: (
+      <Link to="/privacy" target="_blank">
+        {t('privacyPolicy')}
+      </Link>
+    ),
+  };
+  return (
+    <>
+      {t('registerAgree')
+        .split(/(\{terms\}|\{privacy\})/)
+        .map((part, i) => {
+          const key = part.slice(1, -1);
+          return part.startsWith('{') && key in links ? <Fragment key={i}>{links[key]}</Fragment> : part;
+        })}
+    </>
   );
 }

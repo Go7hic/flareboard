@@ -83,6 +83,9 @@ const AUTH_FORM_PATHS = new Set([
   '/api/auth/reset-password',
   '/api/auth/logout',
   '/api/auth/verify',
+  // Re-authenticated account actions: 401 means a wrong password, not a lost session.
+  '/api/me/password',
+  '/api/me/delete',
 ]);
 
 let sessionRedirectPending = false;
@@ -120,11 +123,14 @@ export function handleUnauthorizedIfNeeded(path: string, status: number): boolea
 
 export class ApiError extends Error {
   readonly status: number;
+  /** Parsed JSON error body, for endpoints that return a machine-readable `code` and details. */
+  readonly data: Record<string, unknown> | undefined;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, data?: Record<string, unknown>) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -150,10 +156,10 @@ export async function api<T>(path: string, init: ApiInit = {}): Promise<T> {
   const res = await fetch(url, { ...init, headers, credentials: 'include' });
   if (!res.ok) {
     handleUnauthorizedIfNeeded(path, res.status);
-    const err = await parseJsonBody<{ message?: string }>(res).catch(() => ({
+    const err = await parseJsonBody<{ message?: string } & Record<string, unknown>>(res).catch(() => ({
       message: res.statusText,
     }));
-    throw new ApiError(err.message || 'Request failed', res.status);
+    throw new ApiError(err.message || 'Request failed', res.status, err);
   }
   if (res.status === 204) return undefined as T;
   return parseJsonBody<T>(res);

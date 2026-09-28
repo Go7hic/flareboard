@@ -3,6 +3,7 @@ import { featureFlagNeedsServerEvaluation, type FeatureFlagJsonValue } from '@fl
 import type { Env } from '../env';
 import { flagConfig, getEnabledFlags, type FlagRow } from '../lib/feature-flags';
 import { getWebsiteById } from '../lib/queries';
+import { listActiveSurveys } from '../lib/surveys';
 import { badRequest, json, notFound } from '../lib/response';
 
 /**
@@ -53,49 +54,22 @@ export function replaySettings(raw: unknown) {
   };
 }
 
-export async function handleTrackerConfig(c: Context<{ Bindings: Env }>) {
-  const websiteId = c.req.query('website');
-  if (!websiteId) return badRequest('website query param required');
-
+/**
+ * The tracker config JSON for a website (KV-cached for 60s), or null when the website does not
+ * exist. Shared by /api/tracker-config and the headless /api/surveys endpoint.
+ */
+export async function getTrackerConfigJson(env: Env, websiteId: string): Promise<string | null> {
   const cacheKey = `tracker-config:${websiteId}`;
-  const cached = await c.env.CACHE.get(cacheKey);
-  if (cached) {
-    return new Response(cached, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'public, max-age=60',
-      },
-    });
-  }
+  const cached = await env.CACHE.get(cacheKey);
+  if (cached) return cached;
 
-  const website = await getWebsiteById(c.env, websiteId);
-  if (!website) return notFound();
+  const website = await getWebsiteById(env, websiteId);
+  if (!website) return null;
 
   const heatmapConfig = (website.heatmapConfig ?? {}) as { sampleRate?: number; enabled?: boolean };
   const replayConfig = (website.replayConfig ?? {}) as { heatmapSampleRate?: number };
   const sampleRate = heatmapConfig.sampleRate ?? replayConfig.heatmapSampleRate ?? 0.1;
-  const flags = await getEnabledFlags(c.env, websiteId);
-  const surveys = await c.env.DB.prepare(
-    `SELECT survey_id as id, name, question, type, options, trigger_path as triggerPath,
-            trigger_event as triggerEvent, display_delay_seconds as displayDelaySeconds,
-            display_rules as displayRules
-     FROM survey
-     WHERE website_id = ?1 AND enabled = 1
-     ORDER BY created_at ASC
-     LIMIT 5`,
-  )
-    .bind(websiteId)
-    .all<{
-      id: string;
-      name: string;
-      question: string;
-      type: string;
-      options: string | null;
-      triggerPath: string | null;
-      triggerEvent: string | null;
-      displayDelaySeconds: number | null;
-      displayRules: string | null;
-    }>();
+  const [flags, surveys] = await Promise.all([getEnabledFlags(env, websiteId), listActiveSurveys(env, websiteId)]);
 
   const payload = {
     replay: replaySettings(website.replayConfig),
@@ -109,48 +83,22 @@ export async function handleTrackerConfig(c: Context<{ Bindings: Env }>) {
         name: flag.earlyAccessName || flag.name,
         description: flag.earlyAccessDescription,
       })),
-    surveys: (surveys.results ?? []).map((survey) => {
-      let options: string[] = [];
-      if (survey.options) {
-        try {
-          const parsed = JSON.parse(survey.options);
-          if (Array.isArray(parsed)) options = parsed.filter((item) => typeof item === 'string');
-        } catch {
-          options = [];
-        }
-      }
-      let displayRules: Array<{ field: string; operator: string; value: string; key?: string }> = [];
-      if (survey.displayRules) {
-        try {
-          const parsed = JSON.parse(survey.displayRules);
-          if (Array.isArray(parsed)) {
-            displayRules = parsed
-              .filter(
-                (item) =>
-                  item &&
-                  typeof item.field === 'string' &&
-                  typeof item.operator === 'string' &&
-                  typeof item.value === 'string',
-              )
-              .map((item) => ({
-                field: item.field,
-                operator: item.operator,
-                value: item.value,
-                ...(typeof item.key === 'string' ? { key: item.key } : {}),
-              }));
-          }
-        } catch {
-          displayRules = [];
-        }
-      }
-      return {
-        ...survey,
-        displayDelaySeconds: Math.min(60, Math.max(0, Number(survey.displayDelaySeconds ?? 0))),
-        displayRules,
-        options,
-      };
-    }),
+    surveys,
   };
-  await c.env.CACHE.put(cacheKey, JSON.stringify(payload), { expirationTtl: 60 });
-  return json(payload);
+  const body = JSON.stringify(payload);
+  await env.CACHE.put(cacheKey, body, { expirationTtl: 60 });
+  return body;
+}
+
+export async function handleTrackerConfig(c: Context<{ Bindings: Env }>) {
+  const websiteId = c.req.query('website');
+  if (!websiteId) return badRequest('website query param required');
+  const body = await getTrackerConfigJson(c.env, websiteId);
+  if (!body) return notFound();
+  return new Response(body, {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'public, max-age=60',
+    },
+  });
 }

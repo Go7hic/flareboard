@@ -7,7 +7,7 @@ import { handleTrackerConfig } from './routes/tracker-config';
 import { handleLinkRedirect, handleLinkRedirectApi, handlePixelGif } from './routes/public';
 import { handleActiveUsers } from './routes/active';
 import { handleRecord } from './routes/record';
-import { handleSurveyResponse } from './routes/surveys';
+import { handleActiveSurveys, handleHostedSurvey, handleSurveyResponse } from './routes/surveys';
 import { json } from './lib/response';
 
 export { RateLimiter } from '@flareboard/rate-limiter';
@@ -38,6 +38,8 @@ app.post('/api/send', (c) => handleSend(c));
 app.post('/api/batch', (c) => handleBatch(c));
 app.post('/api/record', (c) => handleRecord(c));
 app.post('/api/surveys/response', (c) => handleSurveyResponse(c));
+app.get('/api/surveys', (c) => handleActiveSurveys(c));
+app.get('/api/surveys/hosted/:key', (c) => handleHostedSurvey(c));
 app.post('/api/feature-flags/evaluate', (c) => handleFeatureFlagEvaluate(c));
 app.get('/api/heartbeat', (c) => handleHeartbeat(c));
 app.get('/api/tracker-config', (c) => handleTrackerConfig(c));

@@ -271,6 +271,7 @@ app.get('/api/websites/:websiteId/surveys/feedback', surveys.handleFeedback);
 app.patch('/api/websites/:websiteId/surveys/:surveyId', surveys.handleUpdate);
 app.delete('/api/websites/:websiteId/surveys/:surveyId', surveys.handleDelete);
 app.get('/api/websites/:websiteId/surveys/:surveyId/responses', surveys.handleResponses);
+app.get('/api/websites/:websiteId/surveys/:surveyId/export', surveys.handleExport);
 app.get('/api/websites/:websiteId/workflows', workflows.handleList);
 app.post('/api/websites/:websiteId/workflows', workflows.handleCreate);
 app.patch('/api/websites/:websiteId/workflows/:workflowId', workflows.handleUpdate);

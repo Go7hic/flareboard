@@ -755,12 +755,23 @@ export const survey = sqliteTable(
     displayRules: text('display_rules', { mode: 'json' }).$type<
       Array<{ field: string; operator: string; value: string; key?: string }>
     >(),
+    /** JSON array of questions (packages/shared/src/surveys.ts). NULL = legacy columns only. */
+    questions: text('questions', { mode: 'json' }).$type<unknown[]>(),
+    appearance: text('appearance', { mode: 'json' }).$type<Record<string, unknown>>(),
+    sampleRate: integer('sample_rate').notNull().default(100),
+    responseLimit: integer('response_limit'),
+    startsAt: integer('starts_at'),
+    endsAt: integer('ends_at'),
+    repeatIntervalDays: integer('repeat_interval_days'),
+    hostedEnabled: integer('hosted_enabled', { mode: 'boolean' }).notNull().default(false),
+    slug: text('slug'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
   },
   (t) => [
     index('survey_website_idx').on(t.websiteId),
     index('survey_website_enabled_idx').on(t.websiteId, t.enabled),
+    uniqueIndex('survey_slug_unique').on(t.slug),
   ],
 );
 
@@ -778,10 +789,17 @@ export const surveyResponse = sqliteTable(
     visitId: text('visit_id'),
     answer: text('answer').notNull(),
     urlPath: text('url_path'),
+    /** JSON object keyed by question id. NULL on rows written before migration 0049's backfill. */
+    answers: text('answers', { mode: 'json' }).$type<Record<string, unknown>>(),
+    completed: integer('completed', { mode: 'boolean' }).notNull().default(true),
+    source: text('source').notNull().default('widget'),
+    distinctId: text('distinct_id'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
   },
   (t) => [
     index('survey_response_survey_idx').on(t.surveyId),
+    index('survey_response_survey_created_idx').on(t.surveyId, t.createdAt),
     index('survey_response_website_created_idx').on(t.websiteId, t.createdAt),
     index('survey_response_session_idx').on(t.sessionId),
   ],

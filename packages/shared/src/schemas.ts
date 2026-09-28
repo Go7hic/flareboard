@@ -5,6 +5,12 @@ import {
   featureFlagPayloadBytes,
   type FeatureFlagJsonValue,
 } from './feature-flag-evaluator';
+import {
+  SURVEY_MAX_QUESTIONS,
+  surveyAppearanceSchema,
+  surveyQuestionsSchema,
+  surveySlugSchema,
+} from './surveys';
 
 /**
  * Collected page context is truncated rather than rejected: landing URLs with ad click
@@ -562,44 +568,81 @@ export const surveyDisplayRuleSchema = z.object({
 
 const surveyDisplayRulesSchema = z.array(surveyDisplayRuleSchema).max(12).default([]);
 
+/** Targeting, limits, hosting and appearance: identical on create and update. */
+const surveySettingsFields = {
+  /** Percent of eligible people who see the survey (deterministic per person). */
+  sampleRate: z.coerce.number().int().min(0).max(100).optional(),
+  /** Stop showing the survey after this many completed responses. */
+  responseLimit: z.coerce.number().int().min(1).max(1_000_000).optional().nullable(),
+  startsAt: z.number().int().min(0).optional().nullable(),
+  endsAt: z.number().int().min(0).optional().nullable(),
+  /** Null = show once per person; N = may show again N days after it was last shown. */
+  repeatIntervalDays: z.coerce.number().int().min(1).max(365).optional().nullable(),
+  hostedEnabled: z.boolean().optional(),
+  slug: surveySlugSchema.optional().nullable(),
+  appearance: surveyAppearanceSchema.optional(),
+};
+
+const scheduleOrdered = (data: { startsAt?: number | null; endsAt?: number | null }) =>
+  data.startsAt == null || data.endsAt == null || data.startsAt < data.endsAt;
+
 export const createSurveySchema = z.object({
   template: surveyTemplateSchema.optional(),
   name: z.string().min(1).max(120).optional(),
   question: z.string().min(1).max(500).optional(),
   type: surveyTypeSchema.optional().default('text'),
   options: surveyOptionsSchema.optional().default([]),
+  /** Multi-question surveys. When present, question/type/options are derived from it. */
+  questions: surveyQuestionsSchema.optional(),
   enabled: z.boolean().optional().default(true),
   triggerPath: z.string().max(500).optional().nullable(),
   triggerEvent: z.string().min(1).max(80).optional().nullable(),
   displayDelaySeconds: z.coerce.number().int().min(0).max(60).optional().default(0),
   displayRules: surveyDisplayRulesSchema.optional().default([]),
-}).refine((data) => data.type !== 'choice' || data.options.length >= 2, {
+  ...surveySettingsFields,
+}).refine((data) => Boolean(data.questions) || data.type !== 'choice' || data.options.length >= 2, {
   message: 'Choice surveys require at least two options',
-}).refine((data) => Boolean(data.template || (data.name && data.question)), {
+}).refine((data) => Boolean(data.template || (data.name && (data.question || data.questions))), {
   message: 'Survey name and question are required unless a template is used',
-});
+}).refine(scheduleOrdered, { message: 'The survey end date must be after its start date' });
 
 export const updateSurveySchema = z.object({
   name: z.string().min(1).max(120).optional(),
   question: z.string().min(1).max(500).optional(),
   type: surveyTypeSchema.optional(),
   options: surveyOptionsSchema.optional(),
+  questions: surveyQuestionsSchema.optional(),
   enabled: z.boolean().optional(),
   triggerPath: z.string().max(500).optional().nullable(),
   triggerEvent: z.string().min(1).max(80).optional().nullable(),
   displayDelaySeconds: z.coerce.number().int().min(0).max(60).optional(),
   displayRules: surveyDisplayRulesSchema.optional(),
+  ...surveySettingsFields,
 }).refine((data) => data.type !== 'choice' || data.options === undefined || data.options.length >= 2, {
   message: 'Choice surveys require at least two options',
-});
+}).refine(scheduleOrdered, { message: 'The survey end date must be after its start date' });
 
+/**
+ * One submission. `answer` is the legacy single-answer form (trackers before multi-question
+ * surveys); `answers` maps question id to value. `responseId` (client-generated) lets a partial
+ * response be completed later instead of creating a second row.
+ */
 export const submitSurveyResponseSchema = z.object({
   website: z.string().uuid(),
-  surveyId: z.string(),
+  surveyId: z.string().min(1).max(64),
   sessionId: z.string().max(128).optional().nullable(),
   visitId: z.string().max(128).optional().nullable(),
-  answer: z.string().min(1).max(2000),
+  distinctId: z.string().max(200).optional().nullable(),
+  answer: z.string().min(1).max(2000).optional(),
+  answers: z.record(z.string().max(40), z.unknown()).optional(),
+  completed: z.boolean().optional(),
+  responseId: z.string().uuid().optional(),
+  source: z.enum(['widget', 'hosted', 'api']).optional(),
   urlPath: z.string().max(500).optional().nullable(),
+}).refine((data) => data.answer !== undefined || Boolean(data.answers && Object.keys(data.answers).length), {
+  message: 'answer or answers is required',
+}).refine((data) => !data.answers || Object.keys(data.answers).length <= SURVEY_MAX_QUESTIONS, {
+  message: `At most ${SURVEY_MAX_QUESTIONS} answers`,
 });
 
 export const workflowActionConfigSchema = z

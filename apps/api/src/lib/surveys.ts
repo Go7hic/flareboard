@@ -1,9 +1,23 @@
+import {
+  csvRow,
+  normalizeResponseAnswers,
+  normalizeSurveyQuestions,
+  surveyAnswerText,
+  surveyRatingRange,
+  type SurveyAnswers,
+  type SurveyQuestion,
+} from '@flareboard/shared';
 import type { Env } from '../env';
 
 export type SurveyResponseFilters = {
   answer?: string;
   path?: string;
   search?: string;
+  /** Inclusive lower bound on created_at (ms). */
+  from?: number;
+  /** Exclusive upper bound on created_at (ms). */
+  to?: number;
+  completion?: 'complete' | 'partial';
 };
 
 export type SurveyTrendRow = {
@@ -101,7 +115,16 @@ const themeKeywords: Array<{ theme: SurveyTheme; keywords: string[] }> = [
 
 function buildSurveyResponseWhere(filters: SurveyResponseFilters = {}) {
   const clauses = ['website_id = ?1', 'survey_id = ?2'];
-  const values: string[] = [];
+  const values: Array<string | number> = [];
+  if (filters.from != null) {
+    clauses.push(`created_at >= ?${values.length + 3}`);
+    values.push(filters.from);
+  }
+  if (filters.to != null) {
+    clauses.push(`created_at < ?${values.length + 3}`);
+    values.push(filters.to);
+  }
+  if (filters.completion) clauses.push(filters.completion === 'complete' ? 'completed = 1' : 'completed = 0');
   if (filters.answer) {
     clauses.push(`answer = ?${values.length + 3}`);
     values.push(filters.answer);
@@ -111,8 +134,10 @@ function buildSurveyResponseWhere(filters: SurveyResponseFilters = {}) {
     values.push(`%${filters.path}%`);
   }
   if (filters.search) {
-    clauses.push(`(answer LIKE ?${values.length + 3} OR COALESCE(url_path, '') LIKE ?${values.length + 4})`);
-    values.push(`%${filters.search}%`, `%${filters.search}%`);
+    clauses.push(
+      `(answer LIKE ?${values.length + 3} OR COALESCE(answers, '') LIKE ?${values.length + 3} OR COALESCE(url_path, '') LIKE ?${values.length + 3})`,
+    );
+    values.push(`%${filters.search}%`);
   }
   return { where: clauses.join(' AND '), values };
 }
@@ -338,41 +363,331 @@ export async function getSurveySummary(
   };
 }
 
+type StoredResponseRow = {
+  id: string;
+  surveyId: string;
+  websiteId: string;
+  sessionId: string | null;
+  visitId: string | null;
+  distinctId: string | null;
+  answer: string;
+  answers: string | null;
+  completed: number;
+  source: string;
+  urlPath: string | null;
+  createdAt: number;
+};
+
+const RESPONSE_COLUMNS = `response_id as id,
+            survey_id as surveyId,
+            website_id as websiteId,
+            session_id as sessionId,
+            visit_id as visitId,
+            distinct_id as distinctId,
+            answer,
+            answers,
+            completed,
+            source,
+            url_path as urlPath,
+            created_at as createdAt`;
+
+/**
+ * Latest responses, newest first. With `questions`, `answers` is the structured per-question
+ * form (legacy rows are mapped to the first question).
+ */
 export async function getSurveyResponses(
   env: Env,
   websiteId: string,
   surveyId: string,
   limit = 100,
   filters: SurveyResponseFilters = {},
+  questions: SurveyQuestion[] = [],
 ) {
   const { where, values } = buildSurveyResponseWhere(filters);
   const rows = await env.DB.prepare(
-    `SELECT response_id as id,
-            survey_id as surveyId,
-            website_id as websiteId,
-            session_id as sessionId,
-            visit_id as visitId,
-            answer,
-            url_path as urlPath,
-            created_at as createdAt
+    `SELECT ${RESPONSE_COLUMNS}
      FROM survey_response
      WHERE ${where}
      ORDER BY created_at DESC
      LIMIT ?${values.length + 3}`,
   )
     .bind(websiteId, surveyId, ...values, Math.min(Math.max(limit, 1), 500))
-    .all<{
-      id: string;
-      surveyId: string;
-      websiteId: string;
-      sessionId: string | null;
-      visitId: string | null;
-      answer: string;
-      urlPath: string | null;
-      createdAt: number;
-    }>();
+    .all<StoredResponseRow>();
 
-  return rows.results ?? [];
+  return (rows.results ?? []).map((row) => ({
+    ...row,
+    answers: normalizeResponseAnswers(questions, row),
+    completed: row.completed !== 0,
+  }));
+}
+
+/** Rows read for per-question aggregation. Counts above this are exact; distributions are sampled. */
+const RESULTS_ROW_CAP = 20_000;
+const TEXT_ITEMS_LIMIT = 50;
+
+type CountRow = { value: string; count: number; percentage: number };
+
+export type SurveyQuestionResult = {
+  id: string;
+  type: SurveyQuestion['type'];
+  question: string;
+  /** Responses that answered this question. */
+  answered: number;
+  /** Partial responses whose last answer was this question. */
+  droppedAfter: number;
+  rating?: {
+    min: number;
+    max: number;
+    average: number | null;
+    distribution: CountRow[];
+    nps: { score: number | null; promoters: number; passives: number; detractors: number } | null;
+  };
+  choices?: Array<CountRow & { other: boolean }>;
+  otherAnswers?: Array<{ value: string; count: number }>;
+  text?: {
+    sentiment: Array<{ sentiment: SurveySentiment; responses: number; percentage: number }>;
+    themes: Array<{ theme: SurveyTheme; responses: number; percentage: number }>;
+    items: Array<{ responseId: string; value: string; sentiment: SurveySentiment; createdAt: number }>;
+  };
+  link?: { clicks: number };
+};
+
+function countRows(counts: Map<string, number>, total: number): CountRow[] {
+  return Array.from(counts.entries()).map(([value, count]) => ({ value, count, percentage: percentage(count, total) }));
+}
+
+function aggregateQuestion(
+  question: SurveyQuestion,
+  rows: Array<{ id: string; createdAt: number; answers: SurveyAnswers }>,
+): Omit<SurveyQuestionResult, 'droppedAfter'> {
+  const values = rows
+    .map((row) => ({ row, value: row.answers[question.id] }))
+    .filter((item): item is { row: (typeof rows)[number]; value: SurveyAnswers[string] } => item.value !== undefined);
+  const answered = values.length;
+  const base = { id: question.id, type: question.type, question: question.question, answered };
+
+  if (question.type === 'rating') {
+    const { min, max } = surveyRatingRange(question.scale);
+    const counts = new Map<string, number>();
+    for (let score = min; score <= max; score += 1) counts.set(String(score), 0);
+    let sum = 0;
+    let promoters = 0;
+    let passives = 0;
+    let detractors = 0;
+    for (const { value } of values) {
+      const score = Number(value);
+      sum += score;
+      counts.set(String(score), (counts.get(String(score)) ?? 0) + 1);
+      if (score >= 9) promoters += 1;
+      else if (score >= 7) passives += 1;
+      else detractors += 1;
+    }
+    return {
+      ...base,
+      rating: {
+        min,
+        max,
+        average: answered ? Math.round((sum / answered) * 100) / 100 : null,
+        distribution: countRows(counts, answered).sort((a, b) => Number(a.value) - Number(b.value)),
+        nps:
+          question.scale === 'nps'
+            ? { score: npsScore(promoters, detractors, answered), promoters, passives, detractors }
+            : null,
+      },
+    };
+  }
+
+  if (question.type === 'single_choice' || question.type === 'multiple_choice') {
+    const counts = new Map<string, number>(question.options.map((option) => [option, 0]));
+    const others = new Map<string, number>();
+    let otherTotal = 0;
+    for (const { value } of values) {
+      const picked = Array.isArray(value) ? value : [String(value)];
+      let sawOther = false;
+      for (const item of picked) {
+        if (counts.has(item)) counts.set(item, (counts.get(item) ?? 0) + 1);
+        else {
+          others.set(item, (others.get(item) ?? 0) + 1);
+          sawOther = true;
+        }
+      }
+      if (sawOther) otherTotal += 1;
+    }
+    const choices = countRows(counts, answered).map((row) => ({ ...row, other: false }));
+    if (question.hasOther || otherTotal > 0) {
+      choices.push({ value: 'other', count: otherTotal, percentage: percentage(otherTotal, answered), other: true });
+    }
+    return {
+      ...base,
+      choices,
+      otherAnswers: Array.from(others.entries())
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
+        .slice(0, 20),
+    };
+  }
+
+  if (question.type === 'open') {
+    const sentimentCounts = new Map<SurveySentiment, number>();
+    const themeCounts = new Map<SurveyTheme, number>();
+    const items: NonNullable<SurveyQuestionResult['text']>['items'] = [];
+    for (const { row, value } of values) {
+      const text = surveyAnswerText(value);
+      const sentiment = classifySentiment(text);
+      const theme = classifyTheme(text);
+      sentimentCounts.set(sentiment, (sentimentCounts.get(sentiment) ?? 0) + 1);
+      themeCounts.set(theme, (themeCounts.get(theme) ?? 0) + 1);
+      if (items.length < TEXT_ITEMS_LIMIT) items.push({ responseId: row.id, value: text, sentiment, createdAt: row.createdAt });
+    }
+    return {
+      ...base,
+      text: {
+        sentiment: Array.from(sentimentCounts.entries())
+          .map(([sentiment, responses]) => ({ sentiment, responses, percentage: percentage(responses, answered) }))
+          .sort((a, b) => b.responses - a.responses || a.sentiment.localeCompare(b.sentiment)),
+        themes: Array.from(themeCounts.entries())
+          .map(([theme, responses]) => ({ theme, responses, percentage: percentage(responses, answered) }))
+          .sort((a, b) => b.responses - a.responses || a.theme.localeCompare(b.theme))
+          .slice(0, 8),
+        items,
+      },
+    };
+  }
+
+  return { ...base, link: { clicks: answered } };
+}
+
+/**
+ * Per-question results: distributions, NPS, choice counts (multiple choice counts every
+ * selected option, so percentages can sum past 100), text answers with sentiment, completion
+ * and drop-off, plus responses per day. Totals and the trend are exact SQL counts; per-question
+ * figures read the newest RESULTS_ROW_CAP rows (`sampled` says when the cap was hit).
+ */
+export async function getSurveyResults(
+  env: Env,
+  websiteId: string,
+  surveyId: string,
+  questions: SurveyQuestion[],
+  filters: SurveyResponseFilters = {},
+) {
+  const { where, values } = buildSurveyResponseWhere(filters);
+  const [totals, trendRows, rows] = await Promise.all([
+    env.DB.prepare(
+      `SELECT COUNT(*) as total, COALESCE(SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END), 0) as completed
+       FROM survey_response WHERE ${where}`,
+    )
+      .bind(websiteId, surveyId, ...values)
+      .first<{ total: number; completed: number }>(),
+    env.DB.prepare(
+      `SELECT date(created_at / 1000, 'unixepoch') as date,
+              COUNT(*) as responses,
+              SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as completed
+       FROM survey_response WHERE ${where}
+       GROUP BY date(created_at / 1000, 'unixepoch')
+       ORDER BY date ASC
+       LIMIT 366`,
+    )
+      .bind(websiteId, surveyId, ...values)
+      .all<{ date: string; responses: number; completed: number }>(),
+    env.DB.prepare(
+      `SELECT response_id as id, answer, answers, completed, created_at as createdAt
+       FROM survey_response WHERE ${where}
+       ORDER BY created_at DESC
+       LIMIT ?${values.length + 3}`,
+    )
+      .bind(websiteId, surveyId, ...values, RESULTS_ROW_CAP)
+      .all<{ id: string; answer: string; answers: string | null; completed: number; createdAt: number }>(),
+  ]);
+
+  const parsed = (rows.results ?? []).map((row) => ({
+    id: row.id,
+    createdAt: row.createdAt,
+    completed: row.completed !== 0,
+    answers: normalizeResponseAnswers(questions, row),
+  }));
+
+  const droppedAfter = new Map<string, number>();
+  const reversed = [...questions].reverse();
+  for (const row of parsed) {
+    if (row.completed) continue;
+    const last = reversed.find((question) => row.answers[question.id] !== undefined);
+    if (last) droppedAfter.set(last.id, (droppedAfter.get(last.id) ?? 0) + 1);
+  }
+
+  const total = totals?.total ?? 0;
+  const completed = totals?.completed ?? 0;
+  return {
+    total,
+    completed,
+    partial: total - completed,
+    completionRate: percentage(completed, total),
+    sampled: total > parsed.length,
+    trend: (trendRows.results ?? []).map((row) => ({
+      date: row.date,
+      responses: row.responses,
+      completed: row.completed ?? 0,
+      partial: row.responses - (row.completed ?? 0),
+    })),
+    questions: questions.map(
+      (question): SurveyQuestionResult => ({
+        ...aggregateQuestion(question, parsed),
+        droppedAfter: droppedAfter.get(question.id) ?? 0,
+      }),
+    ),
+  };
+}
+
+const CSV_ROW_CAP = 50_000;
+
+/** Responses in the filter as CSV, oldest first, one column per question. */
+export async function exportSurveyResponsesCsv(
+  env: Env,
+  websiteId: string,
+  surveyId: string,
+  questions: SurveyQuestion[],
+  filters: SurveyResponseFilters = {},
+) {
+  const { where, values } = buildSurveyResponseWhere(filters);
+  const rows = await env.DB.prepare(
+    `SELECT ${RESPONSE_COLUMNS}
+     FROM survey_response
+     WHERE ${where}
+     ORDER BY created_at ASC
+     LIMIT ?${values.length + 3}`,
+  )
+    .bind(websiteId, surveyId, ...values, CSV_ROW_CAP)
+    .all<StoredResponseRow>();
+
+  const header = [
+    'response_id',
+    'created_at',
+    'status',
+    'source',
+    'url_path',
+    'session_id',
+    'distinct_id',
+    ...questions.map((question, index) => `Q${index + 1}: ${question.question}`),
+  ];
+  const lines = [csvRow(header)];
+  for (const row of rows.results ?? []) {
+    const answers = normalizeResponseAnswers(questions, row);
+    lines.push(
+      csvRow([
+        row.id,
+        new Date(row.createdAt).toISOString(),
+        row.completed !== 0 ? 'complete' : 'partial',
+        row.source,
+        row.urlPath,
+        row.sessionId,
+        row.distinctId,
+        ...questions.map((question) => {
+          const value = answers[question.id];
+          return Array.isArray(value) ? value.join('; ') : surveyAnswerText(value);
+        }),
+      ]),
+    );
+  }
+  return `${lines.join('\r\n')}\r\n`;
 }
 
 export async function getFeedbackInbox(
@@ -381,43 +696,82 @@ export async function getFeedbackInbox(
   filters: FeedbackInboxFilters = {},
   limit = 100,
 ) {
-  const searchPattern = filters.search?.trim() ? `%${filters.search.trim()}%` : null;
-  const fetchLimit = filters.sentiment || filters.theme ? 500 : Math.min(Math.max(limit, 1), 500);
-  const rows = await env.DB.prepare(
-    `SELECT r.response_id as id,
-            r.survey_id as surveyId,
-            s.name as surveyName,
-            s.question as question,
-            r.session_id as sessionId,
-            r.visit_id as visitId,
-            r.answer,
-            r.url_path as urlPath,
-            r.created_at as createdAt
-     FROM survey_response r
-     JOIN survey s ON s.survey_id = r.survey_id
-     WHERE r.website_id = ?1
-       AND s.type = 'text'
-       AND (?2 IS NULL OR r.answer LIKE ?2 OR COALESCE(r.url_path, '') LIKE ?2)
-     ORDER BY r.created_at DESC
-     LIMIT ?3`,
+  // Every open-text question of every survey feeds the inbox, not only single-question text surveys.
+  const surveyRows = await env.DB.prepare(
+    `SELECT survey_id as id, name, question, type, options, questions FROM survey WHERE website_id = ?1`,
   )
-    .bind(websiteId, searchPattern, fetchLimit)
-    .all<{
-      id: string;
-      surveyId: string;
-      surveyName: string;
-      question: string;
-      sessionId: string | null;
-      visitId: string | null;
-      answer: string;
-      urlPath: string | null;
-      createdAt: number;
-    }>();
+    .bind(websiteId)
+    .all<{ id: string; name: string; question: string; type: string; options: string | null; questions: string | null }>();
+  const surveys = new Map<string, { name: string; questions: SurveyQuestion[]; open: SurveyQuestion[] }>();
+  for (const row of surveyRows.results ?? []) {
+    const questions = normalizeSurveyQuestions(row);
+    const open = questions.filter((question) => question.type === 'open');
+    if (open.length) surveys.set(row.id, { name: row.name, questions, open });
+  }
 
-  const mapped = (rows.results ?? []).map((row) => {
-    const sentiment = classifySentiment(row.answer);
-    const theme = classifyTheme(row.answer);
-    return { ...row, sentiment, theme };
+  const search = filters.search?.trim() ?? '';
+  const searchPattern = search ? `%${search}%` : null;
+  const fetchLimit = filters.sentiment || filters.theme || search ? 500 : Math.min(Math.max(limit, 1), 500);
+  const rows = surveys.size
+    ? await env.DB.prepare(
+        `SELECT response_id as id,
+                survey_id as surveyId,
+                session_id as sessionId,
+                visit_id as visitId,
+                answer,
+                answers,
+                url_path as urlPath,
+                created_at as createdAt
+         FROM survey_response
+         WHERE website_id = ?1
+           AND survey_id IN (SELECT value FROM json_each(?2))
+           AND (?3 IS NULL OR answer LIKE ?3 OR COALESCE(answers, '') LIKE ?3 OR COALESCE(url_path, '') LIKE ?3)
+         ORDER BY created_at DESC
+         LIMIT ?4`,
+      )
+        .bind(websiteId, JSON.stringify([...surveys.keys()]), searchPattern, fetchLimit)
+        .all<{
+          id: string;
+          surveyId: string;
+          sessionId: string | null;
+          visitId: string | null;
+          answer: string;
+          answers: string | null;
+          urlPath: string | null;
+          createdAt: number;
+        }>()
+    : null;
+
+  const needle = search.toLowerCase();
+  const mapped = (rows?.results ?? []).flatMap((row) => {
+    const survey = surveys.get(row.surveyId);
+    if (!survey) return [];
+    const answers = normalizeResponseAnswers(survey.questions, row);
+    return survey.open.flatMap((question) => {
+      const answer = surveyAnswerText(answers[question.id]);
+      if (!answer) return [];
+      if (needle && !answer.toLowerCase().includes(needle) && !(row.urlPath ?? '').toLowerCase().includes(needle)) {
+        return [];
+      }
+      return [
+        {
+          // One item per open answer. Surveys with a single open question keep the response id.
+          id: survey.open.length > 1 ? `${row.id}:${question.id}` : row.id,
+          responseId: row.id,
+          surveyId: row.surveyId,
+          surveyName: survey.name,
+          questionId: question.id,
+          question: question.question,
+          sessionId: row.sessionId,
+          visitId: row.visitId,
+          answer,
+          urlPath: row.urlPath,
+          createdAt: row.createdAt,
+          sentiment: classifySentiment(answer),
+          theme: classifyTheme(answer),
+        },
+      ];
+    });
   });
 
   const filtered = mapped

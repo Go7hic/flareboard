@@ -146,7 +146,12 @@ Saved insights are the PostHog-style analysis layer used by the dashboard and bo
 |--------|------|------|
 | GET/POST | `/api/websites/:websiteId/feature-flags` | Bearer |
 | POST | `/api/websites/:websiteId/feature-flags/evaluate` | Bearer |
+| POST | `/api/websites/:websiteId/feature-flags/evaluate-all` (all flags for a `distinctId`; stored person properties merged under supplied `personProperties`) | Bearer |
+| GET | `/api/websites/:websiteId/feature-flags/definitions` (condition groups, payloads, cohorts for SDK local evaluation; server-side only) | Bearer |
+| GET | `/api/websites/:websiteId/feature-flags/early-access?distinctId=` | Bearer |
+| PUT | `/api/websites/:websiteId/feature-flags/early-access/:flagKey/enrollment` (`{ distinctId, enrolled }`) | Bearer |
 | GET/PATCH/DELETE | `/api/websites/:websiteId/feature-flags/:flagId` | Bearer |
+| GET | `/api/websites/:websiteId/feature-flags/:flagId/history?page=&pageSize=` | Bearer |
 | GET/POST | `/api/websites/:websiteId/experiments` | Bearer |
 | GET/PATCH/DELETE | `/api/websites/:websiteId/experiments/:experimentId` | Bearer |
 | GET | `/api/websites/:websiteId/experiments/:experimentId/results` | Bearer |

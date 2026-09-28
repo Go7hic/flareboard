@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import { isbot } from 'isbot';
 import {
+  ERROR_FINGERPRINT_PROPERTY,
   COLLECTION_TYPE,
   EVENT_TYPE,
   HEATMAP_NORM_SIZE,
@@ -36,6 +37,7 @@ import { appendMatchedActionTags } from '../lib/actions';
 import { assertEventAllowed, recordEventUsageKv } from '../lib/hosted-limits';
 import { checkIpRateLimit, checkRateLimit, getTrustedClientIp } from '../lib/rate-limit';
 import { fetchApi } from '../lib/api-client';
+import { buildErrorEventDataPayload, reportPossibleRegression } from '../lib/error-tracking';
 
 const SEND_BODY_MAX_BYTES = 65_536;
 const WORKFLOW_DELIVERIES_PER_HOUR = 60;
@@ -692,19 +694,20 @@ async function processSend(
       const eventId = crypto.randomUUID();
       let eventDataPayload =
         type === COLLECTION_TYPE.error
-          ? {
-              ...(data ?? {}),
-              message: message ?? name ?? 'Unknown error',
-              name: errorName ?? 'Error',
+          ? buildErrorEventDataPayload({
+              data,
+              message,
+              name,
+              errorName,
               stack,
               source,
               lineno,
               colno,
-              severity: severity ?? 'error',
-              handled: handled ?? false,
+              severity,
+              handled,
               release,
               environment,
-            }
+            })
           : type === COLLECTION_TYPE.log
             ? buildLogEventDataPayload({
                 data,
@@ -807,6 +810,25 @@ async function processSend(
         },
         eventData,
       });
+
+      if (websiteId && type === COLLECTION_TYPE.error) {
+        const errorData = eventDataPayload as Record<string, unknown>;
+        const fingerprint = errorData[ERROR_FINGERPRINT_PROPERTY];
+        if (typeof fingerprint === 'string') {
+          defer(() =>
+            reportPossibleRegression(env, {
+              websiteId,
+              fingerprint,
+              occurredAt: createdAt.getTime(),
+              eventId,
+              release: release ?? null,
+              environment: environment ?? null,
+              severity: severity ?? 'error',
+              title: `${errorName ?? 'Error'}: ${message ?? name ?? 'Unknown error'}`,
+            }).then(() => undefined),
+          );
+        }
+      }
 
       if (websiteId && name) {
         defer(() =>

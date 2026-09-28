@@ -83,6 +83,15 @@ Header chrome: `--shell-bg` + `backdrop-filter` on `.shell-nav` / `.landing-nav`
 5. Do not add gradients or heavy box-shadows.
 6. Do not reintroduce teal as the primary brand accent.
 
+## Data handling and the legal pages
+
+`apps/dashboard/src/pages/Privacy.tsx` and `Terms.tsx` describe what the code actually does. When you change data collection, storage, cookies, subprocessors or retention, update the matching section and its `UPDATED` date in the same change.
+
+- **Deletion:** deleting a website or account only sets `deleted_at`. `apps/api/src/lib/data-deletion.ts` (hourly cron) erases everything after `DELETION_GRACE_DAYS` (30, promised in both policies). It discovers website-scoped tables from the schema, so new tables with a `website_id` column are covered automatically; user references need a line in `USER_OWNED_TABLES` / `USER_REFERENCES`.
+- **Replay:** R2 objects (`<websiteId>/<visitId>/<chunk>`) must be deleted before their `session_replay` rows (see `lib/retention.ts`). Privacy settings reach `recorder.js` through `/api/tracker-config` → `replay`; inputs are masked unless a site opts out.
+- **Visitor IDs:** a monthly-salted hash of IP + user agent (`getSalt`, default `'month'`). IPs are never stored. Keep landing copy and the Privacy Policy consistent with this.
+- **Logs:** never log one-time links or email bodies in production (`logUndeliveredLink` in `lib/email.ts`).
+
 ## Blog
 
 `apps/blog` shares Geist tokens (`apps/blog/src/styles/geist-tokens.css`). Stay CSS-first (Astro); do not pull dashboard React/shadcn into the blog.

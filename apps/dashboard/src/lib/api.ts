@@ -197,6 +197,12 @@ export interface Website {
   replayEnabled?: boolean;
   goalConfig?: { goals: Array<{ event: string; target: number; period: string }> };
   timezone?: string;
+  /** Tracker: autocapture clicks, submits, field changes and page leaves. */
+  autocapture?: boolean;
+  /** Tracker: remember visitors across sessions with a random localStorage id. */
+  persistVisitors?: boolean;
+  /** Tracker: send nothing from browsers with Do Not Track / Global Privacy Control. */
+  respectDnt?: boolean;
 }
 
 export interface StatValue {
@@ -253,6 +259,7 @@ export interface EventCatalogDetailResponse {
     visitId: string;
     urlPath: string | null;
     createdAt: number;
+    properties?: Array<{ key: string; value: string | null }>;
   }>;
 }
 

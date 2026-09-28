@@ -8,6 +8,7 @@ import { Button } from '../components/ui/button';
 import { api } from '../lib/api';
 import { formatDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
+import { describeBuiltinEvent } from '../lib/autocapture';
 
 interface SessionDetail {
   id: string;
@@ -65,6 +66,14 @@ function formatContextProperties(properties: SessionContextItem['properties']) {
     .filter((item) => item.value)
     .map((item) => `${item.key}: ${item.value}`);
   return values.length ? values.join(' · ') : null;
+}
+
+/** Built-in events read as sentences; their element properties collapse to the selector. */
+function contextDisplay(item: SessionContextItem) {
+  const builtin = item.kind === 'event' ? describeBuiltinEvent(item.title, item.properties) : null;
+  if (!builtin) return { title: item.title, properties: formatContextProperties(item.properties) };
+  const selector = item.properties?.find((p) => p.key === '$el_selector')?.value ?? null;
+  return { title: builtin, properties: selector };
 }
 
 function sourcePath(websiteId: string | undefined, source: SessionContextItem['source']) {
@@ -164,14 +173,12 @@ export default function SessionDetailPage() {
                 <div>
                   <div className="activity-timeline-path">
                     <span className="badge session-context-kind">{t(contextKindLabels[item.kind])}</span>
-                    <strong>{item.title}</strong>
+                    <strong>{contextDisplay(item).title}</strong>
                     {item.detail ? <span className="text-muted"> · {item.detail}</span> : null}
                   </div>
                   <div className="activity-timeline-time">
                     {item.urlPath ? <span>{item.urlPath}</span> : null}
-                    {formatContextProperties(item.properties) ? (
-                      <span>{formatContextProperties(item.properties)}</span>
-                    ) : null}
+                    {contextDisplay(item).properties ? <span>{contextDisplay(item).properties}</span> : null}
                     <span>{formatDateTime(item.createdAt)}</span>
                   </div>
                 </div>

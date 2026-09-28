@@ -50,7 +50,7 @@ describe('backfillActionTags', () => {
     });
     expect(dryRun).toMatchObject({ scanned: 1, tagged: 1, skipped: 0, dryRun: true });
 
-    const tagged = await env.DB.prepare(
+    const tagged = await testSiteDb(TEST_WEBSITE_ID).prepare(
       `SELECT data_key as dataKey
        FROM event_data
        WHERE website_event_id = ?1 AND data_key = '$flareboard_action_ids'`,
@@ -66,7 +66,7 @@ describe('backfillActionTags', () => {
     });
     expect(first).toMatchObject({ scanned: 1, tagged: 1, skipped: 0, dryRun: false });
 
-    const row = await env.DB.prepare(
+    const row = await testSiteDb(TEST_WEBSITE_ID).prepare(
       `SELECT string_value as value
        FROM event_data
        WHERE website_event_id = ?1 AND data_key = '$flareboard_action_ids'

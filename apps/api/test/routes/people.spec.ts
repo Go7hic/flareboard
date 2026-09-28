@@ -4,6 +4,7 @@ import { createSecureToken } from '@flareboard/shared';
 import { upsertPerson } from '@flareboard/db';
 import { fetchWorkerJson } from '../helpers/fetch-worker';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const TEST_USER_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -19,7 +20,7 @@ describe('people routes', () => {
   });
 
   it('patches stored person properties and returns merged profile detail', async () => {
-    await upsertPerson(env.DB, {
+    await upsertPerson(testSiteDb(TEST_WEBSITE_ID), {
       websiteId: TEST_WEBSITE_ID,
       distinctId: 'stored-user-1',
       properties: { email: 'stored@example.com', plan: 'pro' },

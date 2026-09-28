@@ -1,7 +1,7 @@
 import { EVENT_TYPE } from '@flareboard/shared';
 import type { Env } from '../env';
 import { invalidateDailyRollups } from './rollups';
-import { siteDb } from '../lib/site-db';
+import { siteDb } from './site-db';
 
 export type ImportFormat = 'flareboard' | 'ga4' | 'plausible' | 'matomo';
 
@@ -257,7 +257,7 @@ async function flushBatch(env: Env, websiteId: string, batch: ImportRow[]) {
     }
 
     for (let i = 0; i < stmts.length; i += 50) {
-      await env.DB.batch(stmts.slice(i, i + 50));
+      await siteDb(env, websiteId).batch(stmts.slice(i, i + 50));
     }
     batches++;
   }

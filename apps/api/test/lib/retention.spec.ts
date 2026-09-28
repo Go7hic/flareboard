@@ -88,7 +88,7 @@ describe('runRetentionPurge', () => {
   it('deletes expired session replay recordings from R2 along with their rows and summaries', async () => {
     const visits = async (table: string) =>
       (
-        await env.DB.prepare(`SELECT visit_id AS v FROM ${table} WHERE website_id = ?1 ORDER BY visit_id`)
+        await testSiteDb(SITE).prepare(`SELECT visit_id AS v FROM ${table} WHERE website_id = ?1 ORDER BY visit_id`)
           .bind(SITE)
           .all<{ v: string }>()
       ).results?.map((row) => row.v) ?? [];

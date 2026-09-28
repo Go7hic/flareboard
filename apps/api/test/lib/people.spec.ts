@@ -84,7 +84,7 @@ describe('people query helpers', () => {
 
   it('merges stored person profile properties with session properties', async () => {
     const { upsertPerson } = await import('@flareboard/db');
-    await upsertPerson(env.DB, {
+    await upsertPerson(testSiteDb(TEST_WEBSITE_ID), {
       websiteId: TEST_WEBSITE_ID,
       distinctId: 'user-123',
       properties: { title: 'Founder', email: 'stored@example.com' },

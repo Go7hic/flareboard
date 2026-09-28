@@ -1,3 +1,4 @@
+import type { InsightQuery as InsightQueryV2, InsightType as InsightTypeV2 } from '@flareboard/shared/insight-query';
 import { apiReturnedHtmlError, apiUrlConfigError, resolveApiUrl } from './api-url';
 
 const LEGACY_TOKEN_KEY = 'flareboard_token';
@@ -358,39 +359,34 @@ export interface AnnotationsResponse {
   endAt: number;
 }
 
-export type InsightType = 'trend' | 'funnel' | 'retention' | 'path' | 'stickiness' | 'table';
 
-export type InsightQuery = {
-  event?: string | null;
-  events?: string[];
-  path?: string | null;
-  steps?: string[];
-  metric?: 'pageviews' | 'visitors' | 'visits' | 'events';
-  dimension?: string;
-  actor?: 'person' | 'session';
-  unit?: 'hour' | 'day' | 'week' | 'month';
-  limit?: number;
-};
+export type {
+  InsightQuery,
+  InsightResult,
+  InsightType,
+  PropertyFilter,
+  TrendResult,
+  FunnelResult,
+  RetentionResult,
+  LifecycleResult,
+  StickinessResult,
+} from '@flareboard/shared/insight-query';
 
 export interface Insight {
   id: string;
   websiteId: string;
   userId: string;
-  type: InsightType;
+  type: InsightTypeV2;
   name: string;
   description: string;
-  query: InsightQuery;
+  /** Always the v2 shape (the API upgrades legacy rows on read). */
+  query: InsightQueryV2;
   createdAt: number | null;
   updatedAt: number | null;
 }
 
-export type InsightResult =
-  | { kind: 'trend'; series: Array<{ x: string; y: number }>; startAt: number; endAt: number; event?: string; metric?: string }
-  | { kind: 'funnel'; steps: Array<{ step: string; count: number; rate: number }>; conversion: number; startAt: number; endAt: number }
-  | { kind: 'retention'; cohorts: Array<{ cohortWeek: string; weekOffset: number; users: number }>; startAt: number; endAt: number }
-  | { kind: 'path'; prefix: string[]; depth: number; total: number; next: Array<{ path: string; count: number }>; paths: Array<{ path: string; count: number }>; startAt: number; endAt: number }
-  | { kind: 'stickiness'; distribution: Array<{ activeDays: number; actors: number; events: number; percentage: number }>; totalActors: number; actorDays: number; averageActiveDays: number; startAt: number; endAt: number }
-  | { kind: 'table'; dimension: string; rows: MetricRow[]; startAt: number; endAt: number };
+export type PropertyKeyRow = { key: string; count: number; numeric: boolean };
+export type PropertyValueRow = { value: string; count: number };
 
 export interface ErrorEvent {
   id: string;

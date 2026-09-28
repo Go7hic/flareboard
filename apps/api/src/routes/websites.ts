@@ -5,6 +5,7 @@ import { createWebsiteSchema, updateWebsiteSchema, uuid } from '@flareboard/shar
 import type { Env } from '../env';
 import { canAccessWebsite, canMutateTeam, canMutateWebsite, getWebsitePermissions } from '../lib/access';
 import { listEntityAuditLog, logAdminAction } from '../lib/audit';
+import { forgetProjectKey } from '../lib/project-keys';
 import { getAccessibleWebsites, getWebsiteById } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
@@ -216,6 +217,7 @@ export async function handleDelete(c: Ctx) {
     .where(eq(schema.website.websiteId, website.websiteId));
 
   await c.env.CACHE.delete(`website:${website.websiteId}`);
+  await forgetProjectKey(c.env, website.websiteId);
   await logAdminAction(c.env, c.get('user').userId, 'delete', 'website', website.websiteId, {
     name: website.name,
     domain: website.domain ?? null,

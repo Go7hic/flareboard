@@ -172,6 +172,12 @@ describe('scheduled data deletion', () => {
     );
     await run(`INSERT INTO user_subscription (user_id, plan_id, status) VALUES (?1, 'cloud', 'canceled')`, GONE_USER);
     await run(
+      `INSERT INTO personal_api_key (key_id, user_id, name, key_hash, key_prefix, scopes, created_at)
+       VALUES ('dd-api-key', ?1, 'CI', 'dd-key-hash', 'fb_sk_dd00', 'read', ?2)`,
+      GONE_USER,
+      LONG_AGO,
+    );
+    await run(
       `INSERT INTO user_oauth_identity (provider, provider_user_id, user_id, created_at) VALUES ('github', 'dd-gh', ?1, ?2)`,
       GONE_USER,
       LONG_AGO,
@@ -227,7 +233,7 @@ describe('scheduled data deletion', () => {
     expect(await count(`SELECT COUNT(*) AS n FROM link_pixel_hit WHERE source_id = 'dd-link'`)).toBe(0);
     expect(await count(`SELECT COUNT(*) AS n FROM board WHERE board_id = 'dd-board-own'`)).toBe(0);
     expect(await count(`SELECT COUNT(*) AS n FROM share WHERE share_id = 'dd-board-share'`)).toBe(0);
-    for (const table of ['insight', 'user_subscription', 'user_oauth_identity', 'audit_log', 'team_user']) {
+    for (const table of ['insight', 'user_subscription', 'user_oauth_identity', 'audit_log', 'team_user', 'personal_api_key']) {
       expect(await count(`SELECT COUNT(*) AS n FROM ${table} WHERE user_id = ?1`, GONE_USER)).toBe(0);
     }
   });

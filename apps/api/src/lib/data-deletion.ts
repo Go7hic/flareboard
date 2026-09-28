@@ -120,6 +120,7 @@ const OWNED_BY_USER = `user_id = ?1 AND (team_id IS NULL OR team_id IN (SELECT t
 const USER_OWNED_TABLES = [
   'annotation',
   'insight',
+  'personal_api_key',
   'report',
   'usage_monthly',
   'user_oauth_identity',

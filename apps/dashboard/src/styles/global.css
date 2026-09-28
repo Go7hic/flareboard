@@ -4247,6 +4247,192 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   padding-top: 0;
 }
 
+.error-issue-trend {
+  display: block;
+}
+
+.error-issue-trend-baseline {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.error-issue-trend-large .error-issue-trend {
+  width: 100%;
+  max-width: 100%;
+  height: 4rem;
+}
+
+.error-merge-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  min-height: 2rem;
+  font-size: 0.875rem;
+}
+
+.error-merge-target {
+  width: auto;
+  max-width: 22rem;
+}
+
+.errors-table .error-select-col {
+  width: 2.25rem;
+  padding-right: 0;
+}
+
+.error-issue-heading {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.error-issue-heading .page-title {
+  overflow-wrap: anywhere;
+}
+
+.error-issue-grouping {
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.error-issue-grouping-frames {
+  margin: 0.35rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 0.78rem;
+}
+
+.error-stack {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.error-stack-frame {
+  padding: 0.65rem 0.85rem;
+  border-top: 1px solid var(--border);
+}
+
+.error-stack-frame:first-child {
+  border-top: 0;
+}
+
+.error-stack-frame-library {
+  background: var(--bg-subtle);
+}
+
+.error-stack-frame-library .error-stack-function {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.error-stack-frame-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  font-size: 0.82rem;
+}
+
+.error-stack-function {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.error-stack-location,
+.error-stack-generated {
+  overflow-wrap: anywhere;
+}
+
+.error-stack-generated {
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+}
+
+.error-stack-badge {
+  font-size: 0.7rem;
+}
+
+.error-stack-context {
+  margin: 0.5rem 0 0;
+  padding: 0.35rem 0;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.error-stack-context-line {
+  display: block;
+  padding: 0 0.75rem 0 0;
+  white-space: pre;
+  color: var(--text-muted);
+}
+
+.error-stack-context-line.is-current {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--text);
+}
+
+.error-stack-context-number {
+  display: inline-block;
+  width: 3.25rem;
+  padding-right: 0.75rem;
+  text-align: right;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.error-issue-comments {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.error-issue-comments li {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.error-issue-comments p {
+  margin: 0 0 0.25rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.error-issue-comments span {
+  font-size: 0.78rem;
+}
+
+.error-issue-comment-form {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 40rem;
+}
+
+.error-alert-regressions-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  grid-column: 1 / -1;
+}
+
+.error-source-map-ci code {
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+}
+
 @media (max-width: 900px) {
   .master-detail-layout--table,
   .error-insights-grid {
@@ -5087,6 +5273,12 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 .error-status-ignored {
   background: var(--bg-subtle);
   color: var(--text-muted);
+  border-color: transparent;
+}
+
+.error-status-regressed {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
   border-color: transparent;
 }
 

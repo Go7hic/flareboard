@@ -409,6 +409,17 @@ export interface ErrorEvent {
   handled: string | null;
   release: string | null;
   environment: string | null;
+  /** Issue the event belongs to (after merges). */
+  fingerprint: string;
+}
+
+export type ErrorIssueStatus = 'open' | 'resolved' | 'ignored' | 'regressed';
+
+export interface ErrorIssueComment {
+  id: string;
+  userId: string | null;
+  body: string;
+  createdAt: number;
 }
 
 export interface ErrorIssue {
@@ -418,12 +429,20 @@ export interface ErrorIssue {
   severity: string | null;
   events: number;
   sessions: number;
+  users: number;
   firstSeenAt: number | null;
   lastSeenAt: number | null;
   latestEventId: string | null;
-  status: 'open' | 'resolved' | 'ignored';
+  status: ErrorIssueStatus;
   note: string | null;
+  assigneeUserId: string | null;
   stateUpdatedAt: number | null;
+  resolvedAt: number | null;
+  regressedAt: number | null;
+  mergedCount: number;
+  /** Event counts in equal slices of the selected range. */
+  trend: number[];
+  comments: ErrorIssueComment[];
   samples: ErrorEvent[];
 }
 
@@ -431,6 +450,7 @@ export interface ErrorEventsResponse {
   stats: {
     errors: number;
     sessions: number;
+    users: number;
     firstSeenAt: number | null;
     lastSeenAt: number | null;
     releases: Array<{ release: string; errors: number }>;
@@ -442,20 +462,76 @@ export interface ErrorEventsResponse {
   errors: ErrorEvent[];
 }
 
+export interface ResolvedStackFrame {
+  raw: string;
+  functionName: string | null;
+  file: string;
+  line: number | null;
+  column: number | null;
+  inApp: boolean;
+  source: string | null;
+  sourceLine: number | null;
+  sourceColumn: number | null;
+  resolved: boolean;
+  context: { startLine: number; lines: string[] } | null;
+}
+
 export interface ErrorEventDetail extends ErrorEvent {
   properties: Array<{ key: string; value: string | null }>;
-  resolvedStack?: Array<{
-    raw: string;
-    functionName: string | null;
-    file: string;
-    line: number;
-    column: number;
-    source: string | null;
-    sourceLine: number | null;
-    sourceColumn: number | null;
-    resolved: boolean;
-  }>;
+  resolvedStack?: ResolvedStackFrame[];
+  grouping?: {
+    method: 'custom' | 'stack' | 'message';
+    frames: Array<{ file: string; function: string }>;
+  };
 }
+
+export interface ErrorIssueRegression {
+  id: string;
+  fingerprint: string;
+  eventId: string | null;
+  release: string | null;
+  environment: string | null;
+  resolvedAt: number | null;
+  occurredAt: number;
+  detectedAt: number;
+  notifiedAt: number | null;
+}
+
+export interface ErrorIssueDetail {
+  fingerprint: string;
+  name: string | null;
+  message: string | null;
+  severity: string | null;
+  status: ErrorIssueStatus;
+  note: string | null;
+  assigneeUserId: string | null;
+  stateUpdatedAt: number | null;
+  resolvedAt: number | null;
+  regressedAt: number | null;
+  events: number;
+  sessions: number;
+  users: number;
+  firstSeenAt: number | null;
+  lastSeenAt: number | null;
+  trend: number[];
+  trendStartAt: number;
+  trendEndAt: number;
+  samples: ErrorEvent[];
+  latestEvent: ErrorEventDetail | null;
+  comments: ErrorIssueComment[];
+  mergedIssues: Array<{
+    fingerprint: string;
+    name: string | null;
+    message: string | null;
+    mergedAt: number | null;
+    mergedBy: string | null;
+    events: number;
+    lastSeenAt: number | null;
+  }>;
+  regressions: ErrorIssueRegression[];
+}
+
+export type ErrorIssueDetailResponse = { issue: ErrorIssueDetail } | { mergedInto: string };
 
 export interface LogEvent {
   id: string;
@@ -1154,6 +1230,8 @@ export interface ErrorAlertRule {
   environment: string | null;
   channel: 'record' | 'email' | 'webhook';
   target: string | null;
+  /** Also notify when a resolved issue occurs again. */
+  notifyRegressions: boolean;
   createdAt?: number;
   updatedAt?: number;
 }

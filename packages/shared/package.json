@@ -9,6 +9,7 @@
     "./client": "./src/client.ts",
     "./csv": "./src/csv.ts",
     "./date-range": "./src/date-range.ts",
+    "./insight-query": "./src/insight-query.ts",
     "./timezone": "./src/timezone.ts"
   },
   "scripts": {

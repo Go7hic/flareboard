@@ -1,26 +1,23 @@
-import { EVENT_TYPE } from '@flareboard/shared';
-import type { Env } from '../env';
 import {
-  getFunnelReport,
-  getJourneyFlowReport,
-  getRetentionReport,
-  getStickinessReport,
-} from './advanced-reports';
-import { getEventSeries, getMetrics, getPageviews, getWebsiteMetricsSeries } from './queries';
+  INSIGHT_TYPES,
+  parseInsightQuery,
+  type FunnelActorsResult,
+  type InsightQuery,
+  type InsightResult,
+  type InsightType,
+} from '@flareboard/shared';
+import type { Env } from '../env';
+import { getJourneyFlowReport } from './advanced-reports';
+import { runLifecycle, runRetention, runStickiness, retentionPlanFromQuery } from './insight-activity';
+import { runFunnel, runFunnelActors } from './insight-funnels';
+import type { InsightContext } from './insight-sql';
+import { runTrends } from './insight-trends';
+import { InsightQueryError } from './property-filters';
+import { getMetrics, getWebsiteById } from './queries';
+import { clampReportRange } from './report-range';
+import { siteDb } from './site-db';
 
-export type InsightType = 'trend' | 'funnel' | 'retention' | 'path' | 'stickiness' | 'table';
-
-export type InsightQuery = {
-  event?: string | null;
-  events?: string[];
-  path?: string | null;
-  steps?: string[];
-  metric?: 'pageviews' | 'visitors' | 'visits' | 'events';
-  dimension?: string;
-  actor?: 'person' | 'session';
-  unit?: 'hour' | 'day' | 'week' | 'month';
-  limit?: number;
-};
+export type { InsightQuery, InsightType };
 
 export type InsightLike = {
   id: string;
@@ -29,7 +26,7 @@ export type InsightLike = {
   type: InsightType | string;
   name: string;
   description: string;
-  query: InsightQuery;
+  query: unknown;
   createdAt: number | Date | null;
   updatedAt: number | Date | null;
 };
@@ -39,17 +36,25 @@ function timeValue(value: number | Date | null) {
   return value;
 }
 
-function normalizeUnit(unit: InsightQuery['unit']) {
-  if (unit === 'hour' || unit === 'month') return unit;
-  return 'day';
+export function isInsightType(type: string): type is InsightType {
+  return (INSIGHT_TYPES as readonly string[]).includes(type);
 }
 
-function normalizeQuery(query: unknown): InsightQuery {
-  if (!query || typeof query !== 'object' || Array.isArray(query)) return {};
-  return query as InsightQuery;
+/** Stored or submitted query as v2, or an InsightQueryError. */
+export function resolveInsightQuery(type: string, raw: unknown): InsightQuery {
+  if (!isInsightType(type)) throw new InsightQueryError(`Unknown insight type "${type}"`);
+  const parsed = parseInsightQuery(type, raw);
+  if (!parsed.ok) throw new InsightQueryError(parsed.error);
+  return parsed.query;
 }
 
+/** API shape of a saved insight. `query` is always v2; unreadable rows keep their raw query. */
 export function serializeInsight(row: InsightLike) {
+  let query: unknown = row.query;
+  if (isInsightType(row.type)) {
+    const parsed = parseInsightQuery(row.type, row.query);
+    if (parsed.ok) query = parsed.query;
+  }
   return {
     id: row.id,
     websiteId: row.websiteId,
@@ -57,100 +62,91 @@ export function serializeInsight(row: InsightLike) {
     type: row.type,
     name: row.name,
     description: row.description,
-    query: normalizeQuery(row.query),
+    query,
     createdAt: timeValue(row.createdAt),
     updatedAt: timeValue(row.updatedAt),
+  };
+}
+
+export type RunInsightOptions = {
+  /** Site timezone for buckets; looked up when omitted. */
+  timezone?: string;
+  /** Statistics reset floor: nothing before it is counted. */
+  minStartAt?: number | null;
+};
+
+async function insightContext(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  options: RunInsightOptions,
+): Promise<InsightContext> {
+  const timezone = options.timezone ?? (await getWebsiteById(env, websiteId))?.timezone ?? 'UTC';
+  const range = clampReportRange(startAt, endAt);
+  const floor = options.minStartAt ?? 0;
+  return {
+    db: siteDb(env, websiteId),
+    websiteId,
+    startAt: floor > range.startAt ? Math.min(floor, range.endAt) : range.startAt,
+    endAt: range.endAt,
+    timezone,
   };
 }
 
 export async function runInsightQuery(
   env: Env,
   websiteId: string,
-  type: InsightType,
-  query: InsightQuery,
+  type: InsightType | string,
+  rawQuery: unknown,
   startAt: number,
   endAt: number,
-) {
-  if (type === 'trend') {
-    const unit = normalizeUnit(query.unit);
-    if (query.metric === 'events' || query.event) {
-      const event = query.event || query.events?.[0] || '';
-      if (!event) {
-        const rows = await env.DB.prepare(
-          `SELECT strftime(?4, datetime(created_at / 1000, 'unixepoch')) as x,
-                  COUNT(*) as y
-           FROM website_event
-           WHERE website_id = ?1
-             AND created_at >= ?2
-             AND created_at <= ?3
-             AND event_type = ?5
-           GROUP BY x
-           ORDER BY x ASC`,
-        )
-          .bind(
-            websiteId,
-            startAt,
-            endAt,
-            unit === 'hour' ? '%Y-%m-%d %H:00' : unit === 'month' ? '%Y-%m' : '%Y-%m-%d',
-            EVENT_TYPE.customEvent,
-          )
-          .all<{ x: string; y: number }>();
-        return { kind: 'trend', series: rows.results ?? [], startAt, endAt };
-      }
-      const series = await getEventSeries(env, websiteId, startAt, endAt, event, unit);
-      return { kind: 'trend', event, series, startAt, endAt };
-    }
-    if (query.metric === 'visitors' || query.metric === 'visits') {
-      const series = await getWebsiteMetricsSeries(env, websiteId, startAt, endAt, unit);
-      return {
-        kind: 'trend',
-        metric: query.metric,
-        series: query.metric === 'visitors' ? series.visitors : series.pageviews,
-        startAt,
-        endAt,
-      };
-    }
-    const pageviews = await getPageviews(env, websiteId, startAt, endAt, unit);
-    return { kind: 'trend', metric: 'pageviews', series: pageviews.pageviews, startAt, endAt };
-  }
+  options: RunInsightOptions = {},
+): Promise<InsightResult> {
+  const query = resolveInsightQuery(type, rawQuery);
+  const ctx = await insightContext(env, websiteId, startAt, endAt, options);
 
-  if (type === 'funnel') {
-    const steps = (query.events ?? []).filter(Boolean);
-    return {
-      kind: 'funnel',
-      ...(await getFunnelReport(env, websiteId, startAt, endAt, steps)),
-      startAt,
-      endAt,
-    };
-  }
-
-  if (type === 'retention') {
-    return { kind: 'retention', ...(await getRetentionReport(env, websiteId, startAt, endAt)) };
-  }
-
-  if (type === 'path') {
-    const prefix = (query.steps?.length ? query.steps : query.path ? [query.path] : []).filter(Boolean);
-    return {
-      kind: 'path',
-      ...(await getJourneyFlowReport(env, websiteId, startAt, endAt, prefix, query.limit ?? 20)),
-    };
-  }
-
-  if (type === 'stickiness') {
-    return {
-      kind: 'stickiness',
-      ...(await getStickinessReport(
+  switch (type as InsightType) {
+    case 'trend':
+      return runTrends(ctx, query);
+    case 'funnel':
+      return runFunnel(ctx, query);
+    case 'retention':
+      return runRetention(ctx, retentionPlanFromQuery(ctx, query, options.minStartAt ?? undefined));
+    case 'lifecycle':
+      return runLifecycle(ctx, query);
+    case 'stickiness':
+      return runStickiness(ctx, query.series?.[0] ?? { kind: 'all' }, query.countBy ?? 'person', query.filters);
+    case 'path': {
+      const report = await getJourneyFlowReport(
         env,
         websiteId,
-        startAt,
-        endAt,
-        query.event ?? query.events?.[0] ?? null,
-        query.actor ?? 'person',
-      )),
-    };
+        ctx.startAt,
+        ctx.endAt,
+        query.path?.steps ?? [],
+        query.path?.limit ?? 20,
+        query.filters?.length ? { properties: query.filters } : null,
+      );
+      return { kind: 'path', ...report };
+    }
+    case 'table': {
+      const dimension = query.table?.dimension ?? 'path';
+      const rows = await getMetrics(env, websiteId, ctx.startAt, ctx.endAt, dimension, query.table?.limit ?? 10);
+      return { kind: 'table', dimension, rows, startAt: ctx.startAt, endAt: ctx.endAt };
+    }
   }
+}
 
-  const dimension = query.dimension ?? (query.metric === 'events' ? 'event' : 'path');
-  const rows = await getMetrics(env, websiteId, startAt, endAt, dimension, query.limit ?? 10);
-  return { kind: 'table', dimension, rows, startAt, endAt };
+export async function runInsightFunnelActors(
+  env: Env,
+  websiteId: string,
+  rawQuery: unknown,
+  startAt: number,
+  endAt: number,
+  actors: Parameters<typeof runFunnelActors>[2],
+  options: RunInsightOptions = {},
+): Promise<FunnelActorsResult> {
+  const query = resolveInsightQuery('funnel', rawQuery);
+  const ctx = await insightContext(env, websiteId, startAt, endAt, options);
+  return runFunnelActors(ctx, query, actors);
 }

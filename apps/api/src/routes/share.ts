@@ -23,7 +23,8 @@ import {
   getWebsiteStats,
 } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
-import { runInsightQuery, type InsightQuery, type InsightType } from '../lib/insights';
+import { runInsightQuery } from '../lib/insights';
+import { InsightQueryError } from '../lib/property-filters';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
@@ -246,15 +247,19 @@ export async function handlePublicGet(c: Context<{ Bindings: Env }>) {
             .where(eq(schema.insight.insightId, w.insightId))
             .limit(1);
           if (!insight) return w;
+          // A saved query that no longer validates must not take the whole shared board down.
           const result = await runInsightQuery(
             c.env,
             insight.websiteId,
-            insight.type as InsightType,
-            insight.query as InsightQuery,
+            insight.type,
+            insight.query,
             startAt,
             endAt,
-          );
-          return { ...w, result };
+          ).catch((error: unknown) => {
+            if (error instanceof InsightQueryError) return null;
+            throw error;
+          });
+          return result ? { ...w, result } : w;
         }
         return w;
       }),

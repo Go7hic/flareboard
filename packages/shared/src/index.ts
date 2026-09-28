@@ -8,6 +8,7 @@ export * from './feature-flag-evaluator';
 export * from './flag-hash';
 export * from './action-evaluator';
 export * from './geoip';
+export * from './insight-query';
 export * from './crypto';
 export * from './jwt';
 export * from './password';

@@ -1,3 +1,4 @@
+import { flagBucketingId, flagHash } from './flag-hash';
 export type FeatureFlagVariantConfig = {
   key: string;
   name?: string;
@@ -73,25 +74,11 @@ export type FeatureFlagEvaluationResult = {
   reason: 'missing' | 'disabled' | 'targeting_mismatch' | 'rollout_miss' | 'match';
 };
 
-function stableHash(value: string) {
-  let hash = 2166136261;
-  for (let i = 0; i < value.length; i++) {
-    hash ^= value.charCodeAt(i);
-    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-  }
-  return Math.abs(hash >>> 0) % 100;
-}
+const stableHash = flagHash;
 
+/** Same bucketing id as the tracker script (see flag-hash.ts). */
 function bucketId(context: FeatureFlagEvaluationContext) {
-  return (
-    context.userId ||
-    context.distinctId ||
-    context.sessionId ||
-    context.visitId ||
-    context.anonymousId ||
-    context.userAgent ||
-    'anonymous'
-  );
+  return flagBucketingId(context);
 }
 
 /** Canonical rollout bucket string. Must stay in sync with the embedded tracker script (`hashFlag(key+':'+id)`). */

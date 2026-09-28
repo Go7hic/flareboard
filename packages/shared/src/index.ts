@@ -5,6 +5,7 @@ export * from './csv';
 export * from './delivery';
 export * from './core';
 export * from './feature-flag-evaluator';
+export * from './flag-hash';
 export * from './action-evaluator';
 export * from './geoip';
 export * from './crypto';

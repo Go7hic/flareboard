@@ -287,19 +287,82 @@ export const updateFeatureFlagSchema = z.object({
 
 export const experimentStatusSchema = z.enum(['draft', 'running', 'paused', 'completed']);
 
-export const createExperimentSchema = z.object({
-  name: z.string().min(1).max(120),
-  description: z.string().max(500).optional().default(''),
-  featureFlagId: z.string().uuid(),
-  goalEvent: z.string().min(1).max(80),
-  status: experimentStatusSchema.optional().default('draft'),
-});
+/**
+ * How an experiment metric turns a unit's events into one number:
+ * - conversion: 1 if the unit did `event` after exposure, else 0 (a rate)
+ * - count: occurrences of `event` per unit (a mean)
+ * - property_sum: sum of the numeric `property` over the unit's `event`s, 0 without events
+ * - property_mean: mean of `property` over the unit's `event`s, for units with at least one
+ */
+export const EXPERIMENT_METRIC_TYPES = ['conversion', 'count', 'property_sum', 'property_mean'] as const;
+export type ExperimentMetricType = (typeof EXPERIMENT_METRIC_TYPES)[number];
+export const MAX_EXPERIMENT_SECONDARY_METRICS = 5;
+/** Relative minimum detectable effect (percent) used for sample-size guidance when unset. */
+export const DEFAULT_EXPERIMENT_MDE_PERCENT = 10;
+
+export type ExperimentMetric = {
+  type: ExperimentMetricType;
+  event: string;
+  /** Numeric event property, only for property_sum / property_mean. */
+  property?: string;
+  /** Optional display label. */
+  name?: string;
+};
+
+export function isPropertyMetricType(type: ExperimentMetricType): boolean {
+  return type === 'property_sum' || type === 'property_mean';
+}
+
+export const experimentMetricSchema = z
+  .object({
+    type: z.enum(EXPERIMENT_METRIC_TYPES),
+    event: z.string().trim().min(1).max(80),
+    property: z.string().trim().max(120).optional(),
+    name: z.string().trim().max(120).optional(),
+  })
+  .refine((metric) => !isPropertyMetricType(metric.type) || Boolean(metric.property), {
+    message: 'Property metrics require a numeric event property',
+    path: ['property'],
+  })
+  .transform(
+    (metric): ExperimentMetric => ({
+      type: metric.type,
+      event: metric.event,
+      ...(isPropertyMetricType(metric.type) ? { property: metric.property } : {}),
+      ...(metric.name ? { name: metric.name } : {}),
+    }),
+  );
+
+const experimentSecondaryMetricsSchema = z.array(experimentMetricSchema).max(MAX_EXPERIMENT_SECONDARY_METRICS);
+const experimentMdeSchema = z.number().min(0.1).max(100);
+
+export const createExperimentSchema = z
+  .object({
+    name: z.string().min(1).max(120),
+    description: z.string().max(500).optional().default(''),
+    featureFlagId: z.string().uuid(),
+    /** Legacy: becomes a primary conversion metric when `primaryMetric` is absent. */
+    goalEvent: z.string().trim().min(1).max(80).optional(),
+    primaryMetric: experimentMetricSchema.optional(),
+    secondaryMetrics: experimentSecondaryMetricsSchema.optional().default([]),
+    /** Relative lift in percent that the sample-size guidance plans for. */
+    minimumDetectableEffect: experimentMdeSchema.nullable().optional(),
+    status: experimentStatusSchema.optional().default('draft'),
+  })
+  .refine((body) => Boolean(body.primaryMetric || body.goalEvent), {
+    message: 'A primary metric is required',
+    path: ['primaryMetric'],
+  });
 
 export const updateExperimentSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   description: z.string().max(500).optional(),
   featureFlagId: z.string().uuid().optional(),
-  goalEvent: z.string().min(1).max(80).optional(),
+  /** Legacy: changes the event of the primary metric. */
+  goalEvent: z.string().trim().min(1).max(80).optional(),
+  primaryMetric: experimentMetricSchema.optional(),
+  secondaryMetrics: experimentSecondaryMetricsSchema.optional(),
+  minimumDetectableEffect: experimentMdeSchema.nullable().optional(),
   status: experimentStatusSchema.optional(),
 });
 

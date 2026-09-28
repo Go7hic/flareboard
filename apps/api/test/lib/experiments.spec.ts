@@ -1,44 +1,39 @@
 import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { EVENT_TYPE } from '@flareboard/shared';
-import { getExperimentResults } from '../../src/lib/experiments';
+import type { ExperimentMetric } from '@flareboard/shared';
+import {
+  requiredSampleSizeForProportion,
+  twoProportionZTest,
+  type ExperimentAllocation,
+} from '@flareboard/shared/experiment-stats';
+import type { Env } from '../../src/env';
+import { getExperimentResults, type ExperimentAnalysisInput } from '../../src/lib/experiments';
+import { exposure, seedAnalytics, type SeedEvent, type SeedSession } from '../helpers/experiment-seed';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
 
 const BASE = Date.UTC(2026, 0, 1, 12);
-const DAY = 24 * 60 * 60 * 1000;
+const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
+const HALF_SPLIT: ExperimentAllocation = { enabled: true, rollout: 50, variants: [], targeted: false };
 
-async function insertSession(id: string) {
-  await env.DB.prepare(
-    `INSERT OR IGNORE INTO session (session_id, website_id, created_at)
-     VALUES (?1, ?2, ?3)`,
-  )
-    .bind(id, TEST_WEBSITE_ID, BASE)
-    .run();
+function analyze(overrides: Partial<ExperimentAnalysisInput> & Pick<ExperimentAnalysisInput, 'flagKey'>) {
+  const input: ExperimentAnalysisInput = {
+    startAt: BASE,
+    endAt: BASE + 7 * DAY,
+    primaryMetric: { type: 'conversion', event: 'checkout_completed' },
+    secondaryMetrics: [],
+    allocation: HALF_SPLIT,
+    minimumDetectableEffect: 0.1,
+    now: BASE + 7 * DAY,
+    ...overrides,
+  };
+  return getExperimentResults(env as unknown as Env, TEST_WEBSITE_ID, input);
 }
 
-async function insertEvent(
-  id: string,
-  sessionId: string,
-  eventName: string,
-  createdAt: number,
-  data: Record<string, string>,
-) {
-  await env.DB.prepare(
-    `INSERT INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
-     VALUES (?1, ?2, ?3, ?3, ?4, '/', ?5, ?6)`,
-  )
-    .bind(id, TEST_WEBSITE_ID, sessionId, createdAt, EVENT_TYPE.customEvent, eventName)
-    .run();
-
-  let index = 0;
-  for (const [key, value] of Object.entries(data)) {
-    await env.DB.prepare(
-      `INSERT INTO event_data (event_data_id, website_id, website_event_id, data_key, string_value, data_type, created_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6)`,
-    )
-      .bind(`${id}-data-${index++}`, TEST_WEBSITE_ID, id, key, value, createdAt)
-      .run();
-  }
+function metricRow(result: Awaited<ReturnType<typeof analyze>>, metricIndex: number, variant: string) {
+  const row = result.metrics[metricIndex]!.variants.find((item) => item.variant === variant);
+  if (!row) throw new Error(`missing ${variant} in metric ${metricIndex}`);
+  return row;
 }
 
 describe('getExperimentResults', () => {
@@ -47,295 +42,302 @@ describe('getExperimentResults', () => {
     await seedTestWebsite(env.DB);
   });
 
-  it('counts exposed sessions and goal conversions by feature flag variant', async () => {
-    await insertSession('exp-control-1');
-    await insertSession('exp-control-2');
-    await insertSession('exp-test-1');
-    await insertSession('exp-test-2');
+  it('counts every exposed unit (far past the old 500-exposure cap) and conversions without $feature/*', async () => {
+    const flagKey = 'exp.scale';
+    const sessions: SeedSession[] = [];
+    const events: SeedEvent[] = [];
+    for (let i = 0; i < 700; i++) {
+      const variant = i % 2 === 0 ? 'control' : 'test';
+      const sessionId = `scale-${i}`;
+      sessions.push({ id: sessionId, createdAt: BASE });
+      events.push(exposure(`scale-exp-${i}`, sessionId, flagKey, variant, BASE + i * 60_000));
+      // A second page load re-exposes the same session: still one unit.
+      events.push(exposure(`scale-exp2-${i}`, sessionId, flagKey, variant, BASE + i * 60_000 + 5_000));
+      const armIndex = Math.floor(i / 2);
+      const converts = variant === 'control' ? armIndex % 10 < 2 : armIndex % 10 < 3;
+      if (converts) {
+        events.push({ id: `scale-goal-${i}`, sessionId, name: 'checkout_completed', createdAt: BASE + i * 60_000 + 30_000 });
+      }
+    }
+    await seedAnalytics(TEST_WEBSITE_ID, { sessions, events });
 
-    await insertEvent('exposure-control-1', 'exp-control-1', '$feature_flag_called', BASE, {
-      '$feature_flag': 'checkout.new_flow',
-      '$feature_flag_response': 'control',
-      '$feature/checkout.new_flow': 'control',
-    });
-    await insertEvent('exposure-test-1', 'exp-test-1', '$feature_flag_called', BASE, {
-      '$feature_flag': 'checkout.new_flow',
-      '$feature_flag_response': 'test',
-      '$feature/checkout.new_flow': 'test',
-    });
-    await insertEvent('exposure-test-2', 'exp-test-2', '$feature_flag_called', BASE, {
-      '$feature_flag': 'checkout.new_flow',
-      '$feature_flag_response': 'test',
-      '$feature/checkout.new_flow': 'test',
-    });
-    await insertEvent('conversion-test-1', 'exp-test-1', 'checkout_completed', BASE + 1000, {
-      '$feature/checkout.new_flow': 'test',
-    });
-    await insertEvent('conversion-control-1', 'exp-control-1', 'checkout_completed', BASE + 1000, {
-      '$feature/checkout.new_flow': 'control',
-    });
-    await insertEvent('exposure-control-2', 'exp-control-2', '$feature_flag_called', BASE + DAY, {
-      '$feature_flag': 'checkout.new_flow',
-      '$feature_flag_response': 'control',
-      '$feature/checkout.new_flow': 'control',
-    });
-    await insertEvent('conversion-control-2', 'exp-control-2', 'checkout_completed', BASE + DAY + 1000, {
-      '$feature/checkout.new_flow': 'control',
-    });
+    const result = await analyze({ flagKey });
 
-    const result = await getExperimentResults(
-      env,
-      TEST_WEBSITE_ID,
-      'checkout.new_flow',
-      'checkout_completed',
-      BASE - 1000,
-      BASE + DAY + 2000,
-    );
-
+    expect(result.summary.totalUnits).toBe(700);
+    expect(result.summary.excludedUnits).toBe(0);
     expect(result.variants).toEqual([
-      expect.objectContaining({
-        variant: 'control',
-        exposures: 2,
-        conversions: 2,
-        conversionRate: 100,
-        lift: null,
-        baseline: true,
-        confidenceIntervalLow: expect.any(Number),
-        confidenceIntervalHigh: expect.any(Number),
-        pValue: null,
-        confidence: null,
-        significant: false,
-      }),
-      expect.objectContaining({
-        variant: 'test',
-        exposures: 2,
-        conversions: 1,
-        conversionRate: 50,
-        lift: -50,
-        baseline: false,
-        confidenceIntervalLow: expect.any(Number),
-        confidenceIntervalHigh: expect.any(Number),
-        pValue: expect.any(Number),
-        confidence: expect.any(Number),
-        significant: false,
-      }),
+      { variant: 'control', baseline: true, units: 350, share: 0.5, expectedShare: 0.5 },
+      { variant: 'test', baseline: false, units: 350, share: 0.5, expectedShare: 0.5 },
     ]);
+    const control = metricRow(result, 0, 'control');
+    const test = metricRow(result, 0, 'test');
+    expect(control).toMatchObject({ sampleSize: 350, total: 70, value: 0.2, comparison: null });
+    expect(test).toMatchObject({ sampleSize: 350, total: 105, value: 0.3 });
+    const reference = twoProportionZTest({ n: 350, successes: 70 }, { n: 350, successes: 105 });
+    expect(test.comparison!.frequentist.pValue).toBeCloseTo(reference.pValue!, 12);
+    expect(test.comparison!.frequentist.significant).toBe(true);
+    expect(test.comparison!.lift).toBeCloseTo(0.5, 12);
+    expect(test.comparison!.bayesian.probabilityToBeatControl).toBeGreaterThan(0.99);
+    expect(result.srm).toMatchObject({ status: 'ok', pValue: 1 });
     expect(result.summary).toMatchObject({
-      totalExposures: 4,
-      totalConversions: 3,
-      conversionRate: 75,
-      truncated: false,
-      exposureSampleLimit: 500,
-      controlVariant: 'control',
-      controlConversionRate: 100,
-      leaderVariant: 'control',
-      leaderConversionRate: 100,
-      leaderLift: null,
-      significantVariant: null,
-      maxConfidence: expect.any(Number),
-      trafficImbalanced: false,
-      sampleReady: false,
-      decision: 'keep_collecting',
-      recommendation: 'collect_more_data',
-      diagnostics: [{ code: 'low_sample', level: 'info' }],
-      sampleSize: {
-        minimumExposuresPerVariant: 30,
-        minimumConversions: 10,
-        currentMinExposures: 2,
-        remainingExposures: 56,
-        remainingConversions: 7,
-        ready: false,
-      },
-    });
-    expect(result.recent).toEqual([
-      {
-        id: 'exposure-control-2',
-        sessionId: 'exp-control-2',
-        variant: 'control',
-        urlPath: '/',
-        exposedAt: BASE + DAY,
-        converted: true,
-        convertedAt: BASE + DAY + 1000,
-      },
-      {
-        id: 'exposure-test-2',
-        sessionId: 'exp-test-2',
-        variant: 'test',
-        urlPath: '/',
-        exposedAt: BASE,
-        converted: false,
-        convertedAt: null,
-      },
-      {
-        id: 'exposure-test-1',
-        sessionId: 'exp-test-1',
-        variant: 'test',
-        urlPath: '/',
-        exposedAt: BASE,
-        converted: true,
-        convertedAt: BASE + 1000,
-      },
-      {
-        id: 'exposure-control-1',
-        sessionId: 'exp-control-1',
-        variant: 'control',
-        urlPath: '/',
-        exposedAt: BASE,
-        converted: true,
-        convertedAt: BASE + 1000,
-      },
-    ]);
-    expect(result.trend).toEqual([
-      {
-        date: '2026-01-01',
-        variant: 'control',
-        exposures: 1,
-        conversions: 1,
-        conversionRate: 100,
-      },
-      {
-        date: '2026-01-01',
-        variant: 'test',
-        exposures: 2,
-        conversions: 1,
-        conversionRate: 50,
-      },
-      {
-        date: '2026-01-02',
-        variant: 'control',
-        exposures: 1,
-        conversions: 1,
-        conversionRate: 100,
-      },
-    ]);
-  });
-
-  it('marks a leading variant as significant when sample and conversion gap are strong', async () => {
-    const later = BASE + DAY * 5;
-
-    for (let i = 0; i < 40; i++) {
-      const controlSession = `sig-control-${i}`;
-      await insertSession(controlSession);
-      await insertEvent(`sig-exposure-control-${i}`, controlSession, '$feature_flag_called', later + i, {
-        '$feature_flag': 'checkout.significance',
-        '$feature_flag_response': 'control',
-        '$feature/checkout.significance': 'control',
-      });
-      if (i < 20) {
-        await insertEvent(`sig-conversion-control-${i}`, controlSession, 'checkout_completed', later + 1000 + i, {
-          '$feature/checkout.significance': 'control',
-        });
-      }
-
-      const testSession = `sig-test-${i}`;
-      await insertSession(testSession);
-      await insertEvent(`sig-exposure-test-${i}`, testSession, '$feature_flag_called', later + 2000 + i, {
-        '$feature_flag': 'checkout.significance',
-        '$feature_flag_response': 'test',
-        '$feature/checkout.significance': 'test',
-      });
-      if (i < 32) {
-        await insertEvent(`sig-conversion-test-${i}`, testSession, 'checkout_completed', later + 3000 + i, {
-          '$feature/checkout.significance': 'test',
-        });
-      }
-    }
-
-    const result = await getExperimentResults(
-      env,
-      TEST_WEBSITE_ID,
-      'checkout.significance',
-      'checkout_completed',
-      later - 1000,
-      later + 10_000,
-    );
-
-    expect(result.summary).toMatchObject({
-      totalExposures: 80,
-      totalConversions: 52,
-      truncated: false,
-      exposureSampleLimit: 500,
-      leaderVariant: 'test',
-      significantVariant: 'test',
-      sampleReady: true,
       decision: 'ship_variant',
-      recommendation: 'variant_leading',
-      conclusion: {
-        status: 'winner',
-        variant: 'test',
-        action: 'ship_variant',
-        confidence: expect.any(Number),
+      significantVariant: 'test',
+      leaderVariant: 'test',
+      bayesianLeader: 'test',
+      minimumSampleReached: true,
+    });
+    expect(result.summary.diagnostics).toContainEqual({ code: 'significant_variant', level: 'success' });
+
+    const required = requiredSampleSizeForProportion(0.2, 0.1)!;
+    expect(result.guidance).toMatchObject({
+      metricType: 'conversion',
+      baseline: 0.2,
+      requiredUnitsPerVariant: required,
+      currentUnitsPerVariant: 350,
+      minimumDetectableEffect: 0.1,
+    });
+    // 350 units per arm in 7 days = 50/day.
+    expect(result.guidance!.estimatedDaysRemaining).toBe(Math.ceil((required - 350) / 50));
+    expect(result.trend.reduce((sum, row) => sum + row.units, 0)).toBe(700);
+    expect(result.recent).toHaveLength(20);
+    expect(result.recent[0]).toMatchObject({ id: 'scale-exp-699', sessionId: 'scale-699', variant: 'test' });
+  });
+
+  it('dedups by distinct id across sessions and only counts conversions after the first exposure', async () => {
+    const flagKey = 'exp.identity';
+    const t0 = BASE + HOUR;
+    await seedAnalytics(TEST_WEBSITE_ID, {
+      sessions: [
+        { id: 'id-u1-a', distinctId: 'user-1', createdAt: t0 },
+        { id: 'id-u1-b', distinctId: 'user-1', createdAt: t0 },
+        { id: 'id-u1-c', distinctId: 'user-1', createdAt: t0 },
+        { id: 'id-u2-a', distinctId: 'user-2', createdAt: t0 },
+        { id: 'id-u2-b', distinctId: 'user-2', createdAt: t0 },
+        { id: 'id-u3-a', distinctId: 'user-3', createdAt: t0 },
+        { id: 'id-anon', createdAt: t0 },
+      ],
+      events: [
+        // user-1: three sessions, one unit; converts in a session other than the exposure's.
+        exposure('id-u1-exp-a', 'id-u1-a', flagKey, 'control', t0),
+        exposure('id-u1-exp-b', 'id-u1-b', flagKey, 'control', t0 + HOUR),
+        exposure('id-u1-exp-c', 'id-u1-c', flagKey, 'control', t0 + 2 * HOUR),
+        { id: 'id-u1-goal', sessionId: 'id-u1-c', name: 'checkout_completed', createdAt: t0 + 3 * HOUR },
+        // user-2: exposed in one session, converts in another.
+        exposure('id-u2-exp', 'id-u2-a', flagKey, 'control', t0 + 10),
+        { id: 'id-u2-goal', sessionId: 'id-u2-b', name: 'checkout_completed', createdAt: t0 + DAY },
+        // anonymous session: converted before exposure and after the window, neither counts.
+        { id: 'id-anon-goal-early', sessionId: 'id-anon', name: 'checkout_completed', createdAt: t0 - 1 },
+        exposure('id-anon-exp', 'id-anon', flagKey, 'test', t0),
+        { id: 'id-anon-goal-late', sessionId: 'id-anon', name: 'checkout_completed', createdAt: BASE + 8 * DAY },
+        // user-3: an exposure before the window start does not decide the variant.
+        exposure('id-u3-exp-old', 'id-u3-a', flagKey, 'control', BASE - DAY),
+        exposure('id-u3-exp', 'id-u3-a', flagKey, 'test', t0 + 5),
+      ],
+    });
+
+    const result = await analyze({ flagKey });
+
+    expect(result.summary).toMatchObject({ totalUnits: 4, excludedUnits: 0 });
+    expect(metricRow(result, 0, 'control')).toMatchObject({ sampleSize: 2, total: 2, value: 1 });
+    expect(metricRow(result, 0, 'test')).toMatchObject({ sampleSize: 2, total: 0, value: 0 });
+    const user1 = result.recent.find((item) => item.id === 'id-u1-exp-a');
+    expect(user1).toEqual({
+      id: 'id-u1-exp-a',
+      sessionId: 'id-u1-a',
+      variant: 'control',
+      urlPath: '/',
+      exposedAt: t0,
+      converted: true,
+      convertedAt: t0 + 3 * HOUR,
+    });
+    expect(result.recent.find((item) => item.id === 'id-anon-exp')).toMatchObject({ converted: false, convertedAt: null });
+    expect(result.recent.map((item) => item.id)).not.toContain('id-u1-exp-b');
+  });
+
+  it('excludes units exposed to more than one variant and ignores non-arm responses', async () => {
+    const flagKey = 'exp.mixed';
+    const t0 = BASE + 2 * HOUR;
+    await seedAnalytics(TEST_WEBSITE_ID, {
+      sessions: [
+        { id: 'mix-a', distinctId: 'mixed-user', createdAt: t0 },
+        { id: 'mix-b', distinctId: 'mixed-user', createdAt: t0 },
+        { id: 'mix-c', createdAt: t0 },
+        { id: 'mix-d', createdAt: t0 },
+        { id: 'mix-off', createdAt: t0 },
+      ],
+      events: [
+        exposure('mix-exp-a', 'mix-a', flagKey, 'control', t0),
+        exposure('mix-exp-b', 'mix-b', flagKey, 'test', t0 + HOUR),
+        { id: 'mix-goal', sessionId: 'mix-b', name: 'checkout_completed', createdAt: t0 + 2 * HOUR },
+        exposure('mix-exp-c', 'mix-c', flagKey, 'control', t0),
+        exposure('mix-exp-d', 'mix-d', flagKey, 'test', t0),
+        { id: 'mix-goal-d', sessionId: 'mix-d', name: 'checkout_completed', createdAt: t0 + HOUR },
+        exposure('mix-exp-off', 'mix-off', flagKey, 'false', t0),
+        { id: 'mix-goal-off', sessionId: 'mix-off', name: 'checkout_completed', createdAt: t0 + HOUR },
+      ],
+    });
+
+    const result = await analyze({ flagKey });
+
+    expect(result.summary).toMatchObject({ totalUnits: 2, excludedUnits: 1 });
+    expect(result.variants.map((row) => [row.variant, row.units])).toEqual([
+      ['control', 1],
+      ['test', 1],
+    ]);
+    expect(metricRow(result, 0, 'control')).toMatchObject({ total: 0 });
+    expect(metricRow(result, 0, 'test')).toMatchObject({ total: 1 });
+    expect(result.recent.map((item) => item.id).sort()).toEqual(['mix-exp-c', 'mix-exp-d']);
+  });
+
+  it('computes count, property sum and property mean secondary metrics per unit', async () => {
+    const flagKey = 'exp.metrics';
+    const t0 = BASE + 3 * HOUR;
+    const purchase = (id: string, sessionId: string, at: number, revenue?: number): SeedEvent => ({
+      id,
+      sessionId,
+      name: 'purchase',
+      createdAt: at,
+      data: revenue == null ? { plan: 'pro' } : { revenue, plan: 'pro' },
+    });
+    const click = (id: string, sessionId: string, at: number): SeedEvent => ({
+      id,
+      sessionId,
+      name: 'page_click',
+      createdAt: at,
+    });
+    await seedAnalytics(TEST_WEBSITE_ID, {
+      sessions: ['c1', 'c2', 'c3', 't1', 't2', 't3'].map((id) => ({ id: `met-${id}`, createdAt: t0 })),
+      events: [
+        exposure('met-exp-c1', 'met-c1', flagKey, 'control', t0),
+        exposure('met-exp-c2', 'met-c2', flagKey, 'control', t0),
+        exposure('met-exp-c3', 'met-c3', flagKey, 'control', t0),
+        exposure('met-exp-t1', 'met-t1', flagKey, 'test', t0),
+        exposure('met-exp-t2', 'met-t2', flagKey, 'test', t0),
+        exposure('met-exp-t3', 'met-t3', flagKey, 'test', t0),
+        purchase('met-early', 'met-c2', t0 - HOUR, 999),
+        purchase('met-c1-p1', 'met-c1', t0 + 1, 10),
+        purchase('met-c1-p2', 'met-c1', t0 + 2, 30),
+        click('met-c2-k1', 'met-c2', t0 + 1),
+        click('met-c2-k2', 'met-c2', t0 + 2),
+        click('met-c2-k3', 'met-c2', t0 + 3),
+        purchase('met-c3-p1', 'met-c3', t0 + 1, 20),
+        click('met-c3-k1', 'met-c3', t0 + 2),
+        purchase('met-t1-p1', 'met-t1', t0 + 1, 50),
+        purchase('met-t2-p1', 'met-t2', t0 + 1),
+      ],
+    });
+
+    const secondaryMetrics: ExperimentMetric[] = [
+      { type: 'count', event: 'page_click' },
+      { type: 'property_sum', event: 'purchase', property: 'revenue' },
+      { type: 'property_mean', event: 'purchase', property: 'revenue' },
+    ];
+    const result = await analyze({
+      flagKey,
+      primaryMetric: { type: 'conversion', event: 'purchase' },
+      secondaryMetrics,
+    });
+
+    expect(result.metrics.map((metric) => [metric.role, metric.metric.type])).toEqual([
+      ['primary', 'conversion'],
+      ['secondary', 'count'],
+      ['secondary', 'property_sum'],
+      ['secondary', 'property_mean'],
+    ]);
+    expect(metricRow(result, 0, 'control')).toMatchObject({ sampleSize: 3, total: 2 });
+    expect(metricRow(result, 0, 'control').value).toBeCloseTo(2 / 3, 12);
+    expect(metricRow(result, 0, 'test').value).toBeCloseTo(2 / 3, 12);
+
+    // Clicks per unit: control [0, 3, 1], test [0, 0, 0].
+    const clicks = metricRow(result, 1, 'control');
+    expect(clicks).toMatchObject({ sampleSize: 3, total: 4 });
+    expect(clicks.value).toBeCloseTo(4 / 3, 12);
+    expect(clicks.standardDeviation).toBeCloseTo(Math.sqrt(((4 / 3) ** 2 + (5 / 3) ** 2 + (1 / 3) ** 2) / 2), 12);
+    expect(metricRow(result, 1, 'test')).toMatchObject({ sampleSize: 3, total: 0, value: 0 });
+
+    // Revenue per unit (units without revenue count as 0): control [40, 0, 20], test [50, 0, 0].
+    expect(metricRow(result, 2, 'control')).toMatchObject({ sampleSize: 3, total: 60, value: 20 });
+    expect(metricRow(result, 2, 'test').value).toBeCloseTo(50 / 3, 12);
+    const revenueLift = metricRow(result, 2, 'test').comparison!;
+    expect(revenueLift.lift).toBeCloseTo(50 / 3 / 20 - 1, 12);
+    expect(revenueLift.frequentist.pValue).not.toBeNull();
+
+    // Mean revenue per purchasing unit: control [20, 20] (c1 averages 10 and 30), test [50].
+    expect(metricRow(result, 3, 'control')).toMatchObject({ sampleSize: 2, value: 20, total: 40 });
+    expect(metricRow(result, 3, 'test')).toMatchObject({ sampleSize: 1, value: 50 });
+    // One unit cannot be tested.
+    expect(metricRow(result, 3, 'test').comparison!.frequentist.pValue).toBeNull();
+    expect(metricRow(result, 3, 'test').comparison!.bayesian.probabilityToBeatControl).toBeNull();
+  });
+
+  it('flags a sample ratio mismatch against the configured split and refuses to pick a winner', async () => {
+    const flagKey = 'exp.srm';
+    const sessions: SeedSession[] = [];
+    const events: SeedEvent[] = [];
+    for (let i = 0; i < 500; i++) {
+      const variant = i < 300 ? 'control' : 'test';
+      sessions.push({ id: `srm-${i}`, createdAt: BASE });
+      events.push(exposure(`srm-exp-${i}`, `srm-${i}`, flagKey, variant, BASE + i));
+      // The test arm converts far better: without SRM this would ship.
+      if (variant === 'test' ? i % 2 === 0 : i % 10 === 0) {
+        events.push({ id: `srm-goal-${i}`, sessionId: `srm-${i}`, name: 'checkout_completed', createdAt: BASE + i + 1 });
+      }
+    }
+    await seedAnalytics(TEST_WEBSITE_ID, { sessions, events });
+
+    const result = await analyze({ flagKey });
+
+    // chi-square = 2 * 50^2 / 250 = 20 with 1 degree of freedom.
+    expect(result.srm).toMatchObject({ status: 'mismatch', degreesOfFreedom: 1 });
+    expect(result.srm!.chiSquare).toBeCloseTo(20, 10);
+    expect(result.srm!.pValue).toBeCloseTo(7.744216431044e-6, 15);
+    expect(result.summary.decision).toBe('fix_setup');
+    expect(result.summary.significantVariant).toBeNull();
+    expect(result.summary.diagnostics).toContainEqual({ code: 'sample_ratio_mismatch', level: 'error' });
+
+    // The same data is fine for a 60/40 split.
+    const skewed = await analyze({
+      flagKey,
+      allocation: {
+        enabled: true,
+        rollout: 100,
+        variants: [
+          { key: 'control', weight: 60 },
+          { key: 'test', weight: 40 },
+        ],
+        targeted: false,
       },
     });
-    expect(result.summary.maxConfidence).toBeGreaterThanOrEqual(95);
-    expect(result.summary.diagnostics).toContainEqual({
-      code: 'significant_variant',
-      level: 'success',
-    });
-    expect(result.variants.find((variant) => variant.variant === 'test')).toMatchObject({
-      exposures: 40,
-      conversions: 32,
-      conversionRate: 80,
-      significant: true,
-    });
+    expect(skewed.srm).toMatchObject({ status: 'ok' });
+    expect(skewed.summary.decision).toBe('ship_variant');
   });
 
-  it('asks to fix setup when an experiment has no control group', async () => {
-    const later = BASE + DAY * 7;
-    await insertSession('no-control-session-1');
-    await insertEvent('no-control-exposure-1', 'no-control-session-1', '$feature_flag_called', later, {
-      '$feature_flag': 'checkout.no_control',
-      '$feature_flag_response': 'variant_a',
-      '$feature/checkout.no_control': 'variant_a',
+  it('asks to fix the setup when the flag has no control arm', async () => {
+    const flagKey = 'exp.no_control';
+    await seedAnalytics(TEST_WEBSITE_ID, {
+      sessions: [{ id: 'noctl-1', createdAt: BASE }],
+      events: [exposure('noctl-exp-1', 'noctl-1', flagKey, 'test', BASE + 1)],
     });
 
-    const result = await getExperimentResults(
-      env,
-      TEST_WEBSITE_ID,
-      'checkout.no_control',
-      'checkout_completed',
-      later - 1000,
-      later + 1000,
-    );
-
-    expect(result.summary).toMatchObject({
-      totalExposures: 1,
-      truncated: false,
-      exposureSampleLimit: 500,
-      controlVariant: null,
-      decision: 'fix_setup',
-      recommendation: 'no_control',
-      diagnostics: [{ code: 'missing_control', level: 'warning' }],
-    });
-  });
-
-  it('marks summary truncated when exposure sample hits the query cap', async () => {
-    const later = BASE + DAY * 10;
-    const flagKey = 'checkout.truncation';
-
-    for (let i = 0; i < 501; i++) {
-      const sessionId = `trunc-session-${i}`;
-      await insertSession(sessionId);
-      await insertEvent(`trunc-exposure-${i}`, sessionId, '$feature_flag_called', later + i, {
-        '$feature_flag': flagKey,
-        '$feature_flag_response': 'control',
-        [`$feature/${flagKey}`]: 'control',
-      });
-    }
-
-    const result = await getExperimentResults(
-      env,
-      TEST_WEBSITE_ID,
+    const result = await analyze({
       flagKey,
-      'checkout_completed',
-      later - 1000,
-      later + 10_000,
-    );
-
-    expect(result.summary).toMatchObject({
-      totalExposures: 500,
-      truncated: true,
-      exposureSampleLimit: 500,
+      allocation: { enabled: true, rollout: 100, variants: [], targeted: false },
     });
+
+    expect(result.summary).toMatchObject({ totalUnits: 1, controlVariant: null, decision: 'fix_setup' });
+    expect(result.summary.diagnostics).toContainEqual({ code: 'missing_control', level: 'warning' });
+    expect(metricRow(result, 0, 'test').comparison).toBeNull();
+  });
+
+  it('returns an empty, well-formed result without exposures', async () => {
+    const result = await analyze({ flagKey: 'exp.nothing' });
+    expect(result.summary).toMatchObject({ totalUnits: 0, decision: 'no_data' });
+    expect(result.summary.diagnostics).toEqual([{ code: 'no_exposures', level: 'info' }]);
+    expect(result.srm).toBeNull();
+    expect(result.guidance).toBeNull();
+    expect(result.recent).toEqual([]);
+    expect(result.trend).toEqual([]);
+    // Configured arms are still listed so the page can show the setup.
+    expect(result.variants.map((row) => row.variant)).toEqual(['control', 'test']);
   });
 });

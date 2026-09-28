@@ -1,5 +1,6 @@
 import { HEATMAP_NORM_SIZE } from '@flareboard/shared';
 import type { Env } from '../env';
+import { siteDb } from '../lib/site-db';
 
 export type HeatmapCell = {
   normX: number;
@@ -16,7 +17,7 @@ export async function getHeatmapPaths(
   const startDay = new Date(startAt).toISOString().slice(0, 10);
   const endDay = new Date(endAt).toISOString().slice(0, 10);
 
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT url_path as urlPath, SUM(count) as total
      FROM heatmap_cell
      WHERE website_id = ?1 AND day >= ?2 AND day <= ?3
@@ -47,7 +48,7 @@ export async function getHeatmapData(
     ? [websiteId, urlPath, kind, startDay, endDay, deviceClass]
     : [websiteId, urlPath, kind, startDay, endDay];
 
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT norm_x as normX, norm_y as normY, SUM(count) as count
      FROM heatmap_cell
      WHERE website_id = ?1 AND url_path = ?2 AND kind = ?3
@@ -57,7 +58,7 @@ export async function getHeatmapData(
     .bind(...bindArgs)
     .all<HeatmapCell>();
 
-  const viewport = await env.DB.prepare(
+  const viewport = await siteDb(env, websiteId).prepare(
     `SELECT MAX(viewport_w) as viewportW, MAX(viewport_h) as viewportH
      FROM heatmap_cell
      WHERE website_id = ?1 AND url_path = ?2 AND kind = ?3

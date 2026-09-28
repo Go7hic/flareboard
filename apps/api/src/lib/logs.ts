@@ -1,6 +1,7 @@
 import { EVENT_TYPE } from '@flareboard/shared';
 import type { Env } from '../env';
 import { deliverAlertNotification, hasRecentAlertEvent } from './alert-delivery';
+import { siteDb } from '../lib/site-db';
 
 export type LogEventRow = {
   id: string;
@@ -215,7 +216,7 @@ export async function getLogEvents(
   limit = 100,
 ) {
   const searchPattern = filters.search?.trim() ? `%${filters.search.trim().toLowerCase()}%` : null;
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `${logPropsCte}
      SELECT
        e.event_id as id,
@@ -280,7 +281,7 @@ export async function getLogTail(
   // First load (no cursor): the newest lines, shown oldest-first. Follow-up polls keep
   // ascending order from the cursor so no line between polls is skipped.
   const initial = sinceAt <= 0;
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `${logTailPropsCte}
      SELECT * FROM (
      SELECT
@@ -343,7 +344,7 @@ export async function getServiceSummaries(
   limit = 100,
 ) {
   const searchPattern = filters.search?.trim() ? `%${filters.search.trim().toLowerCase()}%` : null;
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `${logPropsCte}
      SELECT
        props.service as service,
@@ -637,7 +638,7 @@ export async function evaluateLogAlertRules(env: Env, websiteId: string, now = D
     if (recentlyTriggered) continue;
 
     const searchPattern = rule.search ? `%${rule.search.toLowerCase()}%` : null;
-    const row = await env.DB.prepare(
+    const row = await siteDb(env, websiteId).prepare(
       `${logPropsCte}
        SELECT COUNT(*) as count
        FROM website_event e
@@ -712,7 +713,7 @@ export async function getTraceSummaries(
   limit = 100,
 ) {
   const searchPattern = filters.search?.trim() ? `%${filters.search.trim().toLowerCase()}%` : null;
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `${logPropsCte}
      SELECT
        props.traceId as traceId,
@@ -755,7 +756,7 @@ export async function getTraceSummaries(
 }
 
 export async function getTraceDetail(env: Env, websiteId: string, traceId: string) {
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `${logTracePropsCte}
      SELECT
        e.event_id as id,
@@ -815,7 +816,7 @@ export async function getLogStats(
   filters: LogFilters = {},
 ) {
   const searchPattern = filters.search?.trim() ? `%${filters.search.trim().toLowerCase()}%` : null;
-  const row = await env.DB.prepare(
+  const row = await siteDb(env, websiteId).prepare(
     `${logPropsCte}
      SELECT
        COUNT(*) as logs,
@@ -844,7 +845,7 @@ export async function getLogStats(
     )
     .first<{ logs: number; sessions: number; lastSeenAt: number | null }>();
 
-  const levels = await env.DB.prepare(
+  const levels = await siteDb(env, websiteId).prepare(
     `${logPropsCte}
      SELECT COALESCE(props.level, 'info') as level, COUNT(*) as logs
      FROM website_event e
@@ -872,7 +873,7 @@ export async function getLogStats(
     )
     .all<{ level: string; logs: number }>();
 
-  const trend = await env.DB.prepare(
+  const trend = await siteDb(env, websiteId).prepare(
     `${logPropsCte}
      SELECT
        date(e.created_at / 1000, 'unixepoch') as date,
@@ -904,7 +905,7 @@ export async function getLogStats(
     )
     .all<{ date: string; logs: number; sessions: number }>();
 
-  const releases = await env.DB.prepare(
+  const releases = await siteDb(env, websiteId).prepare(
     `${logPropsCte}
      SELECT props.release as release, COUNT(*) as logs
      FROM website_event e
@@ -934,7 +935,7 @@ export async function getLogStats(
     )
     .all<{ release: string; logs: number }>();
 
-  const environments = await env.DB.prepare(
+  const environments = await siteDb(env, websiteId).prepare(
     `${logPropsCte}
      SELECT props.environment as environment, COUNT(*) as logs
      FROM website_event e

@@ -4,6 +4,7 @@ import { EVENT_TYPE } from '@flareboard/shared';
 import { getWebsiteReplays } from '../../src/lib/queries';
 import { getSavedReplays } from '../../src/lib/replays';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const BASE = Date.UTC(2026, 0, 10, 12);
 
@@ -14,7 +15,7 @@ describe('replay query helpers', () => {
   });
 
   it('returns saved replays with replay metadata', async () => {
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT INTO session_replay_summary
        (website_id, visit_id, session_id, started_at, ended_at, event_count, chunks)
        VALUES (?1, 'saved-visit-a', 'saved-session-a', ?2, ?3, 42, 3)`,
@@ -52,13 +53,13 @@ describe('replay query helpers', () => {
   });
 
   it('returns replay context counts for filtering and triage', async () => {
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT OR IGNORE INTO session (session_id, website_id, created_at)
        VALUES ('replay-context-session', ?1, ?2)`,
     )
       .bind(TEST_WEBSITE_ID, BASE)
       .run();
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT INTO session_replay_summary
        (website_id, visit_id, session_id, started_at, ended_at, event_count, chunks)
        VALUES (?1, 'replay-context-visit', 'replay-context-session', ?2, ?3, 80, 4)`,
@@ -74,7 +75,7 @@ describe('replay query helpers', () => {
       ['replay-ai', EVENT_TYPE.ai, 'ai_generation', BASE + 15_000],
     ] as const;
     for (const [eventId, eventType, eventName, createdAt] of events) {
-      await env.DB.prepare(
+      await testSiteDb(TEST_WEBSITE_ID).prepare(
         `INSERT INTO website_event
          (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
          VALUES (?1, ?2, 'replay-context-session', 'replay-context-visit', ?3, '/checkout', ?4, ?5)`,

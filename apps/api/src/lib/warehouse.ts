@@ -1,4 +1,6 @@
 import type { Env } from '../env';
+import { eventStoreMode, siteDb, siteStoreStub } from './site-db';
+import type { StoreParam, StoreResult } from '../store/event-store';
 
 const FORBIDDEN_SQL = /\b(insert|update|delete|drop|alter|create|replace|truncate|attach|detach|pragma|vacuum|reindex)\b/i;
 const UNSAFE_SCOPE_SQL = [
@@ -534,8 +536,8 @@ async function withQueryTimeout<T>(promise: Promise<T>, timeoutMs: number) {
 
 const SAFE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-async function listDatabaseTables(env: Env): Promise<string[]> {
-  const { results } = await env.DB.prepare(
+async function listDatabaseTables(db: D1Database): Promise<string[]> {
+  const { results } = await db.prepare(
     `SELECT name FROM sqlite_master
      WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND name NOT LIKE '\\_cf\\_%' ESCAPE '\\'`,
   ).all<{ name: string }>();
@@ -563,9 +565,54 @@ export function scopeToWebsite(sql: string, tables: string[]): string {
   return `WITH ${shadows.join(', ')} ${sql}`;
 }
 
+/** D1-only tables the warehouse exposes; in store mode they are attached to the query. */
+const ATTACHED_D1_TABLES = ['survey_response', 'workflow_execution'] as const;
+/** Upper bound on rows attached per D1 table (larger queries belong in a real export). */
+const ATTACH_ROW_LIMIT = 50_000;
+
+function catalogColumns(name: string): string[] {
+  return WAREHOUSE_SCHEMA.tables.find((table) => table.name === name)?.columns ?? [];
+}
+
+/** Store mode: user SQL runs inside the website's own store, so it can only ever see this site. */
+async function runWarehouseQueryInStore(env: Env, websiteId: string, executableSql: string) {
+  const referenced = ATTACHED_D1_TABLES.filter((name) =>
+    new RegExp(`\\b${name}\\b`, 'i').test(stripStringLiterals(executableSql)),
+  );
+  const attachments = [];
+  for (const name of referenced) {
+    const columns = catalogColumns(name);
+    const rows = await env.DB.prepare(
+      `SELECT ${columns.join(', ')} FROM ${name} WHERE website_id = ?1 ORDER BY created_at DESC LIMIT ${ATTACH_ROW_LIMIT}`,
+    )
+      .bind(websiteId)
+      .raw<StoreParam[]>();
+    attachments.push({ name, columns, rows });
+  }
+  const storeTables = await listDatabaseTables(siteDb(env, websiteId));
+  const tables = [...new Set([...storeTables, ...referenced])];
+  const scopedSql = scopeToWebsite(executableSql, tables);
+  const startedAt = Date.now();
+  const result = await withQueryTimeout(
+    siteStoreStub(env, websiteId).queryWithAttachments(
+      websiteId,
+      { sql: scopedSql, params: [websiteId], mode: 'all' },
+      attachments,
+    ) as Promise<StoreResult>,
+    QUERY_TIMEOUT_MS,
+  );
+  const cost = enforceWarehouseQueryCost({ rows_read: result.rowsRead }, Date.now() - startedAt);
+  return { rows: result.results, cost };
+}
+
 export async function runWarehouseQuery(env: Env, websiteId: string, sql: string) {
   const analysis = assertReadOnlyScoped(sql);
-  const scopedSql = scopeToWebsite(analysis.executableSql!, await listDatabaseTables(env));
+  if (eventStoreMode(env) === 'do') {
+    const { rows: resultRows, cost } = await runWarehouseQueryInStore(env, websiteId, analysis.executableSql!);
+    const columns = resultRows.length ? Object.keys(resultRows[0]!) : [];
+    return { columns, rows: resultRows, rowCount: resultRows.length, cost, analysis };
+  }
+  const scopedSql = scopeToWebsite(analysis.executableSql!, await listDatabaseTables(env.DB));
   const startedAt = Date.now();
   const rows = await withQueryTimeout(
     env.DB.prepare(scopedSql).bind(websiteId).all<Record<string, unknown>>(),
@@ -1117,6 +1164,16 @@ export async function updateWarehouseDataSource(
 export async function deleteWarehouseDataSource(env: Env, websiteId: string, dataSourceId: string) {
   const existing = await getWarehouseDataSource(env, websiteId, dataSourceId);
   if (!existing) return false;
+  await siteDb(env, websiteId)
+    .prepare(`DELETE FROM warehouse_import WHERE website_id = ?1 AND data_source_id = ?2`)
+    .bind(websiteId, dataSourceId)
+    .run();
+  if (eventStoreMode(env) !== 'd1') {
+    // Rows written before the store migration may still sit in D1.
+    await env.DB.prepare(`DELETE FROM warehouse_import WHERE website_id = ?1 AND data_source_id = ?2`)
+      .bind(websiteId, dataSourceId)
+      .run();
+  }
   await env.DB.prepare(`DELETE FROM warehouse_data_source WHERE website_id = ?1 AND data_source_id = ?2`)
     .bind(websiteId, dataSourceId)
     .run();
@@ -1289,7 +1346,7 @@ async function importHttpRows(
     if (!primaryKey) continue;
 
     statements.push(
-      env.DB.prepare(
+      siteDb(env, websiteId).prepare(
         `INSERT OR REPLACE INTO warehouse_import
          (import_row_id, website_id, data_source_id, primary_key, payload_json, imported_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
@@ -1298,7 +1355,7 @@ async function importHttpRows(
   }
 
   for (let offset = 0; offset < statements.length; offset += IMPORT_BATCH_SIZE) {
-    await env.DB.batch(statements.slice(offset, offset + IMPORT_BATCH_SIZE));
+    await siteDb(env, websiteId).batch(statements.slice(offset, offset + IMPORT_BATCH_SIZE));
   }
 
   return statements.length;

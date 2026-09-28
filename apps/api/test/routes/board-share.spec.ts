@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { ENTITY_TYPE, EVENT_TYPE } from '@flareboard/shared';
 import { fetchWorkerJson } from '../helpers/fetch-worker';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const TEST_USER_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -20,14 +21,14 @@ describe('public board shares', () => {
     const slug = 'publicboardshare';
     const sessionId = 'board-share-session';
 
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT OR IGNORE INTO session (session_id, website_id, created_at)
        VALUES (?1, ?2, ?3)`,
     )
       .bind(sessionId, TEST_WEBSITE_ID, now)
       .run();
 
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT OR IGNORE INTO website_event
         (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
        VALUES (?1, ?2, ?3, ?3, ?4, ?5, ?6, ?7)`,
@@ -119,14 +120,14 @@ describe('public board shares', () => {
     const sessionId = 'board-share-range-session';
     const olderThanOneDay = now - 10 * 86400000;
 
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT OR IGNORE INTO session (session_id, website_id, created_at)
        VALUES (?1, ?2, ?3)`,
     )
       .bind(sessionId, TEST_WEBSITE_ID, olderThanOneDay)
       .run();
 
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT OR IGNORE INTO website_event
         (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
        VALUES (?1, ?2, ?3, ?3, ?4, ?5, ?6, ?7)`,

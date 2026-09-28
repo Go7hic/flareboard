@@ -1,6 +1,7 @@
 import { EVENT_TYPE } from '@flareboard/shared';
 import type { Env } from '../env';
 import { invalidateDailyRollups } from './rollups';
+import { siteDb } from '../lib/site-db';
 
 export type ImportFormat = 'flareboard' | 'ga4' | 'plausible' | 'matomo';
 
@@ -231,14 +232,14 @@ async function flushBatch(env: Env, websiteId: string, batch: ImportRow[]) {
       if (!sessionSeen.has(row.sessionId)) {
         sessionSeen.add(row.sessionId);
         stmts.push(
-          env.DB.prepare(
+          siteDb(env, websiteId).prepare(
             `INSERT OR IGNORE INTO session (session_id, website_id, created_at) VALUES (?1, ?2, ?3)`,
           ).bind(row.sessionId, websiteId, row.createdAt),
         );
       }
       const eventType = row.eventName ? EVENT_TYPE.customEvent : EVENT_TYPE.pageView;
       stmts.push(
-        env.DB.prepare(
+        siteDb(env, websiteId).prepare(
           `INSERT INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
         ).bind(

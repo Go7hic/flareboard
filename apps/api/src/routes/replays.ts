@@ -10,6 +10,7 @@ import { getSavedReplays } from '../lib/replays';
 import { badRequest, json, notFound } from '../lib/response';
 import { requireWebsiteOr404 } from '../lib/website';
 import type { ApiVariables } from '../middleware/auth';
+import { siteDb } from '../lib/site-db';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
 
@@ -32,7 +33,7 @@ export async function handleGet(c: Ctx) {
   // The route id may be a visit id or a replay chunk id; both are matched below.
   const visitId = c.req.param('replayId') ?? '';
 
-  const chunks = await c.env.DB.prepare(
+  const chunks = await siteDb(c.env, website!.websiteId).prepare(
     `SELECT replay_id as id, visit_id as visitId, chunk_index as chunkIndex,
             event_count as eventCount, started_at as startedAt, ended_at as endedAt
      FROM session_replay

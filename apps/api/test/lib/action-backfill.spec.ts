@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { EVENT_TYPE } from '@flareboard/shared';
 import { backfillActionTags } from '../../src/lib/action-backfill';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 describe('backfillActionTags', () => {
   beforeAll(async () => {
@@ -15,14 +16,14 @@ describe('backfillActionTags', () => {
     const sessionId = 'session-backfill-1';
     const eventId = 'event-backfill-1';
 
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT INTO session (session_id, website_id, created_at)
        VALUES (?1, ?2, ?3)`,
     )
       .bind(sessionId, TEST_WEBSITE_ID, now)
       .run();
 
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT INTO website_event
        (event_id, website_id, session_id, visit_id, event_type, event_name, url_path, created_at)
        VALUES (?1, ?2, ?3, ?3, ?4, 'checkout_started', '/checkout', ?5)`,

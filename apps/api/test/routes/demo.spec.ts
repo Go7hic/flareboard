@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { ENTITY_TYPE, EVENT_TYPE, PUBLIC_DEMO_SHARE_SLUG } from '@flareboard/shared';
 import { fetchWorkerJson } from '../helpers/fetch-worker';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 async function insertDemoShare() {
   const now = Date.now();
@@ -25,13 +26,13 @@ async function insertDemoShare() {
 async function insertSamplePageview() {
   const now = Date.now();
   const sessionId = 'demo-session-1';
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT OR REPLACE INTO session (session_id, website_id, browser, os, device, country, created_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
   )
     .bind(sessionId, TEST_WEBSITE_ID, 'Chrome', 'macOS', 'desktop', 'US', now)
     .run();
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT OR REPLACE INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, referrer_domain, event_type, hostname)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
   )

@@ -1,5 +1,6 @@
 import { EVENT_TYPE } from '@flareboard/shared';
 import type { Env } from '../env';
+import { siteDb } from '../lib/site-db';
 
 export type SessionContextKind =
   | 'pageview'
@@ -74,7 +75,7 @@ function sourceFor(
 }
 
 export async function getSessionContext(env: Env, websiteId: string, sessionId: string) {
-  const events = await env.DB.prepare(
+  const events = await siteDb(env, websiteId).prepare(
     `SELECT event_id as id,
             event_type as eventType,
             event_name as eventName,
@@ -99,7 +100,7 @@ export async function getSessionContext(env: Env, websiteId: string, sessionId: 
 
   if (eventRows.length) {
     const placeholders = eventRows.map((_, index) => `?${index + 2}`).join(',');
-    const props = await env.DB.prepare(
+    const props = await siteDb(env, websiteId).prepare(
       `SELECT website_event_id as eventId,
               data_key as key,
               COALESCE(string_value, CAST(number_value AS TEXT), CAST(date_value AS TEXT)) as value

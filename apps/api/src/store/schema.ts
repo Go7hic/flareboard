@@ -264,6 +264,21 @@ export const STORE_MIGRATIONS: ReadonlyArray<{ version: number; statements: stri
       `CREATE UNIQUE INDEX person_group_membership_unique_idx ON person_group_membership (website_id, person_id, group_type, group_key)`,
     ],
   },
+  {
+    version: 2,
+    statements: [
+      `CREATE TABLE warehouse_import (
+        import_row_id TEXT PRIMARY KEY NOT NULL,
+        website_id TEXT NOT NULL,
+        data_source_id TEXT NOT NULL,
+        primary_key TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        imported_at INTEGER NOT NULL
+      )`,
+      `CREATE UNIQUE INDEX warehouse_import_source_key_idx ON warehouse_import (website_id, data_source_id, primary_key)`,
+      `CREATE INDEX warehouse_import_website_idx ON warehouse_import (website_id, imported_at)`,
+    ],
+  },
 ];
 
 export const STORE_SCHEMA_VERSION = STORE_MIGRATIONS[STORE_MIGRATIONS.length - 1]!.version;

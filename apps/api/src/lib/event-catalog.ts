@@ -1,5 +1,6 @@
 import { EVENT_TYPE } from '@flareboard/shared';
 import type { Env } from '../env';
+import { siteDb } from '../lib/site-db';
 
 export type EventCatalogFilters = {
   search?: string;
@@ -22,7 +23,7 @@ export async function getEventCatalog(
   filters: EventCatalogFilters = {},
 ) {
   const search = eventSearch(filters);
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT e.event_name as eventName,
             COUNT(DISTINCT e.event_id) as events,
             COUNT(DISTINCT e.session_id) as sessions,
@@ -77,7 +78,7 @@ export async function getEventCatalogDetail(
   endAt: number,
 ) {
   const [summary, properties, paths, recent] = await Promise.all([
-    env.DB.prepare(
+    siteDb(env, websiteId).prepare(
       `SELECT e.event_name as eventName,
               COUNT(*) as events,
               COUNT(DISTINCT e.session_id) as sessions,
@@ -101,7 +102,7 @@ export async function getEventCatalogDetail(
         firstSeenAt: number | null;
         lastSeenAt: number | null;
       }>(),
-    env.DB.prepare(
+    siteDb(env, websiteId).prepare(
       `SELECT ed.data_key as key,
               COUNT(*) as count,
               COUNT(DISTINCT COALESCE(ed.string_value, CAST(ed.number_value AS TEXT), CAST(ed.date_value AS TEXT))) as valuesCount
@@ -118,7 +119,7 @@ export async function getEventCatalogDetail(
     )
       .bind(websiteId, startAt, endAt, EVENT_TYPE.customEvent, eventName)
       .all<{ key: string; count: number; valuesCount: number }>(),
-    env.DB.prepare(
+    siteDb(env, websiteId).prepare(
       `SELECT e.url_path as path,
               COUNT(*) as events,
               COUNT(DISTINCT e.session_id) as sessions,
@@ -135,7 +136,7 @@ export async function getEventCatalogDetail(
     )
       .bind(websiteId, startAt, endAt, EVENT_TYPE.customEvent, eventName)
       .all<{ path: string; events: number; sessions: number; lastSeenAt: number | null }>(),
-    env.DB.prepare(
+    siteDb(env, websiteId).prepare(
       `SELECT e.event_id as id,
               e.session_id as sessionId,
               e.visit_id as visitId,

@@ -1,4 +1,5 @@
 import type { Env } from '../env';
+import { eventStoreMode, siteStoreStub } from './site-db';
 
 /**
  * Hard deletion behind the soft deletes in the API. Deleting a website or an account only sets
@@ -102,7 +103,13 @@ export async function websiteScopedTables(env: Env): Promise<string[]> {
 
 async function purgeWebsite(env: Env, budget: Budget, websiteId: string, tables: string[]) {
   if (!(await deleteReplayObjects(env, budget, `${websiteId}/`))) return false;
+  if (eventStoreMode(env) !== 'd1') {
+    // Analytics rows live in the website's own store: erase it in one call.
+    budget.left--;
+    await siteStoreStub(env, websiteId).erase();
+  }
   for (const table of tables) {
+    // SITE_TABLES left in D1 (legacy or dual mode) and D1 config tables with a website_id.
     if (!(await drain(env, budget, table, 'website_id = ?1', websiteId))) return false;
   }
   if (!(await drain(env, budget, 'share', 'entity_id = ?1', websiteId))) return false;

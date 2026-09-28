@@ -1,5 +1,6 @@
 import { EVENT_TYPE } from '@flareboard/shared';
 import type { Env } from '../env';
+import { siteDb } from '../lib/site-db';
 
 export type AiEventRow = {
   id: string;
@@ -128,7 +129,7 @@ async function queryAiPropsRows(
   endAt: number,
   filters: AiFilters,
 ) {
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `${aiPropsSql}
      SELECT
        e.session_id as sessionId,
@@ -333,7 +334,7 @@ export async function getAiEvents(
   filters: AiFilters = {},
   limit = 100,
 ) {
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `${aiPropsSql}
      SELECT
        e.event_id as id,

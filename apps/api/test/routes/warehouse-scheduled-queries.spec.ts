@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { createSecureToken, EVENT_TYPE } from '@flareboard/shared';
 import { fetchWorkerJson } from '../helpers/fetch-worker';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const TEST_USER_ID = '00000000-0000-0000-0000-000000000001';
 const BASE = Date.UTC(2026, 0, 23, 12);
@@ -19,13 +20,13 @@ describe('warehouse scheduled query routes', () => {
   });
 
   it('creates, runs due scheduled queries, and stores the last run status', async () => {
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT OR IGNORE INTO session (session_id, website_id, created_at)
        VALUES ('warehouse-schedule-session', ?1, ?2)`,
     )
       .bind(TEST_WEBSITE_ID, BASE)
       .run();
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
        VALUES ('warehouse-schedule-event', ?1, 'warehouse-schedule-session', 'warehouse-schedule-session', ?2, '/pricing', ?3, 'view_pricing')`,
     )

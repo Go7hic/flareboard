@@ -34,6 +34,9 @@ export type StoreInfo = {
 };
 
 const READ_ONLY_PREFIX = /^\s*(WITH|SELECT|EXPLAIN|VALUES)\b/i;
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Heatmap dedup ids only need to outlive queue redelivery (retries span minutes to hours). */
+const HEATMAP_DEDUP_TTL_MS = 2 * DAY_MS;
 
 /**
  * One website's analytics store: a SQLite-backed Durable Object addressed by
@@ -50,7 +53,19 @@ export class EventStore extends DurableObject<Env> {
     this.sql = ctx.storage.sql;
     ctx.blockConcurrencyWhile(async () => {
       this.migrate();
+      // Daily housekeeping (see alarm()); re-armed whenever a sleeping store wakes up.
+      if ((await ctx.storage.getAlarm()) === null) await ctx.storage.setAlarm(Date.now() + DAY_MS);
     });
+  }
+
+  /** Housekeeping that must not depend on a global cron walking every website. */
+  async alarm(): Promise<void> {
+    if (!this.migrated) this.migrate();
+    const cutoff = Date.now() - HEATMAP_DEDUP_TTL_MS;
+    this.sql.exec('DELETE FROM heatmap_ingest_dedup WHERE created_at < ?', cutoff);
+    const hasData = this.sql.exec<{ n: number }>('SELECT COUNT(*) AS n FROM heatmap_ingest_dedup').one().n > 0;
+    // Nothing left to clean: let the store sleep; the constructor re-arms it on the next write.
+    if (hasData) await this.ctx.storage.setAlarm(Date.now() + DAY_MS);
   }
 
   private migrate() {
@@ -130,6 +145,37 @@ export class EventStore extends DurableObject<Env> {
     return this.ctx.storage.transactionSync(() => statements.map((statement) => this.execute(statement)));
   }
 
+  /**
+   * Runs one read-only statement with extra tables attached for its duration (the warehouse
+   * joins D1-only tables such as survey_response). Everything happens in one synchronous
+   * transaction, so the scratch tables can never leak into another request, and they are
+   * dropped before returning.
+   */
+  queryWithAttachments(
+    websiteId: string,
+    statement: StoreStatement,
+    attachments: Array<{ name: string; columns: string[]; rows: StoreParam[][] }>,
+  ): StoreResult {
+    this.claim(websiteId);
+    const identifier = /^[a-z_][a-z0-9_]*$/;
+    return this.ctx.storage.transactionSync(() => {
+      for (const table of attachments) {
+        if (!identifier.test(table.name) || !table.columns.every((column) => identifier.test(column))) {
+          throw new Error(`Invalid attachment ${table.name}`);
+        }
+        this.sql.exec(`DROP TABLE IF EXISTS ${table.name}`);
+        this.sql.exec(`CREATE TABLE ${table.name} (${table.columns.join(', ')})`);
+        const insert = `INSERT INTO ${table.name} (${table.columns.join(', ')}) VALUES (${table.columns.map(() => '?').join(', ')})`;
+        for (const row of table.rows) this.sql.exec(insert, ...row);
+      }
+      try {
+        return this.execute(statement);
+      } finally {
+        for (const table of attachments) this.sql.exec(`DROP TABLE IF EXISTS ${table.name}`);
+      }
+    });
+  }
+
   /** Multi-statement script without parameters (D1 exec()). */
   execScript(websiteId: string, script: string): { count: number } {
     this.claim(websiteId);
@@ -157,6 +203,7 @@ export class EventStore extends DurableObject<Env> {
 
   /** Erases everything this website stored (used by the deletion job). */
   async erase(): Promise<void> {
+    await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.deleteAll();
     this.websiteId = null;
     this.migrated = false;

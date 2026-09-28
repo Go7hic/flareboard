@@ -11,6 +11,7 @@ import {
   uuid,
 } from '@flareboard/shared';
 import type { Env } from '../env';
+import { siteDb } from '../lib/site-db';
 import { bumpTokenVersion } from '../lib/auth-token';
 import { logAdminAction, listAuditLog } from '../lib/audit';
 import { getAllTeamsAdmin, getAllUsers, getAllWebsitesAdmin } from '../lib/queries';
@@ -248,7 +249,7 @@ export async function handleExport(c: Ctx) {
     );
   } else if (type === 'events') {
     if (!websiteId) return badRequest('websiteId required for events export');
-    const events = await db
+    const events = await createDb(siteDb(c.env, websiteId))
       .select({
         eventId: schema.websiteEvent.eventId,
         sessionId: schema.websiteEvent.sessionId,

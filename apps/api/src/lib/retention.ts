@@ -1,4 +1,5 @@
 import type { Env } from '../env';
+import { eventStoreMode, siteDb } from './site-db';
 
 const MAX_WEBSITES_PER_TICK = 25;
 const DELETE_BATCH = 5000;
@@ -43,12 +44,18 @@ export async function runRetentionPurge(env: Env, now = Date.now()) {
     batch.length === MAX_WEBSITES_PER_TICK ? batch[batch.length - 1]!.websiteId : '',
   );
 
-  let deleted = await purgeHeatmapDedup(env, now);
+  // Per-website stores purge their own heatmap dedup ids (EventStore alarm); the shared D1
+  // table only exists in legacy mode.
+  const storeMode = eventStoreMode(env);
+  let deleted = storeMode === 'do' ? 0 : await purgeHeatmapDedup(env, now);
   for (const site of batch) {
     const cutoff = now - site.retentionDays * DAY_MS;
     deleted += await purgeReplayObjects(env, site.websiteId, cutoff);
+    const db = siteDb(env, site.websiteId);
     for (const { table, idColumn } of PURGE_TABLES) {
-      const result = await env.DB.prepare(
+      // In a website store, properties live on the event row and go with it.
+      if (storeMode === 'do' && table === 'event_data') continue;
+      const result = await db.prepare(
         `DELETE FROM ${table}
          WHERE ${idColumn} IN (
            SELECT ${idColumn} FROM ${table}
@@ -82,9 +89,10 @@ const MAX_REPLAY_BATCHES_PER_SITE = 5;
  * them. The summaries shown in the replay list go with them.
  */
 async function purgeReplayObjects(env: Env, websiteId: string, cutoff: number) {
+  const db = siteDb(env, websiteId);
   let deleted = 0;
   for (let i = 0; i < MAX_REPLAY_BATCHES_PER_SITE; i++) {
-    const rows = await env.DB.prepare(
+    const rows = await db.prepare(
       `SELECT visit_id AS visitId, chunk_index AS chunkIndex FROM session_replay
        WHERE website_id = ?1 AND created_at < ?2 ORDER BY rowid LIMIT ${REPLAY_BATCH}`,
     )
@@ -95,7 +103,7 @@ async function purgeReplayObjects(env: Env, websiteId: string, cutoff: number) {
     if (env.REPLAY_BUCKET) {
       await env.REPLAY_BUCKET.delete(chunks.map((row) => `${websiteId}/${row.visitId}/${row.chunkIndex}`));
     }
-    const result = await env.DB.prepare(
+    const result = await db.prepare(
       `DELETE FROM session_replay WHERE rowid IN (
          SELECT rowid FROM session_replay WHERE website_id = ?1 AND created_at < ?2 ORDER BY rowid LIMIT ${REPLAY_BATCH}
        )`,
@@ -105,7 +113,7 @@ async function purgeReplayObjects(env: Env, websiteId: string, cutoff: number) {
     deleted += result.meta?.changes ?? 0;
     if (chunks.length < REPLAY_BATCH) break;
   }
-  const summaries = await env.DB.prepare(
+  const summaries = await db.prepare(
     `DELETE FROM session_replay_summary WHERE rowid IN (
        SELECT rowid FROM session_replay_summary WHERE website_id = ?1 AND started_at < ?2 LIMIT ${DELETE_BATCH}
      )`,

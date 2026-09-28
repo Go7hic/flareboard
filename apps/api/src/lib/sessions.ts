@@ -3,6 +3,7 @@ import type { Env } from '../env';
 import { buildSegmentSql, type SegmentParams } from './segment-filters';
 import type { CohortMemberJoin } from './cohorts';
 import { cohortJoinSql } from './segment-stats';
+import { siteDb } from '../lib/site-db';
 
 export type SessionListFilters = {
   country?: string;
@@ -37,7 +38,7 @@ export async function listSessions(
   const offset = (page - 1) * pageSize;
   const { whereExtra, binds: filterBinds } = sessionFilterSql(filters);
   const baseWhere = 's.website_id = ? AND e.created_at >= ? AND e.created_at <= ?';
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT s.session_id as id, s.browser, s.os, s.device, s.country, s.city,
             s.created_at as createdAt,
             COUNT(DISTINCT e.visit_id) as visits,
@@ -66,7 +67,7 @@ export async function listSessions(
       lastAt: number;
     }>();
 
-  const totalRow = await env.DB.prepare(
+  const totalRow = await siteDb(env, websiteId).prepare(
     `SELECT COUNT(DISTINCT s.session_id) as count
      FROM session s
      INNER JOIN website_event e ON e.session_id = s.session_id
@@ -84,7 +85,7 @@ export async function listSessions(
 }
 
 export async function getSession(env: Env, websiteId: string, sessionId: string) {
-  const row = await env.DB.prepare(
+  const row = await siteDb(env, websiteId).prepare(
     `SELECT s.session_id as id, s.browser, s.os, s.device, s.screen, s.language,
             s.country, s.region, s.city, s.distinct_id as distinctId, s.created_at as createdAt
      FROM session s
@@ -97,7 +98,7 @@ export async function getSession(env: Env, websiteId: string, sessionId: string)
 }
 
 export async function getSessionStats(env: Env, websiteId: string, startAt: number, endAt: number) {
-  const row = await env.DB.prepare(
+  const row = await siteDb(env, websiteId).prepare(
     `SELECT COUNT(DISTINCT s.session_id) as sessions,
             COUNT(DISTINCT e.visit_id) as visits,
             COUNT(*) as views
@@ -112,7 +113,7 @@ export async function getSessionStats(env: Env, websiteId: string, startAt: numb
 }
 
 export async function getSessionWeekly(env: Env, websiteId: string, weeks = 12) {
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT strftime('%Y-%W', datetime(s.created_at / 1000, 'unixepoch')) as week,
             COUNT(DISTINCT s.session_id) as sessions
      FROM session s
@@ -128,7 +129,7 @@ export async function getSessionWeekly(env: Env, websiteId: string, weeks = 12) 
 }
 
 export async function getSessionActivity(env: Env, websiteId: string, sessionId: string) {
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT event_id as id, visit_id as visitId, url_path as urlPath,
             event_type as eventType, event_name as eventName, created_at as createdAt
      FROM website_event
@@ -142,7 +143,7 @@ export async function getSessionActivity(env: Env, websiteId: string, sessionId:
 }
 
 export async function getSessionProperties(env: Env, websiteId: string, sessionId: string) {
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT data_key as key,
             COALESCE(string_value, CAST(number_value AS TEXT)) as value
      FROM session_data
@@ -155,7 +156,7 @@ export async function getSessionProperties(env: Env, websiteId: string, sessionI
 }
 
 export async function getSessionReplays(env: Env, websiteId: string, sessionId: string) {
-  const summary = await env.DB.prepare(
+  const summary = await siteDb(env, websiteId).prepare(
     `SELECT visit_id as visitId, started_at as startedAt, ended_at as endedAt,
             event_count as eventCount, chunks
      FROM session_replay_summary
@@ -167,7 +168,7 @@ export async function getSessionReplays(env: Env, websiteId: string, sessionId: 
 
   if (summary.results?.length) return summary.results;
 
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT visit_id as visitId, MIN(started_at) as startedAt, MAX(ended_at) as endedAt,
             SUM(event_count) as eventCount, COUNT(*) as chunks
      FROM session_replay
@@ -202,7 +203,7 @@ export async function exportEventsCsv(
   clauses.push(...seg.eventClauses, ...seg.sessionClauses);
   binds.push(...seg.binds);
 
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT e.created_at, e.session_id, e.visit_id, e.url_path, e.event_name,
             e.referrer_domain, s.country
      FROM website_event e

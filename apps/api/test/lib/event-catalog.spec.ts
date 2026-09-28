@@ -3,11 +3,12 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { EVENT_TYPE } from '@flareboard/shared';
 import { getEventCatalog, getEventCatalogDetail } from '../../src/lib/event-catalog';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const BASE = Date.UTC(2026, 0, 12, 12);
 
 async function insertSession(id: string, createdAt: number) {
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT OR IGNORE INTO session (session_id, website_id, created_at)
      VALUES (?1, ?2, ?3)`,
   )
@@ -16,7 +17,7 @@ async function insertSession(id: string, createdAt: number) {
 }
 
 async function insertEvent(id: string, sessionId: string, eventName: string, path: string, createdAt: number) {
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
      VALUES (?1, ?2, ?3, ?3, ?4, ?5, ?6, ?7)`,
   )
@@ -26,7 +27,7 @@ async function insertEvent(id: string, sessionId: string, eventName: string, pat
 
 async function insertEventProperty(eventId: string, key: string, value: string | number, createdAt: number) {
   const isNumber = typeof value === 'number';
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT INTO event_data (event_data_id, website_id, website_event_id, data_key, string_value, number_value, data_type, created_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
   )

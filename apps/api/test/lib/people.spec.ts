@@ -3,11 +3,12 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { EVENT_TYPE } from '@flareboard/shared';
 import { getPersonDetail, listPeople } from '../../src/lib/people';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const BASE = Date.UTC(2026, 0, 10, 12);
 
 async function insertSession(id: string, distinctId: string | null, createdAt: number) {
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT INTO session (session_id, website_id, distinct_id, browser, os, country, city, created_at)
      VALUES (?1, ?2, ?3, 'Chrome', 'macOS', 'US', 'Austin', ?4)`,
   )
@@ -16,7 +17,7 @@ async function insertSession(id: string, distinctId: string | null, createdAt: n
 }
 
 async function insertEvent(id: string, sessionId: string, eventName: string | null, eventType: number, createdAt: number) {
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
      VALUES (?1, ?2, ?3, ?3, ?4, '/pricing', ?5, ?6)`,
   )
@@ -25,7 +26,7 @@ async function insertEvent(id: string, sessionId: string, eventName: string | nu
 }
 
 async function insertProperty(id: string, sessionId: string, key: string, value: string, distinctId: string, createdAt: number) {
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT INTO session_data (session_data_id, website_id, session_id, data_key, string_value, data_type, distinct_id, created_at)
      VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7)`,
   )

@@ -25,6 +25,7 @@ export const SITE_TABLES = [
   'rollup_session_day',
   'person',
   'person_group_membership',
+  'warehouse_import',
 ] as const;
 
 /**

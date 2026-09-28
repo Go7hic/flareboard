@@ -165,6 +165,21 @@ describe('per-website analytics store (siteDb facade)', () => {
     expect(rows).toEqual([{ id: 'dz', name: 'signup' }]);
   });
 
+  it('purges expired heatmap dedup ids in its daily alarm', async () => {
+    const site = freshSite();
+    const db = siteDb(typedEnv, site);
+    const now = Date.now();
+    await db.batch([
+      db.prepare(`INSERT INTO heatmap_ingest_dedup (id, website_id, created_at) VALUES ('old', ?1, ?2)`).bind(site, now - 3 * 86_400_000),
+      db.prepare(`INSERT INTO heatmap_ingest_dedup (id, website_id, created_at) VALUES ('new', ?1, ?2)`).bind(site, now),
+    ]);
+    const stub = siteStoreStub(typedEnv, site);
+    const { runDurableObjectAlarm } = await import('cloudflare:test');
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    const ids = await db.prepare('SELECT id FROM heatmap_ingest_dedup ORDER BY id').all<{ id: string }>();
+    expect(ids.results.map((r) => r.id)).toEqual(['new']);
+  });
+
   it('refuses to serve a store under a different website id and can erase itself', async () => {
     const site = freshSite();
     const stub = siteStoreStub(typedEnv, site);

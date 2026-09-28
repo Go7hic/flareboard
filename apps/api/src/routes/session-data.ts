@@ -5,6 +5,7 @@ import { getSessionDataProperties, getSessionDataValues } from '../lib/queries';
 import { badRequest, json } from '../lib/response';
 import { requireWebsiteOr404 } from '../lib/website';
 import type { ApiVariables } from '../middleware/auth';
+import { siteDb } from '../lib/site-db';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
 
@@ -40,7 +41,7 @@ export async function handleStats(c: Ctx) {
   if (!propertyName) return badRequest('propertyName query parameter required');
   const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
 
-  const rows = await c.env.DB.prepare(
+  const rows = await siteDb(c.env, website!.websiteId).prepare(
     `SELECT
       COUNT(DISTINCT session_id) as sessions,
       COUNT(*) as values,

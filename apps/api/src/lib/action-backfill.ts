@@ -5,6 +5,7 @@ import {
   type ActionRule,
 } from '@flareboard/shared';
 import type { Env } from '../env';
+import { siteDb } from '../lib/site-db';
 
 export type ActionBackfillInput = {
   websiteId: string;
@@ -57,7 +58,7 @@ async function loadEventProperties(env: Env, websiteId: string, eventIds: string
   for (let offset = 0; offset < eventIds.length; offset += PROPERTY_CHUNK_SIZE) {
     const chunk = eventIds.slice(offset, offset + PROPERTY_CHUNK_SIZE);
     const placeholders = chunk.map((_, index) => `?${index + 2}`).join(', ');
-    const rows = await env.DB.prepare(
+    const rows = await siteDb(env, websiteId).prepare(
       `SELECT website_event_id as eventId, data_key as dataKey, string_value as stringValue, number_value as numberValue
        FROM event_data
        WHERE website_id = ?1 AND website_event_id IN (${placeholders})`,
@@ -80,7 +81,8 @@ export async function backfillActionTags(env: Env, input: ActionBackfillInput): 
   }
 
   const limit = Math.min(Math.max(input.limit ?? 500, 1), 5000);
-  const events = await env.DB.prepare(
+  const db = siteDb(env, input.websiteId);
+  const events = await db.prepare(
     `SELECT e.event_id as eventId,
             e.event_name as eventName,
             e.url_path as urlPath,
@@ -139,13 +141,13 @@ export async function backfillActionTags(env: Env, input: ActionBackfillInput): 
     const actionIds = matched.map((row) => row.id).join(',');
     const actionNames = matched.map((row) => row.name).join(',');
 
-    await env.DB.batch([
-      env.DB.prepare(
+    await db.batch([
+      db.prepare(
         `INSERT INTO event_data
          (event_data_id, website_id, website_event_id, data_key, string_value, data_type, created_at)
          VALUES (?1, ?2, ?3, '$flareboard_action_ids', ?4, 1, ?5)`,
       ).bind(crypto.randomUUID(), input.websiteId, event.eventId, actionIds, now),
-      env.DB.prepare(
+      db.prepare(
         `INSERT INTO event_data
          (event_data_id, website_id, website_event_id, data_key, string_value, data_type, created_at)
          VALUES (?1, ?2, ?3, '$flareboard_action_names', ?4, 1, ?5)`,

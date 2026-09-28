@@ -4546,6 +4546,255 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   gap: 0.25rem;
 }
 
+/* Feature flag editor: condition groups, variants, payloads, early access */
+.flag-editor {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.flag-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+.flag-editor-wide {
+  grid-column: 1 / -1;
+}
+
+.flag-editor-section {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.flag-editor-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.flag-editor-section-title {
+  margin: 0 0 0.2rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.flag-group {
+  position: relative;
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.flag-group-or {
+  justify-self: start;
+  margin-top: -1.35rem;
+  padding: 0 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg);
+}
+
+.flag-group-head,
+.flag-group-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.flag-group-foot {
+  justify-content: flex-start;
+}
+
+.flag-condition-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.flag-condition {
+  display: grid;
+  grid-template-columns: 3.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.flag-condition-joiner {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.flag-condition-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.flag-condition-row > .select,
+.flag-condition-row > input {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+
+.flag-inline-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.flag-inline-field .select {
+  width: auto;
+}
+
+.flag-variant {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.flag-variant-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.flag-payload-input {
+  min-height: 5.5rem;
+  font-size: 0.8rem;
+}
+
+.flag-editor-errors {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+}
+
+.flag-detail-tabs {
+  margin: 0.25rem 0 1rem;
+}
+
+.flag-summary {
+  display: grid;
+  gap: 1rem;
+}
+
+.flag-summary-group {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.flag-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.flag-summary-conditions {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.flag-summary .flag-group-or {
+  margin-top: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.flag-json {
+  margin: 0.25rem 0 0;
+  padding: 0.6rem 0.75rem;
+  max-height: 16rem;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.flag-history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.flag-history-item {
+  display: grid;
+  gap: 0.4rem;
+  padding-left: 0.85rem;
+  border-left: 2px solid var(--border-strong);
+}
+
+.flag-history-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.flag-history-details summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.flag-history-diff {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 0.6rem;
+}
+
+.flag-history-diff-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.flag-history-pager {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 720px) {
+  .flag-editor-grid,
+  .flag-history-diff-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .flag-variant-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .flag-condition {
+    grid-template-columns: 1fr;
+  }
+}
+
 .experiment-title {
   margin: 0 0 0.25rem;
 }

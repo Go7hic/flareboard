@@ -114,6 +114,9 @@ async function purgeWebsite(env: Env, budget: Budget, websiteId: string, tables:
   }
   if (!(await drain(env, budget, 'share', 'entity_id = ?1', websiteId))) return false;
   if (!(await drain(env, budget, 'audit_log', "entity_type = 'website' AND entity_id = ?1", websiteId))) return false;
+  // History of website-scoped entities (feature flag changes, …) names its website in the metadata.
+  const scopedHistory = `entity_type <> 'website' AND CASE WHEN json_valid(metadata) THEN json_extract(metadata, '$.websiteId') END = ?1`;
+  if (!(await drain(env, budget, 'audit_log', scopedHistory, websiteId))) return false;
   if (budget.left <= 0) return false;
   await exec(env, budget, 'DELETE FROM website WHERE website_id = ?1', websiteId);
   await Promise.all([env.CACHE.delete(`website:${websiteId}`), env.CACHE.delete(`tracker-config:${websiteId}`)]);

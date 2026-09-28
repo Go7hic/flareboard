@@ -1,5 +1,10 @@
 import { z } from 'zod';
 import { isValidSiteTimezone } from './timezone';
+import {
+  FEATURE_FLAG_PAYLOAD_MAX_BYTES,
+  featureFlagPayloadBytes,
+  type FeatureFlagJsonValue,
+} from './feature-flag-evaluator';
 
 /**
  * Collected page context is truncated rather than rejected: landing URLs with ad click
@@ -220,69 +225,202 @@ export const featureFlagKeySchema = z
   .max(80)
   .regex(/^[a-zA-Z][a-zA-Z0-9_.:-]*$/, 'Use letters, numbers, dot, colon, underscore, or dash');
 
+/**
+ * Any JSON value up to FEATURE_FLAG_PAYLOAD_MAX_BYTES once serialized. Payloads are delivered to
+ * browsers (tracker config) and SDKs verbatim, so they must never hold secrets.
+ */
+export const featureFlagPayloadSchema = z.unknown().superRefine((value, ctx) => {
+  const size = featureFlagPayloadBytes(value);
+  if (size === null) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Payload must be valid JSON' });
+  } else if (size > FEATURE_FLAG_PAYLOAD_MAX_BYTES) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Payload must be at most ${FEATURE_FLAG_PAYLOAD_MAX_BYTES / 1024} KB`,
+    });
+  }
+}) as z.ZodType<FeatureFlagJsonValue>;
+
 export const featureFlagVariantSchema = z.object({
   key: featureFlagKeySchema,
   name: z.string().min(1).max(120),
   weight: z.coerce.number().int().min(0).max(100),
+  /** null clears the payload. */
+  payload: featureFlagPayloadSchema.optional(),
 });
 
-const featureFlagVariantsSchema = z.array(featureFlagVariantSchema).max(8).default([]);
+const featureFlagVariantsSchema = z
+  .array(featureFlagVariantSchema)
+  .max(8)
+  .default([])
+  .superRefine((variants, ctx) => {
+    const keys = new Set<string>();
+    let weight = 0;
+    for (const variant of variants) {
+      if (keys.has(variant.key)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Duplicate variant key "${variant.key}"` });
+      }
+      keys.add(variant.key);
+      weight += variant.weight;
+    }
+    if (weight > 100) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Variant weights must add up to 100 or less' });
+    }
+  });
 
-export const featureFlagTargetingRuleSchema = z.object({
-  field: z.enum([
-    'path',
-    'url',
-    'hostname',
-    'referrer',
-    'language',
-    'userAgent',
-    'distinctId',
-    'userId',
-    'environment',
-    'release',
-    'group',
-    'property',
-  ]),
-  key: z.string().min(1).max(120).optional(),
-  operator: z.enum([
-    'equals',
-    'contains',
-    'starts_with',
-    'ends_with',
-    'not_equals',
-    'not_contains',
-    'greater_than',
-    'greater_than_or_equal',
-    'less_than',
-    'less_than_or_equal',
-    'exists',
-    'not_exists',
-  ]),
-  value: z.string().max(200).default(''),
-}).refine((rule) => (rule.field === 'group' || rule.field === 'property' ? Boolean(rule.key?.trim()) : true), {
-  message: 'Group and property rules require a key',
-});
+const FEATURE_FLAG_KEYED_FIELDS = new Set(['group', 'property', 'person', 'group_property']);
+
+export const featureFlagTargetingRuleSchema = z
+  .object({
+    field: z.enum([
+      'path',
+      'url',
+      'hostname',
+      'referrer',
+      'language',
+      'userAgent',
+      'distinctId',
+      'userId',
+      'environment',
+      'release',
+      'group',
+      'property',
+      'person',
+      'group_property',
+      'cohort',
+    ]),
+    key: z.string().min(1).max(120).optional(),
+    /** Group type for `group_property` conditions. */
+    groupType: z.string().min(1).max(120).optional(),
+    operator: z.enum([
+      'equals',
+      'contains',
+      'starts_with',
+      'ends_with',
+      'not_equals',
+      'not_contains',
+      'greater_than',
+      'greater_than_or_equal',
+      'less_than',
+      'less_than_or_equal',
+      'exists',
+      'not_exists',
+      'in_cohort',
+      'not_in_cohort',
+    ]),
+    /** Compared value; the cohort id for `cohort` conditions. */
+    value: z.string().max(200).default(''),
+  })
+  .superRefine((rule, ctx) => {
+    if (FEATURE_FLAG_KEYED_FIELDS.has(rule.field) && !rule.key?.trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Group, property and person rules require a key' });
+    }
+    if (rule.field === 'group_property' && !rule.groupType?.trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Group property rules require a group type' });
+    }
+    const cohortOperator = rule.operator === 'in_cohort' || rule.operator === 'not_in_cohort';
+    if (rule.field === 'cohort') {
+      if (!cohortOperator) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Cohort rules use in_cohort or not_in_cohort' });
+      }
+      if (!rule.value.trim()) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Cohort rules require a cohort' });
+      }
+    } else if (cohortOperator) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'in_cohort and not_in_cohort apply to cohort rules only' });
+    }
+  });
 
 const featureFlagTargetingRulesSchema = z.array(featureFlagTargetingRuleSchema).max(12).default([]);
 
-export const createFeatureFlagSchema = z.object({
+export const featureFlagConditionGroupSchema = z.object({
+  conditions: featureFlagTargetingRulesSchema,
+  rollout: z.coerce.number().int().min(0).max(100).default(100),
+  /** Serve this variant to the group instead of the weighted split (null for none). */
+  variant: featureFlagKeySchema.nullable().optional(),
+  description: z.string().max(200).optional(),
+});
+
+const featureFlagConditionGroupsSchema = z.array(featureFlagConditionGroupSchema).min(1).max(20);
+
+/** Public copy of an early access feature; null turns early access off. */
+export const featureFlagEarlyAccessSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    description: z.string().trim().max(1000).default(''),
+  })
+  .nullable();
+
+const featureFlagFields = {
   key: featureFlagKeySchema,
   name: z.string().min(1).max(120),
-  description: z.string().max(500).optional().default(''),
-  enabled: z.boolean().optional().default(true),
-  rollout: z.coerce.number().int().min(0).max(100).optional().default(100),
-  variants: featureFlagVariantsSchema.optional().default([]),
-  targetingRules: featureFlagTargetingRulesSchema.optional().default([]),
+  description: z.string().max(500),
+  enabled: z.boolean(),
+  /** @deprecated single-group shorthand; ignored when conditionGroups is given. */
+  rollout: z.coerce.number().int().min(0).max(100),
+  variants: featureFlagVariantsSchema,
+  /** @deprecated single-group shorthand; ignored when conditionGroups is given. */
+  targetingRules: featureFlagTargetingRulesSchema,
+  conditionGroups: featureFlagConditionGroupsSchema,
+  /** Payload of a boolean flag (null clears it). Multivariate flags use variant payloads. */
+  payload: featureFlagPayloadSchema,
+  earlyAccess: featureFlagEarlyAccessSchema,
+};
+
+export const createFeatureFlagSchema = z.object({
+  key: featureFlagFields.key,
+  name: featureFlagFields.name,
+  description: featureFlagFields.description.optional().default(''),
+  enabled: featureFlagFields.enabled.optional().default(true),
+  rollout: featureFlagFields.rollout.optional().default(100),
+  variants: featureFlagFields.variants.optional().default([]),
+  targetingRules: featureFlagFields.targetingRules.optional().default([]),
+  conditionGroups: featureFlagFields.conditionGroups.optional(),
+  payload: featureFlagFields.payload.optional(),
+  earlyAccess: featureFlagFields.earlyAccess.optional(),
 });
 
 export const updateFeatureFlagSchema = z.object({
-  key: featureFlagKeySchema.optional(),
-  name: z.string().min(1).max(120).optional(),
-  description: z.string().max(500).optional(),
-  enabled: z.boolean().optional(),
-  rollout: z.coerce.number().int().min(0).max(100).optional(),
-  variants: featureFlagVariantsSchema.optional(),
-  targetingRules: featureFlagTargetingRulesSchema.optional(),
+  key: featureFlagFields.key.optional(),
+  name: featureFlagFields.name.optional(),
+  description: featureFlagFields.description.optional(),
+  enabled: featureFlagFields.enabled.optional(),
+  rollout: featureFlagFields.rollout.optional(),
+  variants: featureFlagFields.variants.optional(),
+  targetingRules: featureFlagFields.targetingRules.optional(),
+  conditionGroups: featureFlagFields.conditionGroups.optional(),
+  payload: featureFlagFields.payload.optional(),
+  earlyAccess: featureFlagFields.earlyAccess.optional(),
+});
+
+/** Body of the evaluate-all endpoint (and the future /decide): who is asking, plus overrides. */
+export const featureFlagEvaluateAllSchema = z.object({
+  distinctId: z.string().trim().min(1).max(200),
+  keys: z.array(featureFlagKeySchema).max(200).optional(),
+  /** Merged over the stored person properties (caller wins). */
+  personProperties: z.record(z.unknown()).optional(),
+  /** Group type → group key. Stored memberships fill the types that are not given. */
+  groups: z.record(z.string().max(200)).optional(),
+  /** Group type → properties, merged over stored group properties (caller wins). */
+  groupProperties: z.record(z.record(z.unknown())).optional(),
+  /** Request / event properties for `property` conditions. */
+  properties: z.record(z.unknown()).optional(),
+  sessionId: z.string().max(200).optional(),
+  userId: z.string().max(200).optional(),
+  anonymousId: z.string().max(200).optional(),
+  path: z.string().max(2000).optional(),
+  url: z.string().max(4000).optional(),
+  hostname: z.string().max(500).optional(),
+  referrer: z.string().max(4000).optional(),
+  language: z.string().max(100).optional(),
+  userAgent: z.string().max(1000).optional(),
+  environment: z.string().max(200).optional(),
+  release: z.string().max(200).optional(),
+});
+
+export const featureEnrollmentSchema = z.object({
+  distinctId: z.string().trim().min(1).max(200),
+  enrolled: z.boolean(),
 });
 
 export const experimentStatusSchema = z.enum(['draft', 'running', 'paused', 'completed']);

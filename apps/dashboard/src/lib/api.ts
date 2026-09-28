@@ -616,6 +616,69 @@ export interface WarehouseSchemaResponse {
   examples: Array<{ name: string; category?: string; sql: string }>;
 }
 
+export type FeatureFlagJson =
+  | null
+  | boolean
+  | number
+  | string
+  | FeatureFlagJson[]
+  | { [key: string]: FeatureFlagJson };
+
+export type FeatureFlagConditionField =
+  | 'path'
+  | 'url'
+  | 'hostname'
+  | 'referrer'
+  | 'language'
+  | 'userAgent'
+  | 'distinctId'
+  | 'userId'
+  | 'environment'
+  | 'release'
+  | 'group'
+  | 'property'
+  | 'person'
+  | 'group_property'
+  | 'cohort';
+
+export type FeatureFlagConditionOperator =
+  | 'equals'
+  | 'contains'
+  | 'starts_with'
+  | 'ends_with'
+  | 'not_equals'
+  | 'not_contains'
+  | 'greater_than'
+  | 'greater_than_or_equal'
+  | 'less_than'
+  | 'less_than_or_equal'
+  | 'exists'
+  | 'not_exists'
+  | 'in_cohort'
+  | 'not_in_cohort';
+
+export interface FeatureFlagCondition {
+  field: FeatureFlagConditionField;
+  key?: string;
+  groupType?: string;
+  operator: FeatureFlagConditionOperator;
+  value: string;
+}
+
+export interface FeatureFlagConditionGroup {
+  conditions: FeatureFlagCondition[];
+  rollout: number;
+  variant?: string | null;
+  description?: string;
+}
+
+export interface FeatureFlagVariant {
+  key: string;
+  name: string;
+  weight: number;
+  payload?: FeatureFlagJson;
+}
+
 export interface FeatureFlag {
   id: string;
   websiteId: string;
@@ -623,38 +686,14 @@ export interface FeatureFlag {
   name: string;
   description: string;
   enabled: boolean;
+  /** First condition group's rollout (legacy mirror). */
   rollout: number;
-  variants: Array<{ key: string; name: string; weight: number }>;
-  targetingRules: Array<{
-    field:
-      | 'path'
-      | 'url'
-      | 'hostname'
-      | 'referrer'
-      | 'language'
-      | 'userAgent'
-      | 'distinctId'
-      | 'userId'
-      | 'environment'
-      | 'release'
-      | 'group'
-      | 'property';
-    key?: string;
-    operator:
-      | 'equals'
-      | 'contains'
-      | 'starts_with'
-      | 'ends_with'
-      | 'not_equals'
-      | 'not_contains'
-      | 'greater_than'
-      | 'greater_than_or_equal'
-      | 'less_than'
-      | 'less_than_or_equal'
-      | 'exists'
-      | 'not_exists';
-    value: string;
-  }>;
+  variants: FeatureFlagVariant[];
+  /** First condition group's conditions (legacy mirror). */
+  targetingRules: FeatureFlagCondition[];
+  conditionGroups: FeatureFlagConditionGroup[];
+  payload: FeatureFlagJson;
+  earlyAccess: { name: string; description: string } | null;
   summary?: {
     exposures: number;
     sessions: number;
@@ -1222,6 +1261,30 @@ export interface SurveyDisplayRule {
 export interface FeatureFlagEvaluateResult {
   key: string;
   enabled: boolean;
-  variant: string | null;
+  variant: string | boolean | null;
   reason: string;
+  conditionGroup?: number | null;
+  payload?: FeatureFlagJson;
+}
+
+export interface FeatureFlagHistoryEntry {
+  id: string;
+  userId: string;
+  username: string;
+  action: 'create' | 'update' | 'delete';
+  metadata: {
+    key?: string;
+    changes?: string[];
+    before?: Partial<FeatureFlag> | null;
+    after?: Partial<FeatureFlag> | null;
+    experimentId?: string;
+  } | null;
+  createdAt: string | number;
+}
+
+export interface FeatureFlagHistoryPage {
+  items: FeatureFlagHistoryEntry[];
+  page: number;
+  pageSize: number;
+  total: number;
 }

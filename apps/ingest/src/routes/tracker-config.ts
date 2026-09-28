@@ -1,27 +1,40 @@
 import type { Context } from 'hono';
+import { featureFlagNeedsServerEvaluation, type FeatureFlagJsonValue } from '@flareboard/shared';
 import type { Env } from '../env';
-import { hasTargetingRules } from '../lib/feature-flags';
+import { flagConfig, getEnabledFlags, type FlagRow } from '../lib/feature-flags';
 import { getWebsiteById } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
 
-function parseVariants(raw: string | null) {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((item) => item && typeof (item as { key?: string }).key === 'string')
-      .map((item) => {
-        const row = item as { key: string; name?: string; weight?: number };
-        return {
-          key: row.key,
-          name: typeof row.name === 'string' ? row.name : row.key,
-          weight: Math.min(100, Math.max(0, Number(row.weight ?? 0))),
-        };
-      });
-  } catch {
-    return [];
-  }
+/**
+ * What the tracker needs about one enabled flag. Conditions never leave the server: flags that
+ * need them (`targeted`) are evaluated through POST /api/feature-flags/evaluate. `rollout` and
+ * `variants[].weight` drive the tracker's local evaluation of untargeted flags. Payloads are
+ * public by design (the dashboard says so); `payload` / `variants[i].payload` appear only when set.
+ */
+export function trackerFlag(row: FlagRow) {
+  const config = flagConfig(row);
+  const [firstGroup] = config.conditionGroups;
+  const flag: {
+    key: string;
+    enabled: boolean;
+    rollout: number;
+    variants: Array<{ key: string; name: string; weight: number; payload?: FeatureFlagJsonValue }>;
+    targeted: boolean;
+    payload?: FeatureFlagJsonValue;
+  } = {
+    key: config.key,
+    enabled: config.enabled,
+    rollout: firstGroup?.rollout ?? 100,
+    variants: config.variants.map((variant) => ({
+      key: variant.key,
+      name: variant.name ?? variant.key,
+      weight: variant.weight ?? 0,
+      ...(variant.payload !== undefined && variant.payload !== null ? { payload: variant.payload } : {}),
+    })),
+    targeted: featureFlagNeedsServerEvaluation(config),
+  };
+  if (!config.variants.length && config.payload !== null) flag.payload = config.payload;
+  return flag;
 }
 
 /**
@@ -61,20 +74,7 @@ export async function handleTrackerConfig(c: Context<{ Bindings: Env }>) {
   const heatmapConfig = (website.heatmapConfig ?? {}) as { sampleRate?: number; enabled?: boolean };
   const replayConfig = (website.replayConfig ?? {}) as { heatmapSampleRate?: number };
   const sampleRate = heatmapConfig.sampleRate ?? replayConfig.heatmapSampleRate ?? 0.1;
-  const flags = await c.env.DB.prepare(
-    `SELECT key, enabled, rollout, variants, targeting_rules as targetingRules
-     FROM feature_flag
-     WHERE website_id = ?1 AND enabled = 1
-     ORDER BY created_at ASC`,
-  )
-    .bind(websiteId)
-    .all<{
-      key: string;
-      enabled: number;
-      rollout: number;
-      variants: string | null;
-      targetingRules: string | null;
-    }>();
+  const flags = await getEnabledFlags(c.env, websiteId);
   const surveys = await c.env.DB.prepare(
     `SELECT survey_id as id, name, question, type, options, trigger_path as triggerPath,
             trigger_event as triggerEvent, display_delay_seconds as displayDelaySeconds,
@@ -101,13 +101,14 @@ export async function handleTrackerConfig(c: Context<{ Bindings: Env }>) {
     replay: replaySettings(website.replayConfig),
     heatmapSampleRate: Math.min(1, Math.max(0, sampleRate)),
     heatmapEnabled: heatmapConfig.enabled !== false,
-    featureFlags: (flags.results ?? []).map((flag) => ({
-      key: flag.key,
-      enabled: Boolean(flag.enabled),
-      rollout: Math.min(100, Math.max(0, Number(flag.rollout ?? 100))),
-      variants: parseVariants(flag.variants),
-      targeted: hasTargetingRules(flag.targetingRules),
-    })),
+    featureFlags: flags.map(trackerFlag),
+    earlyAccessFeatures: flags
+      .filter((flag) => Boolean(flag.earlyAccess))
+      .map((flag) => ({
+        flagKey: flag.key,
+        name: flag.earlyAccessName || flag.name,
+        description: flag.earlyAccessDescription,
+      })),
     surveys: (surveys.results ?? []).map((survey) => {
       let options: string[] = [];
       if (survey.options) {

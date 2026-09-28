@@ -1,9 +1,11 @@
-import { EVENT_TYPE } from '@flareboard/shared';
 import type { CohortDefinition } from '@flareboard/shared';
-import { createDb, schema } from '@flareboard/db';
+import { cohortConditionClause, createDb, schema } from '@flareboard/db';
+import { parseCohortDefinition } from '@flareboard/shared';
 import { eq } from 'drizzle-orm';
 import type { Env } from '../env';
 import { clampReportRange } from './report-range';
+
+export { legacyToDefinition, parseCohortDefinition } from '@flareboard/shared';
 
 export type CohortRecord = {
   cohortId: string;
@@ -12,58 +14,20 @@ export type CohortRecord = {
   definition: CohortDefinition;
 };
 
-export function legacyToDefinition(type: string, value: string): CohortDefinition {
-  if (type === 'event') {
-    return { conditions: [{ field: 'event_name', operator: 'equals', value }] };
-  }
-  return { conditions: [{ field: 'url_path', operator: 'equals', value }] };
-}
-
-export function parseCohortDefinition(
-  definition: CohortDefinition | null | undefined,
-  type: string,
-  value: string,
-): CohortDefinition {
-  if (definition?.conditions?.length) return definition;
-  return legacyToDefinition(type, value);
-}
-
 function conditionSql(
   cond: CohortDefinition['conditions'][number],
   windowStart?: number,
   windowEnd?: number,
 ) {
-  const binds: (string | number)[] = ['WEBSITE_ID'];
+  const clause = cohortConditionClause(cond);
+  const binds: (string | number)[] = ['WEBSITE_ID', clause.value];
   let windowClause = '';
   if (windowStart != null && windowEnd != null) {
     windowClause = ' AND created_at >= ? AND created_at <= ?';
-  }
-
-  if (cond.field === 'event_name') {
-    const nameClause =
-      cond.operator === 'equals'
-        ? `event_type = ${EVENT_TYPE.customEvent} AND event_name = ?`
-        : `event_type = ${EVENT_TYPE.customEvent} AND event_name LIKE '%' || ? || '%'`;
-    binds.push(cond.value);
-    if (windowStart != null && windowEnd != null) {
-      binds.push(windowStart, windowEnd);
-    }
-    return {
-      sql: `SELECT session_id FROM website_event WHERE website_id = ? AND ${nameClause}${windowClause} GROUP BY session_id`,
-      binds,
-    };
-  }
-
-  const pathClause =
-    cond.operator === 'equals'
-      ? `event_type = ${EVENT_TYPE.pageView} AND url_path = ?`
-      : `event_type = ${EVENT_TYPE.pageView} AND url_path LIKE '%' || ? || '%'`;
-  binds.push(cond.value);
-  if (windowStart != null && windowEnd != null) {
     binds.push(windowStart, windowEnd);
   }
   return {
-    sql: `SELECT session_id FROM website_event WHERE website_id = ? AND ${pathClause}${windowClause} GROUP BY session_id`,
+    sql: `SELECT session_id FROM website_event WHERE website_id = ? AND ${clause.sql}${windowClause} GROUP BY session_id`,
     binds,
   };
 }

@@ -20,7 +20,8 @@ export async function recordHit(env: Env, source: HitSource, sourceId: string, r
   const createdAt = new Date();
   const ip = getTrustedClientIp(req);
   const userAgent = req.headers.get('user-agent') ?? '';
-  // Same daily-salted hash as website sessions: counts unique visitors without storing IPs.
+  // Same monthly-salted hash as website sessions (getSalt defaults to 'month'): counts unique
+  // visitors without storing IPs. Keep the Privacy Policy in sync if the rotation changes.
   const visitorId = uuid(sourceId, ip, userAgent, getSalt(createdAt), getSecret(env.APP_SECRET));
   await env.DB.prepare(
     `INSERT INTO link_pixel_hit (hit_id, source_type, source_id, visitor_id, created_at)

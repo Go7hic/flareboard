@@ -43,6 +43,17 @@ describe('ingest integration', () => {
     const text = await response.text();
     expect(text).toContain('rrweb');
   });
+
+  it('GET /recorder.js applies replay privacy settings from tracker config', async () => {
+    const text = await (await fetchWorker('/recorder.js')).text();
+    expect(text).toContain('/api/tracker-config?website=');
+    expect(text).toContain('maskAllInputs:r.maskInputs!==false');
+    expect(text).toContain('o.blockSelector=r.blockSelector');
+    expect(text).toContain("'flareboard.rec.sample.'+vid");
+    // rrweb must receive the options object, never a bare {emit}.
+    expect(text).toContain('w.rrweb.record(options)');
+    expect(text).not.toContain('w.rrweb.record({emit');
+  });
 });
 
 describe('POST /api/send', () => {
@@ -303,6 +314,30 @@ describe('GET /api/tracker-config', () => {
     expect(response.status).toBe(200);
     expect(body.heatmapSampleRate).toBe(0.1);
     expect(body.heatmapEnabled).toBe(true);
+  });
+
+  it('returns safe replay defaults when a website has no replay config', async () => {
+    await seedTestWebsite(env.DB);
+    await env.DB.prepare('UPDATE website SET replay_config = NULL WHERE website_id = ?1').bind(TEST_WEBSITE_ID).run();
+    await env.CACHE.delete(`tracker-config:${TEST_WEBSITE_ID}`);
+
+    const { body } = await fetchWorkerJson<{ replay: unknown }>(`/api/tracker-config?website=${TEST_WEBSITE_ID}`);
+
+    expect(body.replay).toEqual({ sampleRate: 1, maskInputs: true, blockSelector: null });
+  });
+
+  it('returns the website replay privacy settings', async () => {
+    await seedTestWebsite(env.DB);
+    await env.DB.prepare('UPDATE website SET replay_config = ?2 WHERE website_id = ?1')
+      .bind(TEST_WEBSITE_ID, JSON.stringify({ sampleRate: 0.25, maskInputs: false, blockSelectors: ' .secret, #pay ' }))
+      .run();
+    await env.CACHE.delete(`tracker-config:${TEST_WEBSITE_ID}`);
+
+    const { body } = await fetchWorkerJson<{ replay: unknown }>(`/api/tracker-config?website=${TEST_WEBSITE_ID}`);
+
+    expect(body.replay).toEqual({ sampleRate: 0.25, maskInputs: false, blockSelector: '.secret, #pay' });
+    await env.DB.prepare('UPDATE website SET replay_config = NULL WHERE website_id = ?1').bind(TEST_WEBSITE_ID).run();
+    await env.CACHE.delete(`tracker-config:${TEST_WEBSITE_ID}`);
   });
 
   it('returns survey type and options for active choice surveys', async () => {

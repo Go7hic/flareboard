@@ -1160,17 +1160,30 @@ export function handleRecorder(_c: Context<{ Bindings: Env }>) {
   // rrweb calls emit() once per event; batch them so each POST carries an array.
   // chunkIndex is a per-visit counter in sessionStorage so later page loads in the
   // same visit keep appending (playback orders chunks by index).
+  // Privacy settings come from /api/tracker-config (`replay`): all inputs are masked unless the
+  // site turned masking off, blockSelector elements are never recorded, and sampleRate is decided
+  // once per visit. If the config cannot be loaded, record with the safe defaults (mask everything).
   const script = `(function(){'use strict';
 var w=window,d=document,s=d.currentScript;
 function ingestOrigin(){if(s&&s.src)try{return new URL(s.src).origin}catch(_){}return location.origin}
 function post(body,unloading){var b=JSON.stringify(body);return fetch(ingestOrigin()+'/api/record',{method:'POST',headers:{'Content-Type':'application/json'},body:b,keepalive:!!unloading&&b.length<60000}).catch(function(){})}
+function loadReplayCfg(website){return fetch(ingestOrigin()+'/api/tracker-config?website='+encodeURIComponent(website)).then(function(x){return x.ok?x.json():null}).then(function(c){return c&&c.replay||{}}).catch(function(){return {}})}
+function recordOptions(r){var o={maskAllInputs:r.maskInputs!==false};if(typeof r.blockSelector==='string'&&r.blockSelector){try{d.querySelector(r.blockSelector);o.blockSelector=r.blockSelector}catch(_){}}return o}
 function start(){var website=s&&s.getAttribute('data-website-id');if(!website||!w.rrweb)return;
 var sid=sessionStorage.getItem('flareboard.sid');if(!sid){setTimeout(start,300);return;}
 var vid=sessionStorage.getItem('flareboard.vid')||sid;
+loadReplayCfg(website).then(function(r){
+var sampleKey='flareboard.rec.sample.'+vid,pick=sessionStorage.getItem(sampleKey);
+if(pick===null){var rate=typeof r.sampleRate==='number'?r.sampleRate:1;pick=Math.random()<rate?'1':'0';sessionStorage.setItem(sampleKey,pick)}
+if(pick==='1')begin(website,sid,vid,recordOptions(r));
+});
+}
+function begin(website,sid,vid,options){
 var idxKey='flareboard.rec.'+vid,buf=[],started=Date.now();
 function nextIdx(){var n=parseInt(sessionStorage.getItem(idxKey)||'0',10)||0;sessionStorage.setItem(idxKey,String(n+1));return n}
 function flush(unloading){if(!buf.length)return;var events=buf,ended=Date.now();buf=[];post({type:'record',payload:{website:website,sessionId:sid,visitId:vid,chunkIndex:nextIdx(),events:events,startedAt:started,endedAt:ended}},unloading);started=ended}
-w.rrweb.record({emit:function(e){buf.push(e);if(buf.length>=200)flush(false)}});
+options.emit=function(e){buf.push(e);if(buf.length>=200)flush(false)};
+w.rrweb.record(options);
 setInterval(function(){flush(false)},5000);
 w.addEventListener('pagehide',function(){flush(true)});
 d.addEventListener('visibilitychange',function(){if(d.visibilityState==='hidden')flush(true)});

@@ -24,6 +24,22 @@ function parseVariants(raw: string | null) {
   }
 }
 
+/**
+ * Session replay privacy settings for recorder.js, normalized from website.replay_config
+ * (saved by the dashboard's ReplayConfigWizard). Missing config means the safe defaults:
+ * mask every input, record every visit, block nothing extra.
+ */
+export function replaySettings(raw: unknown) {
+  const cfg = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const rate = typeof cfg.sampleRate === 'number' && Number.isFinite(cfg.sampleRate) ? cfg.sampleRate : 1;
+  const selector = typeof cfg.blockSelectors === 'string' ? cfg.blockSelectors.trim().slice(0, 1000) : '';
+  return {
+    sampleRate: Math.min(1, Math.max(0, rate)),
+    maskInputs: cfg.maskInputs !== false,
+    blockSelector: selector || null,
+  };
+}
+
 export async function handleTrackerConfig(c: Context<{ Bindings: Env }>) {
   const websiteId = c.req.query('website');
   if (!websiteId) return badRequest('website query param required');
@@ -82,6 +98,7 @@ export async function handleTrackerConfig(c: Context<{ Bindings: Env }>) {
     }>();
 
   const payload = {
+    replay: replaySettings(website.replayConfig),
     heatmapSampleRate: Math.min(1, Math.max(0, sampleRate)),
     heatmapEnabled: heatmapConfig.enabled !== false,
     featureFlags: (flags.results ?? []).map((flag) => ({

@@ -1,4 +1,6 @@
 import type { Env } from '../env';
+import { resolvedIssueKvPrefix } from './error-issue-keys';
+import { sourceMapObjectPrefix } from './source-maps';
 
 /**
  * Hard deletion behind the soft deletes in the API. Deleting a website or an account only sets
@@ -46,7 +48,10 @@ async function drain(env: Env, budget: Budget, table: string, where: string, ...
   return false;
 }
 
-/** Deletes every replay chunk under `prefix` (keys are `<websiteId>/<visitId>/<chunk>`). */
+/**
+ * Deletes every R2 object under `prefix`: replay chunks (`<websiteId>/<visitId>/<chunk>`) and
+ * source maps (`sourcemaps/<websiteId>/<id>.map`) share the bucket.
+ */
 async function deleteReplayObjects(env: Env, budget: Budget, prefix: string) {
   const bucket = env.REPLAY_BUCKET;
   if (!bucket) return true;
@@ -100,8 +105,25 @@ export async function websiteScopedTables(env: Env): Promise<string[]> {
   return ordered;
 }
 
+/** Deletes the website's KV index of resolved error issues (`error-resolved:<websiteId>:*`). */
+async function deleteResolvedIssueKeys(env: Env, budget: Budget, websiteId: string) {
+  const prefix = resolvedIssueKvPrefix(websiteId);
+  while (budget.left > 0) {
+    budget.left--;
+    const page = await env.CACHE.list({ prefix, limit: R2_PAGE });
+    if (page.keys.length) {
+      budget.left -= page.keys.length;
+      await Promise.all(page.keys.map((key) => env.CACHE.delete(key.name)));
+    }
+    if (page.list_complete) return true;
+  }
+  return false;
+}
+
 async function purgeWebsite(env: Env, budget: Budget, websiteId: string, tables: string[]) {
   if (!(await deleteReplayObjects(env, budget, `${websiteId}/`))) return false;
+  if (!(await deleteReplayObjects(env, budget, sourceMapObjectPrefix(websiteId)))) return false;
+  if (!(await deleteResolvedIssueKeys(env, budget, websiteId))) return false;
   for (const table of tables) {
     if (!(await drain(env, budget, table, 'website_id = ?1', websiteId))) return false;
   }
@@ -134,6 +156,7 @@ const USER_REFERENCES: ReadonlyArray<[table: string, column: string]> = [
   ['link', 'user_id'],
   ['pixel', 'user_id'],
   ['error_issue_comment', 'user_id'],
+  ['error_issue_merge', 'merged_by'],
   ['error_issue_state', 'assignee_user_id'],
   ['log_saved_filter', 'user_id'],
   ['warehouse_data_source', 'user_id'],

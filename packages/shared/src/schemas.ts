@@ -441,6 +441,23 @@ export const createErrorIssueCommentSchema = z.object({
   body: z.string().min(1).max(2000),
 });
 
+export const mergeErrorIssuesSchema = z.object({
+  targetFingerprint: z.string().min(1).max(1000),
+  sourceFingerprints: z.array(z.string().min(1).max(1000)).min(1).max(50),
+});
+
+/** Ingest -> API: an error event whose fingerprint belongs to a resolved issue. */
+export const errorRegressionReportSchema = z.object({
+  websiteId: z.string().uuid(),
+  fingerprint: z.string().min(1).max(200),
+  occurredAt: z.number().int().positive(),
+  eventId: z.string().max(100).optional().nullable(),
+  release: z.string().max(200).optional().nullable(),
+  environment: z.string().max(100).optional().nullable(),
+  severity: z.string().max(20).optional().nullable(),
+  title: z.string().max(1200).optional().nullable(),
+});
+
 export const uploadErrorSourceMapSchema = z.object({
   release: z.string().trim().min(1).max(200),
   file: z.string().trim().min(1).max(1000),
@@ -459,6 +476,8 @@ export const createErrorAlertRuleSchema = z.object({
   environment: z.string().trim().max(100).optional().nullable(),
   channel: errorAlertChannelSchema.optional().default('record'),
   target: z.string().trim().max(500).optional().nullable(),
+  /** Also notify this rule's channel when a resolved issue occurs again. */
+  notifyRegressions: z.boolean().optional().default(true),
 });
 
 export const updateErrorAlertRuleSchema = createErrorAlertRuleSchema.partial();

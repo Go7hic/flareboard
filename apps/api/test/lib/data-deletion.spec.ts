@@ -60,6 +60,22 @@ async function seedWebsiteData(websiteId: string) {
     LONG_AGO,
   );
   await env.REPLAY_BUCKET!.put(`${websiteId}/visit-1/0`, '[]');
+  // Error tracking: a source map in R2 (metadata row in D1) and a merged issue + KV regression index.
+  await run(
+    `INSERT INTO error_source_map (source_map_id, website_id, release, file, content, object_key, size, created_at)
+     VALUES (?1, ?2, '1.0.0', 'app.js.map', '', ?3, 2, ?4)`,
+    `${websiteId}-map`,
+    websiteId,
+    `sourcemaps/${websiteId}/${websiteId}-map.map`,
+    LONG_AGO,
+  );
+  await env.REPLAY_BUCKET!.put(`sourcemaps/${websiteId}/${websiteId}-map.map`, '{}');
+  await run(
+    `INSERT INTO error_issue_merge (website_id, source_fingerprint, target_fingerprint, created_at) VALUES (?1, 'aaaa', 'bbbb', ?2)`,
+    websiteId,
+    LONG_AGO,
+  );
+  await env.CACHE.put(`error-resolved:${websiteId}:bbbb`, '{"issue":"bbbb","resolvedAt":1}');
   await run(`INSERT INTO feature_flag (flag_id, website_id, key, name) VALUES (?1, ?2, 'beta', 'Beta')`, flag, websiteId);
   await run(
     `INSERT INTO experiment (experiment_id, website_id, feature_flag_id, name, goal_event) VALUES (?1, ?2, ?3, 'Exp', 'signup')`,
@@ -209,6 +225,10 @@ describe('scheduled data deletion', () => {
     expect(await count('SELECT COUNT(*) AS n FROM share WHERE entity_id = ?1', PURGED_SITE)).toBe(0);
     expect(await count(`SELECT COUNT(*) AS n FROM audit_log WHERE entity_type = 'website' AND entity_id = ?1`, PURGED_SITE)).toBe(0);
     expect((await env.REPLAY_BUCKET!.list({ prefix: `${PURGED_SITE}/` })).objects).toHaveLength(0);
+    expect((await env.REPLAY_BUCKET!.list({ prefix: `sourcemaps/${PURGED_SITE}/` })).objects).toHaveLength(0);
+    expect(await count('SELECT COUNT(*) AS n FROM error_source_map WHERE website_id = ?1', PURGED_SITE)).toBe(0);
+    expect(await count('SELECT COUNT(*) AS n FROM error_issue_merge WHERE website_id = ?1', PURGED_SITE)).toBe(0);
+    expect((await env.CACHE.list({ prefix: `error-resolved:${PURGED_SITE}:` })).keys).toHaveLength(0);
   });
 
   it('keeps websites still inside the grace period and live websites untouched', async () => {
@@ -216,6 +236,8 @@ describe('scheduled data deletion', () => {
       expect(await count('SELECT COUNT(*) AS n FROM website WHERE website_id = ?1', site)).toBe(1);
       expect(await websiteRows(site)).toBeGreaterThan(5);
       expect((await env.REPLAY_BUCKET!.list({ prefix: `${site}/` })).objects).toHaveLength(1);
+      expect((await env.REPLAY_BUCKET!.list({ prefix: `sourcemaps/${site}/` })).objects).toHaveLength(1);
+      expect((await env.CACHE.list({ prefix: `error-resolved:${site}:` })).keys).toHaveLength(1);
     }
   });
 

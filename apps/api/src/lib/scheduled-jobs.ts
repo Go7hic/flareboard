@@ -1,10 +1,13 @@
 import type { Env } from '../env';
+import { migrateLegacyErrorIssueKeysBatch } from './error-issue-keys';
+import { runScheduledErrorRegressionChecks } from './error-regressions';
 import { evaluateErrorAlertRules } from './errors';
 import { runScheduledEmailReports } from './email-reports';
 import { evaluateLogAlertRules } from './logs';
 import { runRetentionPurge } from './retention';
 import { runDueWarehouseScheduledQueries, runDueWarehouseDataSourceSyncs } from './warehouse';
 import { runDataDeletion } from './data-deletion';
+import { migrateInlineSourceMapsToR2 } from './source-maps';
 
 // Caps how many websites a single cron tick processes so one invocation
 // cannot blow past Worker CPU/subrequest limits; later ticks continue from a cursor.
@@ -96,12 +99,34 @@ export async function runScheduledWarehouseQueries(env: Env, now = Date.now()) {
   return { websites, executed };
 }
 
+/**
+ * Error tracking upkeep: rekey issue state stored under legacy fingerprints, move inline source
+ * maps to R2, and catch regressions the ingest fast path missed. Each step is bounded per tick.
+ */
+export async function runScheduledErrorTracking(env: Env, now = Date.now()) {
+  const legacyKeys = await migrateLegacyErrorIssueKeysBatch(env);
+  const sourceMaps = await migrateInlineSourceMapsToR2(env);
+  const regressions = await runScheduledErrorRegressionChecks(env, now);
+  console.log(JSON.stringify({ event: 'error_tracking_maintenance_complete', legacyKeys, sourceMaps, regressions }));
+  return { legacyKeys, sourceMaps, regressions };
+}
+
 export async function runScheduledMaintenance(env: Env, cron: string) {
   await runScheduledEmailReports(env, cron);
   const alerts = await runScheduledAlertChecks(env);
+  // Must never keep retention and deletion below from running.
+  const errorTracking = await runScheduledErrorTracking(env).catch((error: unknown) => {
+    console.error(
+      JSON.stringify({
+        event: 'error_tracking_maintenance_failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    return null;
+  });
   const warehouse = await runScheduledWarehouseQueries(env);
   const dataSources = await runDueWarehouseDataSourceSyncs(env);
   const retention = await runRetentionPurge(env);
   const deletion = await runDataDeletion(env);
-  return { alerts, warehouse, dataSources, retention, deletion };
+  return { alerts, errorTracking, warehouse, dataSources, retention, deletion };
 }

@@ -1,8 +1,11 @@
 import { Hono } from 'hono';
+import { errorRegressionReportSchema } from '@flareboard/shared';
 import type { Env } from '../env';
 import { backfillActionTags } from '../lib/action-backfill';
+import { recordErrorIssueRegression } from '../lib/error-regressions';
 import { sendEmail } from '../lib/email';
 import { checkIpRateLimit, getTrustedClientIp } from '../lib/rate-limit';
+import { getWebsiteById } from '../lib/queries';
 import { getAppSecret, json } from '../lib/response';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -93,6 +96,26 @@ app.post('/backfill-action-tags', async (c) => {
   });
 
   return json(result);
+});
+
+/**
+ * Ingest reports an error event whose fingerprint belongs to a resolved issue (it keeps a KV
+ * index of those). The conditional update in recordErrorIssueRegression makes repeated reports
+ * of the same regression harmless.
+ */
+app.post('/errors/regressions', async (c) => {
+  if (!isAuthorized(c, c.req.header('Authorization'))) {
+    return json({ error: 'Unauthorized' }, 401);
+  }
+
+  const parsed = errorRegressionReportSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return json({ error: parsed.error.message }, 400);
+  const { websiteId, fingerprint, ...occurrence } = parsed.data;
+  const website = await getWebsiteById(c.env, websiteId);
+  if (!website) return json({ error: 'Website not found' }, 404);
+
+  const regression = await recordErrorIssueRegression(c.env, websiteId, fingerprint, occurrence);
+  return json({ regressed: Boolean(regression), regressionId: regression?.id ?? null });
 });
 
 export default app;

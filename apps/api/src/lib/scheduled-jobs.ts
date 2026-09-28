@@ -5,6 +5,8 @@ import { evaluateLogAlertRules } from './logs';
 import { runRetentionPurge } from './retention';
 import { runDueWarehouseScheduledQueries, runDueWarehouseDataSourceSyncs } from './warehouse';
 import { runDataDeletion } from './data-deletion';
+import { eventStoreMode } from './site-db';
+import { runStoreBackfill } from './store-backfill';
 
 // Caps how many websites a single cron tick processes so one invocation
 // cannot blow past Worker CPU/subrequest limits; later ticks continue from a cursor.
@@ -103,5 +105,7 @@ export async function runScheduledMaintenance(env: Env, cron: string) {
   const dataSources = await runDueWarehouseDataSourceSyncs(env);
   const retention = await runRetentionPurge(env);
   const deletion = await runDataDeletion(env);
-  return { alerts, warehouse, dataSources, retention, deletion };
+  // Storage migration: while in `dual`, copy history into the website stores a few sites per tick.
+  const storeBackfill = eventStoreMode(env) === 'dual' ? await runStoreBackfill(env) : null;
+  return { alerts, warehouse, dataSources, retention, deletion, storeBackfill };
 }

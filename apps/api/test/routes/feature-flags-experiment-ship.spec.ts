@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { createSecureToken, EVENT_TYPE } from '@flareboard/shared';
 import { fetchWorkerJson } from '../helpers/fetch-worker';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const TEST_USER_ID = '00000000-0000-0000-0000-000000000001';
 const BASE = Date.UTC(2026, 0, 10, 12);
@@ -13,7 +14,7 @@ async function authHeader() {
 }
 
 async function insertSession(id: string) {
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT OR IGNORE INTO session (session_id, website_id, created_at)
      VALUES (?1, ?2, ?3)`,
   )
@@ -28,7 +29,7 @@ async function insertEvent(
   createdAt: number,
   data: Record<string, string>,
 ) {
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
      VALUES (?1, ?2, ?3, ?3, ?4, '/', ?5, ?6)`,
   )
@@ -37,7 +38,7 @@ async function insertEvent(
 
   let index = 0;
   for (const [key, value] of Object.entries(data)) {
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT INTO event_data (event_data_id, website_id, website_event_id, data_key, string_value, data_type, created_at)
        VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6)`,
     )
@@ -83,10 +84,19 @@ describe('shipping an experiment winner to a flag with condition groups', () => 
 
     await env.DB.prepare(
       `INSERT OR REPLACE INTO experiment
-        (experiment_id, website_id, feature_flag_id, name, description, status, goal_event, started_at, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, '', 'running', 'checkout_completed', ?5, ?5, ?5)`,
+        (experiment_id, website_id, feature_flag_id, name, description, status, goal_event, allocation, started_at, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, '', 'running', 'checkout_completed', ?6, ?5, ?5, ?5)`,
     )
-      .bind(experimentId, TEST_WEBSITE_ID, flagId, 'Checkout experiment', now)
+      // The split saved when the experiment started: 50% control, 50% variant_a (matches the
+      // traffic below, so the sample-ratio check does not block shipping).
+      .bind(
+        experimentId,
+        TEST_WEBSITE_ID,
+        flagId,
+        'Checkout experiment',
+        now,
+        JSON.stringify({ enabled: true, rollout: 50, variants: [{ key: 'variant_a', weight: 100 }] }),
+      )
       .run();
 
     for (let i = 0; i < 40; i++) {

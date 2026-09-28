@@ -38,10 +38,35 @@
   "observability": {
     "enabled": true
   },
+  // Analytics storage mode, see @flareboard/db/site-store: d1 | dual | do.
+  "vars": {
+    "EVENT_STORE": "do"
+  },
+  // Per-website analytics stores live in the API worker (deploy the API first).
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SITE_STORE",
+        "class_name": "EventStore",
+        "script_name": "flareboard-api"
+      }
+    ]
+  },
   "env": {
     "production": {
       "vars": {
-        "HOSTED_MODE": "true"
+        "HOSTED_MODE": "true",
+        // Switch to "dual", backfill, verify, then "do" (docs/parity/storage-migration.md).
+        "EVENT_STORE": "d1"
+      },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "SITE_STORE",
+            "class_name": "EventStore",
+            "script_name": "flareboard-api-production"
+          }
+        ]
       },
       "d1_databases": [
         {

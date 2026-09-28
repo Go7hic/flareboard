@@ -1,28 +1,9 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '../env';
+import type { StoreParam, StoreResult, StoreStatement } from '@flareboard/db/site-store';
 import { STORE_MIGRATIONS, STORE_SCHEMA_VERSION } from './schema';
 
-export type StoreParam = string | number | null | ArrayBuffer;
-export type StoreMode = 'all' | 'raw' | 'run';
-
-export type StoreStatement = {
-  sql: string;
-  params: StoreParam[];
-  mode: StoreMode;
-};
-
-export type StoreResult = {
-  /** Rows as objects (mode 'all' / 'run'). */
-  results: Record<string, unknown>[];
-  /** Rows as arrays (mode 'raw'), in `columns` order. */
-  raw: unknown[][];
-  columns: string[];
-  /** Rows changed by an INSERT/UPDATE/DELETE (SQLite changes()), 0 for reads. */
-  changes: number;
-  lastRowId: number | null;
-  rowsRead: number;
-  rowsWritten: number;
-};
+export type { StoreMode, StoreParam, StoreResult, StoreStatement } from '@flareboard/db/site-store';
 
 export type StoreInfo = {
   websiteId: string | null;

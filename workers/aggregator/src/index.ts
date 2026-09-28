@@ -1,5 +1,12 @@
 import { eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
+import {
+  createSiteDatabase,
+  eventPropertiesJson,
+  eventStoreMode,
+  siteStoreName,
+  type SiteStoreRpc,
+} from '@flareboard/db/site-store';
 import { EVENT_TYPE, currentMonthKey, type QueueMessage } from '@flareboard/shared';
 import {
   buildDimensionDailyStatements,
@@ -24,12 +31,35 @@ import {
 
 export interface Env {
   DB: D1Database;
+  /** Per-website analytics stores (EventStore in the API worker, bound by script_name). */
+  SITE_STORE?: DurableObjectNamespace;
+  /** 'd1' | 'dual' | 'do' — see @flareboard/db/site-store. */
+  EVENT_STORE?: string;
   DLQ?: Queue;
   /** When "true", billable queue messages update usage_monthly (matches ingest HOSTED_MODE). */
   HOSTED_MODE?: string;
 }
 
 const MAX_RETRIES = 5;
+
+/**
+ * Where a batch is written. `site` means a website store: properties go into the event row's
+ * JSON column instead of event_data rows. `rollups: false` skips counters (dual mode copies,
+ * whose rollups are rebuilt at cutover).
+ */
+type WriteTarget = { store: 'd1' | 'site'; rollups: boolean };
+const D1_TARGET: WriteTarget = { store: 'd1', rollups: true };
+
+function siteHandle(env: Env, websiteId: string): D1Database {
+  if (!env.SITE_STORE) throw new Error('SITE_STORE binding is missing');
+  const stub = env.SITE_STORE.get(env.SITE_STORE.idFromName(siteStoreName(websiteId)));
+  return createSiteDatabase(stub as unknown as SiteStoreRpc, websiteId);
+}
+
+function messageWebsiteId(msg: QueueMessage): string | null {
+  if (msg.type === 'session_data') return msg.data[0]?.websiteId ?? null;
+  return (msg.data as { websiteId?: string }).websiteId ?? null;
+}
 
 /** Process sessions before events so FK inserts succeed when messages arrive out of order. */
 const MESSAGE_ORDER: Record<QueueMessage['type'], number> = {
@@ -112,6 +142,7 @@ async function processEvent(
   d1: D1Database,
   msg: Extract<QueueMessage, { type: 'event' }>,
   claimedIds: ReadonlySet<string>,
+  target: WriteTarget = D1_TARGET,
 ): Promise<boolean> {
   const d = msg.data;
   await ensureSessionRow(db, d.sessionId, d.websiteId, d.createdAt);
@@ -157,7 +188,13 @@ async function processEvent(
   // batch attempt just inserted it (then event_data and rollups are still missing).
   if (!inserted.length && !claimedIds.has(d.id)) return false;
 
-  if (msg.eventData?.length) {
+  if (msg.eventData?.length && target.store === 'site') {
+    // Website stores keep properties on the event row (event_data is a view there).
+    await d1
+      .prepare('UPDATE website_event SET properties = ?1 WHERE event_id = ?2')
+      .bind(eventPropertiesJson(msg.eventData), d.id)
+      .run();
+  } else if (msg.eventData?.length) {
     await db
       .insert(schema.eventData)
       .values(
@@ -176,6 +213,7 @@ async function processEvent(
       .onConflictDoNothing();
   }
 
+  if (!target.rollups) return true;
   const sessionMeta = await getSessionMeta(db, d.sessionId);
   await maintainRollupsForEvent(d1, d, sessionMeta);
   return true;
@@ -325,12 +363,13 @@ async function processMessage(
   d1: D1Database,
   msg: QueueMessage,
   claimedIds: ReadonlySet<string>,
+  target: WriteTarget = D1_TARGET,
 ): Promise<boolean> {
   if (msg.type === 'session') {
     await processSession(d1, msg);
     return false;
   }
-  if (msg.type === 'event') return processEvent(db, d1, msg, claimedIds);
+  if (msg.type === 'event') return processEvent(db, d1, msg, claimedIds, target);
   if (msg.type === 'session_data') {
     await processSessionData(db, msg);
     return false;
@@ -481,11 +520,13 @@ async function flushMessageUsageAfterAck(env: Env, messages: QueueMessage[], hos
 }
 
 async function processBatchOptimized(
-  env: Env,
+  db: D1Database,
+  d1: D1Database,
   messages: QueueMessage[],
   hostedBilling: boolean,
+  target: WriteTarget = D1_TARGET,
 ): Promise<Map<string, number>> {
-  const db = env.DB;
+  const siteStore = target.store === 'site';
   let fallbackSafe = true;
   const claimedIds = new Set<string>();
 
@@ -582,8 +623,8 @@ async function processBatchOptimized(
             utm_source, utm_medium, utm_campaign, utm_content, utm_term,
             referrer_path, referrer_query, referrer_domain, page_title,
             gclid, fbclid, msclkid, ttclid, li_fat_id, twclid,
-            event_type, event_name, tag, hostname, lcp, inp, cls, fcp, ttfb
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            event_type, event_name, tag, hostname, lcp, inp, cls, fcp, ttfb${siteStore ? ', properties' : ''}
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${siteStore ? ', ?' : ''})
           ON CONFLICT(event_id) DO NOTHING`,
           )
           .bind(
@@ -618,6 +659,7 @@ async function processBatchOptimized(
             d.cls ?? null,
             d.fcp ?? null,
             d.ttfb ?? null,
+            ...(siteStore ? [eventPropertiesJson(m.eventData)] : []),
           ),
       );
     }
@@ -626,7 +668,8 @@ async function processBatchOptimized(
     for (const m of insertedEventMsgs) claimedIds.add(m.data.id);
 
     const relatedCoreStmts: D1PreparedStatement[] = [];
-    for (const m of eventMsgs) {
+    // Website stores keep properties on the event row (written above).
+    for (const m of siteStore ? [] : eventMsgs) {
       for (const row of m.eventData ?? []) {
         relatedCoreStmts.push(
           db
@@ -824,6 +867,8 @@ async function processBatchOptimized(
       }
     }
 
+    if (!target.rollups) return getUsageByUser(d1, [...insertedEventMsgs, ...dedupedHeatmapMsgs], hostedBilling);
+
     // After this point, fallback would replay increment-style rollups and can
     // inflate counters if any D1 batch chunk already committed.
     fallbackSafe = false;
@@ -838,7 +883,7 @@ async function processBatchOptimized(
     await runBatched(db, buildStatsRefreshStatements(db, [...statsDays.values()]));
 
     // Bill what this attempt actually wrote: redelivered or duplicate messages are no-ops.
-    return getUsageByUser(db, [...insertedEventMsgs, ...dedupedHeatmapMsgs], hostedBilling);
+    return getUsageByUser(d1, [...insertedEventMsgs, ...dedupedHeatmapMsgs], hostedBilling);
   } catch (error) {
     throw new BatchProcessingError(
       error instanceof Error ? error.message : String(error),
@@ -850,13 +895,14 @@ async function processBatchOptimized(
 
 /** Per-message fallback: isolates poison messages with ack/retry/DLQ semantics. */
 async function processPerMessageFallback(
-  batch: MessageBatch<QueueMessage>,
+  batchMessages: readonly Message<QueueMessage>[],
   env: Env,
   hostedBilling: boolean,
   claimedIds: ReadonlySet<string> = new Set(),
+  target: WriteTarget = D1_TARGET,
+  handleFor: (websiteId: string) => D1Database = () => env.DB,
 ) {
-  const db = createDb(env.DB);
-  const messages = [...batch.messages].sort(
+  const messages = [...batchMessages].sort(
     (a, b) => MESSAGE_ORDER[a.body.type] - MESSAGE_ORDER[b.body.type],
   );
 
@@ -871,7 +917,8 @@ async function processPerMessageFallback(
 
   for (const message of messages) {
     try {
-      const wroteBillable = await processMessage(db, env.DB, message.body, claimedIds);
+      const handle = handleFor(messageWebsiteId(message.body) ?? '');
+      const wroteBillable = await processMessage(createDb(handle), handle, message.body, claimedIds, target);
       message.ack();
 
       if (hostedBilling && wroteBillable) {
@@ -938,6 +985,119 @@ async function persistDeadEvents(batch: MessageBatch<QueueMessage>, env: Env) {
   batch.ackAll();
 }
 
+/** Legacy path: every website's rows in the shared D1 database. */
+async function processD1Batch(batch: MessageBatch<QueueMessage>, env: Env, hostedBilling: boolean) {
+  const messages = [...batch.messages]
+    .sort((a, b) => MESSAGE_ORDER[a.body.type] - MESSAGE_ORDER[b.body.type])
+    .map((m) => m.body);
+
+  try {
+    const usageByUser = await processBatchOptimized(env.DB, env.DB, messages, hostedBilling);
+    batch.ackAll();
+    await flushUsageAfterAck(env, usageByUser);
+  } catch (error) {
+    const fallbackSafe = error instanceof BatchProcessingError ? error.fallbackSafe : true;
+    console.error(
+      JSON.stringify({
+        event: fallbackSafe ? 'queue_batch_fallback' : 'queue_batch_rollup_failed',
+        size: messages.length,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    if (fallbackSafe) {
+      const claimedIds = error instanceof BatchProcessingError ? error.claimedIds : new Set<string>();
+      await processPerMessageFallback(batch.messages, env, hostedBilling, claimedIds);
+      return;
+    }
+
+    batch.ackAll();
+    await flushMessageUsageAfterAck(env, messages, hostedBilling);
+  }
+}
+
+function groupByWebsite<T>(items: readonly T[], body: (item: T) => QueueMessage) {
+  const groups = new Map<string, T[]>();
+  const orphans: T[] = [];
+  for (const item of items) {
+    const websiteId = messageWebsiteId(body(item));
+    if (!websiteId) {
+      orphans.push(item);
+      continue;
+    }
+    const group = groups.get(websiteId);
+    if (group) group.push(item);
+    else groups.set(websiteId, [item]);
+  }
+  return { groups, orphans };
+}
+
+const SITE_TARGET: WriteTarget = { store: 'site', rollups: true };
+
+/**
+ * Store path: each website's messages go to its own store in one transaction-backed batch.
+ * A failing website falls back per message without affecting the others.
+ */
+async function processSiteBatch(batch: MessageBatch<QueueMessage>, env: Env, hostedBilling: boolean) {
+  const sorted = [...batch.messages].sort((a, b) => MESSAGE_ORDER[a.body.type] - MESSAGE_ORDER[b.body.type]);
+  const { groups, orphans } = groupByWebsite(sorted, (m) => m.body);
+  for (const message of orphans) message.ack();
+
+  const usageByUser = new Map<string, number>();
+  for (const [websiteId, group] of groups) {
+    const handle = siteHandle(env, websiteId);
+    const bodies = group.map((m) => m.body);
+    try {
+      const usage = await processBatchOptimized(handle, env.DB, bodies, hostedBilling, SITE_TARGET);
+      for (const message of group) message.ack();
+      for (const [userId, count] of usage) usageByUser.set(userId, (usageByUser.get(userId) ?? 0) + count);
+    } catch (error) {
+      const fallbackSafe = error instanceof BatchProcessingError ? error.fallbackSafe : true;
+      console.error(
+        JSON.stringify({
+          event: fallbackSafe ? 'queue_site_batch_fallback' : 'queue_site_batch_rollup_failed',
+          websiteId,
+          size: group.length,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+      if (fallbackSafe) {
+        const claimedIds = error instanceof BatchProcessingError ? error.claimedIds : new Set<string>();
+        await processPerMessageFallback(group, env, hostedBilling, claimedIds, SITE_TARGET, () => handle);
+      } else {
+        for (const message of group) message.ack();
+        await flushMessageUsageAfterAck(env, bodies, hostedBilling);
+      }
+    }
+  }
+  await flushUsageAfterAck(env, usageByUser);
+}
+
+/**
+ * Dual mode: after the D1 write, copy each website's core rows into its store without rollups
+ * or billing. Failures only log: the cutover backfill copies anything missing and rebuilds
+ * the store rollups from events.
+ */
+async function copyToSiteStores(batch: MessageBatch<QueueMessage>, env: Env) {
+  const bodies = [...batch.messages]
+    .sort((a, b) => MESSAGE_ORDER[a.body.type] - MESSAGE_ORDER[b.body.type])
+    .map((m) => m.body);
+  const { groups } = groupByWebsite(bodies, (m) => m);
+  for (const [websiteId, group] of groups) {
+    try {
+      await processBatchOptimized(siteHandle(env, websiteId), env.DB, group, false, { store: 'site', rollups: false });
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: 'queue_dual_write_failed',
+          websiteId,
+          size: group.length,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
+  }
+}
+
 export default {
   async queue(batch: MessageBatch<QueueMessage>, env: Env) {
     if (batch.queue === DLQ_QUEUE) {
@@ -946,31 +1106,12 @@ export default {
     }
 
     const hostedBilling = env.HOSTED_MODE === 'true';
-    const messages = [...batch.messages]
-      .sort((a, b) => MESSAGE_ORDER[a.body.type] - MESSAGE_ORDER[b.body.type])
-      .map((m) => m.body);
-
-    try {
-      const usageByUser = await processBatchOptimized(env, messages, hostedBilling);
-      batch.ackAll();
-      await flushUsageAfterAck(env, usageByUser);
-    } catch (error) {
-      const fallbackSafe = error instanceof BatchProcessingError ? error.fallbackSafe : true;
-      console.error(
-        JSON.stringify({
-          event: fallbackSafe ? 'queue_batch_fallback' : 'queue_batch_rollup_failed',
-          size: messages.length,
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      );
-      if (fallbackSafe) {
-        const claimedIds = error instanceof BatchProcessingError ? error.claimedIds : new Set<string>();
-        await processPerMessageFallback(batch, env, hostedBilling, claimedIds);
-        return;
-      }
-
-      batch.ackAll();
-      await flushMessageUsageAfterAck(env, messages, hostedBilling);
+    const mode = eventStoreMode(env);
+    if (mode === 'do') {
+      await processSiteBatch(batch, env, hostedBilling);
+      return;
     }
+    await processD1Batch(batch, env, hostedBilling);
+    if (mode === 'dual') await copyToSiteStores(batch, env);
   },
 };

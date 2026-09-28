@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./schema": "./src/schema.ts"
+    "./schema": "./src/schema.ts",
+    "./site-store": "./src/site-store-client.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

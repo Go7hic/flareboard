@@ -1,6 +1,6 @@
 import type { Env } from '../env';
 import { eventStoreMode, siteDb, siteStoreStub } from './site-db';
-import type { StoreParam, StoreResult } from '../store/event-store';
+import type { StoreParam, StoreResult } from '@flareboard/db/site-store';
 
 const FORBIDDEN_SQL = /\b(insert|update|delete|drop|alter|create|replace|truncate|attach|detach|pragma|vacuum|reindex)\b/i;
 const UNSAFE_SCOPE_SQL = [

@@ -20,7 +20,7 @@ export function setSessionCookie(c: Context<{ Bindings: Env }>, token: string) {
   setCookie(c, SESSION_COOKIE, token, sessionCookieOptions(c.env));
 }
 
-export function clearSessionCookie(c: Context<{ Bindings: Env }>) {
+export function clearSessionCookie<E extends { Bindings: Env }>(c: Context<E>) {
   deleteCookie(c, SESSION_COOKIE, { path: '/' });
 }
 

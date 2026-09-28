@@ -119,10 +119,13 @@ app.get('/api/demo', demo.handleMeta);
 app.get('/api/demo/overview', demo.handleOverview);
 app.get('/api/demo/metrics', demo.handleMetrics);
 
+// Hono matches `use` paths exactly: '/api/me' alone left /api/me/password without a user (500).
 app.use('/api/me', jwtAuth);
+app.use('/api/me/*', jwtAuth);
 app.get('/api/me', me.handleMe);
 app.patch('/api/me', me.handleUpdateProfile);
 app.patch('/api/me/password', me.handleUpdatePassword);
+app.post('/api/me/delete', me.handleDeleteAccount);
 
 app.use('/api/dashboard', jwtAuth);
 app.get('/api/dashboard', dashboardOverview.handleDashboard);

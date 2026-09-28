@@ -5,12 +5,11 @@ const DELETE_BATCH = 5000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Fixed allowlist of purgeable append-only tables, child-before-parent so
-// foreign keys hold. Session rows are kept; they are small and may still be
+// foreign keys hold. session_replay is handled by purgeReplayObjects (R2 objects first). Session rows are kept; they are small and may still be
 // referenced by events that fall inside the retention window.
 const PURGE_TABLES: ReadonlyArray<{ table: string; idColumn: string }> = [
   { table: 'event_data', idColumn: 'event_data_id' },
   { table: 'revenue', idColumn: 'revenue_id' },
-  { table: 'session_replay', idColumn: 'replay_id' },
   { table: 'session_data', idColumn: 'session_data_id' },
   { table: 'website_event', idColumn: 'event_id' },
 ];
@@ -47,6 +46,7 @@ export async function runRetentionPurge(env: Env, now = Date.now()) {
   let deleted = await purgeHeatmapDedup(env, now);
   for (const site of batch) {
     const cutoff = now - site.retentionDays * DAY_MS;
+    deleted += await purgeReplayObjects(env, site.websiteId, cutoff);
     for (const { table, idColumn } of PURGE_TABLES) {
       const result = await env.DB.prepare(
         `DELETE FROM ${table}
@@ -70,6 +70,49 @@ export async function runRetentionPurge(env: Env, now = Date.now()) {
     }),
   );
   return { websites: batch.length, deleted };
+}
+
+/** R2 allows at most 1000 keys per delete call. */
+const REPLAY_BATCH = 1000;
+const MAX_REPLAY_BATCHES_PER_SITE = 5;
+
+/**
+ * Replay chunks live in R2 (`<websiteId>/<visitId>/<chunk>`) with an index row in D1. Delete the
+ * objects before their rows, or they would outlive the retention window with nothing pointing at
+ * them. The summaries shown in the replay list go with them.
+ */
+async function purgeReplayObjects(env: Env, websiteId: string, cutoff: number) {
+  let deleted = 0;
+  for (let i = 0; i < MAX_REPLAY_BATCHES_PER_SITE; i++) {
+    const rows = await env.DB.prepare(
+      `SELECT visit_id AS visitId, chunk_index AS chunkIndex FROM session_replay
+       WHERE website_id = ?1 AND created_at < ?2 ORDER BY rowid LIMIT ${REPLAY_BATCH}`,
+    )
+      .bind(websiteId, cutoff)
+      .all<{ visitId: string; chunkIndex: number }>();
+    const chunks = rows.results ?? [];
+    if (!chunks.length) break;
+    if (env.REPLAY_BUCKET) {
+      await env.REPLAY_BUCKET.delete(chunks.map((row) => `${websiteId}/${row.visitId}/${row.chunkIndex}`));
+    }
+    const result = await env.DB.prepare(
+      `DELETE FROM session_replay WHERE rowid IN (
+         SELECT rowid FROM session_replay WHERE website_id = ?1 AND created_at < ?2 ORDER BY rowid LIMIT ${REPLAY_BATCH}
+       )`,
+    )
+      .bind(websiteId, cutoff)
+      .run();
+    deleted += result.meta?.changes ?? 0;
+    if (chunks.length < REPLAY_BATCH) break;
+  }
+  const summaries = await env.DB.prepare(
+    `DELETE FROM session_replay_summary WHERE rowid IN (
+       SELECT rowid FROM session_replay_summary WHERE website_id = ?1 AND started_at < ?2 LIMIT ${DELETE_BATCH}
+     )`,
+  )
+    .bind(websiteId, cutoff)
+    .run();
+  return deleted + (summaries.meta?.changes ?? 0);
 }
 
 async function purgeHeatmapDedup(env: Env, now: number) {

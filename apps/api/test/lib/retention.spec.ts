@@ -54,6 +54,21 @@ describe('runRetentionPurge', () => {
     await seedEvent('old-1', SITE, OLD);
     await seedEvent('recent-1', SITE, RECENT);
     await seedEvent('keep-old-1', KEEP_SITE, OLD);
+    for (const [visit, at] of [['old-visit', OLD], ['recent-visit', RECENT]] as const) {
+      await env.DB.prepare(
+        `INSERT INTO session_replay (replay_id, website_id, session_id, visit_id, chunk_index, events, event_count, started_at, ended_at, created_at)
+         VALUES (?1, ?2, 'sess-old-1', ?3, 0, x'', 1, ?4, ?4, ?4)`,
+      )
+        .bind(`replay-${visit}`, SITE, visit, at)
+        .run();
+      await env.DB.prepare(
+        `INSERT INTO session_replay_summary (website_id, visit_id, session_id, started_at, ended_at, event_count, chunks)
+         VALUES (?1, ?2, 'sess-old-1', ?3, ?3, 1, 1)`,
+      )
+        .bind(SITE, visit, at)
+        .run();
+      await env.REPLAY_BUCKET!.put(`${SITE}/${visit}/0`, '[]');
+    }
   });
 
   it('purges rows past the retention window and leaves opted-out sites untouched', async () => {
@@ -67,5 +82,18 @@ describe('runRetentionPurge', () => {
       `SELECT event_data_id FROM event_data WHERE website_event_id = 'old-1'`,
     ).all();
     expect(orphanData.results ?? []).toHaveLength(0);
+  });
+
+  it('deletes expired session replay recordings from R2 along with their rows and summaries', async () => {
+    const visits = async (table: string) =>
+      (
+        await env.DB.prepare(`SELECT visit_id AS v FROM ${table} WHERE website_id = ?1 ORDER BY visit_id`)
+          .bind(SITE)
+          .all<{ v: string }>()
+      ).results?.map((row) => row.v) ?? [];
+    expect(await visits('session_replay')).toEqual(['recent-visit']);
+    expect(await visits('session_replay_summary')).toEqual(['recent-visit']);
+    expect(await env.REPLAY_BUCKET!.head(`${SITE}/old-visit/0`)).toBeNull();
+    expect(await env.REPLAY_BUCKET!.head(`${SITE}/recent-visit/0`)).not.toBeNull();
   });
 });

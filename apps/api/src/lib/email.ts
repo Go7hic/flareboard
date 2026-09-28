@@ -13,11 +13,32 @@ function emailFrom(env: Env) {
   return { email: from, name };
 }
 
+/**
+ * Emails carry one-time tokens (verify / reset links) and Workers Logs are retained in
+ * production, so message bodies and links are only ever printed outside production.
+ */
+function isProduction(env: Env) {
+  return env.ENVIRONMENT === 'production';
+}
+
+/** A link we could not email: printed for local dev, reduced to a token-free event in production. */
+export function logUndeliveredLink(env: Env, kind: 'password-reset' | 'verify-email', userId: string, url: string) {
+  if (isProduction(env)) {
+    console.error(JSON.stringify({ event: 'email_link_undelivered', kind, userId }));
+    return;
+  }
+  console.log(`[${kind}] Link for ${userId}: ${url}`);
+}
+
 /** Send via Cloudflare Email Sending binding, or log in dev when unconfigured. */
 export async function sendEmail(env: Env, input: SendEmailInput): Promise<boolean> {
   const binding = env.EMAIL;
   if (!binding) {
-    console.log(`[email] To: ${input.to}\nSubject: ${input.subject}\n${input.text}`);
+    if (isProduction(env)) {
+      console.error(JSON.stringify({ event: 'email_binding_missing', subject: input.subject }));
+    } else {
+      console.log(`[email] To: ${input.to}\nSubject: ${input.subject}\n${input.text}`);
+    }
     return false;
   }
 

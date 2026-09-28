@@ -28,7 +28,7 @@ import {
   storeOAuthState,
 } from '../lib/oauth';
 import { ensureSubscriptionRow, isHostedMode } from '../lib/billing';
-import { sendPasswordResetEmail, sendVerificationEmail } from '../lib/email';
+import { logUndeliveredLink, sendPasswordResetEmail, sendVerificationEmail } from '../lib/email';
 import { getUserByEmail, getUserById, getUserByUsername } from '../lib/queries';
 import { checkIpRateLimit, getTrustedClientIp } from '../lib/rate-limit';
 import { badRequest, forbidden, getAppSecret, json, unauthorized } from '../lib/response';
@@ -348,13 +348,10 @@ export async function handleForgotPassword(c: Ctx) {
     await c.env.CACHE.put(`reset:${token}`, user.userId, { expirationTtl: RESET_TTL });
     const resetUrl = `${dashboardBase(c)}/login?reset=${encodeURIComponent(token)}`;
     const to = user.email ?? user.username;
-    if (to.includes('@')) {
-      await sendPasswordResetEmail(c.env, to, resetUrl).catch(() => {
-        console.log(`[password-reset] Reset link for ${user.username}: ${resetUrl}`);
-      });
-    } else {
-      console.log(`[password-reset] Reset link for ${user.username}: ${resetUrl}`);
-    }
+    const delivered = to.includes('@')
+      ? await sendPasswordResetEmail(c.env, to, resetUrl).catch(() => false)
+      : false;
+    if (!delivered) logUndeliveredLink(c.env, 'password-reset', user.userId, resetUrl);
   }
 
   return json({ ok: true, message: 'If the account exists, a reset link was sent.' });

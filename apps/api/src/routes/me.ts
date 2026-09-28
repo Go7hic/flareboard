@@ -1,10 +1,14 @@
 import type { Context } from 'hono';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
-import { checkPassword, hashPassword, updatePasswordSchema, updateProfileSchema } from '@flareboard/shared';
+import { checkPassword, hashPassword, ROLES, updatePasswordSchema, updateProfileSchema } from '@flareboard/shared';
 import type { Env } from '../env';
+import { logAdminAction } from '../lib/audit';
 import { bumpTokenVersion, issueAuthToken } from '../lib/auth-token';
+import { stripeRequest } from '../lib/billing';
+import { DELETION_GRACE_DAYS } from '../lib/data-deletion';
 import { badRequest, json, unauthorized } from '../lib/response';
+import { clearSessionCookie } from '../lib/session-cookie';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
@@ -23,7 +27,131 @@ export async function handleMe(c: Ctx) {
     role: user.role,
     displayName: user.displayName,
     createdAt: user.createdAt,
+    // Accounts created through Google/GitHub have no password the user knows.
+    passwordRequired: !(await hasOauthIdentity(c.env, user.userId)),
   });
+}
+
+async function hasOauthIdentity(env: Env, userId: string) {
+  const db = createDb(env.DB);
+  const [identity] = await db
+    .select({ provider: schema.userOauthIdentity.provider })
+    .from(schema.userOauthIdentity)
+    .where(eq(schema.userOauthIdentity.userId, userId))
+    .limit(1);
+  return Boolean(identity);
+}
+
+const LIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing', 'past_due', 'unpaid']);
+
+/**
+ * Self-service account deletion. Cancels any paid subscription, soft-deletes the account and
+ * the websites that belong only to it, and signs the user out everywhere. The scheduled
+ * deletion job (lib/data-deletion.ts) erases the data after DELETION_GRACE_DAYS.
+ */
+export async function handleDeleteAccount(c: Ctx) {
+  const body = (await c.req.json().catch(() => null)) as { confirm?: unknown; password?: unknown } | null;
+  const db = createDb(c.env.DB);
+  const [user] = await db
+    .select()
+    .from(schema.user)
+    .where(and(eq(schema.user.userId, c.get('user').userId), isNull(schema.user.deletedAt)))
+    .limit(1);
+  if (!user) return unauthorized();
+
+  if (typeof body?.confirm !== 'string' || body.confirm.trim().toLowerCase() !== user.username.toLowerCase()) {
+    return badRequest('Type your username to confirm.');
+  }
+  if (!(await hasOauthIdentity(c.env, user.userId))) {
+    if (typeof body.password !== 'string' || !checkPassword(body.password, user.password)) {
+      return unauthorized({ message: 'Password is incorrect' });
+    }
+  }
+
+  if (user.role === ROLES.admin) {
+    const [otherAdmin] = await db
+      .select({ userId: schema.user.userId })
+      .from(schema.user)
+      .where(and(eq(schema.user.role, ROLES.admin), ne(schema.user.userId, user.userId), isNull(schema.user.deletedAt)))
+      .limit(1);
+    if (!otherAdmin) {
+      return json(
+        { code: 'only_admin', message: 'You are the only admin. Make another user an admin before deleting your account.' },
+        409,
+      );
+    }
+  }
+
+  // Teams: a sole member takes the team with them; an owner with members must hand it over first.
+  const memberships = await db
+    .select({ teamId: schema.teamUser.teamId, role: schema.teamUser.role, name: schema.team.name })
+    .from(schema.teamUser)
+    .innerJoin(schema.team, eq(schema.team.teamId, schema.teamUser.teamId))
+    .where(and(eq(schema.teamUser.userId, user.userId), isNull(schema.team.deletedAt)));
+  const soleTeams: string[] = [];
+  const blocking: string[] = [];
+  for (const membership of memberships) {
+    const others = await db
+      .select({ role: schema.teamUser.role })
+      .from(schema.teamUser)
+      .where(and(eq(schema.teamUser.teamId, membership.teamId), ne(schema.teamUser.userId, user.userId)));
+    if (!others.length) soleTeams.push(membership.teamId);
+    else if (membership.role === ROLES.teamOwner && !others.some((other) => other.role === ROLES.teamOwner)) {
+      blocking.push(membership.name);
+    }
+  }
+  if (blocking.length) {
+    return json(
+      {
+        code: 'team_owner_required',
+        message: `Make another member an owner of ${blocking.join(', ')} before deleting your account.`,
+        teams: blocking,
+      },
+      409,
+    );
+  }
+
+  // Cancel billing first: if Stripe fails, nothing else changes and the user can retry.
+  const [subscription] = await db
+    .select()
+    .from(schema.userSubscription)
+    .where(eq(schema.userSubscription.userId, user.userId))
+    .limit(1);
+  if (subscription?.stripeSubscriptionId && LIVE_SUBSCRIPTION_STATUSES.has(subscription.status ?? '')) {
+    try {
+      await stripeRequest(c.env, `/subscriptions/${encodeURIComponent(subscription.stripeSubscriptionId)}`, {}, 'DELETE');
+    } catch (err) {
+      console.error(JSON.stringify({ event: 'account_delete_stripe_cancel_failed', userId: user.userId, error: String(err) }));
+      return json(
+        { code: 'billing_cancel_failed', message: 'We could not cancel your subscription. Please try again or contact support.' },
+        502,
+      );
+    }
+    await db
+      .update(schema.userSubscription)
+      .set({ status: 'canceled', planId: 'free', updatedAt: new Date() })
+      .where(eq(schema.userSubscription.userId, user.userId));
+  }
+
+  const now = new Date();
+  if (soleTeams.length) {
+    await db.update(schema.team).set({ deletedAt: now, updatedAt: now }).where(inArray(schema.team.teamId, soleTeams));
+    await db
+      .update(schema.website)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(and(inArray(schema.website.teamId, soleTeams), isNull(schema.website.deletedAt)));
+  }
+  await db
+    .update(schema.website)
+    .set({ deletedAt: now, updatedAt: now })
+    .where(and(eq(schema.website.userId, user.userId), isNull(schema.website.teamId), isNull(schema.website.deletedAt)));
+  await db.delete(schema.teamUser).where(eq(schema.teamUser.userId, user.userId));
+  await db.update(schema.user).set({ deletedAt: now, updatedAt: now }).where(eq(schema.user.userId, user.userId));
+
+  await bumpTokenVersion(c.env, user.userId);
+  await logAdminAction(c.env, user.userId, 'delete', 'user', user.userId, { self: true });
+  clearSessionCookie(c);
+  return json({ ok: true, erasedWithinDays: DELETION_GRACE_DAYS });
 }
 
 export async function handleUpdatePassword(c: Ctx) {

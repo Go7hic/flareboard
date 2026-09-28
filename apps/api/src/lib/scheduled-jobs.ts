@@ -4,6 +4,7 @@ import { runScheduledEmailReports } from './email-reports';
 import { evaluateLogAlertRules } from './logs';
 import { runRetentionPurge } from './retention';
 import { runDueWarehouseScheduledQueries, runDueWarehouseDataSourceSyncs } from './warehouse';
+import { runDataDeletion } from './data-deletion';
 
 // Caps how many websites a single cron tick processes so one invocation
 // cannot blow past Worker CPU/subrequest limits; later ticks continue from a cursor.
@@ -101,5 +102,6 @@ export async function runScheduledMaintenance(env: Env, cron: string) {
   const warehouse = await runScheduledWarehouseQueries(env);
   const dataSources = await runDueWarehouseDataSourceSyncs(env);
   const retention = await runRetentionPurge(env);
-  return { alerts, warehouse, dataSources, retention };
+  const deletion = await runDataDeletion(env);
+  return { alerts, warehouse, dataSources, retention, deletion };
 }

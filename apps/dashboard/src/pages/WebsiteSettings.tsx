@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { IngestSnippetPanel } from '../components/IngestSnippetPanel';
 import { PlanUpgradeBanner } from '../components/PlanUpgradeBanner';
+import { ProjectKeyField } from '../components/ProjectKeyField';
 import {
   ReplayConfigWizard,
   replayConfigFromJson,
@@ -253,6 +254,14 @@ export default function WebsiteSettingsPage() {
         ) : null}
 
         <div className="page-settings-main">
+          {websiteId ? (
+            <Panel variant="accent-rail">
+              <h2 className="section-title">{t('projectKeyTitle')}</h2>
+              <p className="section-lead">{t('projectKeyLead')}</p>
+              <ProjectKeyField websiteId={websiteId} />
+            </Panel>
+          ) : null}
+
           {/* Sections are sibling panels; the old outer card nested cards inside a card. */}
           <div className="page-settings-group">
             <form className="page-settings-form" onSubmit={onSubmit}>

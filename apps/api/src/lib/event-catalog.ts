@@ -1,6 +1,6 @@
 import { EVENT_TYPE } from '@flareboard/shared';
 import type { Env } from '../env';
-import { siteDb } from '../lib/site-db';
+import { siteDb } from './site-db';
 
 export type EventCatalogFilters = {
   search?: string;
@@ -162,10 +162,37 @@ export async function getEventCatalogDetail(
   ]);
 
   if (!summary) return null;
+  const recentRows = recent.results ?? [];
+  const recentProps = await getEventProperties(env, websiteId, recentRows.map((row) => row.id));
   return {
     summary,
     properties: properties.results ?? [],
     paths: paths.results ?? [],
-    recent: recent.results ?? [],
+    // Properties let the dashboard describe examples, e.g. "Clicked button 'Sign up'".
+    recent: recentRows.map((row) => ({ ...row, properties: recentProps.get(row.id) ?? [] })),
   };
+}
+
+/** Property rows for a handful of events, keyed by event id. */
+async function getEventProperties(env: Env, websiteId: string, eventIds: string[]) {
+  const byEvent = new Map<string, Array<{ key: string; value: string | null }>>();
+  if (!eventIds.length) return byEvent;
+  const placeholders = eventIds.map((_, index) => `?${index + 2}`).join(',');
+  const rows = await siteDb(env, websiteId)
+    .prepare(
+      `SELECT website_event_id as eventId,
+              data_key as key,
+              COALESCE(string_value, CAST(number_value AS TEXT), CAST(date_value AS TEXT)) as value
+       FROM event_data
+       WHERE website_id = ?1 AND website_event_id IN (${placeholders})
+       ORDER BY data_key ASC`,
+    )
+    .bind(websiteId, ...eventIds)
+    .all<{ eventId: string; key: string; value: string | null }>();
+  for (const row of rows.results ?? []) {
+    const list = byEvent.get(row.eventId) ?? [];
+    list.push({ key: row.key, value: row.value });
+    byEvent.set(row.eventId, list);
+  }
+  return byEvent;
 }

@@ -93,6 +93,11 @@ export const website = sqliteTable(
     // Null keeps raw event data forever; a positive value purges rows older than N days.
     retentionDays: integer('retention_days'),
     timezone: text('timezone').notNull().default('UTC'),
+    // Tracker settings (migration 0047). Autocapture is on for new websites only.
+    autocapture: integer('autocapture', { mode: 'boolean' }).notNull().default(true),
+    // Opt-in: a random localStorage visitor id replaces the monthly IP + user agent hash.
+    persistVisitors: integer('persist_visitors', { mode: 'boolean' }).notNull().default(false),
+    respectDnt: integer('respect_dnt', { mode: 'boolean' }).notNull().default(false),
   },
   (t) => [
     index('website_user_idx').on(t.userId),

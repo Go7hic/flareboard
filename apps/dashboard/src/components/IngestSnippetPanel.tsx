@@ -94,6 +94,12 @@ export function IngestSnippetPanel({
   flareboard.group('account', 'acme_inc', { name: 'Acme Inc', plan: 'team' })
   // flareboard.reset()
 
+  // ${t('superPropsSnippetComment')}
+  flareboard.register({ app_version: '2.4.0' })
+
+  // ${t('consentSnippetComment')}
+  // flareboard.optOut()  ·  flareboard.optIn()  ·  flareboard.hasOptedOut()
+
   // ${t('featureFlagSnippetComment')}
   flareboard.featureFlagsReady().then(function () {
     if (flareboard.isFeatureEnabled('checkout.new_flow')) {
@@ -122,6 +128,34 @@ export function IngestSnippetPanel({
     status: 'success'
   })
 </script>`;
+
+  const optionsSnippet = `<script defer src="${INGEST_URL}/script.js" data-website-id="${websiteId}"
+  data-autocapture="false"
+  data-pageleave="true"
+  data-persistence="false"
+  data-respect-dnt></script>
+
+<div data-fb-no-capture>…</div>`;
+
+  const npmSnippet = `npm install @flareboard/js
+
+import { flareboard } from '@flareboard/js'
+
+flareboard.init({
+  host: '${INGEST_URL}',
+  websiteId: '${websiteId}',
+  // autocapture: false, persistence: false, respectDnt: true
+})
+flareboard.track('signup', { plan: 'pro' })
+
+// ${t('embedNpmCommentReact')}
+import { FlareboardProvider, useFeatureFlag } from '@flareboard/js/react'
+
+<FlareboardProvider config={{ host: '${INGEST_URL}', websiteId: '${websiteId}' }}>
+  <App />
+</FlareboardProvider>
+
+const variant = useFeatureFlag('checkout.new_flow')`;
 
   const declarativeSnippet = `<!-- ${t('declarativeEvents')} -->
 <button data-flareboard-event="signup" data-flareboard-event-plan="pro">Sign up</button>
@@ -211,6 +245,31 @@ export function IngestSnippetPanel({
         <details className="snippet-advanced">
           <summary>{t('embedAdvanced')}</summary>
           <pre className="code-block snippet-code">{advancedSnippet}</pre>
+        </details>
+        <details className="snippet-advanced">
+          <summary>{t('embedOptions')}</summary>
+          <p className="section-lead snippet-replay-lead">{t('embedOptionsLead')}</p>
+          <pre className="code-block snippet-code">{optionsSnippet}</pre>
+          <ul className="list-plain">
+            {(
+              [
+                ['data-autocapture', 'embedOptionAutocapture'],
+                ['data-pageleave', 'embedOptionPageleave'],
+                ['data-persistence', 'embedOptionPersistence'],
+                ['data-respect-dnt', 'embedOptionRespectDnt'],
+                ['data-fb-no-capture', 'embedOptionNoCapture'],
+              ] as const
+            ).map(([name, key]) => (
+              <li key={name} className="field-hint">
+                <code>{name}</code> — {t(key)}
+              </li>
+            ))}
+          </ul>
+        </details>
+        <details className="snippet-advanced">
+          <summary>{t('embedNpmTitle')}</summary>
+          <p className="section-lead snippet-replay-lead">{t('embedNpmLead')}</p>
+          <pre className="code-block snippet-code">{npmSnippet}</pre>
         </details>
         <details className="snippet-advanced">
           <summary>{t('declarativeEvents')}</summary>

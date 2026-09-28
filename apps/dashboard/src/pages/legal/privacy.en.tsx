@@ -151,6 +151,19 @@ const sections: LegalSection[] = [
           </li>
           <li>Page performance metrics (Core Web Vitals), when enabled.</li>
           <li>Aggregated click positions for heatmaps, when enabled. Heatmap data is not linked to a visitor.</li>
+          <li>
+            <strong>Interactions (autocapture)</strong>, when the customer leaves it on: clicks on links and buttons,
+            form submissions and changes to form fields. For each, the script records the kind of element, its
+            identifier, name and CSS classes, the link address, a short description of its position in the page and
+            up to 255 characters of its visible text. It <strong>never records what is typed or selected</strong> in
+            a form field, never reads text from form fields, password fields or elements that look sensitive (for
+            example payment or one-time-code fields), drops text that looks like a card number, identity number or
+            email address, and records nothing inside parts of a page the customer marks as excluded.
+          </li>
+          <li>
+            <strong>Page leave</strong>, together with autocapture: how long a page was visible and how far down it
+            was scrolled.
+          </li>
         </ul>
         <h3>How visitors are counted</h3>
         <div className="legal-callout">
@@ -163,10 +176,22 @@ const sections: LegalSection[] = [
           </p>
         </div>
         <p>
+          <strong>Remembering visitors (off by default).</strong> A customer can turn on “Remember visitors across
+          sessions” for a website. The script then creates a random identifier, keeps it in the browser’s{' '}
+          <code>localStorage</code> and sends it with each event, and that identifier is used instead of the hash
+          above to count the visitor. The same browser is then recognized across networks and months, until the
+          visitor clears the site’s data or the website resets it (for example at sign-out). The identifier is
+          random: it is not derived from the IP address or the device. IP addresses are still never stored.
+          Because this stores an identifier on the visitor’s device, customers who turn it on are responsible for
+          obtaining any consent the law where their visitors are requires.
+        </p>
+        <p>
           The tracking script sets <strong>no cookies</strong>. It keeps short-lived session information in the
           browser’s <code>sessionStorage</code>, which is cleared when the tab is closed. It uses{' '}
-          <code>localStorage</code> only when a customer identifies a signed-in user or shows a survey, to
-          remember that identifier or survey state.
+          <code>localStorage</code> only when a customer identifies a signed-in user or shows a survey (to
+          remember that identifier or survey state), when a visitor opts out (to remember that choice), and, on
+          websites that remember visitors, for the random visitor identifier and the event properties the website
+          asks the script to attach to every event.
         </p>
         <h3>Data customers choose to send</h3>
         <ul>
@@ -197,9 +222,10 @@ const sections: LegalSection[] = [
           </li>
         </ul>
         <p>
-          The tracking script ignores most automated traffic (bots and crawlers). It does not currently change its
-          behavior in response to Do Not Track or Global Privacy Control browser signals; customers who need to
-          honor these signals can load the script conditionally.
+          The tracking script ignores most automated traffic (bots and crawlers). Customers can set a website to
+          honor Do Not Track and Global Privacy Control browser signals, in which case the script sends nothing from
+          browsers that send either signal. Websites can also offer visitors an opt-out; the choice is remembered in
+          the browser and the script then sends nothing.
         </p>
         <p>
           We do not use analytics data for our own purposes, do not combine it across customers, and never sell it
@@ -306,7 +332,10 @@ const sections: LegalSection[] = [
                   Session information for the tracking script, as described in{' '}
                   <a href="#analytics-data">Analytics data</a>. No cookies.
                 </td>
-                <td>Until the tab closes; identify and survey state until cleared</td>
+                <td>
+                  Until the tab closes; identify, survey and opt-out state, and (when the website remembers visitors)
+                  the random visitor identifier, until cleared
+                </td>
               </tr>
             </tbody>
           </table>

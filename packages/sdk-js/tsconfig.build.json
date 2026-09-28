@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "target": "ES2019",
+    "types": [],
+    "declaration": true,
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+}

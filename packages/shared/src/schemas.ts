@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { INSIGHT_TYPES, insightQuerySchema, propertyFiltersSchema } from './insight-query';
 import { isValidSiteTimezone } from './timezone';
 import {
   FEATURE_FLAG_PAYLOAD_MAX_BYTES,
@@ -968,22 +969,7 @@ export const updateBoardSchema = z.object({
   parameters: z.record(z.unknown()).optional(),
 });
 
-export const insightTypeSchema = z.enum(['trend', 'funnel', 'retention', 'path', 'stickiness', 'table']);
-
-export const insightQuerySchema = z.object({
-  event: z.string().max(120).optional().nullable(),
-  events: z.array(z.string().min(1).max(120)).max(8).optional(),
-  path: z.string().max(500).optional().nullable(),
-  steps: z.array(z.string().min(1).max(500)).max(8).optional(),
-  metric: z.enum(['pageviews', 'visitors', 'visits', 'events']).optional().default('pageviews'),
-  dimension: z
-    .enum(['path', 'url', 'referrer', 'channel', 'browser', 'os', 'device', 'country', 'region', 'city', 'language', 'event'])
-    .optional()
-    .default('path'),
-  actor: z.enum(['person', 'session']).optional().default('person'),
-  unit: z.enum(['hour', 'day', 'week', 'month']).optional().default('day'),
-  limit: z.coerce.number().int().min(1).max(100).optional().default(10),
-});
+export const insightTypeSchema = z.enum(INSIGHT_TYPES);
 
 export const createInsightSchema = z.object({
   websiteId: z.string().uuid(),
@@ -1023,11 +1009,23 @@ export const updateSavedReplaySchema = z.object({
   name: z.string().max(100).optional(),
 });
 
-export const cohortConditionSchema = z.object({
-  field: z.enum(['event_name', 'url_path']),
-  operator: z.enum(['equals', 'contains']),
-  value: z.string().max(500),
-});
+export const cohortConditionSchema = z
+  .object({
+    /** event_name / url_path: custom event or pageview. any_event: any pageview or custom event. */
+    field: z.enum(['event_name', 'url_path', 'any_event']),
+    operator: z.enum(['equals', 'contains']),
+    value: z.string().max(500),
+    /** Event, person or dimension filters the matching events must also satisfy. */
+    filters: propertyFiltersSchema.optional(),
+  })
+  .superRefine((condition, ctx) => {
+    if (condition.field === 'any_event' ? !condition.filters?.length : !condition.value.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: condition.field === 'any_event' ? 'Add at least one filter' : 'Enter a value',
+      });
+    }
+  });
 
 export const cohortDefinitionSchema = z.object({
   conditions: z.array(cohortConditionSchema).min(1).max(10),

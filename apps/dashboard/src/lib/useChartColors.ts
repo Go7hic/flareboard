@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  CHART_SERIES_COLORS,
   getChartSeriesPrimary,
   getMetricSeriesColors,
   type MetricSeriesColors,
@@ -18,6 +19,8 @@ export type ChartColors = {
   panel: string;
   text: string;
   series: MetricSeriesColors;
+  /** Resolved --chart-1 … --chart-6 for indexed multi-series charts. */
+  palette: string[];
 };
 
 export function getChartColors(): ChartColors {
@@ -28,6 +31,10 @@ export function getChartColors(): ChartColors {
     panel: cssVar('--chart-tooltip-bg') || cssVar('--bg-elevated'),
     text: cssVar('--text'),
     series: getMetricSeriesColors(),
+    palette: CHART_SERIES_COLORS.map((token, index) => {
+      const name = token.slice(4, -1);
+      return cssVar(name) || (index === 0 ? getChartSeriesPrimary() : '');
+    }),
   };
 }
 

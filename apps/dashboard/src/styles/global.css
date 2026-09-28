@@ -5332,6 +5332,166 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   gap: 1rem;
 }
 
+/* Insight builder: series / steps / property filters */
+.insight-editor {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.insight-editor-section {
+  gap: 0.5rem;
+}
+
+.insight-series-list,
+.property-filter-builder {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: start;
+}
+
+.insight-series-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.insight-series-letter {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-top: 0.375rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.insight-series-body,
+.insight-event-editor {
+  display: grid;
+  gap: 0.5rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.insight-event-row,
+.property-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.insight-event-row > .select,
+.property-filter-row > .select {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 8rem;
+}
+
+.insight-event-row > .input,
+.insight-event-name,
+.property-filter-key,
+.property-filter-value {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+
+.property-filter-range {
+  display: flex;
+  gap: 0.5rem;
+  flex: 1 1 12rem;
+}
+
+.property-filter-problem,
+.insight-problem {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.insight-checkbox-field {
+  justify-content: flex-end;
+}
+
+.insight-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.25rem;
+  cursor: pointer;
+}
+
+.insight-range-select {
+  width: auto;
+}
+
+.insight-result-table {
+  margin-top: 1rem;
+}
+
+.insight-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.insight-legend-swatch {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+.insight-drill-cell {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.insight-drill-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--link);
+  font: inherit;
+  cursor: pointer;
+}
+
+.insight-drill-link:hover {
+  text-decoration: underline;
+}
+
+.insight-actors-panel {
+  margin-top: 1rem;
+}
+
+.insight-actors-list {
+  max-height: 16rem;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.board-insight-widget-body {
+  min-width: 0;
+  overflow: auto;
+}
+
+.cohort-condition-filter {
+  color: var(--text-muted);
+}
+
 .workflow-action-note {
   color: var(--text-muted);
   margin: 0.75rem 0 0;

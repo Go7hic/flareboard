@@ -11,11 +11,13 @@ import {
 import type { Env } from '../env';
 import { canAccessWebsite, canMutateWebsite } from '../lib/access';
 import {
+  cohortMemberSql,
   compareCohorts,
   getCohortSizeOverTime,
   legacyToDefinition,
   parseCohortDefinition,
 } from '../lib/cohorts';
+import { InsightQueryError } from '../lib/property-filters';
 import { getWebsiteById } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
@@ -41,8 +43,19 @@ function serialize(row: typeof schema.cohort.$inferSelect) {
 function definitionLegacyFields(definition: CohortDefinition) {
   const first = definition.conditions[0];
   if (!first) return { type: 'event' as const, value: '' };
-  if (first.field === 'event_name') return { type: 'event' as const, value: first.value };
-  return { type: 'path' as const, value: first.value };
+  if (first.field === 'url_path') return { type: 'path' as const, value: first.value };
+  return { type: 'event' as const, value: first.field === 'event_name' ? first.value : '' };
+}
+
+/** Compile the definition once so unusable cohorts are rejected on save, not on every report. */
+function definitionProblem(definition: CohortDefinition, websiteId: string): string | null {
+  try {
+    cohortMemberSql(definition, websiteId);
+    return null;
+  } catch (error) {
+    if (error instanceof InsightQueryError) return error.message;
+    throw error;
+  }
 }
 
 async function getCohort(env: Env, websiteId: string, cohortId: string) {
@@ -85,6 +98,8 @@ export async function handleCreate(c: Ctx) {
   const body = await c.req.json().catch(() => null);
   const parsed = createCohortSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
+  const problem = definitionProblem(parsed.data.definition, websiteId);
+  if (problem) return badRequest(problem);
 
   const cohortId = uuid();
   const now = new Date();
@@ -136,6 +151,10 @@ export async function handleUpdate(c: Ctx) {
   const body = await c.req.json().catch(() => null);
   const parsed = updateCohortSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
+  if (parsed.data.definition) {
+    const problem = definitionProblem(parsed.data.definition, websiteId);
+    if (problem) return badRequest(problem);
+  }
 
   const definition = parsed.data.definition ?? (row.definition as CohortDefinition);
   const legacy = definition ? definitionLegacyFields(definition) : null;

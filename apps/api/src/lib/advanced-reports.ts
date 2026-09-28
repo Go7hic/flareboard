@@ -1,6 +1,15 @@
-import { EVENT_TYPE, type AttributionConversionResponse } from '@flareboard/shared';
+import {
+  EVENT_TYPE,
+  MAX_FUNNEL_WINDOW_MS,
+  segmentParamsToFilters,
+  type AttributionConversionResponse,
+  type PropertyFilter,
+} from '@flareboard/shared';
 import type { Env } from '../env';
 import { paidAdsCaseSql } from './channel';
+import { runRetention, runStickiness } from './insight-activity';
+import { runFunnel } from './insight-funnels';
+import type { InsightContext } from './insight-sql';
 import {
   clampJourneyLimit,
   clampReportRange,
@@ -8,6 +17,7 @@ import {
   MAX_JOURNEY_VISIT_SAMPLE,
 } from './report-range';
 import { buildSegmentSql, type SegmentParams } from './segment-filters';
+import { siteDb } from './site-db';
 
 function segmentEventFilter(
   websiteId: string,
@@ -28,6 +38,32 @@ function segmentEventFilter(
   return { joins, where: clauses.join(' AND '), binds, seg };
 }
 
+function reportFilters(segment?: SegmentParams | null, filters?: PropertyFilter[] | null): PropertyFilter[] {
+  return [...segmentParamsToFilters(segment ?? null), ...(filters ?? [])];
+}
+
+function reportContext(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  timezone: string,
+): InsightContext {
+  return { db: siteDb(env, websiteId), websiteId, startAt, endAt, timezone };
+}
+
+export type FunnelReportOptions = {
+  countBy?: 'person' | 'session';
+  order?: 'strict' | 'any';
+  windowMs?: number;
+  filters?: PropertyFilter[] | null;
+  timezone?: string;
+};
+
+/**
+ * Legacy `/api/reports/funnel` shape over the insight funnel engine. Defaults keep the v1
+ * behaviour: custom-event steps counted per session, strict order, no practical window.
+ */
 export async function getFunnelReport(
   env: Env,
   websiteId: string,
@@ -35,106 +71,61 @@ export async function getFunnelReport(
   endAt: number,
   steps: string[],
   segment?: SegmentParams | null,
+  options: FunnelReportOptions = {},
 ) {
   if (!steps.length) return { steps: [], conversion: 0 };
-
-  const { joins, where, binds } = segmentEventFilter(websiteId, startAt, endAt, segment);
-  const results: Array<{ step: string; count: number; rate: number }> = [];
-  let prevCount = 0;
-
-  for (let i = 0; i < steps.length; i++) {
-    const required = steps.slice(0, i + 1);
-    const caseCols = required
-      .map((_, idx) => `MIN(CASE WHEN e.event_name = ? THEN e.created_at END) as step_${idx}`)
-      .join(', ');
-    const orderChecks = required
-      .slice(1)
-      .map((_, idx) => `step_${idx} < step_${idx + 1}`)
-      .join(' AND ');
-    const presenceChecks = required.map((_, idx) => `step_${idx} IS NOT NULL`).join(' AND ');
-    const havingClause = orderChecks ? `${presenceChecks} AND ${orderChecks}` : presenceChecks;
-
-    const sql = `SELECT COUNT(*) as count FROM (
-      SELECT e.session_id, ${caseCols}
-      FROM website_event e${joins}
-      WHERE ${where} AND e.event_type = ${EVENT_TYPE.customEvent}
-      GROUP BY e.session_id
-      HAVING ${havingClause}
-    )`;
-
-    const stepBinds = [...binds, ...required];
-    const row = await env.DB.prepare(sql)
-      .bind(...stepBinds)
-      .first<{ count: number }>();
-    const count = row?.count ?? 0;
-    const rate =
-      count === 0 ? 0 : i === 0 ? 100 : prevCount > 0 ? Math.round((count / prevCount) * 100) : 0;
-    results.push({ step: steps[i], count, rate });
-    prevCount = count;
-  }
-
-  const first = results[0]?.count ?? 0;
-  const last = results[results.length - 1]?.count ?? 0;
+  const windowMs = Math.min(Math.max(options.windowMs ?? MAX_FUNNEL_WINDOW_MS, 60_000), MAX_FUNNEL_WINDOW_MS);
+  const result = await runFunnel(reportContext(env, websiteId, startAt, endAt, options.timezone ?? 'UTC'), {
+    version: 2,
+    countBy: options.countBy ?? 'session',
+    filters: reportFilters(segment, options.filters),
+    funnel: {
+      steps: steps.map((event) => ({ kind: 'event' as const, event })),
+      window: { value: Math.max(1, Math.round(windowMs / 60_000)), unit: 'minute' },
+      order: options.order ?? 'strict',
+    },
+  });
   return {
-    steps: results,
-    conversion: first > 0 ? Math.round((last / first) * 100) : 0,
+    steps: result.steps.map((step) => ({
+      step: step.label,
+      count: step.count,
+      rate: Math.round(step.rate),
+      avgTimeToConvertMs: step.avgTimeToConvertMs,
+      medianTimeToConvertMs: step.medianTimeToConvertMs,
+    })),
+    conversion: Math.round(result.conversion),
   };
 }
 
+/** Legacy weekly pageview retention (`/api/reports/retention`): offsets 0..8 per cohort week. */
 export async function getRetentionReport(
   env: Env,
   websiteId: string,
   startAt: number,
   endAt: number,
   segment?: SegmentParams | null,
+  options: { filters?: PropertyFilter[] | null; timezone?: string } = {},
 ) {
   const range = clampReportRange(startAt, endAt);
-  const seg = buildSegmentSql(segment ?? null);
-  const sessionJoin = seg.joinSession || seg.sessionClauses.length ? ' INNER JOIN session s ON e.session_id = s.session_id' : '';
-  const eventFilter = seg.eventClauses.length ? ` AND ${seg.eventClauses.join(' AND ')}` : '';
-  const sessionFilter = seg.sessionClauses.length ? ` AND ${seg.sessionClauses.join(' AND ')}` : '';
-  const binds: (string | number)[] = [websiteId, range.startAt, range.endAt, ...seg.binds];
-
-  const rows = await env.DB.prepare(
-    `WITH first_touch AS (
-      SELECT e.session_id,
-        MIN(e.created_at) as first_at
-      FROM website_event e${sessionJoin}
-      WHERE e.website_id = ?1
-        AND e.created_at >= ?2 AND e.created_at <= ?3
-        AND e.event_type = ${EVENT_TYPE.pageView}
-        ${eventFilter}${sessionFilter}
-      GROUP BY e.session_id
-    ),
-    cohort AS (
-      SELECT session_id,
-        -- 'weekday 0' alone jumps FORWARD to the next Sunday; step back 6 days first so
-        -- the cohort starts on the Sunday on or before the first visit.
-        date(first_at / 1000, 'unixepoch', '-6 days', 'weekday 0') as cohort_week
-      FROM first_touch
-    ),
-    activity AS (
-      SELECT c.session_id, c.cohort_week,
-        CAST((julianday(date(e.created_at / 1000, 'unixepoch')) -
-              julianday(c.cohort_week)) / 7 AS INTEGER) as week_offset
-      FROM cohort c
-      INNER JOIN website_event e ON e.session_id = c.session_id
-      WHERE e.website_id = ?1
-        AND e.created_at <= ?3
-        AND e.event_type = ${EVENT_TYPE.pageView}
-      GROUP BY c.session_id, week_offset
-    )
-    SELECT cohort_week as cohortWeek, week_offset as weekOffset,
-           COUNT(DISTINCT session_id) as users
-    FROM activity
-    WHERE week_offset >= 0 AND week_offset <= 8
-    GROUP BY cohort_week, week_offset
-    ORDER BY cohort_week, week_offset`,
-  )
-    .bind(...binds)
-    .all<{ cohortWeek: string; weekOffset: number; users: number }>();
-
-  return { cohorts: rows.results ?? [], startAt: range.startAt, endAt: range.endAt };
+  const timezone = options.timezone ?? 'UTC';
+  const result = await runRetention(reportContext(env, websiteId, range.startAt, range.endAt, timezone), {
+    startEvent: { kind: 'pageview' },
+    returnEvent: { kind: 'pageview' },
+    period: 'week',
+    periods: 9,
+    countBy: 'session',
+    filters: reportFilters(segment, options.filters),
+    cohortFrom: range.startAt,
+    endAt: range.endAt,
+  });
+  const cohorts = result.cohorts.flatMap((cohort) =>
+    cohort.size
+      ? cohort.values
+          .map((users, weekOffset) => ({ cohortWeek: cohort.cohort, weekOffset, users }))
+          .filter((row) => row.users > 0)
+      : [],
+  );
+  return { cohorts, startAt: range.startAt, endAt: range.endAt };
 }
 
 export async function getStickinessReport(
@@ -145,88 +136,17 @@ export async function getStickinessReport(
   eventName?: string | null,
   actor: 'person' | 'session' = 'person',
   segment?: SegmentParams | null,
+  options: { filters?: PropertyFilter[] | null; timezone?: string } = {},
 ) {
   const range = clampReportRange(startAt, endAt);
-  const seg = buildSegmentSql(segment ?? null);
-  const joins = ` INNER JOIN session s ON s.session_id = e.session_id AND s.website_id = e.website_id`;
-  const eventFilter = seg.eventClauses.length ? ` AND ${seg.eventClauses.join(' AND ')}` : '';
-  const sessionFilter = seg.sessionClauses.length ? ` AND ${seg.sessionClauses.join(' AND ')}` : '';
-  const eventNameFilter = eventName ? ' AND e.event_name = ?' : '';
-  const actorExpr =
-    actor === 'session'
-      ? 'e.session_id'
-      : "COALESCE(NULLIF(s.distinct_id, ''), e.session_id)";
-  const binds: (string | number)[] = [websiteId, range.startAt, range.endAt];
-  if (eventName) binds.push(eventName);
-  binds.push(...seg.binds);
-
-  const rows = await env.DB.prepare(
-    `WITH daily_activity AS (
-       SELECT ${actorExpr} as actorId,
-              date(e.created_at / 1000, 'unixepoch') as activeDay,
-              COUNT(*) as events
-       FROM website_event e${joins}
-       WHERE e.website_id = ?
-         AND e.created_at >= ?
-         AND e.created_at <= ?
-         ${eventNameFilter}
-         ${eventFilter}${sessionFilter}
-       GROUP BY actorId, activeDay
-     ),
-     actor_activity AS (
-       SELECT actorId,
-              COUNT(*) as activeDays,
-              SUM(events) as events
-       FROM daily_activity
-       GROUP BY actorId
-     )
-     SELECT activeDays,
-            COUNT(*) as actors,
-            SUM(events) as events
-     FROM actor_activity
-     GROUP BY activeDays
-     ORDER BY activeDays ASC`,
-  )
-    .bind(...binds)
-    .all<{ activeDays: number; actors: number; events: number }>();
-
-  const totalRow = await env.DB.prepare(
-    `WITH daily_activity AS (
-       SELECT ${actorExpr} as actorId,
-              date(e.created_at / 1000, 'unixepoch') as activeDay
-       FROM website_event e${joins}
-       WHERE e.website_id = ?
-         AND e.created_at >= ?
-         AND e.created_at <= ?
-         ${eventNameFilter}
-         ${eventFilter}${sessionFilter}
-       GROUP BY actorId, activeDay
-     )
-     SELECT COUNT(DISTINCT actorId) as actors,
-            COUNT(*) as actorDays
-     FROM daily_activity`,
-  )
-    .bind(...binds)
-    .first<{ actors: number; actorDays: number }>();
-
-  const distribution = rows.results ?? [];
-  const totalActors = totalRow?.actors ?? 0;
-  const actorDays = totalRow?.actorDays ?? 0;
-  return {
-    event: eventName || null,
+  const report = await runStickiness(
+    reportContext(env, websiteId, range.startAt, range.endAt, options.timezone ?? 'UTC'),
+    eventName ? { kind: 'event', event: eventName } : { kind: 'all' },
     actor,
-    startAt: range.startAt,
-    endAt: range.endAt,
-    totalActors,
-    actorDays,
-    averageActiveDays: totalActors > 0 ? Math.round((actorDays / totalActors) * 100) / 100 : 0,
-    distribution: distribution.map((row) => ({
-      activeDays: row.activeDays,
-      actors: row.actors,
-      events: row.events,
-      percentage: totalActors > 0 ? Math.round((row.actors / totalActors) * 1000) / 10 : 0,
-    })),
-  };
+    reportFilters(segment, options.filters),
+  );
+  const { kind: _kind, ...rest } = report;
+  return { ...rest, event: eventName || null };
 }
 
 function journeyPrefixHaving(prefixSteps: string[]) {
@@ -282,8 +202,9 @@ export async function getJourneyFlowReport(
       ${havingClause}
     )`;
 
+  const db = siteDb(env, websiteId);
   const [nextRows, totalRow, pathRows] = await Promise.all([
-    env.DB.prepare(
+    db.prepare(
       `${baseCte}
       SELECT r.url_path as path, COUNT(DISTINCT r.visit_id) as count
       FROM ranked r
@@ -295,13 +216,13 @@ export async function getJourneyFlowReport(
     )
       .bind(...binds, ...prefixBinds, cappedLimit)
       .all<JourneyFlowStep>(),
-    env.DB.prepare(
+    db.prepare(
       `${baseCte}
       SELECT COUNT(*) as total FROM matching_visits`,
     )
       .bind(...binds, ...prefixBinds)
       .first<{ total: number }>(),
-    env.DB.prepare(
+    db.prepare(
       `${baseCte},
       visit_paths AS (
         SELECT r.visit_id,
@@ -379,7 +300,8 @@ export async function getJourneyReport(
     ORDER BY count DESC
     LIMIT ? OFFSET ?`;
 
-  const rows = await env.DB.prepare(sql)
+  const rows = await siteDb(env, websiteId)
+    .prepare(sql)
     .bind(...binds, cappedLimit, cappedOffset)
     .all<{ path: string; count: number }>();
 

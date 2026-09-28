@@ -12,7 +12,7 @@ export {
 export type { PersonProperties } from './person-store';
 export {
   COHORT_MEMBERSHIP_CACHE_TTL_SECONDS,
-  cohortConditionClause,
+  cohortConditionWhere,
   isPersonInCohort,
   isSessionInCohort,
   loadFlagCohorts,

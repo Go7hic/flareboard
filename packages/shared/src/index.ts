@@ -12,6 +12,7 @@ export * from './feature-flag-config';
 export * from './flag-hash';
 export * from './action-evaluator';
 export * from './geoip';
+export * from './insight-query';
 export * from './crypto';
 export * from './jwt';
 export * from './password';

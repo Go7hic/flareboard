@@ -8,6 +8,7 @@ import {
   type FeatureFlagEvaluationContext,
 } from '@flareboard/shared';
 import { parsePersonProperties } from './person-store';
+import { compilePropertyFilters, likeContainsPattern, SqlParams, type CompiledFilter } from './property-filters';
 
 /**
  * Lookups that turn a caller's identity into the targeting data feature flags evaluate against:
@@ -49,27 +50,39 @@ export type FlagCohort = {
 };
 
 /**
- * SQL for one cohort condition over unqualified website_event columns. This is the single
- * definition of what a cohort condition matches; apps/api/src/lib/cohorts.ts builds cohort
- * reports from it too.
+ * WHERE fragment for one cohort condition over `website_event e` (and `session s` when
+ * `needsSession`, joined on `s.session_id = e.session_id`). This is the single definition of what
+ * a cohort condition matches: apps/api/src/lib/cohorts.ts builds cohort reports from it too.
  */
-export function cohortConditionClause(condition: CohortCondition): { sql: string; value: string } {
+export function cohortConditionWhere(
+  condition: CohortCondition,
+  params: SqlParams,
+  websiteId: string,
+  windowStart?: number | null,
+  windowEnd?: number | null,
+): CompiledFilter {
+  const clauses: string[] = [`e.website_id = ${params.add(websiteId)}`];
+  const contains = (column: string, value: string) =>
+    `${column} LIKE ${params.add(likeContainsPattern(value))} ESCAPE '\\'`;
   if (condition.field === 'event_name') {
-    return {
-      sql:
-        condition.operator === 'equals'
-          ? `event_type = ${EVENT_TYPE.customEvent} AND event_name = ?`
-          : `event_type = ${EVENT_TYPE.customEvent} AND event_name LIKE '%' || ? || '%'`,
-      value: condition.value,
-    };
+    clauses.push(`e.event_type = ${EVENT_TYPE.customEvent}`);
+    clauses.push(
+      condition.operator === 'equals' ? `e.event_name = ${params.add(condition.value)}` : contains('e.event_name', condition.value),
+    );
+  } else if (condition.field === 'url_path') {
+    clauses.push(`e.event_type = ${EVENT_TYPE.pageView}`);
+    clauses.push(
+      condition.operator === 'equals' ? `e.url_path = ${params.add(condition.value)}` : contains('e.url_path', condition.value),
+    );
+  } else {
+    clauses.push(`e.event_type IN (${EVENT_TYPE.pageView}, ${EVENT_TYPE.customEvent})`);
   }
-  return {
-    sql:
-      condition.operator === 'equals'
-        ? `event_type = ${EVENT_TYPE.pageView} AND url_path = ?`
-        : `event_type = ${EVENT_TYPE.pageView} AND url_path LIKE '%' || ? || '%'`,
-    value: condition.value,
-  };
+  if (windowStart != null && windowEnd != null) {
+    clauses.push(`e.created_at >= ${params.add(windowStart)} AND e.created_at <= ${params.add(windowEnd)}`);
+  }
+  const filters = compilePropertyFilters(condition.filters, params);
+  if (filters.sql) clauses.push(filters.sql);
+  return { sql: clauses.join(' AND '), needsSession: filters.needsSession };
 }
 
 export async function loadFlagPerson(site: D1Database, websiteId: string, distinctId: string): Promise<FlagPerson | null> {
@@ -184,19 +197,17 @@ export async function loadFlagCohorts(db: D1Database, websiteId: string, cohortI
   return cohorts;
 }
 
-function cohortExistsSql(definition: CohortDefinition, websiteId: string) {
-  const binds: Array<string | number> = [];
-  const clauses = definition.conditions.map((condition) => {
-    const clause = cohortConditionClause(condition);
-    binds.push(websiteId, clause.value);
-    let window = '';
-    if (definition.windowStart != null && definition.windowEnd != null) {
-      window = ' AND created_at >= ? AND created_at <= ?';
-      binds.push(definition.windowStart, definition.windowEnd);
-    }
-    return `EXISTS (SELECT 1 FROM website_event e WHERE e.website_id = ? AND e.session_id = s.session_id AND ${clause.sql}${window})`;
-  });
-  return { sql: clauses.join(' AND '), binds };
+/**
+ * EXISTS clauses (one per condition) over the outer `session s`; condition filters on session
+ * columns read that same row.
+ */
+function cohortExistsSql(definition: CohortDefinition, websiteId: string, params: SqlParams) {
+  return definition.conditions
+    .map((condition) => {
+      const where = cohortConditionWhere(condition, params, websiteId, definition.windowStart, definition.windowEnd);
+      return `EXISTS (SELECT 1 FROM website_event e WHERE e.session_id = s.session_id AND ${where.sql})`;
+    })
+    .join(' AND ');
 }
 
 /**
@@ -210,10 +221,12 @@ export async function isSessionInCohort(
   sessionId: string,
 ): Promise<boolean> {
   if (!definition.conditions.length) return false;
-  const exists = cohortExistsSql(definition, websiteId);
+  const params = new SqlParams('positional');
+  const head = `s.session_id = ${params.add(sessionId)} AND s.website_id = ${params.add(websiteId)}`;
+  const exists = cohortExistsSql(definition, websiteId, params);
   const row = await site
-    .prepare(`SELECT 1 AS found FROM session s WHERE s.session_id = ? AND s.website_id = ? AND ${exists.sql} LIMIT 1`)
-    .bind(sessionId, websiteId, ...exists.binds)
+    .prepare(`SELECT 1 AS found FROM session s WHERE ${head} AND ${exists} LIMIT 1`)
+    .bind(...params.values)
     .first<{ found: number }>();
   return Boolean(row);
 }
@@ -227,16 +240,18 @@ export async function isPersonInCohort(
   person: FlagPerson,
 ): Promise<boolean> {
   if (!definition.conditions.length) return false;
-  const exists = cohortExistsSql(definition, websiteId);
   // No index covers session.distinct_id: bound the range scan to sessions since the person appeared.
   const since = person.firstSeenAt != null ? person.firstSeenAt - PERSON_SESSION_LOOKBACK_MS : 0;
+  const params = new SqlParams('positional');
+  const head = `s.website_id = ${params.add(websiteId)} AND s.created_at >= ${params.add(since)} AND s.distinct_id = ${params.add(distinctId)}`;
+  const exists = cohortExistsSql(definition, websiteId, params);
   const row = await site
     .prepare(
       `SELECT 1 AS found FROM session s
-       WHERE s.website_id = ? AND s.created_at >= ? AND s.distinct_id = ? AND ${exists.sql}
+       WHERE ${head} AND ${exists}
        LIMIT 1`,
     )
-    .bind(websiteId, since, distinctId, ...exists.binds)
+    .bind(...params.values)
     .first<{ found: number }>();
   return Boolean(row);
 }

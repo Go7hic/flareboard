@@ -43,6 +43,33 @@ describe('buildSegmentSql', () => {
     expect(result.binds).toEqual(['US', 'Chrome', 'mobile']);
   });
 
+  it('binds event-clause values before session-clause values', () => {
+    // Callers place event clauses first; binds used to follow key order instead.
+    const result = buildSegmentSql({ country: 'US', path: '/pricing' });
+    expect([...result.eventClauses, ...result.sessionClauses]).toEqual(['e.url_path = ?', 's.country = ?']);
+    expect(result.binds).toEqual(['/pricing', 'US']);
+  });
+
+  it('compiles `properties` into positional clauses and joins the session for person filters', () => {
+    const result = buildSegmentSql({
+      country: 'US',
+      properties: [
+        { type: 'event', key: 'plan', operator: 'is', value: ['pro'] },
+        { type: 'person', key: 'email', operator: 'is_set' },
+      ],
+    });
+    expect(result.joinSession).toBe(true);
+    expect(result.eventClauses).toHaveLength(1);
+    expect(result.eventClauses[0]).toContain('EXISTS (SELECT 1 FROM event_data d');
+    expect(result.eventClauses[0]!.match(/\?/g)).toHaveLength(3);
+    expect(result.binds).toEqual(['plan', 'pro', 'email', 'US']);
+  });
+
+  it('ignores invalid property filters', () => {
+    const result = buildSegmentSql({ properties: [{ type: 'event', key: 'x', operator: 'gt', value: 'many' }] });
+    expect(result.eventClauses).toEqual([]);
+  });
+
   it('skips empty values', () => {
     const result = buildSegmentSql({ country: '', path: '/ok', tag: null });
     expect(result.eventClauses).toEqual(['e.url_path = ?']);

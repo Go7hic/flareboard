@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { Bar, BarChart, Line, LineChart } from 'recharts';
+import { Line, LineChart } from 'recharts';
 import { AnalyticsChart } from './AnalyticsChart';
+import { InsightResultView } from './InsightResultView';
 import { StatCard } from './ui/stat-card';
 import { api, type InsightResult, type WebsiteStats } from '../lib/api';
 import {
@@ -163,7 +164,6 @@ function InsightBoardWidget({
   publicMode?: boolean;
   rangePreset: BoardRangePreset;
 }) {
-  const chartColors = useChartColors();
   const range = presetToRange(rangePreset);
   const rangeQs = rangeQueryString(range.startAt, range.endAt);
   const insightQuery = useQuery({
@@ -179,51 +179,8 @@ function InsightBoardWidget({
       <h3 className="board-stat-widget-title">{widget.label?.trim() || t('insight')}</h3>
       {loading ? <div className="skeleton skeleton-block" aria-busy /> : null}
       {!loading && result ? (
-        <div className="board-stat-widget-chart">
-          {result.kind === 'trend' ? (
-            <AnalyticsChart
-              Chart={LineChart}
-              data={result.series.map((point) => ({ x: formatChartTimeLabel(point.x, false), y: point.y }))}
-              margin={{ top: 8, right: 8, left: 0, bottom: 4 }}
-              responsive={{ width: '100%', height: '100%' }}
-              xAxis={{ dataKey: 'x', tick: { fontSize: 11 }, ...compactXAxis }}
-              yAxis={{ allowDecimals: false, tick: { fontSize: 11 }, ...compactYAxis }}
-            >
-              <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} />
-            </AnalyticsChart>
-          ) : result.kind === 'funnel' ? (
-            <AnalyticsChart
-              Chart={BarChart}
-              data={result.steps.map((step) => ({ x: step.step, y: step.count }))}
-              layout="vertical"
-              responsive={{ width: '100%', height: '100%' }}
-              grid={{ horizontal: false }}
-              xAxis={{ type: 'number', tick: { fontSize: 10 } }}
-              yAxis={{ type: 'category', dataKey: 'x', width: 80, tick: { fontSize: 10 } }}
-            >
-              <Bar dataKey="y" fill={chartColors.accent} radius={[0, 4, 4, 0]} />
-            </AnalyticsChart>
-          ) : result.kind === 'table' ? (
-            <ul className="list-plain">
-              {result.rows.slice(0, 5).map((row) => (
-                <li key={row.x} className="list-item list-row">
-                  <span>{row.x}</span>
-                  <span className="list-row-value">{formatNumber(row.y)}</span>
-                </li>
-              ))}
-            </ul>
-          ) : result.kind === 'path' ? (
-            <ul className="list-plain">
-              {result.next.slice(0, 5).map((row) => (
-                <li key={row.path} className="list-item list-row">
-                  <span>{row.path}</span>
-                  <span className="list-row-value">{formatNumber(row.count)}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-muted board-stat-widget-empty">{t('boardInsightSummary')}</p>
-          )}
+        <div className="board-insight-widget-body">
+          <InsightResultView result={result} compact />
         </div>
       ) : null}
     </section>

@@ -88,6 +88,52 @@ export async function getEnabledFlagsByKeys(env: Env, websiteId: string, keys: s
   return rows.results ?? [];
 }
 
+export type EvaluatedFlag = {
+  key: string;
+  flagId: string;
+  /** The flag has variants (its value is a variant key, not true/false). */
+  multivariate: boolean;
+  evaluation: ReturnType<typeof evaluateFeatureFlag>;
+  /**
+   * JSON payload returned for this flag when it is enabled. Nothing sets it yet: once flags carry
+   * payloads, populate it here and PostHog `/decide` + `/flags` return it unchanged.
+   */
+  payload?: unknown;
+};
+
+export async function hasEnabledFlags(env: Env, websiteId: string): Promise<boolean> {
+  const row = await env.DB.prepare(`SELECT 1 AS found FROM feature_flag WHERE website_id = ?1 AND enabled = 1 LIMIT 1`)
+    .bind(websiteId)
+    .first<{ found: number }>();
+  return Boolean(row);
+}
+
+/** Every enabled flag of a website evaluated for one context (PostHog `/decide` and `/flags`). */
+export async function evaluateAllFlags(
+  env: Env,
+  websiteId: string,
+  context: FeatureFlagEvaluationContext,
+  onlyKeys?: string[],
+): Promise<EvaluatedFlag[]> {
+  const rows = await env.DB.prepare(
+    `SELECT flag_id AS flagId, key, enabled, rollout, variants, targeting_rules AS targetingRules
+     FROM feature_flag
+     WHERE website_id = ?1 AND enabled = 1
+     ORDER BY created_at ASC`,
+  )
+    .bind(websiteId)
+    .all<FlagRow & { flagId: string }>();
+  const wanted = onlyKeys?.length ? new Set(onlyKeys) : null;
+  return (rows.results ?? [])
+    .filter((row) => !wanted || wanted.has(row.key))
+    .map((row) => ({
+      key: row.key,
+      flagId: row.flagId,
+      multivariate: parseVariants(row.variants).length > 0,
+      evaluation: evaluateFlagRow(row, context),
+    }));
+}
+
 export function evaluateFlagRow(row: FlagRow, context: FeatureFlagEvaluationContext) {
   return evaluateFeatureFlag(
     {

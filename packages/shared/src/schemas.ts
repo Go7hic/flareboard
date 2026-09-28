@@ -75,6 +75,12 @@ export const sendPayloadSchema = z
     userAgent: truncatedString(500).optional(),
     timestamp: z.coerce.number().int().optional(),
     id: z.string().max(128).optional(),
+    /**
+     * Random device id from the tracker when the website remembers visitors. When it equals `id`
+     * (or `id` is absent) the event is anonymous, and ingest honors the id only if the website has
+     * persistence on; otherwise the visitor is counted with the cookieless hash as before.
+     */
+    anonymousId: z.string().max(128).optional(),
     browser: z.string().max(100).optional(),
     os: z.string().max(100).optional(),
     device: z.string().max(100).optional(),
@@ -569,6 +575,12 @@ export const updateWebsiteSchema = z.object({
     .max(64)
     .refine(isValidSiteTimezone, { message: 'Invalid IANA timezone' })
     .optional(),
+  /** Tracker: autocapture clicks, form submits, field changes and page leaves. */
+  autocapture: z.boolean().optional(),
+  /** Tracker: remember visitors across sessions with a random localStorage id. */
+  persistVisitors: z.boolean().optional(),
+  /** Tracker: send nothing from browsers with Do Not Track or Global Privacy Control. */
+  respectDnt: z.boolean().optional(),
 });
 
 export const updateProfileSchema = z.object({

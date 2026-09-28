@@ -29,8 +29,22 @@ function serializeWebsite(website: Website) {
     heatmapConfig: website.heatmapConfig ?? undefined,
     goalConfig: website.goalConfig ?? undefined,
     timezone: website.timezone ?? 'UTC',
+    autocapture: website.autocapture !== false,
+    persistVisitors: website.persistVisitors === true,
+    respectDnt: website.respectDnt === true,
     createdAt: website.createdAt,
   };
+}
+
+/**
+ * Tracker settings are cached by the ingest worker: the public tracker config (60 s) and the
+ * settings ingest reads per event (`tracker-settings:`, see apps/ingest/src/lib/tracker-settings.ts).
+ */
+async function forgetTrackerCaches(env: Env, websiteId: string) {
+  await Promise.all([
+    env.CACHE.delete(`tracker-config:${websiteId}`),
+    env.CACHE.delete(`tracker-settings:${websiteId}`),
+  ]);
 }
 
 export async function handleList(c: Ctx) {
@@ -177,9 +191,18 @@ export async function handleUpdate(c: Ctx) {
       retentionDays:
         parsed.data.retentionDays !== undefined ? parsed.data.retentionDays : website.retentionDays,
       timezone: parsed.data.timezone ?? website.timezone,
+      autocapture: parsed.data.autocapture ?? website.autocapture,
+      persistVisitors: parsed.data.persistVisitors ?? website.persistVisitors,
+      respectDnt: parsed.data.respectDnt ?? website.respectDnt,
       updatedAt: new Date(),
     })
     .where(eq(schema.website.websiteId, website.websiteId));
+
+  const trackerSettingsChanged =
+    (parsed.data.autocapture !== undefined && parsed.data.autocapture !== website.autocapture) ||
+    (parsed.data.persistVisitors !== undefined && parsed.data.persistVisitors !== website.persistVisitors) ||
+    (parsed.data.respectDnt !== undefined && parsed.data.respectDnt !== website.respectDnt);
+  if (trackerSettingsChanged) await forgetTrackerCaches(c.env, website.websiteId);
 
   if (parsed.data.timezone) {
     await db
@@ -194,6 +217,9 @@ export async function handleUpdate(c: Ctx) {
     domain: parsed.data.domain ?? website.domain,
     replayEnabled: parsed.data.replayEnabled ?? website.replayEnabled ?? false,
     heatmapEnabled: parsed.data.heatmapConfig?.enabled ?? undefined,
+    autocapture: parsed.data.autocapture ?? undefined,
+    persistVisitors: parsed.data.persistVisitors ?? undefined,
+    respectDnt: parsed.data.respectDnt ?? undefined,
   });
   return json(serializeWebsite(updated!));
 }

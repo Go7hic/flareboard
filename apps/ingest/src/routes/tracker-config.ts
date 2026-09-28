@@ -98,6 +98,12 @@ export async function handleTrackerConfig(c: Context<{ Bindings: Env }>) {
     }>();
 
   const payload = {
+    websiteId: website.websiteId,
+    // Tracker behavior. script.js lets data-autocapture / data-persistence="false" /
+    // data-respect-dnt on the script tag override these per page.
+    autocapture: website.autocapture !== false,
+    persistence: website.persistVisitors === true,
+    respectDnt: website.respectDnt === true,
     replay: replaySettings(website.replayConfig),
     heatmapSampleRate: Math.min(1, Math.max(0, sampleRate)),
     heatmapEnabled: heatmapConfig.enabled !== false,

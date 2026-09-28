@@ -33,7 +33,8 @@ Standard pageviews and custom events.
 | `data` | Arbitrary JSON properties stored in `event_data` |
 | `tag` | Optional event tag |
 | `revenue`, `currency` | Optional revenue attribution |
-| `id` | Distinct ID from `identify()` |
+| `id` | Distinct ID: the `identify()` user id, or the anonymous id (see below) |
+| `anonymousId` | Random device id from the tracker. When it equals `id` (or `id` is absent) the event is anonymous: ingest counts the visitor by it only if the website has **Remember visitors across sessions** on, and otherwise drops it and uses the monthly IP + user agent hash |
 
 Matched action definitions are tagged at ingest time on `$flareboard_action_ids` and `$flareboard_action_names` in event properties.
 
@@ -124,6 +125,9 @@ Structured log and trace spans.
 
 Returns runtime config for `script.js`:
 
+- `websiteId`, and the website's tracker settings: `autocapture`, `persistence` (remember visitors
+  across sessions) and `respectDnt`
+
 - Heatmap sampling and enablement
 - Active feature flags with rollout, variants, and a `targeted` boolean (targeting rules are not exposed)
 - Active surveys with type, options, trigger event, display delay, and display rules
@@ -133,6 +137,41 @@ Example:
 ```bash
 curl "https://t.example.com/api/tracker-config?website=<uuid>"
 ```
+
+## Browser tracker (`script.js`)
+
+```html
+<script defer src="https://t.example.com/script.js" data-website-id="<uuid>"></script>
+```
+
+Script tag options (all optional; absent means "follow the website settings"):
+
+| Attribute | Effect |
+|-----------|--------|
+| `data-autocapture="false"` / `"true"` | Turn `$autocapture` off or on for this page |
+| `data-pageleave="false"` / `"true"` | `$pageleave` events (default: same as autocapture) |
+| `data-persistence="false"` | Never keep an anonymous id in localStorage on this page |
+| `data-respect-dnt` | Send nothing from browsers with Do Not Track or Global Privacy Control |
+| `data-project-key` | Instead of `data-website-id`; resolved through `/api/tracker-config?key=` (the response must carry `websiteId`) |
+| `data-release`, `data-environment`, `data-heatmap-sample-rate` | As before |
+
+Events the tracker adds:
+
+- `$autocapture`: clicks on links, buttons, `[role=button]` and submit/button inputs, form submits
+  and field changes. Properties: `$event_type` (`click`, `submit`, `change`), `$el_tag`, `$el_id`,
+  `$el_classes` (up to 10), `$el_type`, `$el_name` (fields and forms), `$el_text` (up to 255
+  characters, never for fields, password or sensitive-looking elements, or text that looks like a
+  card number, SSN or email), `$el_href` and `$el_selector` (element plus up to 5 ancestors).
+  Values typed or selected are never sent. Nothing inside `[data-fb-no-capture]` or
+  `.ph-no-capture` is captured. At most 10 per burst (refilling one per second) and 100 per page.
+- `$pageleave`: `$time_on_page` (seconds the page was visible) and `$max_scroll_depth` (percent),
+  sent with `sendBeacon` on `pagehide` and before each SPA pageview.
+
+API additions on `window.flareboard`: `register(props)`, `registerOnce(props)`, `unregister(key)`,
+`optOut()`, `optIn()`, `hasOptedOut()`, `getFeatureFlagPayload(key)`,
+`onFeatureFlags((flags, variants, payloads) => {})` (returns an unsubscribe function). Calls made
+before the script loads can be queued on `window.flareboard = { _q: [[method, args], ...] }`; the
+npm package [`@flareboard/js`](../packages/sdk-js/README.md) does this for you.
 
 ## Feature flag evaluation (`POST /api/feature-flags/evaluate`)
 

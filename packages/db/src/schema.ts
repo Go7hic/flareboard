@@ -662,7 +662,15 @@ export const experiment = sqliteTable(
     name: text('name').notNull(),
     description: text('description').notNull().default(''),
     status: text('status').notNull().default('draft'),
+    /** Event of the primary metric, kept in sync for older readers. */
     goalEvent: text('goal_event').notNull(),
+    /** ExperimentMetric JSON (null only on rows created before migration 0044). */
+    primaryMetric: text('primary_metric', { mode: 'json' }),
+    secondaryMetrics: text('secondary_metrics', { mode: 'json' }).notNull().default([]),
+    /** Relative lift in percent the sample-size guidance plans for (null = default). */
+    minimumDetectableEffect: real('minimum_detectable_effect'),
+    /** ExperimentAllocation JSON captured when the experiment starts. */
+    allocation: text('allocation', { mode: 'json' }),
     startedAt: integer('started_at', { mode: 'timestamp_ms' }),
     endedAt: integer('ended_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),

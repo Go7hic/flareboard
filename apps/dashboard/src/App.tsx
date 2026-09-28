@@ -52,6 +52,7 @@ const WebsiteCompare = lazy(() => import('./pages/WebsiteCompare'));
 const WebsiteShareLinks = lazy(() => import('./pages/WebsiteShareLinks'));
 const WebsiteErrors = lazy(() => import('./pages/WebsiteErrors'));
 const WebsiteErrorDetail = lazy(() => import('./pages/WebsiteErrorDetail'));
+const WebsiteErrorIssue = lazy(() => import('./pages/WebsiteErrorIssue'));
 const WebsiteAiObservability = lazy(() => import('./pages/WebsiteAiObservability'));
 const WebsiteLogs = lazy(() => import('./pages/WebsiteLogs'));
 const WebsiteExperiments = lazy(() => import('./pages/WebsiteExperiments'));
@@ -400,6 +401,14 @@ export default function App() {
               element={
                 <LazyPage>
                   <WebsiteErrors />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="errors/issues/:fingerprint"
+              element={
+                <LazyPage>
+                  <WebsiteErrorIssue />
                 </LazyPage>
               }
             />

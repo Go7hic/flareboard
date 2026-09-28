@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { EVENT_TYPE } from '@flareboard/shared';
+import { EVENT_TYPE, messageFingerprint } from '@flareboard/shared';
 import {
   addErrorIssueComment,
   createErrorAlertRule,
@@ -236,7 +236,7 @@ describe('errors query helpers', () => {
 
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatchObject({
-      fingerprint,
+      fingerprint: messageFingerprint('TypeError', 'Stateful issue'),
       status: 'resolved',
       note: 'Fixed in 2.1.0',
     });
@@ -276,7 +276,7 @@ describe('errors query helpers', () => {
 
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatchObject({
-      fingerprint,
+      fingerprint: messageFingerprint('TypeError', 'Assigned issue'),
       status: 'open',
       note: 'Needs owner',
       assigneeUserId: '00000000-0000-0000-0000-000000000001',
@@ -322,11 +322,11 @@ describe('errors query helpers', () => {
     ]);
 
     expect(openStats.errors).toBe(1);
-    expect(openIssues.map((issue) => issue.fingerprint)).toEqual(['TypeError|Still open issue']);
+    expect(openIssues.map((issue) => issue.fingerprint)).toEqual([messageFingerprint('TypeError', 'Still open issue')]);
     expect(openEvents.map((event) => event.id)).toEqual(['error-status-filter-1']);
 
     expect(resolvedStats.errors).toBe(1);
-    expect(resolvedIssues.map((issue) => issue.fingerprint)).toEqual(['TypeError|Already fixed issue']);
+    expect(resolvedIssues.map((issue) => issue.fingerprint)).toEqual([messageFingerprint('TypeError', 'Already fixed issue')]);
     expect(resolvedEvents.map((event) => event.id)).toEqual(['error-status-filter-2']);
   });
 

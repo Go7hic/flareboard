@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { createSecureToken, EVENT_TYPE } from '@flareboard/shared';
+import { createSecureToken, EVENT_TYPE, messageFingerprint } from '@flareboard/shared';
 import { fetchWorkerJson } from '../helpers/fetch-worker';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
 
@@ -92,7 +92,7 @@ describe('error issue workflow routes', () => {
     });
 
     expect(list.body.issues[0]).toMatchObject({
-      fingerprint,
+      fingerprint: messageFingerprint('TypeError', 'Assigned route issue'),
       assigneeUserId: TEST_USER_ID,
       comments: [{ body: 'Checking the minified stack trace.' }],
     });

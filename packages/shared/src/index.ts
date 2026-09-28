@@ -4,6 +4,7 @@ export * from './constants';
 export * from './cohort-definition';
 export * from './csv';
 export * from './delivery';
+export * from './error-fingerprint';
 export * from './core';
 export * from './feature-flag-evaluator';
 export * from './feature-flag-config';

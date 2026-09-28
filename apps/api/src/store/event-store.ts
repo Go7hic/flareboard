@@ -182,6 +182,95 @@ export class EventStore extends DurableObject<Env> {
     };
   }
 
+  /**
+   * Recomputes every rollup table (and replay summaries) from raw rows, in one transaction so
+   * readers never see a half-built state. Mirrors the aggregator's incremental rules
+   * (workers/aggregator/src). Heatmap cells are not derivable from events and are left alone.
+   */
+  rebuildRollups(websiteId: string): { pageviews: number } {
+    this.claim(websiteId);
+    const bucket = (format: string, column = 'created_at') =>
+      `strftime('${format}', ${column} / 1000, 'unixepoch')`;
+    const DAY = bucket('%Y-%m-%d');
+    const DAY_E = bucket('%Y-%m-%d', 'e.created_at');
+    const units: Array<[string, string]> = [
+      ['day', DAY],
+      ['hour', bucket('%Y-%m-%d %H:00')],
+      ['month', bucket('%Y-%m')],
+      ['year', bucket('%Y')],
+    ];
+    return this.ctx.storage.transactionSync(() => {
+      for (const table of [
+        'rollup_session_day',
+        'rollup_stats_daily',
+        'rollup_pageview_series',
+        'rollup_series_bucket',
+        'rollup_dimension_daily',
+        'rollup_event_daily',
+        'session_replay_summary',
+      ]) {
+        this.sql.exec(`DELETE FROM ${table}`);
+      }
+      this.sql.exec(
+        `INSERT INTO rollup_session_day (website_id, day, session_id, visit_id, pageviews, first_at, last_at)
+         SELECT website_id, ${DAY}, session_id, visit_id, COUNT(*), MIN(created_at), MAX(created_at)
+         FROM website_event WHERE event_type = 1 AND created_at IS NOT NULL
+         GROUP BY ${DAY}, session_id, visit_id`,
+      );
+      this.sql.exec(
+        `INSERT INTO rollup_stats_daily (website_id, day, pageviews, visitors, visits, bounces, totaltime_sec)
+         SELECT website_id, day, SUM(pageviews), COUNT(DISTINCT session_id), COUNT(*),
+                SUM(CASE WHEN pageviews = 1 THEN 1 ELSE 0 END), COALESCE(SUM((last_at - first_at) / 1000), 0)
+         FROM rollup_session_day GROUP BY day`,
+      );
+      for (const [unit, expr] of units) {
+        this.sql.exec(
+          `INSERT INTO rollup_pageview_series (website_id, unit, bucket, pageviews)
+           SELECT website_id, ?, ${expr}, COUNT(*)
+           FROM website_event WHERE event_type = 1 AND created_at IS NOT NULL GROUP BY ${expr}`,
+          unit,
+        );
+        this.sql.exec(
+          `INSERT INTO rollup_series_bucket (website_id, unit, bucket, session_id, visit_id)
+           SELECT DISTINCT website_id, ?, ${expr}, session_id, visit_id
+           FROM website_event WHERE event_type = 1 AND created_at IS NOT NULL`,
+          unit,
+        );
+      }
+      const dimension = (name: string, value: string, join = '') =>
+        this.sql.exec(
+          `INSERT INTO rollup_dimension_daily (website_id, day, dimension, value, count)
+           SELECT e.website_id, ${DAY_E}, ?, ${value}, COUNT(*)
+           FROM website_event e ${join}
+           WHERE e.event_type = 1 AND e.created_at IS NOT NULL
+           GROUP BY ${DAY_E}, ${value}`,
+          name,
+        );
+      dimension('path', "COALESCE(e.url_path, '')");
+      dimension('referrer', "COALESCE(NULLIF(e.referrer_domain, ''), 'Direct')");
+      // Session dimensions only when the session row exists, as in the aggregator.
+      for (const column of ['browser', 'os', 'device', 'language', 'country']) {
+        dimension(column, `COALESCE(NULLIF(s.${column}, ''), 'Unknown')`, 'JOIN session s ON s.session_id = e.session_id');
+      }
+      this.sql.exec(
+        `INSERT INTO rollup_event_daily (website_id, day, event_name, count)
+         SELECT website_id, ${DAY}, event_name, COUNT(*)
+         FROM website_event
+         WHERE event_type = 2 AND event_name IS NOT NULL AND event_name <> '' AND created_at IS NOT NULL
+         GROUP BY ${DAY}, event_name`,
+      );
+      this.sql.exec(
+        `INSERT INTO session_replay_summary (website_id, visit_id, session_id, started_at, ended_at, event_count, chunks)
+         SELECT website_id, visit_id, MIN(session_id), MIN(started_at), MAX(ended_at), SUM(event_count), COUNT(*)
+         FROM session_replay GROUP BY visit_id`,
+      );
+      const pageviews = this.sql
+        .exec<{ n: number }>('SELECT COUNT(*) AS n FROM website_event WHERE event_type = 1')
+        .one().n;
+      return { pageviews: Number(pageviews) || 0 };
+    });
+  }
+
   /** Erases everything this website stored (used by the deletion job). */
   async erase(): Promise<void> {
     await this.ctx.storage.deleteAlarm();

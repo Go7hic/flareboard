@@ -683,6 +683,15 @@ export interface FeatureFlag {
   updatedAt?: string | number;
 }
 
+export type ExperimentMetricType = 'conversion' | 'count' | 'property_sum' | 'property_mean';
+
+export interface ExperimentMetric {
+  type: ExperimentMetricType;
+  event: string;
+  property?: string;
+  name?: string;
+}
+
 export interface Experiment {
   id: string;
   websiteId: string;
@@ -692,70 +701,106 @@ export interface Experiment {
   name: string;
   description: string;
   status: 'draft' | 'running' | 'paused' | 'completed';
+  /** Event of the primary metric. */
   goalEvent: string;
+  primaryMetric: ExperimentMetric;
+  secondaryMetrics: ExperimentMetric[];
+  /** Relative lift in percent the sample-size guidance plans for; null = default. */
+  minimumDetectableEffect: number | null;
   startedAt?: string | number | null;
   endedAt?: string | number | null;
   createdAt?: string | number;
   updatedAt?: string | number;
 }
 
+export type ExperimentInterval = [number, number];
+
+export interface ExperimentMetricVariantResult {
+  variant: string;
+  baseline: boolean;
+  /** Units contributing a value (for property_mean: units with the property). */
+  sampleSize: number;
+  /** Conversion rate (fraction) or mean per unit. */
+  value: number | null;
+  total: number;
+  standardDeviation: number | null;
+  confidenceInterval: ExperimentInterval | null;
+  credibleInterval: ExperimentInterval | null;
+  comparison: {
+    /** Relative lift as a fraction. */
+    lift: number | null;
+    difference: number;
+    frequentist: {
+      pValue: number | null;
+      significant: boolean;
+      liftInterval: ExperimentInterval | null;
+      differenceInterval: ExperimentInterval | null;
+    };
+    bayesian: { probabilityToBeatControl: number | null; liftInterval: ExperimentInterval | null };
+  } | null;
+}
+
+export type ExperimentDecision = 'no_data' | 'fix_setup' | 'keep_collecting' | 'ship_variant' | 'keep_control';
+
 export interface ExperimentResults {
   experiment: Experiment;
+  window: { startAt: number; endAt: number };
+  variants: Array<{
+    variant: string;
+    baseline: boolean;
+    units: number;
+    share: number;
+    expectedShare: number | null;
+  }>;
+  srm: {
+    status: 'ok' | 'mismatch' | 'insufficient_data' | 'not_applicable';
+    reason: 'unexpected_variant' | 'single_arm' | 'targeting_rules' | null;
+    pValue: number | null;
+    chiSquare: number | null;
+    degreesOfFreedom: number | null;
+    expectedShares: Record<string, number>;
+  } | null;
+  metrics: Array<{
+    role: 'primary' | 'secondary';
+    metric: ExperimentMetric;
+    variants: ExperimentMetricVariantResult[];
+  }>;
+  guidance: {
+    metricType: ExperimentMetricType;
+    baseline: number | null;
+    /** Fraction. */
+    minimumDetectableEffect: number;
+    requiredUnitsPerVariant: number | null;
+    currentUnitsPerVariant: number;
+    detectableEffect: number | null;
+    estimatedDaysRemaining: number | null;
+    alpha: number;
+    power: number;
+  } | null;
   summary: {
-    totalExposures: number;
-    totalConversions: number;
-    conversionRate: number;
-    truncated?: boolean;
-    exposureSampleLimit: number;
+    totalUnits: number;
+    excludedUnits: number;
     controlVariant: string | null;
-    controlConversionRate: number | null;
     leaderVariant: string | null;
-    leaderConversionRate: number | null;
     leaderLift: number | null;
     significantVariant: string | null;
-    maxConfidence: number | null;
-    trafficImbalanced: boolean;
-    sampleReady: boolean;
-    sampleSize: {
-      minimumExposuresPerVariant: number;
-      minimumConversions: number;
-      currentMinExposures: number;
-      remainingExposures: number;
-      remainingConversions: number;
-      ready: boolean;
-    };
-    decision: 'no_data' | 'fix_setup' | 'keep_collecting' | 'ship_variant' | 'keep_control';
-    recommendation: 'no_data' | 'collect_more_data' | 'variant_leading' | 'control_leading' | 'no_control';
-    conclusion: {
-      status: 'no_data' | 'setup_issue' | 'collecting' | 'winner' | 'keep_control';
-      variant: string | null;
-      action: 'no_data' | 'fix_setup' | 'keep_collecting' | 'ship_variant' | 'keep_control';
-      confidence: number | null;
-    };
+    bayesianLeader: string | null;
+    bayesianLeaderProbability: number | null;
+    minimumSampleReached: boolean;
+    plannedSampleReached: boolean;
+    decision: ExperimentDecision;
     diagnostics: Array<{
       code:
         | 'no_exposures'
         | 'missing_control'
+        | 'sample_ratio_mismatch'
         | 'low_sample'
-        | 'traffic_imbalanced'
         | 'significant_variant'
+        | 'variant_worse'
         | 'no_significant_winner';
-      level: 'info' | 'warning' | 'success';
+      level: 'info' | 'warning' | 'success' | 'error';
     }>;
   };
-  variants: Array<{
-    variant: string;
-    exposures: number;
-    conversions: number;
-    conversionRate: number;
-    lift: number | null;
-    baseline: boolean;
-    confidenceIntervalLow: number;
-    confidenceIntervalHigh: number;
-    pValue: number | null;
-    confidence: number | null;
-    significant: boolean;
-  }>;
   recent: Array<{
     id: string;
     sessionId: string;
@@ -768,9 +813,10 @@ export interface ExperimentResults {
   trend: Array<{
     date: string;
     variant: string;
-    exposures: number;
-    conversions: number;
-    conversionRate: number;
+    /** Units first exposed that day. */
+    units: number;
+    /** Primary metric for that day's cohort. */
+    value: number | null;
   }>;
 }
 

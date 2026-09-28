@@ -3,6 +3,10 @@ export interface Env {
   CACHE: KVNamespace;
   RATE_LIMITER: DurableObjectNamespace;
   REPLAY_BUCKET?: R2Bucket;
+  /** Per-website analytics stores (see lib/site-db.ts). */
+  SITE_STORE?: DurableObjectNamespace<import('./store/event-store').EventStore>;
+  /** Analytics storage mode: 'd1' | 'dual' | 'do' (lib/site-db.ts). */
+  EVENT_STORE?: string;
   /** Cloudflare Email Sending binding (optional). */
   EMAIL?: SendEmail;
   APP_SECRET: string;

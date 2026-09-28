@@ -400,6 +400,7 @@ app.get('/api/admin/websites', admin.handleListWebsites);
 app.post('/api/admin/websites', admin.handleCreateWebsite);
 
 export { RateLimiter } from '@flareboard/rate-limiter';
+export { EventStore } from './store/event-store';
 
 export default {
   fetch: app.fetch,

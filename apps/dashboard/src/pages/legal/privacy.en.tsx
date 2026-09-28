@@ -65,6 +65,11 @@ const sections: LegalSection[] = [
             username the provider returns. We do not store the provider’s access tokens.
           </li>
           <li>Email verification status, role, team memberships and account timestamps.</li>
+          <li>
+            Personal API keys you create: their name, scopes, the first characters of the key and when it was
+            created and last used. The full key is shown to you once and stored only as a one-way (SHA-256) hash.
+            Revoking a key deletes it; the rest are erased with your account.
+          </li>
         </ul>
         <h3>Billing information</h3>
         <p>
@@ -184,6 +189,12 @@ const sections: LegalSection[] = [
           random: it is not derived from the IP address or the device. IP addresses are still never stored.
           Because this stores an identifier on the visitor’s device, customers who turn it on are responsible for
           obtaining any consent the law where their visitors are requires.
+        </p>
+        <p>
+          Customers can also send data with PostHog’s open-source SDKs (such as posthog-js or posthog-node)
+          pointed at Flareboard. We process it as described on this page: IP address properties and raw user
+          agent strings included in such data are discarded, not stored. Those SDKs may use cookies or{' '}
+          <code>localStorage</code> on the customer’s site according to how the customer configures them.
         </p>
         <p>
           The tracking script sets <strong>no cookies</strong>. It keeps short-lived session information in the
@@ -491,7 +502,7 @@ const sections: LegalSection[] = [
     body: (
       <p>
         We protect data with encryption in transit (HTTPS), the encryption at rest provided by our hosting
-        provider, hashed passwords, encrypted and revocable session tokens, role-based access controls and rate
+        provider, hashed passwords and API keys, encrypted and revocable session tokens, role-based access controls and rate
         limiting. No system is perfectly secure, however, and we cannot guarantee absolute security. If a breach
         affects your personal data, we will notify you and the relevant authorities as required by law.
       </p>

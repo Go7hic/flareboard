@@ -62,6 +62,7 @@ const WebsiteWorkflows = lazy(() => import('./pages/WebsiteWorkflows'));
 const WebsiteWarehouse = lazy(() => import('./pages/WebsiteWarehouse'));
 const WebsiteAuditLog = lazy(() => import('./pages/WebsiteAuditLog'));
 const Billing = lazy(() => import('./pages/Billing'));
+const ApiKeys = lazy(() => import('./pages/ApiKeys'));
 
 function LazyPage({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
@@ -185,6 +186,14 @@ export default function App() {
             element={
               <LazyPage>
                 <Billing />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="/api-keys"
+            element={
+              <LazyPage>
+                <ApiKeys />
               </LazyPage>
             }
           />

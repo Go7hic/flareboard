@@ -81,8 +81,19 @@ export async function appendMatchedActionTags(
     data?: Record<string, unknown>;
   },
 ): Promise<Record<string, unknown>> {
+  return tagMatchedActions(await loadWebsiteActionDefinitions(env, websiteId), input);
+}
+
+/** appendMatchedActionTags with definitions loaded once for a whole batch of events. */
+export function tagMatchedActions(
+  definitions: ActionDefinitionLike[],
+  input: {
+    eventName?: string | null;
+    urlPath?: string | null;
+    data?: Record<string, unknown>;
+  },
+): Record<string, unknown> {
   const data = { ...(input.data ?? {}) };
-  const definitions = await loadWebsiteActionDefinitions(env, websiteId);
   if (!definitions.length) return data;
 
   const matched = matchActionDefinitions(definitions, actionMatchContextFromEvent(input));

@@ -69,6 +69,7 @@ export function AppSidebar({
           oauthProviders={oauthProviders}
           onLogout={onLogout}
           onDeleteAccount={onDeleteAccount}
+          onNavigate={onNavigate}
         />
       </div>
     </aside>

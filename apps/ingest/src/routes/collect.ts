@@ -7,7 +7,6 @@ import {
   HEATMAP_NORM_SIZE,
   createCacheToken,
   extractWebVitals,
-  flattenEventData,
   getSalt,
   getSecret,
   parseToken,
@@ -15,12 +14,13 @@ import {
   sendSchema,
   uuid,
   geoFromCf,
+  isProjectKey,
   visitSalt,
   type CacheToken,
   type QueueMessage,
   type SendBody,
 } from '@flareboard/shared';
-import { patchPersonProperties, upsertPerson, upsertPersonGroupMembership } from '@flareboard/db';
+import { upsertPerson, upsertPersonGroupMembership } from '@flareboard/db';
 import type { Env } from '../env';
 import {
   badRequest,
@@ -35,11 +35,14 @@ import { hitAllowed, recordHit, sourceExists, type HitSource } from '../lib/link
 import { bumpRealtimeVisitor } from '../lib/realtime-kv';
 import { appendMatchedActionTags } from '../lib/actions';
 import { assertEventAllowed, recordEventUsageKv } from '../lib/hosted-limits';
-import { checkIpRateLimit, checkRateLimit, getTrustedClientIp } from '../lib/rate-limit';
+import { checkIpRateLimit, checkProjectKeyRateLimit, checkRateLimit, getTrustedClientIp } from '../lib/rate-limit';
 import { fetchApi } from '../lib/api-client';
 import { buildErrorEventDataPayload, reportPossibleRegression } from '../lib/error-tracking';
 import { resolveDistinctId } from '../lib/tracker-settings';
 import { TRACKER_SCRIPT } from '../tracker/script';
+import { eventMessage, pageContext, parsePageUrl, sessionDataMessage, sessionMessage } from '../lib/queue-messages';
+import { recordAlias } from '../lib/person-identity';
+import { resolveWebsiteRef } from '../lib/project-keys';
 
 const SEND_BODY_MAX_BYTES = 65_536;
 const WORKFLOW_DELIVERIES_PER_HOUR = 60;
@@ -87,7 +90,7 @@ export function buildLogEventDataPayload(input: LogEventDataInput) {
 const HTTP_CLIENT_UA =
   /^(?:node|undici|node-fetch|axios|got|python-requests|python-httpx|python-urllib|aiohttp|go-http-client|curl|wget|okhttp|java|apache-httpclient|ruby|faraday|guzzlehttp|php|dart|reqwest)\b/i;
 
-function isBot(userAgent: string) {
+export function isBot(userAgent: string) {
   if (!userAgent || HTTP_CLIENT_UA.test(userAgent)) return false;
   return isbot(userAgent);
 }
@@ -118,6 +121,8 @@ function deviceClass(device: string): string {
 
 type ProcessSendOpts = {
   cacheToken?: string;
+  /** The payload named its website by project key: rate limit per key instead of per IP. */
+  projectKey?: string;
   waitUntil: (promise: Promise<void>) => void;
 };
 
@@ -125,7 +130,7 @@ function deferWrite(waitUntil: ProcessSendOpts['waitUntil'], fn: () => Promise<v
   waitUntil(fn().catch((e) => console.error('waitUntil task failed', e)));
 }
 
-async function recordWorkflowExecutions(
+export async function recordWorkflowExecutions(
   env: Env,
   args: {
     websiteId: string;
@@ -322,6 +327,24 @@ function getWorkflowActionState(
   return { status: 'recorded', error: null };
 }
 
+/**
+ * A project key in `payload.website` (e.g. `data-website-id="fb_pk_…"`) is swapped for the
+ * website id before validation. Returns the key so the request is rate limited per key.
+ */
+async function resolvePayloadWebsite(
+  env: Env,
+  raw: unknown,
+): Promise<{ projectKey?: string } | { error: string }> {
+  const payload = raw && typeof raw === 'object' ? (raw as { payload?: unknown }).payload : undefined;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return {};
+  const record = payload as Record<string, unknown>;
+  if (typeof record.website !== 'string') return {};
+  const ref = await resolveWebsiteRef(env, record.website);
+  if (!ref) return { error: 'Website not found.' };
+  record.website = ref.websiteId;
+  return { projectKey: ref.projectKey };
+}
+
 function parseSendRequest(
   raw: unknown,
 ): { body: SendBody; cacheToken?: string } | { error: string } {
@@ -378,35 +401,6 @@ function applyCacheToken(
   return cache;
 }
 
-/**
- * Page URL resolved against the reported hostname. Client input is not trusted to be
- * well-formed ("exa mple.com", "http://[" ...): a bad value degrades to the site root
- * instead of throwing and turning the whole request into a 500.
- */
-function parsePageUrl(url: string | undefined, hostname: string | undefined): URL {
-  let base = 'https://localhost';
-  if (hostname) {
-    try {
-      base = new URL(`https://${hostname}`).origin;
-    } catch {
-      // keep the neutral base
-    }
-  }
-  try {
-    return new URL(url || '/', base);
-  } catch {
-    return new URL('/', base);
-  }
-}
-
-function parseReferrerUrl(referrer: string, base: URL): URL | null {
-  try {
-    return new URL(referrer, base);
-  } catch {
-    return null;
-  }
-}
-
 /** Backfilled events may be this old; anything earlier (or in the future) is rejected. */
 const MAX_EVENT_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
@@ -438,12 +432,14 @@ async function processSend(
     if (isBot(req.headers.get('user-agent') ?? '')) return json({ beep: 'boop' });
 
     const defer = (fn: () => Promise<void>) => deferWrite(opts.waitUntil, fn);
+    const rateLimit = (websiteId: string, trustedIp: string) =>
+      opts.projectKey ? checkProjectKeyRateLimit(env, opts.projectKey) : checkRateLimit(env, websiteId, trustedIp);
 
     if (type === COLLECTION_TYPE.heatmap) {
       const websiteId = payload.website;
       const trustedIp = getTrustedClientIp(req);
       const [rl, quota] = await Promise.all([
-        checkRateLimit(env, websiteId, trustedIp),
+        rateLimit(websiteId, trustedIp),
         assertEventAllowed(env, websiteId),
       ]);
       if (!rl.allowed) {
@@ -566,7 +562,7 @@ async function processSend(
     let billingUserId = '';
     if (websiteId) {
       const [rl, quota, parsedCache] = await Promise.all([
-        checkRateLimit(env, websiteId, trustedIp),
+        rateLimit(websiteId, trustedIp),
         assertEventAllowed(env, websiteId),
         parseCacheToken(req, secret, opts.cacheToken),
       ]);
@@ -638,9 +634,8 @@ async function processSend(
     } | undefined;
 
     if (!cache?.sessionId) {
-      messages.push({
-        type: 'session',
-        data: {
+      messages.push(
+        sessionMessage({
           id: sessionId,
           websiteId: sourceId,
           browser: client.browser,
@@ -653,39 +648,12 @@ async function processSend(
           city: client.city,
           distinctId: id ?? null,
           createdAt: createdAt.getTime(),
-        },
-      });
+        }),
+      );
     }
 
     if (type === COLLECTION_TYPE.event || type === COLLECTION_TYPE.error || type === COLLECTION_TYPE.log || type === COLLECTION_TYPE.ai) {
-      const currentUrl = parsePageUrl(url, hostname);
-      let urlPath =
-        currentUrl.pathname === '/undefined' ? '' : currentUrl.pathname + currentUrl.hash;
-      const urlQuery = currentUrl.search.substring(1);
-      const urlDomain = currentUrl.hostname.replace(/^www\./, '');
-
-      let referrerPath: string | undefined;
-      let referrerQuery: string | undefined;
-      let referrerDomain: string | undefined;
-
-      const utmSource = currentUrl.searchParams.get('utm_source');
-      const utmMedium = currentUrl.searchParams.get('utm_medium');
-      const utmCampaign = currentUrl.searchParams.get('utm_campaign');
-      const utmContent = currentUrl.searchParams.get('utm_content');
-      const utmTerm = currentUrl.searchParams.get('utm_term');
-      const gclid = currentUrl.searchParams.get('gclid');
-      const fbclid = currentUrl.searchParams.get('fbclid');
-      const msclkid = currentUrl.searchParams.get('msclkid');
-      const ttclid = currentUrl.searchParams.get('ttclid');
-      const lifatid = currentUrl.searchParams.get('li_fat_id');
-      const twclid = currentUrl.searchParams.get('twclid');
-
-      const referrerUrl = referrer ? parseReferrerUrl(referrer, currentUrl) : null;
-      if (referrerUrl) {
-        referrerPath = referrerUrl.pathname;
-        referrerQuery = referrerUrl.search.substring(1);
-        referrerDomain = referrerUrl.hostname.replace(/^www\./, '');
-      }
+      const page = pageContext(url, hostname, referrer);
 
       const eventType =
         type === COLLECTION_TYPE.error
@@ -760,49 +728,29 @@ async function processSend(
                 : type === COLLECTION_TYPE.ai
                   ? (name ?? 'ai_generation')
                   : (name ?? null),
-          urlPath: safeDecodeURI(urlPath) ?? urlPath,
+          urlPath: page.urlPath,
           data: (eventDataPayload ?? undefined) as Record<string, unknown> | undefined,
         });
         if (eventDataPayload || Object.keys(tagged).length) eventDataPayload = tagged;
       }
 
-      const eventData = eventDataPayload
-        ? flattenEventData(sourceId, eventId, eventDataPayload, createdAt.getTime())
-        : undefined;
-
       if (websiteId && eventType === EVENT_TYPE.pageView) {
         realtimeMeta = {
-          urlPath: safeDecodeURI(urlPath) ?? urlPath,
-          referrerDomain: referrerDomain ?? null,
+          urlPath: page.urlPath,
+          referrerDomain: page.referrerDomain,
           country: client.country ?? null,
         };
       }
 
-      messages.push({
-        type: 'event',
-        data: {
+      messages.push(
+        eventMessage({
           id: eventId,
           websiteId: sourceId,
           sessionId,
           visitId,
           createdAt: createdAt.getTime(),
-          urlPath: safeDecodeURI(urlPath) ?? urlPath,
-          urlQuery: urlQuery || null,
-          utmSource,
-          utmMedium,
-          utmCampaign,
-          utmContent,
-          utmTerm,
-          referrerPath: safeDecodeURI(referrerPath) ?? referrerPath ?? null,
-          referrerQuery: referrerQuery ?? null,
-          referrerDomain: referrerDomain ?? null,
-          pageTitle: safeDecodeURIComponent(title) ?? null,
-          gclid,
-          fbclid,
-          msclkid,
-          ttclid,
-          lifatid,
-          twclid,
+          page,
+          title,
           eventType,
           eventName:
             type === COLLECTION_TYPE.error
@@ -812,11 +760,11 @@ async function processSend(
                 : type === COLLECTION_TYPE.ai
                   ? (name ?? 'ai_generation')
                 : (name ?? null),
-          tag: tag ?? null,
-          hostname: hostname || urlDomain,
-        },
-        eventData,
-      });
+          tag,
+          hostname,
+          data: eventDataPayload as Record<string, unknown> | null | undefined,
+        }),
+      );
 
       if (websiteId && type === COLLECTION_TYPE.error) {
         const errorData = eventDataPayload as Record<string, unknown>;
@@ -874,51 +822,18 @@ async function processSend(
             ? data.distinctId.trim()
             : (id ?? '').trim();
         if (alias && canonicalDistinctId) {
-          defer(() =>
-            upsertPerson(env.DB, {
-              websiteId,
-              distinctId: canonicalDistinctId,
-              seenAt: createdAt.getTime(),
-            })
-              .then(() =>
-                patchPersonProperties(
-                  env.DB,
-                  websiteId,
-                  canonicalDistinctId,
-                  { $alias: alias },
-                  createdAt.getTime(),
-                ),
-              )
-              // The alias gets its own person row pointing at the canonical id. Reusing the
-              // canonical person_id (the primary key) made this insert fail every time.
-              .then(() =>
-                upsertPerson(env.DB, {
-                  websiteId,
-                  distinctId: alias,
-                  properties: { $alias: alias, $canonical_distinct_id: canonicalDistinctId },
-                  seenAt: createdAt.getTime(),
-                }),
-              )
-              .then(() => undefined),
-          );
+          defer(() => recordAlias(env, { websiteId, alias, canonicalDistinctId, seenAt: createdAt.getTime() }));
         }
       }
     } else if (type === COLLECTION_TYPE.identify && data) {
-      const items = flattenEventData(sourceId, sessionId, data, createdAt.getTime())?.map((row) => ({
-        id: row.id,
+      const identifyData = sessionDataMessage({
         websiteId: sourceId,
         sessionId,
-        dataKey: row.dataKey,
-        stringValue: row.stringValue,
-        numberValue: row.numberValue,
-        dateValue: row.dateValue,
-        dataType: row.dataType,
         distinctId: id ?? null,
+        data,
         createdAt: createdAt.getTime(),
-      }));
-      if (items?.length) {
-        messages.push({ type: 'session_data', data: items });
-      }
+      });
+      if (identifyData) messages.push(identifyData);
       if (id) {
         defer(() =>
           upsertPerson(env.DB, {
@@ -938,21 +853,14 @@ async function processSend(
           groupData[`$group/${groupType}/${key}`] = value;
         }
       }
-      const items = flattenEventData(sourceId, sessionId, groupData, createdAt.getTime())?.map((row) => ({
-        id: row.id,
+      const groupMessage = sessionDataMessage({
         websiteId: sourceId,
         sessionId,
-        dataKey: row.dataKey,
-        stringValue: row.stringValue,
-        numberValue: row.numberValue,
-        dateValue: row.dateValue,
-        dataType: row.dataType,
         distinctId: id ?? null,
+        data: groupData,
         createdAt: createdAt.getTime(),
-      }));
-      if (items?.length) {
-        messages.push({ type: 'session_data', data: items });
-      }
+      });
+      if (groupMessage) messages.push(groupMessage);
       if (id) {
         defer(() =>
           upsertPersonGroupMembership(env.DB, {
@@ -1096,6 +1004,9 @@ export async function handleSend(c: Context<{ Bindings: Env }>) {
     return badRequest('Invalid JSON');
   }
 
+  const website = await resolvePayloadWebsite(c.env, raw);
+  if ('error' in website) return badRequest(website.error);
+
   const parsed = parseSendRequest(raw);
   if ('error' in parsed) return badRequest(parsed.error);
 
@@ -1105,6 +1016,7 @@ export async function handleSend(c: Context<{ Bindings: Env }>) {
 
   return processSend(c.env, c.req.raw, parsed.body, envSecret(c), {
     cacheToken: parsed.cacheToken,
+    projectKey: website.projectKey,
     waitUntil,
   });
 }
@@ -1114,12 +1026,6 @@ const MAX_BATCH_BYTES = 512 * 1024;
 
 export async function handleBatch(c: Context<{ Bindings: Env }>) {
   try {
-    const trustedIp = getTrustedClientIp(c.req.raw);
-    const batchRl = await checkIpRateLimit(c.env, 'batch', trustedIp);
-    if (!batchRl.allowed) {
-      return json({ message: 'Rate limit exceeded' }, 429);
-    }
-
     const raw = await c.req.text();
     if (raw.length > MAX_BATCH_BYTES) return badRequest('Batch payload too large');
 
@@ -1132,6 +1038,18 @@ export async function handleBatch(c: Context<{ Bindings: Env }>) {
     if (!Array.isArray(body)) return badRequest('Expected array');
     if (body.length > MAX_BATCH_ITEMS) return badRequest(`Batch exceeds ${MAX_BATCH_ITEMS} items`);
 
+    // Batches that name every website by project key are limited per key (each item below);
+    // anything else keeps the per-IP batch limit.
+    const keyed =
+      body.length > 0 &&
+      body.every((item) => isProjectKey((item as { payload?: { website?: unknown } } | null)?.payload?.website));
+    if (!keyed) {
+      const batchRl = await checkIpRateLimit(c.env, 'batch', getTrustedClientIp(c.req.raw));
+      if (!batchRl.allowed) {
+        return json({ message: 'Rate limit exceeded' }, 429);
+      }
+    }
+
     const errors: Array<{ index: number; response: unknown }> = [];
     let index = 0;
     let cache: string | null = null;
@@ -1140,6 +1058,13 @@ export async function handleBatch(c: Context<{ Bindings: Env }>) {
       const serialized = JSON.stringify(data);
       if (serialized.length > SEND_BODY_MAX_BYTES) {
         errors.push({ index, response: { message: 'Payload too large' } });
+        index++;
+        continue;
+      }
+
+      const website = await resolvePayloadWebsite(c.env, data);
+      if ('error' in website) {
+        errors.push({ index, response: { message: website.error } });
         index++;
         continue;
       }
@@ -1159,7 +1084,10 @@ export async function handleBatch(c: Context<{ Bindings: Env }>) {
       const waitUntil = (promise: Promise<void>) => {
         c.executionCtx.waitUntil(promise);
       };
-      const res = await processSend(c.env, req, parsed.data, envSecret(c), { waitUntil });
+      const res = await processSend(c.env, req, parsed.data, envSecret(c), {
+        projectKey: website.projectKey,
+        waitUntil,
+      });
       const resJson = await res.json();
       if (!res.ok) {
         errors.push({ index, response: resJson });

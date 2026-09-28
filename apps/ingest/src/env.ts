@@ -11,4 +11,6 @@ export interface Env {
   API?: Fetcher;
   /** API base URL fallback for local dev when no `API` binding exists. */
   API_URL?: string;
+  /** Requests per minute allowed per project key (default 30000). */
+  PROJECT_KEY_RATE_LIMIT?: string;
 }

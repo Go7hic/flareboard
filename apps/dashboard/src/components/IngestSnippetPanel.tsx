@@ -3,7 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
-import { api, INGEST_URL, type TrackingStatus } from '../lib/api';
+import { ProjectKeyField, useProjectKey } from './ProjectKeyField';
+import { api, INGEST_URL, INGEST_URL_FOR_DOCS, type TrackingStatus } from '../lib/api';
 import { formatDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
 
@@ -157,6 +158,31 @@ import { FlareboardProvider, useFeatureFlag } from '@flareboard/js/react'
 
 const variant = useFeatureFlag('checkout.new_flow')`;
 
+  const projectKey = useProjectKey(websiteId).data?.key ?? 'fb_pk_…';
+  const posthogSnippets = useMemo(
+    () => ({
+      js: `import posthog from 'posthog-js'
+
+posthog.init('${projectKey}', {
+  api_host: '${INGEST_URL_FOR_DOCS}',
+  person_profiles: 'identified_only',
+  // ${t('posthogSnippetUnsupportedComment')}
+  disable_session_recording: true,
+  disable_surveys: true,
+})`,
+      node: `import { PostHog } from 'posthog-node'
+
+const posthog = new PostHog('${projectKey}', { host: '${INGEST_URL_FOR_DOCS}' })
+posthog.capture({ distinctId: 'user_123', event: 'subscription_renewed', properties: { plan: 'pro' } })
+await posthog.shutdown()`,
+      python: `from posthog import Posthog
+
+posthog = Posthog('${projectKey}', host='${INGEST_URL_FOR_DOCS}')
+posthog.capture(distinct_id='user_123', event='subscription_renewed', properties={'plan': 'pro'})`,
+    }),
+    [projectKey],
+  );
+
   const declarativeSnippet = `<!-- ${t('declarativeEvents')} -->
 <button data-flareboard-event="signup" data-flareboard-event-plan="pro">Sign up</button>
 <!-- Umami-compatible: data-umami-event="signup" data-umami-event-plan="pro" -->`;
@@ -270,6 +296,18 @@ const variant = useFeatureFlag('checkout.new_flow')`;
           <summary>{t('embedNpmTitle')}</summary>
           <p className="section-lead snippet-replay-lead">{t('embedNpmLead')}</p>
           <pre className="code-block snippet-code">{npmSnippet}</pre>
+        </details>
+        <details className="snippet-advanced">
+          <summary>{t('posthogSdks')}</summary>
+          <p className="section-lead snippet-replay-lead">{t('posthogSdksLead')}</p>
+          <ProjectKeyField websiteId={websiteId} />
+          <p className="text-sm text-[var(--text-muted)] mb-2">posthog-js</p>
+          <pre className="code-block snippet-code">{posthogSnippets.js}</pre>
+          <p className="text-sm text-[var(--text-muted)] mb-2">posthog-node</p>
+          <pre className="code-block snippet-code">{posthogSnippets.node}</pre>
+          <p className="text-sm text-[var(--text-muted)] mb-2">posthog-python</p>
+          <pre className="code-block snippet-code">{posthogSnippets.python}</pre>
+          <p className="field-hint">{t('posthogSdksLimits')}</p>
         </details>
         <details className="snippet-advanced">
           <summary>{t('declarativeEvents')}</summary>

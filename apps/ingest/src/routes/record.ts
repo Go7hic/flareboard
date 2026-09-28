@@ -4,7 +4,8 @@ import { and, eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
 import { recordSchema, uuid } from '@flareboard/shared';
 import type { Env } from '../env';
-import { checkRateLimit, getTrustedClientIp } from '../lib/rate-limit';
+import { checkProjectKeyRateLimit, checkRateLimit, getTrustedClientIp } from '../lib/rate-limit';
+import { resolveWebsiteRef } from '../lib/project-keys';
 import { badRequest, json } from '../lib/response';
 import { getWebsiteById } from '../lib/queries';
 import { replayAllowedByPlan } from '../lib/hosted-limits';
@@ -36,6 +37,16 @@ export async function handleRecord(c: Ctx) {
     return badRequest('Invalid JSON');
   }
 
+  // recorder.js sends its data-website-id, which may be the site's project key.
+  const payload = (body as { payload?: { website?: unknown } } | null)?.payload;
+  let projectKey: string | undefined;
+  if (payload && typeof payload === 'object' && typeof payload.website === 'string') {
+    const ref = await resolveWebsiteRef(c.env, payload.website);
+    if (!ref) return badRequest('Website not found');
+    payload.website = ref.websiteId;
+    projectKey = ref.projectKey;
+  }
+
   const parsed = recordSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
 
@@ -49,7 +60,7 @@ export async function handleRecord(c: Ctx) {
   }
 
   const ip = getTrustedClientIp(c.req.raw);
-  const rl = await checkRateLimit(c.env, website, ip);
+  const rl = projectKey ? await checkProjectKeyRateLimit(c.env, projectKey) : await checkRateLimit(c.env, website, ip);
   if (!rl.allowed) {
     return json({ message: 'Rate limit exceeded' }, 429);
   }

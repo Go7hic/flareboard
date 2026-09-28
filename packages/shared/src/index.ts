@@ -3,6 +3,7 @@ export * from './billing';
 export * from './constants';
 export * from './csv';
 export * from './delivery';
+export * from './error-fingerprint';
 export * from './core';
 export * from './feature-flag-evaluator';
 export * from './flag-hash';

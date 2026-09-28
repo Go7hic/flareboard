@@ -247,6 +247,14 @@ app.delete('/api/websites/:websiteId/warehouse/saved-queries/:savedQueryId', war
 app.get('/api/websites/:websiteId/feature-flags', featureFlags.handleList);
 app.post('/api/websites/:websiteId/feature-flags', featureFlags.handleCreate);
 app.post('/api/websites/:websiteId/feature-flags/evaluate', featureFlags.handleEvaluate);
+app.post('/api/websites/:websiteId/feature-flags/evaluate-all', featureFlags.handleEvaluateAll);
+app.get('/api/websites/:websiteId/feature-flags/definitions', featureFlags.handleDefinitions);
+app.get('/api/websites/:websiteId/feature-flags/early-access', featureFlags.handleEarlyAccessList);
+app.put(
+  '/api/websites/:websiteId/feature-flags/early-access/:flagKey/enrollment',
+  featureFlags.handleEarlyAccessEnrollment,
+);
+app.get('/api/websites/:websiteId/feature-flags/:flagId/history', featureFlags.handleHistory);
 app.get('/api/websites/:websiteId/feature-flags/:flagId', featureFlags.handleGet);
 app.patch('/api/websites/:websiteId/feature-flags/:flagId', featureFlags.handleUpdate);
 app.delete('/api/websites/:websiteId/feature-flags/:flagId', featureFlags.handleDelete);

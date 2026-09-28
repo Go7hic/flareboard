@@ -5,6 +5,11 @@ import { createExperimentSchema, statsQuerySchema, updateExperimentSchema, uuid 
 import type { Env } from '../env';
 import { canMutateWebsite } from '../lib/access';
 import { getExperimentResults } from '../lib/experiments';
+import {
+  fullRolloutConditionGroups,
+  invalidateFeatureFlagCaches,
+  recordFeatureFlagChange,
+} from '../lib/feature-flags';
 import { badRequest, json, notFound } from '../lib/response';
 import { requireWebsiteOr404 } from '../lib/website';
 import type { ApiVariables } from '../middleware/auth';
@@ -312,6 +317,7 @@ export async function handleApply(c: Ctx) {
       enabled: true,
       rollout: 100,
       variants,
+      conditionGroups: fullRolloutConditionGroups(flag),
       updatedAt: now,
     })
     .where(eq(schema.featureFlag.flagId, flag.flagId));
@@ -323,9 +329,12 @@ export async function handleApply(c: Ctx) {
       updatedAt: now,
     })
     .where(eq(schema.experiment.experimentId, row.experimentId));
-  await c.env.CACHE.delete(`tracker-config:${website!.websiteId}`);
+  await invalidateFeatureFlagCaches(c.env, website!.websiteId);
 
   const [updatedFlag] = await db.select().from(schema.featureFlag).where(eq(schema.featureFlag.flagId, flag.flagId)).limit(1);
+  await recordFeatureFlagChange(c.env, c.get('user').userId, 'update', flag, updatedFlag ?? null, {
+    experimentId: row.experimentId,
+  });
   const updatedExperiment = await getExperiment(c.env, website!.websiteId, row.experimentId);
   return json({
     appliedVariant: winningVariant,

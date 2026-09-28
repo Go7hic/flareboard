@@ -10,3 +10,16 @@ export {
   upsertPersonGroupMembership,
 } from './person-store';
 export type { PersonProperties } from './person-store';
+export {
+  COHORT_MEMBERSHIP_CACHE_TTL_SECONDS,
+  cohortConditionClause,
+  isPersonInCohort,
+  isSessionInCohort,
+  loadFlagCohorts,
+  loadFlagPerson,
+  loadGroupProperties,
+  loadPersonGroupKeys,
+  resolveCohortMembership,
+  resolveFlagTargetingContext,
+} from './flag-targeting';
+export type { FlagCohort, FlagPerson, FlagTargetingStores } from './flag-targeting';

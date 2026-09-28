@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
-import type { FeatureFlagEvaluationContext } from '@flareboard/shared';
+import type { FeatureFlagEvaluationContext, FeatureFlagJsonValue } from '@flareboard/shared';
 import type { Env } from '../env';
-import { evaluateFlagRow, getEnabledFlagsByKeys } from '../lib/feature-flags';
+import { evaluateFlags, flagConfig, getEnabledFlagsByKeys } from '../lib/feature-flags';
 import { getWebsiteById } from '../lib/queries';
 import { checkIpRateLimit, getTrustedClientIp } from '../lib/rate-limit';
 import { badRequest, json, notFound } from '../lib/response';
@@ -40,6 +40,9 @@ function parseContext(raw: Record<string, unknown> | undefined): FeatureFlagEval
     release: cleanText(raw?.release),
     groups: cleanRecord(raw?.groups),
     properties: cleanRecord(raw?.properties),
+    // Caller-supplied overrides, merged over the stored ones (as PostHog's /decide does).
+    personProperties: cleanRecord(raw?.personProperties),
+    groupProperties: cleanRecord(raw?.groupProperties) as Record<string, Record<string, unknown>> | undefined,
   };
 }
 
@@ -54,7 +57,7 @@ export async function handleEvaluate(c: Context<{ Bindings: Env }>) {
   if (!websiteId) return badRequest('website is required');
 
   const keys = Array.isArray(body?.keys)
-    ? body.keys.map((key) => cleanText(key)).filter((key): key is string => Boolean(key))
+    ? [...new Set(body.keys.map((key) => cleanText(key)).filter((key): key is string => Boolean(key)))].slice(0, 200)
     : [];
   if (!keys.length) return badRequest('keys is required');
 
@@ -63,17 +66,16 @@ export async function handleEvaluate(c: Context<{ Bindings: Env }>) {
 
   const context = parseContext(body?.context);
   const rows = await getEnabledFlagsByKeys(c.env, websiteId, keys);
+  const configs = rows.map(flagConfig);
+  const evaluations = await evaluateFlags(c.env, websiteId, configs, context);
   const results: Record<string, string | boolean> = {};
+  const payloads: Record<string, FeatureFlagJsonValue> = {};
 
-  for (const key of keys) {
-    const row = rows.find((item) => item.key === key);
-    if (!row) {
-      results[key] = false;
-      continue;
-    }
-    const evaluation = evaluateFlagRow(row, context);
-    results[key] = evaluation.variant;
-  }
+  for (const key of keys) results[key] = false;
+  evaluations.forEach((evaluation) => {
+    results[evaluation.key] = evaluation.variant;
+    if (evaluation.enabled && evaluation.payload !== null) payloads[evaluation.key] = evaluation.payload;
+  });
 
-  return json({ results });
+  return json({ results, payloads });
 }

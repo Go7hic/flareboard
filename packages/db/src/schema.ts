@@ -637,15 +637,26 @@ export const featureFlag = sqliteTable(
     name: text('name').notNull(),
     description: text('description').notNull().default(''),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    /** @deprecated mirror of the first condition group, kept for older readers (migration 0045). */
     rollout: integer('rollout').notNull().default(100),
+    /** Variants with weights and optional per-variant `payload`. */
     variants: text('variants', { mode: 'json' }),
+    /** @deprecated mirror of the first condition group, kept for older readers (migration 0045). */
     targetingRules: text('targeting_rules', { mode: 'json' }),
+    /** OR-ed release condition groups; NULL means "derive one group from the legacy columns". */
+    conditionGroups: text('condition_groups', { mode: 'json' }),
+    /** Raw JSON payload of a boolean flag (see parsePayloadColumn). */
+    payload: text('payload'),
+    earlyAccess: integer('early_access', { mode: 'boolean' }).notNull().default(false),
+    earlyAccessName: text('early_access_name').notNull().default(''),
+    earlyAccessDescription: text('early_access_description').notNull().default(''),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
   },
   (t) => [
     index('feature_flag_website_idx').on(t.websiteId),
     index('feature_flag_website_key_idx').on(t.websiteId, t.key),
+    index('feature_flag_website_early_access_idx').on(t.websiteId, t.earlyAccess),
   ],
 );
 

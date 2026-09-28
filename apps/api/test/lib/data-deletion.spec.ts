@@ -93,6 +93,20 @@ async function seedWebsiteData(websiteId: string) {
     websiteId,
     LONG_AGO,
   );
+  // Feature flag history outlives the flag and names its website in the metadata.
+  await run(
+    `INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, metadata, created_at)
+     VALUES (?1, ?2, 'delete', 'feature_flag', ?3, ?4, ?5)`,
+    `${websiteId}-flag-audit`,
+    OWNER,
+    `${websiteId}-deleted-flag`,
+    JSON.stringify({ websiteId, key: 'old', before: { key: 'old' }, after: null }),
+    LONG_AGO,
+  );
+}
+
+async function flagHistoryRows(websiteId: string) {
+  return count(`SELECT COUNT(*) AS n FROM audit_log WHERE entity_type = 'feature_flag' AND entity_id = ?1`, `${websiteId}-deleted-flag`);
 }
 
 async function websiteRows(websiteId: string) {
@@ -208,6 +222,7 @@ describe('scheduled data deletion', () => {
     expect(await websiteRows(PURGED_SITE)).toBe(0);
     expect(await count('SELECT COUNT(*) AS n FROM share WHERE entity_id = ?1', PURGED_SITE)).toBe(0);
     expect(await count(`SELECT COUNT(*) AS n FROM audit_log WHERE entity_type = 'website' AND entity_id = ?1`, PURGED_SITE)).toBe(0);
+    expect(await flagHistoryRows(PURGED_SITE)).toBe(0);
     expect((await env.REPLAY_BUCKET!.list({ prefix: `${PURGED_SITE}/` })).objects).toHaveLength(0);
   });
 
@@ -215,6 +230,7 @@ describe('scheduled data deletion', () => {
     for (const site of [GRACE_SITE, LIVE_SITE]) {
       expect(await count('SELECT COUNT(*) AS n FROM website WHERE website_id = ?1', site)).toBe(1);
       expect(await websiteRows(site)).toBeGreaterThan(5);
+      expect(await flagHistoryRows(site)).toBe(1);
       expect((await env.REPLAY_BUCKET!.list({ prefix: `${site}/` })).objects).toHaveLength(1);
     }
   });

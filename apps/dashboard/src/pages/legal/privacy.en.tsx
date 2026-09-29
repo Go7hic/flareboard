@@ -344,8 +344,8 @@ const sections: LegalSection[] = [
         </p>
         <ul>
           <li>
-            <strong>What is sent to Anthropic.</strong> To answer, we send Anthropic PBC (the provider of the
-            Claude models) your question, up to the last 12 messages of the same conversation, the website’s name,
+            <strong>What is sent to DeepSeek.</strong> To answer, we send Hangzhou DeepSeek Artificial
+            Intelligence Co., Ltd. (the provider of the DeepSeek models) your question, up to the last 12 messages of the same conversation, the website’s name,
             domain and timezone, and the results of the queries the assistant runs for you. Those results are
             limited in size (at most 100 rows per query and a capped number of characters) and can include
             analytics data such as event names, page URLs, property values and, when a question needs it, the
@@ -353,9 +353,11 @@ const sections: LegalSection[] = [
             behalf of the assistant; it cannot change your data.
           </li>
           <li>
-            <strong>How Anthropic uses it.</strong> Anthropic processes this data as our subprocessor to generate
-            the answer, under its commercial terms, which do not allow it to train models on API data. Anthropic
-            may retain API inputs and outputs for a limited period for trust and safety purposes.
+            <strong>How DeepSeek uses it.</strong> DeepSeek processes this data as our subprocessor to generate
+            the answer and stores it on servers in the People’s Republic of China. Under its own terms and privacy
+            policy, DeepSeek may retain inputs and outputs and may use them to improve its models. Do not use the
+            assistant for questions whose results you are not willing to share with DeepSeek; if you or your
+            visitors are subject to rules that restrict transfers to China, leave the assistant unused.
           </li>
           <li>
             <strong>What we store.</strong> Your questions and the assistant’s answers (with the charts and tables
@@ -507,7 +509,7 @@ const sections: LegalSection[] = [
                 <td>Your IP address and browser details, as part of the request</td>
               </tr>
               <tr>
-                <td>Anthropic PBC</td>
+                <td>Hangzhou DeepSeek Artificial Intelligence Co., Ltd. (China)</td>
                 <td>
                   Answers from the “Ask Flareboard” assistant, only when you use it (see{' '}
                   <a href="#assistant">AI assistant</a>)
@@ -555,7 +557,8 @@ const sections: LegalSection[] = [
         Flareboard runs on Cloudflare’s global network, so data may be processed in data centers in many countries,
         including outside your own. Where the law requires it, we rely on appropriate safeguards for these
         transfers, such as the European Commission’s Standard Contractual Clauses included in our providers’ data
-        processing terms.
+        processing terms. If you use the optional “Ask Flareboard” assistant, the data it sends is transferred to
+        DeepSeek in the People’s Republic of China (see <a href="#assistant">AI assistant</a>).
       </p>
     ),
   },

@@ -140,6 +140,7 @@ export type ModelPriceEntry = ModelPrice & {
  * Last reviewed: 2026-09-29.
  * - Anthropic: from Anthropic's model reference (current rates as of 2026-06; cache reads 0.1x
  *   and 5-minute cache writes 1.25x input unless listed otherwise).
+ * - DeepSeek: from DeepSeek's pricing page at the review date, peak rates (off-peak is half).
  * - OpenAI, Google, Mistral, Groq, Together: published list prices as known to the author at the
  *   review date; models whose price the author was unsure of are left out (they show as
  *   "unpriced" and can be priced per website).
@@ -217,6 +218,19 @@ export const LLM_PRICE_TABLE: readonly ModelPriceEntry[] = [
   { provider: 'mistral', model: 'pixtral-large-latest', input: 2, output: 6 },
   { provider: 'mistral', model: 'mistral-embed', input: 0.1, output: 0 },
 
+  // DeepSeek (api-docs.deepseek.com/quick_start/pricing, checked 2026-09-29). Peak rates: off-peak
+  // calls cost half, so these are an upper bound; cacheRead is the cache-hit input price. The
+  // retired `deepseek-v4-flash*` ids are served and billed as deepseek-flash.
+  {
+    provider: 'deepseek',
+    model: 'deepseek-flash',
+    input: 0.3,
+    output: 1.2,
+    cacheRead: 0.006,
+    aliases: ['deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'],
+  },
+  { provider: 'deepseek', model: 'deepseek-v4-pro', input: 1.32, output: 3.96, cacheRead: 0.044 },
+
   // Meta Llama on common hosts (host-specific model ids)
   { provider: 'groq', model: 'llama-3.3-70b-versatile', input: 0.59, output: 0.79 },
   { provider: 'groq', model: 'llama-3.1-8b-instant', input: 0.05, output: 0.08 },
@@ -236,7 +250,7 @@ const PRICE_INDEX: ReadonlyMap<string, ModelPriceEntry> = (() => {
 })();
 
 /** Vendor prefixes routers put in front of a model id (OpenRouter, LiteLLM, Gemini's `models/`). */
-const VENDOR_PREFIX = /^(?:openai|anthropic|google|mistralai|mistral|models|gemini|vertex_ai|bedrock)\//;
+const VENDOR_PREFIX = /^(?:openai|anthropic|google|mistralai|mistral|deepseek|models|gemini|vertex_ai|bedrock)\//;
 
 /**
  * The model id in the form the price table uses: lower case, without router / Bedrock / Vertex

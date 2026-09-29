@@ -36,8 +36,12 @@ export interface Env {
   GITHUB_CLIENT_SECRET?: string;
   /** Public dashboard URL for password reset links (optional). */
   DASHBOARD_URL?: string;
-  /** Claude API key for the "Ask Flareboard" assistant (secret). Unset: the assistant is off. */
-  ANTHROPIC_API_KEY?: string;
+  /** DeepSeek API key for the "Ask Flareboard" assistant (secret). Unset: the assistant is off. */
+  DEEPSEEK_API_KEY?: string;
+  /** Assistant model (default `deepseek-flash`). */
+  DEEPSEEK_MODEL?: string;
+  /** DeepSeek Anthropic-format base URL (default https://api.deepseek.com/anthropic). */
+  DEEPSEEK_BASE_URL?: string;
   /** Stripe (hosted billing) */
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;

@@ -1503,7 +1503,7 @@ export const frFRLocale: Record<string, string> = {
   assistantPlaceholder: "Posez une question sur ce site…",
   assistantSend: "Envoyer",
   assistantUsageLeft: "Encore {count} questions aujourd’hui",
-  assistantDisclaimer: "Les réponses sont générées par une IA (Anthropic Claude) et peuvent être inexactes.",
+  assistantDisclaimer: "Les réponses sont générées par l’IA (DeepSeek, traitement en Chine) et peuvent être erronées.",
   assistantPrivacyLink: "Utilisation de vos données",
   assistantDailyLimit: "Vous avez atteint la limite quotidienne de l’assistant. Elle est réinitialisée à minuit UTC.",
   assistantRateLimited: "Trop de questions d’affilée. Patientez une minute puis réessayez.",

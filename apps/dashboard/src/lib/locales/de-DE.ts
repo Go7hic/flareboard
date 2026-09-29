@@ -1503,7 +1503,7 @@ export const deDELocale: Record<string, string> = {
   assistantPlaceholder: "Fragen Sie zu dieser Website…",
   assistantSend: "Senden",
   assistantUsageLeft: "Heute noch {count} Fragen",
-  assistantDisclaimer: "Antworten werden von KI (Anthropic Claude) erzeugt und können falsch sein.",
+  assistantDisclaimer: "Antworten werden von KI erzeugt (DeepSeek, Verarbeitung in China) und können falsch sein.",
   assistantPrivacyLink: "So werden Ihre Daten verwendet",
   assistantDailyLimit: "Sie haben das heutige Limit des Assistenten erreicht. Es wird um Mitternacht UTC zurückgesetzt.",
   assistantRateLimited: "Zu viele Fragen hintereinander. Warten Sie eine Minute und versuchen Sie es erneut.",

@@ -1503,7 +1503,7 @@ export const jaJPLocale: Record<string, string> = {
   assistantPlaceholder: "このウェブサイトについて質問…",
   assistantSend: "送信",
   assistantUsageLeft: "本日の残り質問数：{count}",
-  assistantDisclaimer: "回答は AI（Anthropic Claude）が生成しており、誤りを含む場合があります。",
+  assistantDisclaimer: "回答は AI（DeepSeek、データは中国で処理）によって生成され、誤りを含む場合があります。",
   assistantPrivacyLink: "データの利用方法",
   assistantDailyLimit: "アシスタントの本日の上限に達しました。UTC の 0 時にリセットされます。",
   assistantRateLimited: "質問が続きすぎています。1 分ほど待ってから再試行してください。",

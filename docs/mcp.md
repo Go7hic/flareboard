@@ -105,17 +105,25 @@ curl -s https://api.your-domain.com/mcp \
 
 ## Ask Flareboard (dashboard assistant)
 
-Set the `ANTHROPIC_API_KEY` secret on the API worker to turn it on
-(`wrangler secret put ANTHROPIC_API_KEY --env production`; locally in `apps/api/.dev.vars`). Without it
-the button is hidden and the endpoints answer 404; the MCP server works either way.
+Set the `DEEPSEEK_API_KEY` secret on the API worker to turn it on
+(`wrangler secret put DEEPSEEK_API_KEY --env production`; locally in `apps/api/.dev.vars`). Without it
+the button is hidden and the endpoints answer 404; the MCP server works either way. Optional vars:
+`DEEPSEEK_MODEL` (default `deepseek-flash`; `deepseek-v4-pro` for harder questions) and
+`DEEPSEEK_BASE_URL` (default `https://api.deepseek.com/anthropic`).
 
-- Model `claude-opus-5` over the Messages API (`fetch`, streaming, adaptive thinking,
-  `fallbacks: "default"`), with the read-only tools above minus `list_websites`, bound to the current
-  website. Write tools are never offered to the assistant.
+- DeepSeek through its Anthropic-format Messages endpoint (`fetch`, streaming, thinking mode on),
+  with the read-only tools above minus `list_websites`, bound to the current website. Write tools are
+  never offered to the assistant.
 - Up to 8 model requests per answer. Tool results sent to the model are capped (100 rows, 12,000
-  characters, long trend series summarized). Tool errors go back to the model as tool results.
+  characters, long trend series summarized). Tool errors go back to the model as tool results whose
+  text starts with `Error:` (DeepSeek ignores `is_error`).
+- DeepSeek rejects earlier assistant turns sent without their reasoning when tools are present, so
+  earlier messages are folded into the question as a plain-text transcript; within one answer the
+  tool loop echoes the model's thinking blocks back unchanged.
+- Data goes to DeepSeek (Hangzhou DeepSeek Artificial Intelligence Co., Ltd.), stored in China and
+  possibly used to improve its models; the Privacy Policy says so (`#assistant`).
 - Conversations are stored per user and website (`ai_conversation`, `ai_message`; migration 0056):
-  50 conversations per website, 100 messages each, the last 12 messages replayed to the model,
+  50 conversations per website, 100 messages each, the last 12 messages sent with a new question,
   deleted after 90 days idle (hourly cron) and with the website or account.
 - Limits: 10 questions per minute per user; in hosted mode a daily cap per account by the website
   owner's plan (`ASSISTANT_DAILY_LIMITS` in `apps/api/src/lib/assistant.ts`, counted in `ai_usage_daily`).

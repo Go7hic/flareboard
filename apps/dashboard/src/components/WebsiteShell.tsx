@@ -11,7 +11,7 @@ import { Button } from './ui/button';
 export function WebsiteShell() {
   const { websiteId } = useParams();
   const [assistantOpen, setAssistantOpen] = useState(false);
-  // Off unless the API has ANTHROPIC_API_KEY: then the button is not shown at all.
+  // Off unless the API has DEEPSEEK_API_KEY: then the button is not shown at all.
   const assistant = useQuery({
     queryKey: ['assistant-status', websiteId],
     queryFn: () => fetchAssistantStatus(websiteId!),

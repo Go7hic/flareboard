@@ -150,6 +150,10 @@ Cost is computed when the data is read, not at ingest:
 3. otherwise the built-in list prices in `packages/shared/src/llm.ts` (`LLM_PRICE_TABLE`, with its
    review date).
 
+DeepSeek (`deepseek-flash`, `deepseek-v4-pro`) charges half price off-peak. Costs are computed on
+per-model sums, not per call, so the table uses the peak rate: DeepSeek costs are an upper bound.
+Set a website override with the off-peak rate if most of your traffic runs off-peak.
+
 Computing at read time means fixing a price or adding an override changes past costs at once
 without a backfill, and ingest does not read prices on the hot path. SQL sums unpriced tokens per
 model, so it stays cheap.
@@ -158,7 +162,7 @@ Model ids are matched exactly after normalizing (lower case; vendor prefixes suc
 Bedrock `anthropic.` and `-v1:0`, Vertex `@date`, date suffixes and `-latest` removed). A model
 that is not found is **unpriced**: it counts in "Unpriced", never at a guessed price.
 
-Cached tokens: OpenAI and Gemini count cached tokens inside the input count, so they are charged at
+Cached tokens: OpenAI, Gemini and DeepSeek count cached tokens inside the input count, so they are charged at
 the cache price and removed from the regular input; Anthropic (also on Bedrock/Vertex) reports them
 separately. Without a cache price, cached tokens are charged at the input price.
 

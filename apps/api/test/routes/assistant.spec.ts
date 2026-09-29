@@ -19,8 +19,8 @@ const originalFetch = assistantRuntime.fetch;
 
 type Captured = { url: string; headers: Record<string, string>; body: any };
 
-/** A Claude Messages API stream, delivered in small chunks so events straddle reads. */
-function claudeStream(events: Array<Record<string, unknown>>, chunkSize = 17) {
+/** A DeepSeek (Anthropic-format) Messages stream, delivered in small chunks so events straddle reads. */
+function modelStream(events: Array<Record<string, unknown>>, chunkSize = 17) {
   const text = events.map((event) => `event: ${String(event.type)}\ndata: ${JSON.stringify(event)}\n\n`).join('');
   const bytes = new TextEncoder().encode(text);
   return new Response(
@@ -65,8 +65,8 @@ function toolTurn(id: string, name: string, input: unknown, rawJson?: string) {
   ];
 }
 
-/** Replaces the Claude API with scripted responses and records the requests. */
-function fakeClaude(responses: Array<() => Response>) {
+/** Replaces the DeepSeek API with scripted responses and records the requests. */
+function fakeDeepSeek(responses: Array<() => Response>) {
   const captured: Captured[] = [];
   assistantRuntime.fetch = async (url, init) => {
     captured.push({
@@ -75,7 +75,7 @@ function fakeClaude(responses: Array<() => Response>) {
       body: JSON.parse(String(init.body)),
     });
     const next = responses.shift();
-    if (!next) throw new Error('Unexpected Claude request');
+    if (!next) throw new Error('Unexpected DeepSeek request');
     return next();
   };
   return captured;
@@ -90,7 +90,7 @@ async function fetchApi(path: string, init: RequestInit = {}, extraEnv: Record<s
   const ctx = createExecutionContext();
   const response = await worker.fetch(
     new Request(`http://example.com${path}`, init),
-    { ...(env as unknown as Env), ANTHROPIC_API_KEY: 'sk-ant-test', ...extraEnv } as Env,
+    { ...(env as unknown as Env), DEEPSEEK_API_KEY: 'sk-deepseek-test', ...extraEnv } as Env,
     ctx,
   );
   await waitOnExecutionContext(ctx);
@@ -149,17 +149,17 @@ describe('Ask Flareboard assistant', () => {
     assistantRuntime.fetch = originalFetch;
   });
 
-  it('is hidden when ANTHROPIC_API_KEY is not set', async () => {
-    const status = await fetchApi(`/api/websites/${FIXTURE_SITE}/assistant`, { headers: await session(ADMIN, ROLES.admin) }, { ANTHROPIC_API_KEY: undefined });
+  it('is hidden when DEEPSEEK_API_KEY is not set', async () => {
+    const status = await fetchApi(`/api/websites/${FIXTURE_SITE}/assistant`, { headers: await session(ADMIN, ROLES.admin) }, { DEEPSEEK_API_KEY: undefined });
     expect(await status.json()).toEqual({ enabled: false, usage: null });
-    const { response } = await ask(FIXTURE_SITE, { message: 'Hi' }, await session(ADMIN, ROLES.admin), { ANTHROPIC_API_KEY: undefined });
+    const { response } = await ask(FIXTURE_SITE, { message: 'Hi' }, await session(ADMIN, ROLES.admin), { DEEPSEEK_API_KEY: undefined });
     expect(response.status).toBe(404);
   });
 
   it('answers with a tool-use loop over the shared tools and stores the conversation', async () => {
-    const captured = fakeClaude([
-      () => claudeStream(toolTurn('toolu_1', 'run_insight', TREND_INPUT)),
-      () => claudeStream(textTurn('Signups: 6 between Feb 2 and Feb 4.')),
+    const captured = fakeDeepSeek([
+      () => modelStream(toolTurn('toolu_1', 'run_insight', TREND_INPUT)),
+      () => modelStream(textTurn('Signups: 6 between Feb 2 and Feb 4.')),
     ]);
     const headers = await session(ADMIN, ROLES.admin);
     const { response, events } = await ask(FIXTURE_SITE, { message: 'How many signups last week?' }, headers);
@@ -177,19 +177,19 @@ describe('Ask Flareboard assistant', () => {
     expect(message.status).toBe('complete');
     expect(message.blocks.map((block) => block.type)).toEqual(['text', 'tool', 'text']);
 
-    // First request: model, streaming, adaptive thinking, fallbacks, read-only tools without websiteId.
+    // First request: model, streaming, thinking mode, read-only tools without websiteId.
     const first = captured[0]!;
-    expect(first.url).toBe('https://api.anthropic.com/v1/messages');
-    expect(first.headers['x-api-key']).toBe('sk-ant-test');
-    expect(first.headers['anthropic-beta']).toBe('server-side-fallback-2026-07-01');
-    expect(first.body).toMatchObject({ model: 'claude-opus-5', stream: true, thinking: { type: 'adaptive' }, fallbacks: 'default' });
+    expect(first.url).toBe('https://api.deepseek.com/anthropic/v1/messages');
+    expect(first.headers['x-api-key']).toBe('sk-deepseek-test');
+    expect(first.body).toMatchObject({ model: 'deepseek-flash', stream: true, thinking: { type: 'enabled' } });
+    expect(first.body).not.toHaveProperty('fallbacks');
     const toolNames = first.body.tools.map((tool: { name: string }) => tool.name);
     expect(toolNames).toContain('run_insight');
     expect(toolNames).not.toContain('list_websites');
     expect(toolNames).not.toContain('toggle_feature_flag');
     expect(toolNames).not.toContain('create_annotation');
     for (const tool of first.body.tools) {
-      expect(tool.eager_input_streaming).toBe(true);
+      expect(tool).not.toHaveProperty('eager_input_streaming');
       expect(tool.input_schema.properties).not.toHaveProperty('websiteId');
     }
     expect(JSON.stringify(first.body.system)).toContain('Insights fixture');
@@ -223,15 +223,17 @@ describe('Ask Flareboard assistant', () => {
       .first<{ requests: number; inputTokens: number; outputTokens: number }>();
     expect(usage).toMatchObject({ requests: 1, inputTokens: 350, outputTokens: 60 });
 
-    // A follow-up replays the earlier turn, including the tools it used.
-    const followUp = fakeClaude([() => claudeStream(textTurn('By country: mostly US.'))]);
+    // A follow-up carries the earlier turn (and the tools it used) as a transcript in the one
+    // user message: DeepSeek rejects earlier assistant turns without their reasoning.
+    const followUp = fakeDeepSeek([() => modelStream(textTurn('By country: mostly US.'))]);
     await ask(FIXTURE_SITE, { message: 'And by country?', conversationId }, headers);
     const replayed = followUp[0]!.body.messages;
-    expect(replayed[0]).toEqual({ role: 'user', content: 'How many signups last week?' });
-    expect(replayed[1].role).toBe('assistant');
-    expect(replayed[1].content).toContain('Signups: 6');
-    expect(replayed[1].content).toContain('[Tools used: run_insight');
-    expect(replayed[2]).toEqual({ role: 'user', content: 'And by country?' });
+    expect(replayed).toHaveLength(1);
+    expect(replayed[0].role).toBe('user');
+    expect(replayed[0].content).toContain('User: How many signups last week?');
+    expect(replayed[0].content).toContain('Assistant: Let me check. Signups: 6');
+    expect(replayed[0].content).toContain('[Tools used: run_insight');
+    expect(replayed[0].content).toMatch(/New question:\nAnd by country\?$/);
 
     // Other users cannot see or delete it; the owner can delete it.
     const strangerHeaders = await session(STRANGER);
@@ -246,19 +248,20 @@ describe('Ask Flareboard assistant', () => {
   });
 
   it('returns tool errors to the model and keeps tools on the conversation’s website', async () => {
-    const captured = fakeClaude([
-      () => claudeStream(toolTurn('toolu_x', 'run_insight', { ...TREND_INPUT, websiteId: VIEWER_SITE })),
-      () => claudeStream(toolTurn('toolu_y', 'run_sql', null, '{"sql": "SELECT 1" oops')),
-      () => claudeStream(toolTurn('toolu_z', 'toggle_feature_flag', { key: 'x', enabled: true })),
-      () => claudeStream(textTurn('I could not run that.')),
+    const captured = fakeDeepSeek([
+      () => modelStream(toolTurn('toolu_x', 'run_insight', { ...TREND_INPUT, websiteId: VIEWER_SITE })),
+      () => modelStream(toolTurn('toolu_y', 'run_sql', null, '{"sql": "SELECT 1" oops')),
+      () => modelStream(toolTurn('toolu_z', 'toggle_feature_flag', { key: 'x', enabled: true })),
+      () => modelStream(textTurn('I could not run that.')),
     ]);
     const { events } = await ask(FIXTURE_SITE, { message: 'Compare with the other site' }, await session(ADMIN, ROLES.admin));
     expect(doneMessage(events).status).toBe('complete');
 
     const results = captured.slice(1).map((request) => request.body.messages.at(-1).content[0]);
-    expect(results[0]).toMatchObject({ tool_use_id: 'toolu_x', is_error: true, content: expect.stringMatching(/its own website/) });
+    // DeepSeek ignores is_error, so every failure says so in its text.
+    expect(results[0]).toMatchObject({ tool_use_id: 'toolu_x', is_error: true, content: expect.stringMatching(/^Error: .*its own website/) });
     expect(results[1]).toMatchObject({ tool_use_id: 'toolu_y', is_error: true });
-    expect(JSON.parse(results[1].content)).toEqual({ INVALID_JSON: '{"sql": "SELECT 1" oops' });
+    expect(results[1].content).toBe('Error: invalid tool input JSON: {"sql": "SELECT 1" oops');
     // Write tools do not exist for the assistant.
     expect(results[2]).toMatchObject({ tool_use_id: 'toolu_z', is_error: true, content: expect.stringMatching(/Unknown tool/) });
     const flagChange = await env.DB.prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE entity_type = 'feature_flag'`).first<{ n: number }>();
@@ -266,13 +269,13 @@ describe('Ask Flareboard assistant', () => {
   });
 
   it('handles refusals and API errors without throwing', async () => {
-    fakeClaude([() => claudeStream(textTurn('I will not', 'refusal'))]);
+    fakeDeepSeek([() => modelStream(textTurn('I will not', 'refusal'))]);
     const refused = await ask(FIXTURE_SITE, { message: 'Something odd' }, await session(ADMIN, ROLES.admin));
     const message = doneMessage(refused.events);
     expect(message.status).toBe('refused');
     expect(message.blocks).toEqual([]);
 
-    fakeClaude([() => new Response(JSON.stringify({ type: 'error', error: { type: 'overloaded_error' } }), { status: 529 })]);
+    fakeDeepSeek([() => new Response(JSON.stringify({ type: 'error', error: { type: 'overloaded_error' } }), { status: 529 })]);
     const failed = await ask(FIXTURE_SITE, { message: 'Try again' }, await session(ADMIN, ROLES.admin));
     expect(failed.events.find((event) => event.type === 'error')).toMatchObject({ message: expect.stringMatching(/busy/) });
     expect(doneMessage(failed.events).status).toBe('error');
@@ -282,7 +285,7 @@ describe('Ask Flareboard assistant', () => {
     const denied = await ask(FIXTURE_SITE, { message: 'Hi' }, await session(STRANGER));
     expect(denied.response.status).toBe(404);
 
-    fakeClaude([() => claudeStream(textTurn('Hello there.'))]);
+    fakeDeepSeek([() => modelStream(textTurn('Hello there.'))]);
     const viewer = await ask(VIEWER_SITE, { message: 'Hi' }, await session(VIEWER, ROLES.viewOnly));
     expect(viewer.response.status).toBe(200);
     expect(doneMessage(viewer.events).status).toBe('complete');
@@ -302,7 +305,7 @@ describe('Ask Flareboard assistant', () => {
     expect(await response.json()).toMatchObject({ code: 'assistant_daily_limit' });
 
     // Self-hosted: no daily cap.
-    fakeClaude([() => claudeStream(textTurn('Still here.'))]);
+    fakeDeepSeek([() => modelStream(textTurn('Still here.'))]);
     const selfHosted = await ask(VIEWER_SITE, { message: 'One more' }, headers);
     expect(selfHosted.response.status).toBe(200);
   });

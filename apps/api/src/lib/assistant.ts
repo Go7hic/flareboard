@@ -1,9 +1,9 @@
 /**
- * "Ask Flareboard": a per-website assistant that answers questions by calling Claude with the
+ * "Ask Flareboard": a per-website assistant that answers questions by calling DeepSeek with the
  * read-only tools of the shared registry (lib/ai-tools.ts, the same tools the MCP server
- * exposes). Needs the ANTHROPIC_API_KEY secret; without it the feature is off.
+ * exposes). Needs the DEEPSEEK_API_KEY secret; without it the feature is off.
  *
- * Data sent to Anthropic: the question, a bounded slice of the conversation, the website's
+ * Data sent to DeepSeek: the question, a bounded slice of the conversation, the website's
  * name, domain and timezone, and the compact tool results (capped rows and characters).
  * Nothing about prompts or answers is logged.
  */
@@ -22,19 +22,18 @@ import type { Website } from '@flareboard/db';
 import type { Env } from '../env';
 import { callTool, listTools, UnknownToolError, type ToolCaller } from './ai-tools';
 import {
-  ANTHROPIC_FALLBACK_BETA,
-  ClaudeApiError,
-  echoableContent,
-  streamClaudeMessage,
-  type ClaudeContentBlock,
-  type ClaudeMessageParam,
-  type ClaudeToolResultBlock,
-  type ClaudeToolUseBlock,
+  DeepSeekApiError,
+  streamDeepSeekMessage,
+  type DeepSeekContentBlock,
+  type DeepSeekMessageParam,
+  type DeepSeekToolResultBlock,
+  type DeepSeekToolUseBlock,
   type FetchLike,
-} from './anthropic';
+} from './deepseek';
 import { getWebsitePlanId, isHostedMode } from './billing';
 
-export const ASSISTANT_MODEL = 'claude-opus-5';
+/** Default model; `DEEPSEEK_MODEL` overrides it (e.g. `deepseek-v4-pro`). */
+export const ASSISTANT_MODEL = 'deepseek-flash';
 
 export const ASSISTANT_LIMITS = {
   /** Model requests per answer (each tool round is one request). */
@@ -68,7 +67,7 @@ export const assistantRuntime: { fetch: FetchLike } = {
 };
 
 export function isAssistantEnabled(env: Env) {
-  return Boolean(env.ANTHROPIC_API_KEY?.trim());
+  return Boolean(env.DEEPSEEK_API_KEY?.trim());
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -294,19 +293,32 @@ function assistantHistoryText(message: Extract<AiAssistantMessage, { role: 'assi
   return parts.join('\n');
 }
 
-/** The last messages of the conversation, oldest first, within the history budget. */
-export function historyForModel(messages: AiAssistantMessage[]): ClaudeMessageParam[] {
-  const out: ClaudeMessageParam[] = [];
+/**
+ * The last messages of the conversation, oldest first, within the history budget, as one
+ * plain-text transcript. Earlier answers are not replayed as assistant turns: in thinking mode
+ * with tools DeepSeek requires every earlier assistant turn to carry its reasoning, which the
+ * stored history does not keep. Null when there is no history.
+ */
+export function historyForModel(messages: AiAssistantMessage[]): string | null {
+  const kept: Array<{ role: AiAssistantMessage['role']; text: string }> = [];
   let chars = 0;
   for (const message of messages.slice(-ASSISTANT_LIMITS.historyMessages).reverse()) {
     const text = message.role === 'user' ? message.text : assistantHistoryText(message);
     if (chars + text.length > ASSISTANT_LIMITS.historyChars) break;
     chars += text.length;
-    out.unshift({ role: message.role, content: text });
+    kept.unshift({ role: message.role, text });
   }
-  // The conversation sent to the model must start with the user.
-  while (out[0]?.role === 'assistant') out.shift();
-  return out;
+  // An answer whose question fell outside the budget reads as noise: start with a question.
+  while (kept[0]?.role === 'assistant') kept.shift();
+  if (!kept.length) return null;
+  return kept.map((entry) => `${entry.role === 'user' ? 'User' : 'Assistant'}: ${entry.text}`).join('\n\n');
+}
+
+/** The first (and only) user message of a turn: earlier conversation, then the question. */
+export function questionForModel(history: AiAssistantMessage[], question: string): string {
+  const transcript = historyForModel(history);
+  if (!transcript) return question;
+  return `Earlier in this conversation:\n\n${transcript}\n\nNew question:\n${question}`;
 }
 
 /** Tool result text for the model, capped in size. */
@@ -352,11 +364,14 @@ function appendText(blocks: AiAssistantBlock[], text: string) {
 }
 
 function userFacingError(error: unknown) {
-  if (error instanceof ClaudeApiError) {
-    if (error.status === 429 || error.status === 529 || error.errorType === 'overloaded_error') {
+  if (error instanceof DeepSeekApiError) {
+    if (error.status === 429 || error.status === 503 || error.errorType === 'overloaded_error') {
       return 'The assistant is busy right now. Try again in a minute.';
     }
-    if (error.status === 401 || error.status === 403) return 'The assistant is not configured correctly. Ask your administrator.';
+    // 402: the DeepSeek account has no balance left.
+    if (error.status === 401 || error.status === 402 || error.status === 403) {
+      return 'The assistant is not configured correctly. Ask your administrator.';
+    }
   }
   return 'The assistant could not answer. Try again.';
 }
@@ -365,10 +380,10 @@ function userFacingError(error: unknown) {
 async function runTool(
   env: Env,
   caller: ToolCaller,
-  toolUse: ClaudeToolUseBlock,
+  toolUse: DeepSeekToolUseBlock,
   invalidInputs: Map<string, string>,
   emit: (event: AiStreamEvent) => void,
-): Promise<{ block: AiAssistantBlock; result: ClaudeToolResultBlock }> {
+): Promise<{ block: AiAssistantBlock; result: DeepSeekToolResultBlock }> {
   const { id, name } = toolUse;
   emit({ type: 'tool_start', id, name, input: toolUse.input });
   const raw = invalidInputs.get(id);
@@ -376,7 +391,7 @@ async function runTool(
     emit({ type: 'tool_result', id, name, ok: false, error: 'Invalid tool input' });
     return {
       block: { type: 'tool', id, name, input: null, ok: false, error: 'Invalid tool input' },
-      result: { type: 'tool_result', tool_use_id: id, is_error: true, content: JSON.stringify({ INVALID_JSON: raw }) },
+      result: { type: 'tool_result', tool_use_id: id, is_error: true, content: `Error: invalid tool input JSON: ${trimChars(raw, 2_000)}` },
     };
   }
   let outcome: Awaited<ReturnType<typeof callTool>>;
@@ -390,7 +405,8 @@ async function runTool(
     emit({ type: 'tool_result', id, name, ok: false, error: outcome.error });
     return {
       block: { type: 'tool', id, name, input: toolUse.input, ok: false, error: outcome.error },
-      result: { type: 'tool_result', tool_use_id: id, is_error: true, content: outcome.error },
+      // DeepSeek ignores `is_error`: the text itself has to say it failed.
+      result: { type: 'tool_result', tool_use_id: id, is_error: true, content: `Error: ${outcome.error}` },
     };
   }
   const display = outcome.display;
@@ -414,27 +430,25 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     name: tool.name,
     description: tool.description,
     input_schema: tool.inputSchema,
-    // Inputs are validated by the registry before any tool runs.
-    eager_input_streaming: true,
   }));
-  const messages: ClaudeMessageParam[] = [...historyForModel(input.history), { role: 'user', content: input.question }];
+  const messages: DeepSeekMessageParam[] = [{ role: 'user', content: questionForModel(input.history, input.question) }];
   const blocks: AiAssistantBlock[] = [];
   const usage = { inputTokens: 0, outputTokens: 0 };
 
   try {
     for (let round = 0; round < ASSISTANT_LIMITS.toolRounds; round++) {
       const lastRound = round === ASSISTANT_LIMITS.toolRounds - 1;
-      const turn = await streamClaudeMessage({
-        apiKey: env.ANTHROPIC_API_KEY!,
+      const turn = await streamDeepSeekMessage({
+        apiKey: env.DEEPSEEK_API_KEY!,
+        baseUrl: env.DEEPSEEK_BASE_URL,
         fetch: assistantRuntime.fetch,
-        betas: [ANTHROPIC_FALLBACK_BETA],
         signal: input.signal,
         body: {
-          model: ASSISTANT_MODEL,
+          model: env.DEEPSEEK_MODEL?.trim() || ASSISTANT_MODEL,
           max_tokens: ASSISTANT_LIMITS.maxTokens,
-          thinking: { type: 'adaptive' },
-          fallbacks: 'default',
-          cache_control: { type: 'ephemeral' },
+          // Thinking mode (DeepSeek's default); reasoning blocks are echoed back below.
+          thinking: { type: 'enabled' },
+          output_config: { effort: 'high' },
           system: [
             { type: 'text', text: SYSTEM_PROMPT },
             { type: 'text', text: websiteContext(website, now) },
@@ -453,16 +467,16 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
         return { blocks, status: 'refused', usage };
       }
 
-      const content = echoableContent(turn.content);
+      const content = turn.content;
       for (const block of content) if (block.type === 'text') appendText(blocks, block.text);
 
-      const toolUses = content.filter((block): block is ClaudeToolUseBlock => block.type === 'tool_use');
+      const toolUses = content.filter((block): block is DeepSeekToolUseBlock => block.type === 'tool_use');
       if (turn.stopReason === 'max_tokens') return { blocks, status: 'truncated', usage };
       if (turn.stopReason !== 'tool_use' || !toolUses.length) return { blocks, status: 'complete', usage };
 
       const settled = await Promise.all(toolUses.map((toolUse) => runTool(env, caller, toolUse, turn.invalidToolInputs, emit)));
       for (const { block } of settled) blocks.push(block);
-      messages.push({ role: 'assistant', content: content as ClaudeContentBlock[] });
+      messages.push({ role: 'assistant', content: content as DeepSeekContentBlock[] });
       messages.push({ role: 'user', content: settled.map(({ result }) => result) });
     }
     return { blocks, status: 'truncated', usage };
@@ -470,8 +484,8 @@ export async function runAssistantTurn(input: AssistantTurnInput): Promise<Assis
     console.error(
       JSON.stringify({
         event: 'assistant_request_failed',
-        status: error instanceof ClaudeApiError ? error.status : null,
-        type: error instanceof ClaudeApiError ? error.errorType : error instanceof Error ? error.name : 'unknown',
+        status: error instanceof DeepSeekApiError ? error.status : null,
+        type: error instanceof DeepSeekApiError ? error.errorType : error instanceof Error ? error.name : 'unknown',
       }),
     );
     emit({ type: 'error', message: userFacingError(error) });

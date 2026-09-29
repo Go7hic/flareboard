@@ -1,59 +1,58 @@
 /**
- * Minimal streaming client for the Claude Messages API (`POST /v1/messages`, `stream: true`).
+ * Minimal streaming client for DeepSeek's Anthropic-format Messages endpoint
+ * (`POST <base>/v1/messages`, `stream: true`; https://api-docs.deepseek.com/guides/anthropic_api).
  *
- * Plain `fetch` + SSE parsing instead of `@anthropic-ai/sdk`: the API worker only needs one
- * streaming call with client tools, and an injectable `fetch` keeps tests off the network.
- * Content blocks are accumulated exactly as streamed so the assistant can echo them back
- * (thinking blocks keep their signatures) in the next request of a tool-use loop.
+ * Plain `fetch` + SSE parsing: the API worker only needs one streaming call with client tools,
+ * and an injectable `fetch` keeps tests off the network. Content blocks are accumulated exactly
+ * as streamed so the assistant can echo them back in the next request of a tool-use loop:
+ * in thinking mode with tools, DeepSeek rejects (400) a request whose earlier assistant turns
+ * lack their reasoning.
  */
 
-export const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-export const ANTHROPIC_VERSION = '2023-06-01';
-/** Server-side refusal fallbacks, `fallbacks: "default"` form. */
-export const ANTHROPIC_FALLBACK_BETA = 'server-side-fallback-2026-07-01';
+export const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/anthropic';
+/** Ignored by DeepSeek; sent so the request is a valid Anthropic-format call. */
+const API_VERSION = '2023-06-01';
 
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
-export type ClaudeTextBlock = { type: 'text'; text: string };
-export type ClaudeThinkingBlock = { type: 'thinking'; thinking: string; signature: string };
-export type ClaudeRedactedThinkingBlock = { type: 'redacted_thinking'; data: string };
-export type ClaudeToolUseBlock = { type: 'tool_use'; id: string; name: string; input: unknown };
-export type ClaudeFallbackBlock = { type: 'fallback'; from?: unknown; to?: unknown };
+export type DeepSeekTextBlock = { type: 'text'; text: string };
+export type DeepSeekThinkingBlock = { type: 'thinking'; thinking: string; signature: string };
+export type DeepSeekRedactedThinkingBlock = { type: 'redacted_thinking'; data: string };
+export type DeepSeekToolUseBlock = { type: 'tool_use'; id: string; name: string; input: unknown };
 
-export type ClaudeContentBlock =
-  | ClaudeTextBlock
-  | ClaudeThinkingBlock
-  | ClaudeRedactedThinkingBlock
-  | ClaudeToolUseBlock
-  | ClaudeFallbackBlock;
+export type DeepSeekContentBlock =
+  | DeepSeekTextBlock
+  | DeepSeekThinkingBlock
+  | DeepSeekRedactedThinkingBlock
+  | DeepSeekToolUseBlock;
 
-export type ClaudeToolResultBlock = {
+export type DeepSeekToolResultBlock = {
   type: 'tool_result';
   tool_use_id: string;
   content: string;
   is_error?: boolean;
 };
 
-export type ClaudeMessageParam =
-  | { role: 'user'; content: string | Array<ClaudeTextBlock | ClaudeToolResultBlock> }
-  | { role: 'assistant'; content: string | ClaudeContentBlock[] };
+export type DeepSeekMessageParam =
+  | { role: 'user'; content: string | Array<DeepSeekTextBlock | DeepSeekToolResultBlock> }
+  | { role: 'assistant'; content: string | DeepSeekContentBlock[] };
 
-export type ClaudeUsage = { inputTokens: number; outputTokens: number };
+export type DeepSeekUsage = { inputTokens: number; outputTokens: number };
 
-export type ClaudeTurn = {
-  content: ClaudeContentBlock[];
+export type DeepSeekTurn = {
+  content: DeepSeekContentBlock[];
   stopReason: string | null;
-  usage: ClaudeUsage;
+  usage: DeepSeekUsage;
   /** tool_use ids whose streamed input was not valid JSON, with the raw text. */
   invalidToolInputs: Map<string, string>;
 };
 
-export class ClaudeApiError extends Error {
+export class DeepSeekApiError extends Error {
   constructor(
     readonly status: number,
     readonly errorType: string | null,
   ) {
-    super(`Claude API error ${status}${errorType ? ` (${errorType})` : ''}`);
+    super(`DeepSeek API error ${status}${errorType ? ` (${errorType})` : ''}`);
   }
 }
 
@@ -62,7 +61,6 @@ type StreamingBlock =
   | { type: 'thinking'; thinking: string; signature: string }
   | { type: 'redacted_thinking'; data: string }
   | { type: 'tool_use'; id: string; name: string; json: string }
-  | { type: 'fallback'; from?: unknown; to?: unknown }
   | { type: 'other' };
 
 function startBlock(raw: Record<string, unknown>): StreamingBlock {
@@ -79,19 +77,16 @@ function startBlock(raw: Record<string, unknown>): StreamingBlock {
       return { type: 'redacted_thinking', data: typeof raw.data === 'string' ? raw.data : '' };
     case 'tool_use':
       return { type: 'tool_use', id: String(raw.id ?? ''), name: String(raw.name ?? ''), json: '' };
-    case 'fallback':
-      return { type: 'fallback', from: raw.from, to: raw.to };
     default:
       return { type: 'other' };
   }
 }
 
-function finishBlock(block: StreamingBlock, invalid: Map<string, string>): ClaudeContentBlock | null {
+function finishBlock(block: StreamingBlock, invalid: Map<string, string>): DeepSeekContentBlock | null {
   switch (block.type) {
     case 'text':
     case 'thinking':
     case 'redacted_thinking':
-    case 'fallback':
       return block;
     case 'tool_use': {
       let input: unknown = {};
@@ -113,34 +108,35 @@ function finishBlock(block: StreamingBlock, invalid: Map<string, string>): Claud
  * Streams one Messages API request. `onText` receives text deltas as they arrive.
  * Resolves with the accumulated content blocks once the stream ends.
  */
-export async function streamClaudeMessage(options: {
+export async function streamDeepSeekMessage(options: {
   apiKey: string;
+  /** Defaults to DEEPSEEK_BASE_URL. */
+  baseUrl?: string;
   body: Record<string, unknown>;
   fetch: FetchLike;
-  betas?: string[];
   onText?: (delta: string) => void;
   signal?: AbortSignal;
-}): Promise<ClaudeTurn> {
-  const response = await options.fetch(ANTHROPIC_API_URL, {
+}): Promise<DeepSeekTurn> {
+  const baseUrl = (options.baseUrl?.trim() || DEEPSEEK_BASE_URL).replace(/\/+$/, '');
+  const response = await options.fetch(`${baseUrl}/v1/messages`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       'x-api-key': options.apiKey,
-      'anthropic-version': ANTHROPIC_VERSION,
-      ...(options.betas?.length ? { 'anthropic-beta': options.betas.join(',') } : {}),
+      'anthropic-version': API_VERSION,
     },
     body: JSON.stringify({ ...options.body, stream: true }),
     signal: options.signal,
   });
   if (!response.ok || !response.body) {
     const payload = (await response.json().catch(() => null)) as { error?: { type?: string } } | null;
-    throw new ClaudeApiError(response.status, payload?.error?.type ?? null);
+    throw new DeepSeekApiError(response.status, payload?.error?.type ?? null);
   }
 
   const blocks = new Map<number, StreamingBlock>();
-  const content: Array<{ index: number; block: ClaudeContentBlock }> = [];
+  const content: Array<{ index: number; block: DeepSeekContentBlock }> = [];
   const invalidToolInputs = new Map<string, string>();
-  const usage: ClaudeUsage = { inputTokens: 0, outputTokens: 0 };
+  const usage: DeepSeekUsage = { inputTokens: 0, outputTokens: 0 };
   let stopReason: string | null = null;
 
   const handleEvent = (data: string) => {
@@ -196,7 +192,7 @@ export async function streamClaudeMessage(options: {
       }
       case 'error': {
         const error = (event.error ?? {}) as { type?: string };
-        throw new ClaudeApiError(200, error.type ?? 'stream_error');
+        throw new DeepSeekApiError(200, error.type ?? 'stream_error');
       }
     }
   };
@@ -227,21 +223,4 @@ export async function streamClaudeMessage(options: {
 
   content.sort((a, b) => a.index - b.index);
   return { content: content.map((entry) => entry.block), stopReason, usage, invalidToolInputs };
-}
-
-/**
- * Assistant content to send back in the next request. After a mid-output server-side
- * fallback, thinking and tool_use blocks before the last `fallback` marker belong to the
- * declined attempt and are left out; the marker itself is dropped.
- */
-export function echoableContent(content: ClaudeContentBlock[]): ClaudeContentBlock[] {
-  let lastFallback = -1;
-  content.forEach((block, index) => {
-    if (block.type === 'fallback') lastFallback = index;
-  });
-  return content.filter((block, index) => {
-    if (block.type === 'fallback') return false;
-    if (index < lastFallback && block.type !== 'text') return false;
-    return true;
-  });
 }

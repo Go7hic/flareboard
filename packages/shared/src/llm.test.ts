@@ -30,6 +30,10 @@ describe('model ids', () => {
     // The first gpt-4o snapshot kept its launch price.
     expect(lookupModelPrice('gpt-4o-2024-05-13')?.price).toMatchObject({ input: 5, output: 15 });
     expect(lookupModelPrice('gpt-4o-audio-preview')).toBeNull();
+    expect(lookupModelPrice('deepseek/deepseek-flash')?.price).toMatchObject({ input: 0.3, output: 1.2, cacheRead: 0.006 });
+    // Retired ids are billed as deepseek-flash.
+    expect(lookupModelPrice('deepseek-v4-flash')?.model).toBe('deepseek-flash');
+    expect(lookupModelPrice('deepseek-v4-pro')?.provider).toBe('deepseek');
     expect(lookupModelPrice('my-finetune')).toBeNull();
     expect(lookupModelPrice('')).toBeNull();
     expect(lookupModelPrice(null)).toBeNull();
@@ -66,6 +70,15 @@ describe('cost', () => {
     const price = lookupModelPrice('gpt-4o')!.price;
     // 1000 * 2.5 / 1e6 + 500 * 10 / 1e6
     expect(usageCostUsd(usage(1000, 500), price, true)).toBeCloseTo(0.0075, 10);
+  });
+
+  it('DeepSeek: cache hits are part of the prompt count and cost the cache-hit price', () => {
+    const price = lookupModelPrice('deepseek-flash')!.price;
+    // 800 regular at 0.3 + 200 cache hits at 0.006 + 100 output at 1.2
+    expect(usageCostUsd(usage(1000, 100, 200), price, inputIncludesCache('deepseek', 'deepseek-flash'))).toBeCloseTo(
+      (800 * 0.3 + 200 * 0.006 + 100 * 1.2) / 1e6,
+      12,
+    );
   });
 
   it('OpenAI: cached tokens are part of the input count', () => {

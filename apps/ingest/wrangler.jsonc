@@ -87,7 +87,7 @@
         "ENVIRONMENT": "production",
         "HOSTED_MODE": "true",
         // Switch to "dual", backfill, verify, then "do" (docs/parity/storage-migration.md).
-        "EVENT_STORE": "dual"
+        "EVENT_STORE": "do"
       },
       // fetchApi calls the API worker in-network (no public hop, no WAF challenge).
       "services": [

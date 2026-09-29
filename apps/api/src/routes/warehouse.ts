@@ -21,19 +21,22 @@ import {
   getWarehouseDataSource,
   getWarehouseScheduledQuery,
   getWarehouseSavedQuery,
-  getWarehouseSchema,
+  getWarehouseSchemaForWebsite,
   listWarehouseDataSources,
   listWarehouseQueryHistory,
   listWarehouseScheduledQueries,
   listWarehouseSavedQueries,
   recordWarehouseQueryHistory,
   runDueWarehouseScheduledQueries,
+  runWarehouseExport,
   runWarehouseQuery,
   syncWarehouseDataSource,
   updateWarehouseDataSource,
   updateWarehouseScheduledQuery,
   updateWarehouseSavedQuery,
+  WAREHOUSE_EXPORT_ROW_CAP,
 } from '../lib/warehouse';
+import { csvDownload, inBatches } from '../lib/csv-stream';
 import { badRequest, json, notFound } from '../lib/response';
 import { requireWebsiteOr404 } from '../lib/website';
 import type { ApiVariables } from '../middleware/auth';
@@ -41,9 +44,9 @@ import type { ApiVariables } from '../middleware/auth';
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
 
 export async function handleSchema(c: Ctx) {
-  const { response } = await requireWebsiteOr404(c);
+  const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
-  return json(getWarehouseSchema());
+  return json(await getWarehouseSchemaForWebsite(c.env, website!.websiteId));
 }
 
 export async function handleQuery(c: Ctx) {
@@ -74,6 +77,60 @@ export async function handleQuery(c: Ctx) {
       durationMs: Date.now() - startedAt,
     });
     return json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await recordWarehouseQueryHistory(c.env, website!.websiteId, c.get('user').userId, {
+      sql: parsed.data.sql,
+      status: 'failed',
+      rowCount: 0,
+      error: message,
+      durationMs: Date.now() - startedAt,
+    });
+    return badRequest(message);
+  }
+}
+
+/**
+ * POST /warehouse/query/export — the query's results as CSV (same checks and limits as a query,
+ * at most WAREHOUSE_EXPORT_ROW_CAP rows; X-Truncated: true when the cap cut rows off).
+ */
+export async function handleQueryExport(c: Ctx) {
+  const { website, response } = await requireWebsiteOr404(c);
+  if (response) return response;
+
+  const body = await c.req.json().catch(() => null);
+  const parsed = warehouseQuerySchema.safeParse(body);
+  if (!parsed.success) return badRequest(parsed.error.message);
+
+  const rateLimit = await checkIpRateLimit(
+    c.env,
+    `warehouse-query:${website!.websiteId}:${c.get('user').userId}`,
+    c.get('user').userId,
+    20,
+    60,
+  );
+  if (!rateLimit.allowed) return json({ message: 'Rate limit exceeded' }, 429);
+
+  const startedAt = Date.now();
+  try {
+    const result = await runWarehouseExport(c.env, website!.websiteId, parsed.data.sql);
+    await recordWarehouseQueryHistory(c.env, website!.websiteId, c.get('user').userId, {
+      sql: parsed.data.sql,
+      status: 'success',
+      rowCount: result.rowCount,
+      error: null,
+      durationMs: Date.now() - startedAt,
+    });
+    return csvDownload(
+      `${website!.websiteId}-warehouse.csv`,
+      result.columns,
+      inBatches(result.rows.map((row) => result.columns.map((column) => row[column]))),
+      {
+        'X-Row-Cap': String(WAREHOUSE_EXPORT_ROW_CAP),
+        'X-Row-Count': String(result.rowCount),
+        'X-Truncated': String(result.truncated),
+      },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await recordWarehouseQueryHistory(c.env, website!.websiteId, c.get('user').userId, {
@@ -187,8 +244,12 @@ export async function handleDataSourceCreate(c: Ctx) {
   const body = await c.req.json().catch(() => null);
   const parsed = createWarehouseDataSourceSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
-  const dataSource = await createWarehouseDataSource(c.env, website!.websiteId, c.get('user').userId, parsed.data);
-  return json(dataSource, 201);
+  try {
+    const dataSource = await createWarehouseDataSource(c.env, website!.websiteId, c.get('user').userId, parsed.data);
+    return json(dataSource, 201);
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : String(error));
+  }
 }
 
 export async function handleDataSourceUpdate(c: Ctx) {
@@ -202,9 +263,13 @@ export async function handleDataSourceUpdate(c: Ctx) {
   const body = await c.req.json().catch(() => null);
   const parsed = updateWarehouseDataSourceSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
-  const dataSource = await updateWarehouseDataSource(c.env, website!.websiteId, dataSourceId, parsed.data);
-  if (!dataSource) return notFound();
-  return json(dataSource);
+  try {
+    const dataSource = await updateWarehouseDataSource(c.env, website!.websiteId, dataSourceId, parsed.data);
+    if (!dataSource) return notFound();
+    return json(dataSource);
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : String(error));
+  }
 }
 
 export async function handleDataSourceSync(c: Ctx) {
@@ -217,7 +282,10 @@ export async function handleDataSourceSync(c: Ctx) {
   if (!dataSourceId) return notFound();
   const source = await getWarehouseDataSource(c.env, website!.websiteId, dataSourceId);
   if (!source) return notFound();
-  const result = await syncWarehouseDataSource(c.env, website!.websiteId, dataSourceId);
+  // Interactive: a smaller Stripe request budget than the cron; a long backfill continues there.
+  const result = await syncWarehouseDataSource(c.env, website!.websiteId, dataSourceId, Date.now(), {
+    stripe: { maxRequests: 25 },
+  });
   return json(result);
 }
 

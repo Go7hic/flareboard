@@ -87,6 +87,12 @@ const AUTH_FORM_PATHS = new Set([
   // Re-authenticated account actions: 401 means a wrong password, not a lost session.
   '/api/me/password',
   '/api/me/delete',
+  // Two-factor: 401 means a wrong code or an expired sign-in challenge.
+  '/api/auth/login/2fa',
+  '/api/me/2fa/setup',
+  '/api/me/2fa/enable',
+  '/api/me/2fa/disable',
+  '/api/me/2fa/recovery-codes',
 ]);
 
 let sessionRedirectPending = false;
@@ -187,6 +193,34 @@ async function parseJsonBody<T>(res: Response): Promise<T> {
 export interface LoginResponse {
   user: { id: string; username: string; role: string };
   token?: string;
+  /** Returned by `/api/auth/login/2fa` when a recovery code was used. */
+  recoveryCodesRemaining?: number;
+}
+
+/** Returned instead of a session (HTTP 200, no cookie) when the account has two-factor on. */
+export interface TwoFactorChallenge {
+  twoFactorRequired: true;
+  challenge: string;
+}
+
+/** `GET /api/me` (cached under the `['me']` query key). */
+export interface MeResponse {
+  id: string;
+  username: string;
+  role?: string;
+  displayName?: string | null;
+  /** False for accounts created through Google/GitHub: they have no password to confirm. */
+  passwordRequired?: boolean;
+  twoFactorEnabled?: boolean;
+  /** Teams that require two-factor authentication, which the user cannot reach without it. */
+  twoFactorRequiredBy?: Array<{ id: string; name: string }>;
+}
+
+/** Result of `/api/auth/login`,`/api/auth/oauth/exchange` and `/api/auth/verify-email`. */
+export type LoginResult = LoginResponse | TwoFactorChallenge;
+
+export function isTwoFactorChallenge(res: LoginResult | null | undefined): res is TwoFactorChallenge {
+  return Boolean(res && 'twoFactorRequired' in res && res.twoFactorRequired && typeof res.challenge === 'string');
 }
 
 export interface Website {
@@ -1062,6 +1096,27 @@ export interface Team {
   accessCode?: string;
   role?: string;
   createdAt?: string | number;
+  /** Members must have two-factor authentication on to reach the team's websites. */
+  requireTwoFactor?: boolean;
+}
+
+/** One row of `/api/me/audit-log` and `/api/teams/:teamId/audit-log`. */
+export interface AuditLogEntry {
+  id: string;
+  userId: string | null;
+  username: string | null;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string | number | null;
+}
+
+export interface AuditLogPage {
+  items: AuditLogEntry[];
+  page: number;
+  pageSize: number;
+  total: number;
 }
 
 export interface ShareLink {

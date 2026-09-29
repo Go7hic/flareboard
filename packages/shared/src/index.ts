@@ -15,6 +15,7 @@ export * from './workflow-definition';
 export * from './geoip';
 export * from './insight-query';
 export * from './crypto';
+export * from './dashboards';
 export * from './jwt';
 export * from './llm';
 export * from './password';

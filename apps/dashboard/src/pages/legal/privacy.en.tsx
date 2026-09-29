@@ -87,9 +87,15 @@ const sections: LegalSection[] = [
         </p>
         <h3>Content you create</h3>
         <p>
-          Websites, dashboards (“boards”), reports, insights, segments, cohorts, goals, feature flags, experiments,
-          surveys, workflows, alert rules, saved queries, annotations, uploaded source maps and similar
-          configuration you create in the dashboard.
+          Websites, dashboards (“boards”) including their filters and layout, reports, insights, notebooks, segments,
+          cohorts, goals, feature flags, experiments, surveys, workflows, alert rules, saved queries, annotations,
+          uploaded source maps and similar configuration you create in the dashboard.
+        </p>
+        <p>
+          When you set up an insight alert or an email subscription to a board or insight, we store the email addresses
+          or webhook URL you enter, the schedule, and a history of alert checks (the checked value and whether a
+          notification was sent). Subscription emails contain aggregate numbers only. Alerts and subscriptions are
+          deleted with their board, insight or website, and subscriptions you created are deleted with your account.
         </p>
         <h3>Activity and security records</h3>
         <ul>
@@ -513,14 +519,14 @@ const sections: LegalSection[] = [
         <ul>
           <li>
             <strong>At your direction</strong>, for example to webhook URLs, email addresses or data sources you
-            configure, or through public share links you create. Anyone with a share link can see the aggregate
-            statistics it exposes. Anyone with a replay link can watch that one session recording, including any
-            console and network activity it holds, until the link expires or you revoke it. Workflows send what
-            their templates include to the webhook, email and Slack destinations the customer configures: by default
-            the triggering event with its properties, page URL and distinct ID, and the stored properties of that
-            person. Webhook deliveries are signed so the receiver can verify they came from Flareboard. When you
-            connect a Stripe account as a data source, we call Stripe’s API with your key to read your data; Stripe
-            acts as your provider there, not ours.
+            configure, or through public share links you create for a website, board or insight. Anyone with a share
+            link can see the aggregate statistics it exposes until the link expires or you revoke it. Anyone with a
+            replay link can watch that one session recording, including any console and network activity it holds,
+            until the link expires or you revoke it. Workflows send what their templates include to the webhook, email
+            and Slack destinations the customer configures: by default the triggering event with its properties, page
+            URL and distinct ID, and the stored properties of that person. Webhook deliveries are signed so the
+            receiver can verify they came from Flareboard. When you connect a Stripe account as a data source, we call
+            Stripe’s API with your key to read your data; Stripe acts as your provider there, not ours.
           </li>
           <li>
             <strong>For legal reasons</strong>, if required by law or a valid legal request, or to protect the

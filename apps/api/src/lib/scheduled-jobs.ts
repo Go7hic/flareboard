@@ -3,6 +3,8 @@ import { migrateLegacyErrorIssueKeysBatch } from './error-issue-keys';
 import { runScheduledErrorRegressionChecks } from './error-regressions';
 import { evaluateErrorAlertRules } from './errors';
 import { runScheduledEmailReports } from './email-reports';
+import { runScheduledInsightAlerts } from './insight-alerts';
+import { runDueSubscriptions } from './subscriptions';
 import { evaluateLogAlertRules } from './logs';
 import { runRetentionPurge } from './retention';
 import { purgeWorkflowLogs } from './workflows';
@@ -115,6 +117,13 @@ export async function runScheduledErrorTracking(env: Env, now = Date.now()) {
   return { legacyKeys, sourceMaps, regressions };
 }
 
+/** Insight alerts (once per alert interval) and due board / insight email subscriptions. */
+export async function runScheduledDashboards(env: Env, now = Date.now()) {
+  const insightAlerts = await runScheduledInsightAlerts(env, now);
+  const subscriptions = await runDueSubscriptions(env, now);
+  return { insightAlerts, subscriptions };
+}
+
 export async function runScheduledMaintenance(env: Env, cron: string) {
   await runScheduledEmailReports(env, cron);
   const alerts = await runScheduledAlertChecks(env);
@@ -123,6 +132,15 @@ export async function runScheduledMaintenance(env: Env, cron: string) {
     console.error(
       JSON.stringify({
         event: 'error_tracking_maintenance_failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    return null;
+  });
+  const dashboards = await runScheduledDashboards(env).catch((error: unknown) => {
+    console.error(
+      JSON.stringify({
+        event: 'dashboards_maintenance_failed',
         error: error instanceof Error ? error.message : String(error),
       }),
     );
@@ -139,5 +157,5 @@ export async function runScheduledMaintenance(env: Env, cron: string) {
   });
   // Storage migration: while in `dual`, copy history into the website stores a few sites per tick.
   const storeBackfill = eventStoreMode(env) === 'dual' ? await runStoreBackfill(env) : null;
-  return { alerts, errorTracking, warehouse, dataSources, retention, workflowLogs, deletion, assistantPruned, storeBackfill };
+  return { alerts, errorTracking, dashboards, warehouse, dataSources, retention, workflowLogs, deletion, assistantPruned, storeBackfill };
 }

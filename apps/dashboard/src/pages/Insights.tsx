@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { FunnelActorsResult, InsightQuery, InsightResult, InsightType } from '@flareboard/shared/insight-query';
 import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
+import { InsightAlertsPanel } from '../components/InsightAlertsPanel';
 import { InsightQueryEditor, insightQueryProblem } from '../components/InsightQueryEditor';
 import { InsightResultView, breakdownLabel, type FunnelDrill } from '../components/InsightResultView';
 import {
@@ -14,6 +15,8 @@ import {
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { ProductLineCrossLinks } from '../components/ProductLineCrossLinks';
+import { ShareLinksDialog } from '../components/ShareLinksDialog';
+import { SubscriptionsDialog } from '../components/SubscriptionsDialog';
 import { completeFilters } from '../lib/websiteReportApi';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -147,6 +150,9 @@ export default function InsightsPage() {
   const [query, setQuery] = useState<InsightQuery>(() => defaultQuery('trend'));
   const [preset, setPreset] = useState<DateRangePreset>('30d');
   const [drill, setDrill] = useState<FunnelDrill | null>(null);
+  const [dialog, setDialog] = useState<'share' | 'subscribe' | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linkedInsightId = searchParams.get('insight');
 
   const websitesQuery = useQuery({
     queryKey: ['websites'],
@@ -161,16 +167,33 @@ export default function InsightsPage() {
   const problem = insightQueryProblem(type, query);
 
   useEffect(() => {
-    if (!websiteId && websites.length) {
+    if (!websiteId && websites.length && !linkedInsightId) {
       setWebsiteId(websites[0].id);
     }
-  }, [websiteId, websites]);
+  }, [websiteId, websites, linkedInsightId]);
 
   const insightsQuery = useQuery({
     queryKey: ['insights', websiteId],
     enabled: Boolean(websiteId),
     queryFn: () => api<Insight[]>(`/api/insights?websiteId=${websiteId}`),
   });
+
+  // Deep links from boards, notebooks and alert emails: /insights?insight=<id>.
+  const linkedInsightQuery = useQuery({
+    queryKey: ['insight', linkedInsightId],
+    enabled: Boolean(linkedInsightId) && linkedInsightId !== selectedId,
+    queryFn: () => api<Insight>(`/api/insights/${linkedInsightId}`),
+  });
+
+  useEffect(() => {
+    const linked = linkedInsightQuery.data;
+    if (linked && linked.id === linkedInsightId && linked.id !== selectedId) selectInsight(linked);
+    // A link to an insight that is gone (or not ours) falls back to the default website.
+    if (linkedInsightQuery.isError) setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedInsightQuery.data, linkedInsightQuery.isError, linkedInsightId]);
+
+  const selectedInsight = selectedId ? (insightsQuery.data ?? []).find((insight) => insight.id === selectedId) : undefined;
 
   const previewMutation = useMutation({
     mutationFn: () =>
@@ -199,6 +222,7 @@ export default function InsightsPage() {
     },
     onSuccess: (insight) => {
       setSelectedId(insight.id);
+      if (searchParams.get('insight') !== insight.id) setSearchParams({ insight: insight.id }, { replace: true });
       queryClient.invalidateQueries({ queryKey: ['insights', websiteId] });
     },
   });
@@ -207,6 +231,7 @@ export default function InsightsPage() {
     mutationFn: (id: string) => api(`/api/insights/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       setSelectedId(null);
+      if (searchParams.has('insight')) setSearchParams({}, { replace: true });
       setName(typeLabel(type));
       queryClient.invalidateQueries({ queryKey: ['insights', websiteId] });
     },
@@ -221,6 +246,7 @@ export default function InsightsPage() {
   function selectInsight(insight: Insight) {
     reset();
     setSelectedId(insight.id);
+    if (searchParams.get('insight') !== insight.id) setSearchParams({ insight: insight.id }, { replace: true });
     setWebsiteId(insight.websiteId);
     setName(insight.name);
     setDescription(insight.description);
@@ -231,6 +257,7 @@ export default function InsightsPage() {
   function newInsight(nextType: InsightType = 'trend') {
     reset();
     setSelectedId(null);
+    if (searchParams.has('insight')) setSearchParams({}, { replace: true });
     setType(nextType);
     setName(typeLabel(nextType));
     setDescription('');
@@ -279,11 +306,23 @@ export default function InsightsPage() {
               title={selectedId ? t('editInsight') : t('createInsight')}
               description={t('insightBuilderLead')}
               actions={
-                canEdit ? (
-                  <Button type="button" variant="secondary" onClick={() => newInsight()}>
-                    {t('newInsight')}
-                  </Button>
-                ) : null
+                <>
+                  {selectedInsight ? (
+                    <>
+                      <Button type="button" variant="ghost" onClick={() => setDialog('share')}>
+                        {t('shareInsight')}
+                      </Button>
+                      <Button type="button" variant="ghost" onClick={() => setDialog('subscribe')}>
+                        {t('subscribe')}
+                      </Button>
+                    </>
+                  ) : null}
+                  {canEdit ? (
+                    <Button type="button" variant="secondary" onClick={() => newInsight()}>
+                      {t('newInsight')}
+                    </Button>
+                  ) : null}
+                </>
               }
             >
             <div className="workflow-insights-grid">
@@ -436,11 +475,31 @@ export default function InsightsPage() {
                 </DataViewState>
               ) : null}
             </div>
+            {selectedInsight?.type === 'trend' ? <InsightAlertsPanel insight={selectedInsight} canEdit={canEdit} /> : null}
             </MasterDetailPane>
           }
         />
       </section>
       </PageBody>
+      {dialog === 'share' && selectedInsight ? (
+        <ShareLinksDialog
+          entityType="insight"
+          entityId={selectedInsight.id}
+          entityName={selectedInsight.name}
+          canEdit={canEdit}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
+      {dialog === 'subscribe' && selectedInsight ? (
+        <SubscriptionsDialog
+          targetType="insight"
+          targetId={selectedInsight.id}
+          targetName={selectedInsight.name}
+          canEdit={canEdit}
+          timezone={timezone}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
     </Page>
   );
 }

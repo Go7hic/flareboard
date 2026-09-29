@@ -30,7 +30,7 @@ export function isValidSiteTimezone(tz: string): boolean {
   }
 }
 
-function calendarParts(ms: number, timezone: SiteTimezone) {
+export function siteCalendarParts(ms: number, timezone: SiteTimezone) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
     year: 'numeric',
@@ -53,7 +53,8 @@ function calendarParts(ms: number, timezone: SiteTimezone) {
   };
 }
 
-function siteLocalToUtc(
+/** UTC ms of a wall-clock time in `timezone` (month 1-12; out-of-range days roll over). */
+export function siteLocalToUtc(
   year: number,
   month: number,
   day: number,
@@ -65,7 +66,7 @@ function siteLocalToUtc(
 ): number {
   let guess = Date.UTC(year, month - 1, day, hour, minute, second, millisecond);
   for (let i = 0; i < 4; i += 1) {
-    const actual = calendarParts(guess, timezone);
+    const actual = siteCalendarParts(guess, timezone);
     const target = Date.UTC(year, month - 1, day, hour, minute, second, millisecond);
     const current = Date.UTC(
       actual.year,
@@ -84,7 +85,7 @@ function siteLocalToUtc(
 }
 
 function addLocalCalendarDays(ms: number, deltaDays: number, timezone: SiteTimezone): number {
-  const { year, month, day } = calendarParts(ms, timezone);
+  const { year, month, day } = siteCalendarParts(ms, timezone);
   const shifted = new Date(Date.UTC(year, month - 1, day + deltaDays));
   return siteLocalToUtc(
     shifted.getUTCFullYear(),
@@ -99,7 +100,7 @@ function addLocalCalendarDays(ms: number, deltaDays: number, timezone: SiteTimez
 }
 
 export function siteStartOfDay(ms: number, timezone: SiteTimezone): number {
-  const { year, month, day } = calendarParts(ms, timezone);
+  const { year, month, day } = siteCalendarParts(ms, timezone);
   return siteLocalToUtc(year, month, day, 0, 0, 0, 0, timezone);
 }
 
@@ -166,7 +167,7 @@ export function formatDayBucketLabel(day: string, _timezone?: SiteTimezone): str
 /** Milliseconds to add to a UTC instant to get the site's wall-clock time. */
 export function siteUtcOffsetMs(ms: number, timezone: SiteTimezone): number {
   const whole = Math.floor(ms / 1000) * 1000;
-  const p = calendarParts(whole, timezone);
+  const p = siteCalendarParts(whole, timezone);
   return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - whole;
 }
 

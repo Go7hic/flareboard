@@ -547,6 +547,112 @@ export const aiUsageDaily = sqliteTable(
   (t) => [primaryKey({ columns: [t.userId, t.day] })],
 );
 
+/** Threshold alert on a trend insight, checked by the hourly cron once per `checkInterval`. */
+export const insightAlert = sqliteTable(
+  'insight_alert',
+  {
+    alertId: text('alert_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    insightId: text('insight_id')
+      .notNull()
+      .references(() => insight.insightId),
+    name: text('name').notNull(),
+    /** value_above | value_below | increase_above | decrease_above (percent vs previous interval). */
+    condition: text('condition').notNull(),
+    threshold: real('threshold').notNull(),
+    /** Trend result line: series letter (A…E) or `formula`. */
+    seriesKey: text('series_key').notNull().default('A'),
+    checkInterval: text('check_interval').notNull().default('day'),
+    channel: text('channel').notNull().default('email'),
+    target: text('target'),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    snoozedUntil: integer('snoozed_until', { mode: 'timestamp_ms' }),
+    lastCheckedAt: integer('last_checked_at', { mode: 'timestamp_ms' }),
+    lastState: text('last_state'),
+    createdBy: text('created_by').references(() => user.userId),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [
+    index('insight_alert_website_idx').on(t.websiteId, t.enabled),
+    index('insight_alert_insight_idx').on(t.insightId),
+  ],
+);
+
+export const insightAlertCheck = sqliteTable(
+  'insight_alert_check',
+  {
+    checkId: text('check_id').primaryKey(),
+    alertId: text('alert_id')
+      .notNull()
+      .references(() => insightAlert.alertId),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    intervalStart: integer('interval_start').notNull(),
+    intervalEnd: integer('interval_end').notNull(),
+    value: real('value'),
+    previousValue: real('previous_value'),
+    /** firing | ok | error */
+    state: text('state').notNull(),
+    delivered: integer('delivered', { mode: 'boolean' }).notNull().default(false),
+    error: text('error'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [uniqueIndex('insight_alert_check_interval_idx').on(t.alertId, t.intervalStart)],
+);
+
+/** Scheduled email summary of a board (websiteId null) or of an insight. */
+export const reportSubscription = sqliteTable(
+  'report_subscription',
+  {
+    subscriptionId: text('subscription_id').primaryKey(),
+    websiteId: text('website_id').references(() => website.websiteId),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.userId),
+    targetType: text('target_type').notNull(),
+    targetId: text('target_id').notNull(),
+    title: text('title').notNull(),
+    frequency: text('frequency').notNull(),
+    weekday: integer('weekday').notNull().default(1),
+    hour: integer('hour').notNull().default(8),
+    timezone: text('timezone').notNull().default('UTC'),
+    /** JSON array of email addresses. */
+    recipients: text('recipients', { mode: 'json' }).notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    nextRunAt: integer('next_run_at').notNull(),
+    lastSentAt: integer('last_sent_at', { mode: 'timestamp_ms' }),
+    lastError: text('last_error'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [
+    index('report_subscription_due_idx').on(t.enabled, t.nextRunAt),
+    index('report_subscription_target_idx').on(t.targetType, t.targetId),
+  ],
+);
+
+/** Website-scoped document of text, insight and replay blocks. */
+export const notebook = sqliteTable(
+  'notebook',
+  {
+    notebookId: text('notebook_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    title: text('title').notNull(),
+    content: text('content', { mode: 'json' }).notNull(),
+    createdBy: text('created_by').references(() => user.userId),
+    updatedBy: text('updated_by').references(() => user.userId),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('notebook_website_idx').on(t.websiteId, t.updatedAt)],
+);
+
 export const share = sqliteTable(
   'share',
   {

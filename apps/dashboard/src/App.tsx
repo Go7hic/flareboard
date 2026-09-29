@@ -25,6 +25,8 @@ const LinkAnalytics = lazy(() => import('./pages/LinkAnalytics'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Insights = lazy(() => import('./pages/Insights'));
 const Boards = lazy(() => import('./pages/Boards'));
+const BoardDetail = lazy(() => import('./pages/BoardDetail'));
+const Notebooks = lazy(() => import('./pages/Notebooks'));
 const Admin = lazy(() => import('./pages/Admin'));
 const WebsiteStats = lazy(() => import('./pages/WebsiteStats'));
 const Sessions = lazy(() => import('./pages/Sessions'));
@@ -198,6 +200,22 @@ export default function App() {
             element={
               <LazyPage>
                 <Boards />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="/boards/:boardId"
+            element={
+              <LazyPage>
+                <BoardDetail />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="/notebooks"
+            element={
+              <LazyPage>
+                <Notebooks />
               </LazyPage>
             }
           />

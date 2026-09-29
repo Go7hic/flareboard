@@ -130,6 +130,9 @@ async function purgeWebsite(env: Env, budget: Budget, websiteId: string, tables:
     budget.left--;
     await siteStoreStub(env, websiteId).erase();
   }
+  // Insight shares point at insight ids, not the website: erase them before the insights go.
+  const insightShares = `share_type = 5 AND entity_id IN (SELECT insight_id FROM insight WHERE website_id = ?1)`;
+  if (!(await drain(env, budget, 'share', insightShares, websiteId))) return false;
   for (const table of tables) {
     // SITE_TABLES left in D1 (legacy or dual mode) and D1 config tables with a website_id.
     if (!(await drain(env, budget, table, 'website_id = ?1', websiteId))) return false;
@@ -158,6 +161,7 @@ const USER_OWNED_TABLES = [
   'insight',
   'personal_api_key',
   'report',
+  'report_subscription',
   'usage_monthly',
   'user_oauth_identity',
   'user_recovery_code',
@@ -180,6 +184,9 @@ const USER_REFERENCES: ReadonlyArray<[table: string, column: string]> = [
   ['error_issue_comment', 'user_id'],
   ['error_issue_merge', 'merged_by'],
   ['error_issue_state', 'assignee_user_id'],
+  ['insight_alert', 'created_by'],
+  ['notebook', 'created_by'],
+  ['notebook', 'updated_by'],
   ['log_saved_filter', 'user_id'],
   ['warehouse_data_source', 'user_id'],
   ['warehouse_query_history', 'user_id'],
@@ -203,8 +210,21 @@ async function purgeUser(env: Env, budget: Budget, userId: string) {
   if (!(await drain(env, budget, 'share', `entity_id IN (SELECT board_id FROM board WHERE ${OWNED_BY_USER})`, userId))) {
     return false;
   }
+  const boardSubscriptions = `target_type = 'board' AND target_id IN (SELECT board_id FROM board WHERE ${OWNED_BY_USER})`;
+  if (!(await drain(env, budget, 'report_subscription', boardSubscriptions, userId))) return false;
   for (const table of ['link', 'pixel', 'board']) {
     if (!(await drain(env, budget, table, OWNED_BY_USER, userId))) return false;
+  }
+  // The user's insights leave with them (USER_OWNED_TABLES): first what hangs off those insights.
+  const ownInsights = `SELECT insight_id FROM insight WHERE user_id = ?1`;
+  const insightDependents: Array<[string, string]> = [
+    ['insight_alert_check', `alert_id IN (SELECT alert_id FROM insight_alert WHERE insight_id IN (${ownInsights}))`],
+    ['insight_alert', `insight_id IN (${ownInsights})`],
+    ['report_subscription', `target_type = 'insight' AND target_id IN (${ownInsights})`],
+    ['share', `share_type = 5 AND entity_id IN (${ownInsights})`],
+  ];
+  for (const [table, where] of insightDependents) {
+    if (!(await drain(env, budget, table, where, userId))) return false;
   }
   for (const table of USER_OWNED_TABLES) {
     if (!(await drain(env, budget, table, 'user_id = ?1', userId))) return false;

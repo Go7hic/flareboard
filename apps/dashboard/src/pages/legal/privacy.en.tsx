@@ -231,6 +231,16 @@ const sections: LegalSection[] = [
             <strong>AI usage data</strong>: model, token counts, cost and latency. Prompts and responses are only
             stored if a customer includes them in the data they send.
           </li>
+          <li>
+            <strong>Data warehouse imports</strong> a customer sets up: rows fetched from HTTP JSON or CSV addresses
+            the customer configures, and, when a customer connects their own Stripe account, that account’s
+            customers (email, name and metadata), subscriptions, invoices and invoice line items, charges and
+            refunds. We import this on the customer’s behalf with a restricted, read-only API key the customer
+            creates. Before storing Stripe records we drop payment method and card details, billing and shipping
+            addresses, phone numbers, tax IDs and links to hosted invoices. A Stripe customer is linked to a person
+            in the customer’s analytics when the Stripe metadata carries that person’s <code>distinct_id</code> or
+            the email address matches a profile, so revenue can be attributed to how that person first arrived.
+          </li>
         </ul>
         <p>
           The tracking script ignores most automated traffic (bots and crawlers). Customers can set a website to
@@ -407,7 +417,8 @@ const sections: LegalSection[] = [
           <li>
             <strong>At your direction</strong>, for example to webhook URLs, email addresses or data sources you
             configure, or through public share links you create. Anyone with a share link can see the aggregate
-            statistics it exposes.
+            statistics it exposes. When you connect a Stripe account as a data source, we call Stripe’s API with
+            your key to read your data; Stripe acts as your provider there, not ours.
           </li>
           <li>
             <strong>For legal reasons</strong>, if required by law or a valid legal request, or to protect the
@@ -455,8 +466,15 @@ const sections: LegalSection[] = [
             statistics derived from raw events may be kept for the life of the website.
           </li>
           <li>
+            <strong>Imported warehouse data</strong> (HTTP and Stripe imports) is kept until the customer deletes
+            the data source or the website; the per-website retention period does not apply to it. Deleting a data
+            source erases what it imported and its stored API key right away. Replacing a Stripe API key erases the
+            data imported with the old key.
+          </li>
+          <li>
             <strong>Deleting a website</strong> in the dashboard removes it from your account immediately, and all
-            of its stored data, including session replay recordings, is permanently erased within 30 days.
+            of its stored data, including session replay recordings, imported warehouse data and stored API keys,
+            is permanently erased within 30 days.
           </li>
           <li>
             <strong>Technical logs</strong> kept by our hosting provider are deleted automatically, typically within

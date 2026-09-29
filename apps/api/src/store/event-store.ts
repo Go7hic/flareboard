@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '../env';
 import type { StoreParam, StoreResult, StoreStatement } from '@flareboard/db/site-store';
-import { STORE_MIGRATIONS, STORE_SCHEMA_VERSION } from './schema';
+import { pendingStoreMigrations, STORE_MIGRATIONS, STORE_SCHEMA_VERSION } from './schema';
 
 export type { StoreMode, StoreParam, StoreResult, StoreStatement } from '@flareboard/db/site-store';
 
@@ -55,17 +55,17 @@ export class EventStore extends DurableObject<Env> {
     const meta = new Map(rows.map((row) => [row.key, row.value]));
     this.websiteId = meta.get('website_id') ?? null;
     let version = Number(meta.get('schema_version') ?? 0);
-    for (const migration of STORE_MIGRATIONS) {
-      if (migration.version <= version) continue;
+    for (const migration of pendingStoreMigrations(meta, STORE_MIGRATIONS)) {
+      version = Math.max(version, migration.version);
       this.ctx.storage.transactionSync(() => {
         for (const statement of migration.statements) this.sql.exec(statement);
+        this.sql.exec(`INSERT OR REPLACE INTO _store_meta (key, value) VALUES (?, '1')`, `migration:${migration.version}`);
         this.sql.exec(
           `INSERT INTO _store_meta (key, value) VALUES ('schema_version', ?)
            ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-          String(migration.version),
+          String(version),
         );
       });
-      version = migration.version;
     }
     this.migrated = true;
   }

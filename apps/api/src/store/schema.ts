@@ -9,7 +9,9 @@
  * - indexes that only made sense in a multi-tenant table (single `website_id`, bare
  *   `created_at`) are gone.
  *
- * Migrations are append-only: never edit a released step, add a new one.
+ * Migrations are append-only: never edit a released step, add a new one. Each store records every
+ * version it applied (`_store_meta` key `migration:<n>`), so versions may be merged out of order:
+ * a lower number added after a higher one still runs. Keep steps independent of each other's order.
  */
 export const STORE_MIGRATIONS: ReadonlyArray<{ version: number; statements: string[] }> = [
   {
@@ -419,4 +421,27 @@ export const STORE_MIGRATIONS: ReadonlyArray<{ version: number; statements: stri
   },
 ];
 
-export const STORE_SCHEMA_VERSION = STORE_MIGRATIONS[STORE_MIGRATIONS.length - 1]!.version;
+export const STORE_SCHEMA_VERSION = Math.max(...STORE_MIGRATIONS.map((migration) => migration.version));
+
+/**
+ * Versions that existed before per-version tracking. A store that only has `schema_version` = N
+ * applied exactly these versions up to N (versions added later are tracked individually).
+ */
+export const LEGACY_STORE_VERSIONS: ReadonlyArray<number> = [1, 2, 3, 6];
+
+/**
+ * Migrations a store still needs, in version order, given its `_store_meta` rows: the versions it
+ * recorded individually plus, for stores migrated before that, the legacy versions up to its
+ * `schema_version`.
+ */
+export function pendingStoreMigrations<M extends { version: number }>(
+  meta: ReadonlyMap<string, string>,
+  migrations: ReadonlyArray<M> = STORE_MIGRATIONS as unknown as ReadonlyArray<M>,
+  legacyVersions: ReadonlyArray<number> = LEGACY_STORE_VERSIONS,
+): M[] {
+  const applied = new Set<number>();
+  for (const key of meta.keys()) if (key.startsWith('migration:')) applied.add(Number(key.slice('migration:'.length)));
+  const legacyVersion = Number(meta.get('schema_version') ?? 0);
+  for (const version of legacyVersions) if (version <= legacyVersion) applied.add(version);
+  return [...migrations].filter((migration) => !applied.has(migration.version)).sort((a, b) => a.version - b.version);
+}

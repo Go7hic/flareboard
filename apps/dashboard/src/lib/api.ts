@@ -566,18 +566,26 @@ export interface LogEventsResponse {
   logs: LogEvent[];
 }
 
+export type AiCostSource = 'reported' | 'override' | 'builtin';
+
 export interface AiObservationEvent {
   id: string;
   sessionId: string;
-  visitId: string;
+  distinctId: string | null;
   urlPath: string;
   createdAt: number;
+  kind: string;
+  traceId: string;
   provider: string | null;
   model: string | null;
   inputTokens: number | null;
   outputTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheWriteTokens: number | null;
   totalTokens: number | null;
+  /** Null when the model has no known price. */
   costUsd: number | null;
+  costSource: AiCostSource | null;
   latencyMs: number | null;
   status: string | null;
   quality: string | null;
@@ -585,39 +593,143 @@ export interface AiObservationEvent {
   environment: string | null;
 }
 
+export interface AiTally {
+  calls: number;
+  tokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  unpricedCalls: number;
+  errors: number;
+  errorRate: number;
+  avgLatencyMs: number | null;
+}
+
 export interface AiObservabilityResponse {
-  stats: {
-    calls: number;
+  stats: AiTally & {
+    unit: 'hour' | 'day';
     sessions: number;
-    tokens: number;
-    costUsd: number;
-    errors: number;
-    avgLatencyMs: number | null;
-    models: Array<{
-      model: string;
-      calls: number;
-      tokens: number;
-      costUsd: number;
-      errors: number;
-      avgLatencyMs: number | null;
-      errorRate: number;
-    }>;
+    users: number;
+    traces: number;
+    p50LatencyMs: number | null;
+    p95LatencyMs: number | null;
+    truncated: boolean;
+    models: Array<AiTally & { model: string; provider: string | null; priceSource: 'override' | 'builtin' | null }>;
     statuses: Array<{ status: string; calls: number }>;
-    providers: Array<{ provider: string; calls: number; costUsd: number; errors: number }>;
+    providers: Array<AiTally & { provider: string }>;
     qualities: Array<{ quality: string; calls: number }>;
     releases: Array<{ release: string; calls: number; costUsd: number; errors: number }>;
     environments: Array<{ environment: string; calls: number; costUsd: number; errors: number }>;
-    trend: Array<{
-      date: string;
-      calls: number;
-      sessions: number;
-      tokens: number;
-      costUsd: number;
-      errors: number;
-      avgLatencyMs: number | null;
-    }>;
+    /** `date` is an ISO hour (UTC) when unit is hour, else a site-local YYYY-MM-DD. */
+    trend: Array<AiTally & { date: string; sessions: number; p50LatencyMs: number | null; p95LatencyMs: number | null }>;
   };
   events: AiObservationEvent[];
+}
+
+export interface AiTraceSummary {
+  traceId: string;
+  name: string | null;
+  startedAt: number;
+  lastAt: number;
+  latencyMs: number;
+  generations: number;
+  spans: number;
+  errors: number;
+  tokens: number;
+  costUsd: number;
+  unpricedCalls: number;
+  models: string[];
+  providers: string[];
+  distinctId: string | null;
+  sessionId: string;
+}
+
+export interface AiTraceEvent {
+  id: string;
+  kind: string;
+  eventName: string | null;
+  createdAt: number;
+  startMs: number;
+  endMs: number;
+  spanId: string | null;
+  parentId: string | null;
+  name: string | null;
+  model: string | null;
+  provider: string | null;
+  status: string;
+  isError: boolean;
+  error: string | null;
+  httpStatus: number | null;
+  latencyMs: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheWriteTokens: number | null;
+  tokens: number;
+  costUsd: number | null;
+  costSource: AiCostSource | null;
+  input: string | null;
+  output: string | null;
+  inputTruncated: boolean;
+  outputTruncated: boolean;
+  contentOmitted: boolean;
+  properties: Record<string, string | number | null>;
+}
+
+export interface AiTraceNode {
+  id: string;
+  event: AiTraceEvent | null;
+  depth: number;
+  startMs: number;
+  endMs: number;
+  totals: { costUsd: number; tokens: number; errors: number; generations: number };
+  children: AiTraceNode[];
+}
+
+export interface AiTraceDetail {
+  traceId: string;
+  name: string | null;
+  distinctId: string | null;
+  sessionId: string;
+  startedAt: number;
+  endedAt: number;
+  latencyMs: number;
+  costUsd: number;
+  tokens: number;
+  errors: number;
+  generations: number;
+  unpricedCalls: number;
+  truncated: boolean;
+  tree: AiTraceNode;
+}
+
+export interface AiUserRow {
+  distinctId: string | null;
+  sessionId: string;
+  calls: number;
+  traces: number;
+  errors: number;
+  tokens: number;
+  costUsd: number;
+  unpricedCalls: number;
+  firstAt: number;
+  lastAt: number;
+  models: string[];
+}
+
+export interface AiModelPrice {
+  model: string;
+  inputPerMillion: number;
+  outputPerMillion: number;
+  cacheReadPerMillion: number | null;
+  cacheWritePerMillion: number | null;
+}
+
+export interface AiSettings {
+  captureContent: boolean;
+  priceOverrides: AiModelPrice[];
+  builtInPrices: Array<AiModelPrice & { provider: string }>;
+  pricesReviewedAt: string;
 }
 
 export interface WorkflowSummary {

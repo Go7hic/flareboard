@@ -3,6 +3,8 @@ export interface Env {
   CACHE: KVNamespace;
   RATE_LIMITER: DurableObjectNamespace;
   EVENT_QUEUE: Queue;
+  /** Workflow triggers for the API worker (lib/workflows.ts). Missing: workflows do not run. */
+  WORKFLOW_QUEUE?: Queue;
   REPLAY_BUCKET?: R2Bucket;
   APP_SECRET: string;
   ENVIRONMENT: string;
@@ -13,4 +15,8 @@ export interface Env {
   API_URL?: string;
   /** Requests per minute allowed per project key (default 30000). */
   PROJECT_KEY_RATE_LIMIT?: string;
+  /** Per-website analytics stores (EventStore in the API worker). */
+  SITE_STORE?: DurableObjectNamespace;
+  /** Analytics storage mode, see @flareboard/db/site-store: d1 | dual | do. */
+  EVENT_STORE?: string;
 }

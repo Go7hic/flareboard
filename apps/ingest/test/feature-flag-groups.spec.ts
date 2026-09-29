@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { upsertPerson } from '@flareboard/db';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from './helpers/migrations';
 import { fetchWorkerJson } from './helpers/fetch-worker';
+import { testSiteDb } from './helpers/site-db';
 
 const NOW = Date.UTC(2026, 2, 1);
 
@@ -112,7 +113,7 @@ describe('feature flags for the tracker', () => {
   });
 
   it('evaluates condition groups against stored person properties and returns payloads', async () => {
-    await upsertPerson(env.DB, {
+    await upsertPerson(testSiteDb(TEST_WEBSITE_ID), {
       websiteId: TEST_WEBSITE_ID,
       distinctId: 'tracker-pro',
       properties: { plan: 'pro', '$feature_enrollment/tracker.early': true },

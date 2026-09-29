@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from './helpers/migrations';
 import { fetchWorkerJson } from './helpers/fetch-worker';
+import { testSiteDb } from './helpers/site-db';
 
 const FULL_SNAPSHOT = { type: 2, data: {}, timestamp: 1 };
 
@@ -78,7 +79,7 @@ describe('replay recording gate', () => {
     const stored = (await (await env.REPLAY_BUCKET!.get(body.r2Key!))!.json()) as Array<{ type: number }>;
     expect(stored.map((event) => event.type)).toEqual([2, 3, 3, 3]);
 
-    const summary = await env.DB.prepare(
+    const summary = await testSiteDb(TEST_WEBSITE_ID).prepare(
       `SELECT event_count AS eventCount, click_count AS clicks, input_count AS inputs,
               console_error_count AS consoleErrors, network_error_count AS networkErrors
        FROM session_replay_summary WHERE website_id = ?1 AND visit_id = 'visit-no-capture'`,
@@ -102,7 +103,7 @@ describe('replay recording gate', () => {
       { method: 'GET', url: '/api/cart', status: 500, duration: null, size: null, failed: false },
     ]);
 
-    const summary = await env.DB.prepare(
+    const summary = await testSiteDb(TEST_WEBSITE_ID).prepare(
       `SELECT chunks, click_count AS clicks, console_error_count AS consoleErrors,
               console_warn_count AS consoleWarns, network_error_count AS networkErrors
        FROM session_replay_summary WHERE website_id = ?1 AND visit_id = 'visit-capture'`,

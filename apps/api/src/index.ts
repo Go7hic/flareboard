@@ -48,6 +48,7 @@ import * as emailReports from './routes/email-reports';
 import * as dataImport from './routes/import';
 import internalRoutes from './routes/internal';
 import { runScheduledMaintenance } from './lib/scheduled-jobs';
+import { handleWorkflowTriggerBatch } from './lib/workflow-triggers';
 import { getWebsitePlanId, isHostedMode } from './lib/billing';
 import { getWebsiteById } from './lib/queries';
 import { json } from './lib/response';
@@ -281,11 +282,16 @@ app.get('/api/websites/:websiteId/surveys/feedback', surveys.handleFeedback);
 app.patch('/api/websites/:websiteId/surveys/:surveyId', surveys.handleUpdate);
 app.delete('/api/websites/:websiteId/surveys/:surveyId', surveys.handleDelete);
 app.get('/api/websites/:websiteId/surveys/:surveyId/responses', surveys.handleResponses);
+app.get('/api/websites/:websiteId/surveys/:surveyId/export', surveys.handleExport);
 app.get('/api/websites/:websiteId/workflows', workflows.handleList);
 app.post('/api/websites/:websiteId/workflows', workflows.handleCreate);
 app.patch('/api/websites/:websiteId/workflows/:workflowId', workflows.handleUpdate);
 app.delete('/api/websites/:websiteId/workflows/:workflowId', workflows.handleDelete);
 app.get('/api/websites/:websiteId/workflows/:workflowId/executions', workflows.handleExecutions);
+app.get('/api/websites/:websiteId/workflows/:workflowId/executions/:executionId', workflows.handleExecutionDetail);
+app.post('/api/websites/:websiteId/workflows/:workflowId/test', workflows.handleTest);
+app.get('/api/websites/:websiteId/workflows/:workflowId/sample-event', workflows.handleSampleEvent);
+app.post('/api/websites/:websiteId/workflows/:workflowId/rotate-secret', workflows.handleRotateSecret);
 
 app.get('/api/websites/:websiteId/sessions', sessions.handleList);
 app.get('/api/websites/:websiteId/sessions/stats', sessions.handleStats);
@@ -429,10 +435,15 @@ app.post('/api/admin/websites', admin.handleCreateWebsite);
 
 export { RateLimiter } from '@flareboard/rate-limiter';
 export { EventStore } from './store/event-store';
+export { WorkflowRunner } from './workflows/runner';
 
 export default {
   fetch: app.fetch,
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(runScheduledMaintenance(env, event.cron));
+  },
+  /** Workflow triggers from ingest (queue `flareboard-workflow-triggers`). */
+  async queue(batch: MessageBatch<unknown>, env: Env) {
+    await handleWorkflowTriggerBatch(batch, env);
   },
 };

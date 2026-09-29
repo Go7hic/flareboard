@@ -46,7 +46,7 @@ export default function WebsiteWarehousePage() {
   const confirm = useConfirm();
   const { websiteId } = useParams<{ websiteId: string }>();
   const queryClient = useQueryClient();
-  const { canEdit } = useWebsitePermissions(websiteId, 'warehouse');
+  const { canEdit, viewOnly } = useWebsitePermissions(websiteId, 'warehouse');
   const [tab, setTab] = useState<WarehouseTab>('query');
   const [sql, setSql] = useState(EXAMPLE_SQL);
   const [savedName, setSavedName] = useState('');
@@ -212,7 +212,7 @@ export default function WebsiteWarehousePage() {
 
       <PageBody>
 
-      {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
+      {viewOnly ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
       <div className="section-gap">
         <SegmentTabs

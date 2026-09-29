@@ -9,6 +9,7 @@ import { resolveWebsiteRef } from '../lib/project-keys';
 import { badRequest, json } from '../lib/response';
 import { getWebsiteById } from '../lib/queries';
 import { replayAllowedByPlan } from '../lib/hosted-limits';
+import { siteDb, writeSiteTables } from '../lib/site-db';
 import { sanitizeReplayChunk } from '../lib/replay-events';
 import { replaySettings } from './tracker-config';
 
@@ -74,8 +75,7 @@ export async function handleRecord(c: Ctx) {
   const chunkBytes = new TextEncoder().encode(JSON.stringify(chunk.events));
   const r2Key = `${website}/${visitId}/${chunkIndex}`;
 
-  const db = createDb(c.env.DB);
-  const [existingChunk] = await db
+  const [existingChunk] = await createDb(siteDb(c.env, website))
     .select({ replayId: schema.sessionReplay.replayId })
     .from(schema.sessionReplay)
     .where(
@@ -98,52 +98,56 @@ export async function handleRecord(c: Ctx) {
     });
   }
 
-  await db.insert(schema.sessionReplay).values({
-    replayId,
-    websiteId: website,
-    sessionId,
-    visitId,
-    chunkIndex,
-    events: new Uint8Array(0),
-    eventCount: chunk.events.length,
-    startedAt: new Date(startedAt),
-    endedAt: new Date(endedAt),
-    createdAt: new Date(),
-    ...counts,
+  await writeSiteTables(c.env, website, async (db) => {
+    await createDb(db)
+      .insert(schema.sessionReplay)
+      .values({
+        replayId,
+        websiteId: website,
+        sessionId,
+        visitId,
+        chunkIndex,
+        events: new Uint8Array(0),
+        eventCount: chunk.events.length,
+        startedAt: new Date(startedAt),
+        endedAt: new Date(endedAt),
+        createdAt: new Date(),
+        ...counts,
+      });
+    await db
+      .prepare(
+        `INSERT INTO session_replay_summary (website_id, visit_id, session_id, started_at, ended_at, event_count, chunks,
+           click_count, input_count, console_log_count, console_warn_count, console_error_count, network_error_count)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?8, ?9, ?10, ?11, ?12)
+         ON CONFLICT(website_id, visit_id) DO UPDATE SET
+           session_id = excluded.session_id,
+           started_at = MIN(started_at, excluded.started_at),
+           ended_at = MAX(ended_at, excluded.ended_at),
+           event_count = event_count + excluded.event_count,
+           chunks = chunks + 1,
+           click_count = click_count + excluded.click_count,
+           input_count = input_count + excluded.input_count,
+           console_log_count = console_log_count + excluded.console_log_count,
+           console_warn_count = console_warn_count + excluded.console_warn_count,
+           console_error_count = console_error_count + excluded.console_error_count,
+           network_error_count = network_error_count + excluded.network_error_count`,
+      )
+      .bind(
+        website,
+        visitId,
+        sessionId,
+        startedAt,
+        endedAt,
+        chunk.events.length,
+        counts.clickCount,
+        counts.inputCount,
+        counts.consoleLogCount,
+        counts.consoleWarnCount,
+        counts.consoleErrorCount,
+        counts.networkErrorCount,
+      )
+      .run();
   });
-
-  await c.env.DB.prepare(
-    `INSERT INTO session_replay_summary (website_id, visit_id, session_id, started_at, ended_at, event_count, chunks,
-       click_count, input_count, console_log_count, console_warn_count, console_error_count, network_error_count)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?8, ?9, ?10, ?11, ?12)
-     ON CONFLICT(website_id, visit_id) DO UPDATE SET
-       session_id = excluded.session_id,
-       started_at = MIN(started_at, excluded.started_at),
-       ended_at = MAX(ended_at, excluded.ended_at),
-       event_count = event_count + excluded.event_count,
-       chunks = chunks + 1,
-       click_count = click_count + excluded.click_count,
-       input_count = input_count + excluded.input_count,
-       console_log_count = console_log_count + excluded.console_log_count,
-       console_warn_count = console_warn_count + excluded.console_warn_count,
-       console_error_count = console_error_count + excluded.console_error_count,
-       network_error_count = network_error_count + excluded.network_error_count`,
-  )
-    .bind(
-      website,
-      visitId,
-      sessionId,
-      startedAt,
-      endedAt,
-      chunk.events.length,
-      counts.clickCount,
-      counts.inputCount,
-      counts.consoleLogCount,
-      counts.consoleWarnCount,
-      counts.consoleErrorCount,
-      counts.networkErrorCount,
-    )
-    .run();
 
   return json({ ok: true, replayId, r2Key: c.env.REPLAY_BUCKET ? r2Key : null });
 }

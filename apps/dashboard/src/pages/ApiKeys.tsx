@@ -132,13 +132,15 @@ export default function ApiKeysPage() {
                   </label>
                 ))}
               </fieldset>
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={createMutation.isPending || !name.trim() || !selectedScopes.length}
-              >
-                {t('apiKeyCreate')}
-              </Button>
+              <div className="mt-3">
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={createMutation.isPending || !name.trim() || !selectedScopes.length}
+                >
+                  {t('apiKeyCreate')}
+                </Button>
+              </div>
               {createMutation.error ? <p className="text-danger">{(createMutation.error as Error).message}</p> : null}
             </form>
           </Panel>

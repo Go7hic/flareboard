@@ -7,6 +7,7 @@ import {
   type NormalizedFeatureFlagConfig,
 } from '@flareboard/shared';
 import type { Env } from '../env';
+import { siteDb } from './site-db';
 
 /** feature_flag columns needed to evaluate a flag and describe it to the tracker. */
 export const FLAG_COLUMNS = `key, enabled, rollout, variants, targeting_rules AS targetingRules,
@@ -29,16 +30,6 @@ export type FlagRow = {
 
 export function flagConfig(row: FlagRow): NormalizedFeatureFlagConfig {
   return normalizeFeatureFlagConfig(row);
-}
-
-/**
- * Handle for the website's analytics tables (person, session, session_data, …). Mirrors
- * `siteDb` in apps/api/src/lib/site-db.ts: today the shared D1 database; the storage migration
- * swaps it for the website's Durable Object.
- */
-export function siteTables(env: Env, websiteId: string): D1Database {
-  void websiteId;
-  return env.DB;
 }
 
 export async function getEnabledFlags(env: Env, websiteId: string) {
@@ -69,7 +60,7 @@ export async function evaluateFlags(
 ): Promise<FeatureFlagEvaluationResult[]> {
   if (!flags.length) return [];
   const resolved = await resolveFlagTargetingContext(
-    { db: env.DB, site: siteTables(env, websiteId), cache: env.CACHE },
+    { db: env.DB, site: siteDb(env, websiteId), cache: env.CACHE },
     websiteId,
     flags,
     context,

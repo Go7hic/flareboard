@@ -96,7 +96,7 @@ describe('project keys in place of website ids', () => {
       method: 'POST',
       body: JSON.stringify({ website: KEY, keys: ['missing'], context: {} }),
     });
-    expect(await flags.response.json()).toEqual({ results: { missing: false } });
+    expect(await flags.response.json()).toEqual({ results: { missing: false }, payloads: {} });
   });
 
   it('limits keyed requests per key across IPs, leaving per-IP traffic alone', async () => {

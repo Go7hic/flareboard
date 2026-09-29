@@ -1,4 +1,5 @@
 import type { InsightQuery as InsightQueryV2, InsightType as InsightTypeV2 } from '@flareboard/shared/insight-query';
+import type { SurveyAnswers, SurveyAppearance, SurveyQuestion } from '@flareboard/shared/survey-flow';
 import { apiReturnedHtmlError, apiUrlConfigError, resolveApiUrl } from './api-url';
 
 const LEGACY_TOKEN_KEY = 'flareboard_token';
@@ -625,6 +626,7 @@ export interface WorkflowSummary {
   lastExecutionAt: number | null;
   failures: number;
   successes: number;
+  inProgress: number;
   successRate: number;
   statuses: Array<{ status: string; executions: number; percentage: number }>;
   events: Array<{ eventName: string; executions: number; lastExecutionAt: number | null }>;
@@ -637,14 +639,61 @@ export interface WorkflowSummary {
   }>;
 }
 
+export type WorkflowConditionField = 'property' | 'person' | 'path' | 'url' | 'hostname';
+export type WorkflowConditionOperator =
+  | 'equals'
+  | 'not_equals'
+  | 'contains'
+  | 'not_contains'
+  | 'starts_with'
+  | 'ends_with'
+  | 'exists'
+  | 'not_exists'
+  | 'greater_than'
+  | 'greater_than_or_equal'
+  | 'less_than'
+  | 'less_than_or_equal';
+
+export interface WorkflowCondition {
+  field: WorkflowConditionField;
+  key: string;
+  operator: WorkflowConditionOperator;
+  value: string;
+}
+
+export type WorkflowWebhookMethod = 'POST' | 'PUT' | 'PATCH' | 'GET' | 'DELETE';
+
+/** Mirrors WorkflowStep in packages/shared/src/workflow-definition.ts. */
+export type WorkflowStep =
+  | { id: string; type: 'delay'; minutes: number }
+  | { id: string; type: 'condition'; conditions: WorkflowCondition[] }
+  | {
+      id: string;
+      type: 'webhook';
+      url: string;
+      method: WorkflowWebhookMethod;
+      headers: Array<{ key: string; value: string }>;
+      body: string;
+    }
+  | { id: string; type: 'email'; to: string; subject: string; body: string }
+  | { id: string; type: 'slack'; webhookUrl: string; message: string };
+
+export type WorkflowStepType = WorkflowStep['type'];
+
 export interface Workflow {
   id: string;
   websiteId: string;
   name: string;
+  description: string;
   triggerEvent: string;
   enabled: boolean;
-  actionType: 'record' | 'webhook' | 'email';
-  actionConfig: { note?: string; url?: string; email?: string };
+  filters: WorkflowCondition[];
+  steps: WorkflowStep[];
+  stepsValid: boolean;
+  signingSecretPreview: string | null;
+  signingSecretRotatedAt?: string | number | null;
+  /** Only in the create response. */
+  signingSecret?: string;
   createdAt?: string | number;
   updatedAt?: string | number;
   summary?: WorkflowSummary;
@@ -657,15 +706,70 @@ export interface WorkflowExecution {
   visitId: string | null;
   eventId: string | null;
   eventName: string | null;
+  distinctId: string | null;
   status: string;
   error: string | null;
+  currentStep: number | null;
+  attempts: number;
+  responseCode: number | null;
+  nextRetryAt: number | null;
   createdAt: number;
+  updatedAt: number | null;
+  completedAt: number | null;
+}
+
+export interface WorkflowExecutionAttempt {
+  id: string;
+  stepIndex: number;
+  stepType: string;
+  attempt: number;
+  status: string;
+  responseCode: number | null;
+  error: string | null;
+  responseBody: string | null;
+  durationMs: number | null;
+  nextRetryAt: number | null;
+  createdAt: number;
+}
+
+export interface WorkflowExecutionDetail {
+  execution: WorkflowExecution;
+  attempts: WorkflowExecutionAttempt[];
 }
 
 export interface WorkflowExecutionsResponse {
   workflow: Workflow;
   summary: WorkflowSummary;
   executions: WorkflowExecution[];
+}
+
+export type WorkflowTestRequest =
+  | { type: 'webhook' | 'slack'; method: string; url: string; headers: Array<{ key: string; value: string }>; body: string | null }
+  | { type: 'email'; to: string[]; subject: string; text: string };
+
+export interface WorkflowTestResult {
+  matched: boolean;
+  sent: boolean;
+  steps: Array<{
+    index: number;
+    type: WorkflowStepType;
+    status: 'skipped' | 'passed' | 'stopped' | 'rendered' | 'sent' | 'failed' | 'not_reached';
+    detail: string | null;
+    request: WorkflowTestRequest | null;
+    response: { statusCode: number | null; body: string | null; durationMs: number } | null;
+    error: string | null;
+  }>;
+}
+
+export interface WorkflowSampleEvent {
+  event: {
+    name: string;
+    hostname: string | null;
+    urlPath: string | null;
+    urlQuery: string | null;
+    distinctId: string | null;
+    properties: Record<string, unknown>;
+  } | null;
 }
 
 export interface WarehouseQueryResponse {
@@ -975,14 +1079,24 @@ export interface Survey {
   id: string;
   websiteId: string;
   name: string;
+  /** Legacy mirror of the first question. */
   question: string;
   type: 'text' | 'rating' | 'choice';
   options: string[];
+  questions: SurveyQuestion[];
+  appearance: SurveyAppearance;
   enabled: boolean;
   triggerPath?: string | null;
   triggerEvent?: string | null;
   displayDelaySeconds: number;
   displayRules?: SurveyDisplayRule[];
+  sampleRate: number;
+  responseLimit: number | null;
+  startsAt: number | null;
+  endsAt: number | null;
+  repeatIntervalDays: number | null;
+  hostedEnabled: boolean;
+  slug: string | null;
   createdAt?: string | number;
   updatedAt?: string | number;
   summary?: SurveySummary;
@@ -992,14 +1106,55 @@ export interface SurveyResponse {
   id: string;
   sessionId: string | null;
   visitId: string | null;
+  distinctId: string | null;
   answer: string;
+  answers: SurveyAnswers;
+  completed: boolean;
+  source: string;
   urlPath: string | null;
   createdAt: number;
+}
+
+type SurveyCountRow = { value: string; count: number; percentage: number };
+type SurveySentimentName = 'positive' | 'negative' | 'neutral';
+
+export interface SurveyQuestionResult {
+  id: string;
+  type: SurveyQuestion['type'];
+  question: string;
+  answered: number;
+  droppedAfter: number;
+  rating?: {
+    min: number;
+    max: number;
+    average: number | null;
+    distribution: SurveyCountRow[];
+    nps: { score: number | null; promoters: number; passives: number; detractors: number } | null;
+  };
+  choices?: Array<SurveyCountRow & { other: boolean }>;
+  otherAnswers?: Array<{ value: string; count: number }>;
+  text?: {
+    sentiment: Array<{ sentiment: SurveySentimentName; responses: number; percentage: number }>;
+    themes: Array<{ theme: string; responses: number; percentage: number }>;
+    items: Array<{ responseId: string; value: string; sentiment: SurveySentimentName; createdAt: number }>;
+  };
+  link?: { clicks: number };
+}
+
+export interface SurveyResults {
+  total: number;
+  completed: number;
+  partial: number;
+  completionRate: number;
+  sampled: boolean;
+  trend: Array<{ date: string; responses: number; completed: number; partial: number }>;
+  questions: SurveyQuestionResult[];
 }
 
 export interface SurveyResponsesResponse {
   survey: Survey;
   summary: SurveySummary;
+  results: SurveyResults;
   responses: SurveyResponse[];
 }
 

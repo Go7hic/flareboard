@@ -7,6 +7,8 @@ export interface Env {
   SITE_STORE?: DurableObjectNamespace<import('./store/event-store').EventStore>;
   /** Analytics storage mode: 'd1' | 'dual' | 'do' (lib/site-db.ts). */
   EVENT_STORE?: string;
+  /** Durable workflow executions (src/workflows/runner.ts). */
+  WORKFLOW_RUNNER?: Workflow<import('./lib/workflow-runtime').WorkflowRunParams>;
   /** Cloudflare Email Sending binding (optional). */
   EMAIL?: SendEmail;
   APP_SECRET: string;

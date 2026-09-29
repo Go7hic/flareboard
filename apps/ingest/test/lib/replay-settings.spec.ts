@@ -59,4 +59,10 @@ describe('replaySettings', () => {
     expect(replaySettings({ maskSelectors: ' .pii ' }).maskSelector).toBe('.pii');
     expect(replaySettings({ maskSelectors: 42 }).maskSelector).toBeNull();
   });
+
+  it('joins one-selector-per-line lists with commas', () => {
+    expect(replaySettings({ blockSelectors: '.secret\n#payment,\n\n [data-private] ' }).blockSelector).toBe(
+      '.secret, #payment, [data-private]',
+    );
+  });
 });

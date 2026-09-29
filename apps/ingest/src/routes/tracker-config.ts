@@ -41,8 +41,18 @@ export function trackerFlag(row: FlagRow) {
 /** Longest minimum duration the dashboard offers; longer values are clamped. */
 export const MAX_REPLAY_MIN_DURATION_MS = 60_000;
 
+/**
+ * Selector list typed in the dashboard ("one per line or comma-separated"). Lines are joined with
+ * commas: a newline inside a CSS selector would otherwise act as a descendant combinator.
+ */
 function selectorList(value: unknown) {
-  return typeof value === 'string' ? value.trim().slice(0, 1000) || null : null;
+  if (typeof value !== 'string') return null;
+  const joined = value
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/,$/, '').trim())
+    .filter(Boolean)
+    .join(', ');
+  return joined.slice(0, 1000) || null;
 }
 
 /**

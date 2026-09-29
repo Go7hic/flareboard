@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 /**
  * LLM analytics: the normalized AI event model, content limits and the model price table.
  *
@@ -324,3 +326,25 @@ export function usageCostUsd(usage: LlmUsage, price: ModelPrice, cacheIncluded: 
     Math.max(0, usage.outputTokens) * price.output;
   return total / 1_000_000;
 }
+
+const pricePerMillion = z.number().finite().nonnegative().max(100_000);
+
+/** Body of PUT /api/websites/:id/ai-observability/settings. */
+export const llmSettingsSchema = z
+  .object({
+    captureContent: z.boolean().optional(),
+    /** Replaces the website's whole override list. */
+    priceOverrides: z
+      .array(
+        z.object({
+          model: z.string().trim().min(1).max(120),
+          inputPerMillion: pricePerMillion,
+          outputPerMillion: pricePerMillion,
+          cacheReadPerMillion: pricePerMillion.nullable().optional(),
+          cacheWritePerMillion: pricePerMillion.nullable().optional(),
+        }),
+      )
+      .max(200)
+      .optional(),
+  })
+  .strict();

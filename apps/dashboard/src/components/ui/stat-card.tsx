@@ -72,7 +72,7 @@ function StatCard({
       </p>
       <p
         className={cn(
-          'mt-[0.3rem] font-mono font-semibold tracking-[-0.03em] tabular-nums',
+          'mt-[0.3rem] font-mono font-semibold tracking-[-0.03em] tabular-nums [overflow-wrap:anywhere]',
           sizeValue[size]
         )}
       >

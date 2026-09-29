@@ -2218,6 +2218,11 @@ code {
   min-width: 0;
 }
 
+/* Money values are wider than counts: let the revenue row pick its column count. */
+.analytics-hero-stats.revenue-stats {
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
 .analytics-hero-stats .stat-delta {
   white-space: nowrap;
   font-size: 0.6875rem;

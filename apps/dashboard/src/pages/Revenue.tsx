@@ -199,7 +199,7 @@ export default function RevenuePage() {
           </p>
         </div>
 
-        <section className="analytics-hero-stats section-gap">
+        <section className="analytics-hero-stats revenue-stats section-gap">
           {revenueQuery.isLoading ? (
             <>
               <StatCardSkeleton />

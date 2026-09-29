@@ -79,11 +79,22 @@ Pass `segmentId` on stats/metrics/pageviews to apply segment filters (`country`,
 
 | Method | Path | Auth |
 |--------|------|------|
-| GET | `/api/websites/:websiteId/replays` | Bearer |
+| GET | `/api/websites/:websiteId/replays` | Bearer — filters below |
 | GET | `/api/websites/:websiteId/replays/:visitId` | Bearer — parallel R2 chunk load |
 | GET/POST | `/api/websites/:websiteId/replays/saved` | Bearer |
 | PATCH/DELETE | `/api/websites/:websiteId/replays/saved/:savedReplayId` | Bearer |
+| GET/POST | `/api/websites/:websiteId/replays/:visitId/shares` | Bearer — public links; POST `{ expiresInDays?: 1-365 \| null }` |
+| DELETE | `/api/websites/:websiteId/replays/shares/:shareId` | Bearer — revoke a link |
+| GET | `/api/replay-shares/:token` | — one shared replay (events + duration), 404 once expired or revoked |
 | POST | `/api/record` | — (ingest) rrweb chunks → D1 + R2 |
+
+Replay list query: `startAt` / `endAt` (by replay start), `minDurationMs`, `maxDurationMs`,
+`hasErrors=true|false` (error events or console errors), `distinctId`, `event` (event name
+performed), `url` (a pageview path containing it), `filters` (JSON array of property filters, as
+in insights: event / person / dimension such as `country`, `browser`, `device`, `path`),
+`sort=newest|oldest|longest|shortest|most_active|most_errors`, `limit` (≤ 500). Rows carry
+activity counters (clicks, inputs, console messages by level, failed requests), the entry path
+and the session's country / browser / OS / device / distinct id.
 
 Load **`script.js` before `recorder.js`** on tracked pages so session IDs align between analytics and replay.
 

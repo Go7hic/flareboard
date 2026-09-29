@@ -166,6 +166,7 @@ const USER_REFERENCES: ReadonlyArray<[table: string, column: string]> = [
   ['board', 'user_id'],
   ['link', 'user_id'],
   ['pixel', 'user_id'],
+  ['session_replay_share', 'created_by'],
   ['error_issue_comment', 'user_id'],
   ['error_issue_merge', 'merged_by'],
   ['error_issue_state', 'assignee_user_id'],

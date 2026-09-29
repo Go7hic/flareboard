@@ -116,6 +116,7 @@ app.post('/api/billing/checkout', billing.handleCheckout);
 app.post('/api/billing/portal', billing.handlePortal);
 
 app.get('/api/share/:slug', share.handlePublicGet);
+app.get('/api/replay-shares/:token', replays.handlePublicShare);
 app.get('/api/demo', demo.handleMeta);
 app.get('/api/demo/overview', demo.handleOverview);
 app.get('/api/demo/metrics', demo.handleMetrics);
@@ -369,6 +370,9 @@ app.get('/api/websites/:websiteId/replays/saved', replays.handleSavedList);
 app.post('/api/websites/:websiteId/replays/saved', replays.handleSavedCreate);
 app.patch('/api/websites/:websiteId/replays/saved/:savedReplayId', replays.handleSavedUpdate);
 app.delete('/api/websites/:websiteId/replays/saved/:savedReplayId', replays.handleSavedDelete);
+app.delete('/api/websites/:websiteId/replays/shares/:shareId', replays.handleShareDelete);
+app.get('/api/websites/:websiteId/replays/:replayId/shares', replays.handleShareList);
+app.post('/api/websites/:websiteId/replays/:replayId/shares', replays.handleShareCreate);
 app.get('/api/websites/:websiteId/replays/:replayId', replays.handleGet);
 
 app.use('/api/links/*', jwtAuth);

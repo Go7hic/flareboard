@@ -1009,6 +1009,47 @@ export const updateSavedReplaySchema = z.object({
   name: z.string().max(100).optional(),
 });
 
+export const REPLAY_SORTS = ['newest', 'oldest', 'longest', 'shortest', 'most_active', 'most_errors'] as const;
+export type ReplaySort = (typeof REPLAY_SORTS)[number];
+
+const queryBoolean = z.enum(['true', 'false', '1', '0']).transform((value) => value === 'true' || value === '1');
+
+/**
+ * Query string of GET /api/websites/:websiteId/replays (besides startAt / endAt). `filters` is a
+ * JSON array of property filters (event, person or dimension such as country / browser /
+ * device / path); a replay matches when some event of its visit matches each positive filter
+ * and no event matches the negated ones.
+ */
+export const replayListQuerySchema = z.object({
+  minDurationMs: z.coerce.number().int().min(0).optional(),
+  maxDurationMs: z.coerce.number().int().min(0).optional(),
+  hasErrors: queryBoolean.optional(),
+  distinctId: z.string().trim().min(1).max(200).optional(),
+  event: z.string().trim().min(1).max(200).optional(),
+  url: z.string().trim().min(1).max(500).optional(),
+  filters: z
+    .string()
+    .max(8000)
+    .transform((raw, ctx) => {
+      try {
+        return JSON.parse(raw) as unknown;
+      } catch {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'filters must be JSON' });
+        return z.NEVER;
+      }
+    })
+    .pipe(propertyFiltersSchema)
+    .optional(),
+  sort: z.enum(REPLAY_SORTS).default('newest'),
+  limit: z.coerce.number().int().min(1).max(500).default(200),
+});
+export type ReplayListQuery = z.infer<typeof replayListQuerySchema>;
+
+/** A public link to one replay; no expiry when `expiresInDays` is null or missing. */
+export const createReplayShareSchema = z.object({
+  expiresInDays: z.number().int().min(1).max(365).nullable().optional(),
+});
+
 export const cohortConditionSchema = z
   .object({
     /** event_name / url_path: custom event or pageview. any_event: any pageview or custom event. */

@@ -10,6 +10,7 @@
     "./csv": "./src/csv.ts",
     "./date-range": "./src/date-range.ts",
     "./experiment-stats": "./src/experiment-stats.ts",
+    "./survey-flow": "./src/survey-flow.ts",
     "./timezone": "./src/timezone.ts"
   },
   "scripts": {

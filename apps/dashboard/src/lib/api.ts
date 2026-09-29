@@ -1,3 +1,4 @@
+import type { SurveyAnswers, SurveyAppearance, SurveyQuestion } from '@flareboard/shared/survey-flow';
 import { apiReturnedHtmlError, apiUrlConfigError, resolveApiUrl } from './api-url';
 
 const LEGACY_TOKEN_KEY = 'flareboard_token';
@@ -896,14 +897,24 @@ export interface Survey {
   id: string;
   websiteId: string;
   name: string;
+  /** Legacy mirror of the first question. */
   question: string;
   type: 'text' | 'rating' | 'choice';
   options: string[];
+  questions: SurveyQuestion[];
+  appearance: SurveyAppearance;
   enabled: boolean;
   triggerPath?: string | null;
   triggerEvent?: string | null;
   displayDelaySeconds: number;
   displayRules?: SurveyDisplayRule[];
+  sampleRate: number;
+  responseLimit: number | null;
+  startsAt: number | null;
+  endsAt: number | null;
+  repeatIntervalDays: number | null;
+  hostedEnabled: boolean;
+  slug: string | null;
   createdAt?: string | number;
   updatedAt?: string | number;
   summary?: SurveySummary;
@@ -913,14 +924,55 @@ export interface SurveyResponse {
   id: string;
   sessionId: string | null;
   visitId: string | null;
+  distinctId: string | null;
   answer: string;
+  answers: SurveyAnswers;
+  completed: boolean;
+  source: string;
   urlPath: string | null;
   createdAt: number;
+}
+
+type SurveyCountRow = { value: string; count: number; percentage: number };
+type SurveySentimentName = 'positive' | 'negative' | 'neutral';
+
+export interface SurveyQuestionResult {
+  id: string;
+  type: SurveyQuestion['type'];
+  question: string;
+  answered: number;
+  droppedAfter: number;
+  rating?: {
+    min: number;
+    max: number;
+    average: number | null;
+    distribution: SurveyCountRow[];
+    nps: { score: number | null; promoters: number; passives: number; detractors: number } | null;
+  };
+  choices?: Array<SurveyCountRow & { other: boolean }>;
+  otherAnswers?: Array<{ value: string; count: number }>;
+  text?: {
+    sentiment: Array<{ sentiment: SurveySentimentName; responses: number; percentage: number }>;
+    themes: Array<{ theme: string; responses: number; percentage: number }>;
+    items: Array<{ responseId: string; value: string; sentiment: SurveySentimentName; createdAt: number }>;
+  };
+  link?: { clicks: number };
+}
+
+export interface SurveyResults {
+  total: number;
+  completed: number;
+  partial: number;
+  completionRate: number;
+  sampled: boolean;
+  trend: Array<{ date: string; responses: number; completed: number; partial: number }>;
+  questions: SurveyQuestionResult[];
 }
 
 export interface SurveyResponsesResponse {
   survey: Survey;
   summary: SurveySummary;
+  results: SurveyResults;
   responses: SurveyResponse[];
 }
 

@@ -1,4 +1,6 @@
 import {
+  AI_CONTENT_KEYS,
+  EVENT_TYPE,
   flattenEventData,
   type QueueEventMessage,
   type QueueSessionDataMessage,
@@ -163,7 +165,16 @@ export function eventMessage(input: {
       tag: input.tag ?? null,
       hostname: input.hostname || page.urlDomain,
     },
-    eventData: input.data ? flattenEventData(input.websiteId, input.id, input.data, input.createdAt) : undefined,
+    eventData: input.data
+      ? flattenEventData(
+          input.websiteId,
+          input.id,
+          input.data,
+          input.createdAt,
+          // AI prompt / response content is size-capped by the AI normalizers, not at 2000 chars.
+          input.eventType === EVENT_TYPE.ai ? AI_CONTENT_KEYS : undefined,
+        )
+      : undefined,
   };
 }
 

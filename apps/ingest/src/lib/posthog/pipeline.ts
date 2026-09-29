@@ -6,6 +6,7 @@ import { enqueueWorkflowTriggers, type WorkflowTriggerEvent } from '../workflows
 import { loadWebsiteActionDefinitions, tagMatchedActions } from '../actions';
 import { recordEventUsageKv } from '../hosted-limits';
 import { recordAlias } from '../person-identity';
+import { llmCaptureContent } from '../llm-settings';
 import { writeSiteTables } from '../site-db';
 import { eventMessage, emptyPageContext, pageContext, sessionDataMessage, sessionMessage } from '../queue-messages';
 import { getTrustedClientIp } from '../rate-limit';
@@ -26,6 +27,7 @@ import {
   webVitals,
   type PostHogEvent,
 } from './events';
+import { hasPostHogAiContent, POSTHOG_AI_PROPERTIES, postHogAiKind, postHogAiProperties } from './ai';
 
 /** Cloudflare Queues: at most 100 messages and 256 KB per sendBatch call. */
 const QUEUE_BATCH_MESSAGES = 100;
@@ -103,6 +105,8 @@ export async function capturePostHogEvents(input: CaptureInput): Promise<{ accep
     ? geoFromCf((req as Request & { cf?: unknown }).cf)
     : { country: null, region: null, city: null };
   const definitions = await loadWebsiteActionDefinitions(env, websiteId);
+  // The website's LLM privacy setting, read only when some AI event carries content.
+  const captureAiContent = hasPostHogAiContent(input.events) ? await llmCaptureContent(env, websiteId) : true;
 
   const sessions = new Map<string, SessionState>();
   const sessionData: QueueMessage[] = [];
@@ -211,7 +215,15 @@ export async function capturePostHogEvents(input: CaptureInput): Promise<{ accep
     let eventName: string | null = event.event;
     let data: Json;
     let vitals: ReturnType<typeof webVitals> = null;
-    if (event.event === '$pageview') {
+    const aiKind = postHogAiKind(event.event);
+    if (aiKind) {
+      eventType = EVENT_TYPE.ai;
+      // AI fields first: event_data keeps at most 100 keys, and custom properties never override them.
+      data = postHogAiProperties(aiKind, props, captureAiContent);
+      for (const [key, value] of Object.entries(eventProperties(event, POSTHOG_AI_PROPERTIES))) {
+        if (!(key in data)) data[key] = value;
+      }
+    } else if (event.event === '$pageview') {
       eventType = EVENT_TYPE.pageView;
       eventName = null;
       data = eventProperties(event, new Set(['title']));
@@ -256,7 +268,7 @@ export async function capturePostHogEvents(input: CaptureInput): Promise<{ accep
         country: geo.country,
       };
     }
-    if (eventType === EVENT_TYPE.customEvent && eventName) {
+    if ((eventType === EVENT_TYPE.customEvent || eventType === EVENT_TYPE.ai) && eventName) {
       workflowEvents.push({
         sessionId,
         visitId,

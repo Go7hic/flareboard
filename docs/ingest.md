@@ -117,11 +117,17 @@ Structured log and trace spans.
 
 | Field | Notes |
 |-------|-------|
-| `provider`, `model`, `name` | Model metadata |
-| `inputTokens`, `outputTokens`, `totalTokens`, `costUsd`, `latencyMs` | Usage metrics |
-| `status`, `quality` | Outcome metadata |
+| `kind` | `generation` (default), `span`, `trace` or `embedding` |
+| `provider`, `model`, `name` | Model metadata (`name` is the event name) |
+| `inputTokens`, `outputTokens`, `totalTokens`, `cacheReadTokens`, `cacheWriteTokens` | Token usage |
+| `costUsd`, `latencyMs` | Omit `costUsd` to have it computed from the model price table |
+| `status`, `message`, `quality` | Outcome; `message` is the error of a failed call |
+| `traceId`, `spanId`, `parentSpanId`, `operation` | Trace tree (`operation` is the span name) |
+| `input`, `output` | Prompt / response (any JSON), 32 KB each, dropped when the website stores no content |
 | `release`, `environment` | Deployment context |
 | `data` | Extra properties |
+
+PostHog `$ai_*` events map onto the same fields. See [llm-observability.md](./llm-observability.md).
 
 ## Tracker config (`GET /api/tracker-config`)
 

@@ -364,6 +364,11 @@ app.patch('/api/websites/:websiteId/logs/alerts/:alertRuleId', logs.handleAlertR
 app.delete('/api/websites/:websiteId/logs/alerts/:alertRuleId', logs.handleAlertRuleDelete);
 app.get('/api/websites/:websiteId/logs', logs.handleList);
 app.get('/api/websites/:websiteId/ai-observability', aiObservability.handleList);
+app.get('/api/websites/:websiteId/ai-observability/traces', aiObservability.handleTraces);
+app.get('/api/websites/:websiteId/ai-observability/traces/:traceId', aiObservability.handleTrace);
+app.get('/api/websites/:websiteId/ai-observability/users', aiObservability.handleUsers);
+app.get('/api/websites/:websiteId/ai-observability/settings', aiObservability.handleSettingsGet);
+app.put('/api/websites/:websiteId/ai-observability/settings', aiObservability.handleSettingsUpdate);
 
 app.get('/api/websites/:websiteId/event-data/properties', eventData.handleProperties);
 app.get('/api/websites/:websiteId/event-data/values', eventData.handleValues);

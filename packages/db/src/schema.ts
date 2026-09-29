@@ -705,6 +705,32 @@ export const websiteEmailReport = sqliteTable('website_email_report', {
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
 });
 
+/** LLM analytics: whether AI events keep prompt/response content (no row = yes). */
+export const llmWebsiteSetting = sqliteTable('llm_website_setting', {
+  websiteId: text('website_id')
+    .primaryKey()
+    .references(() => website.websiteId),
+  captureContent: integer('capture_content', { mode: 'boolean' }).notNull().default(true),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+/** LLM analytics: per-website model prices (USD per 1M tokens) replacing the built-in table. */
+export const llmModelPrice = sqliteTable(
+  'llm_model_price',
+  {
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    model: text('model').notNull(),
+    inputPerMillion: real('input_per_million').notNull(),
+    outputPerMillion: real('output_per_million').notNull(),
+    cacheReadPerMillion: real('cache_read_per_million'),
+    cacheWritePerMillion: real('cache_write_per_million'),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.websiteId, t.model] })],
+);
+
 export const cohort = sqliteTable(
   'cohort',
   {

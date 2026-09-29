@@ -7,15 +7,31 @@ export type FlagValue = string | boolean;
 export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
 export type AiObservation = {
-  model: string;
+  /** Required for generations and embeddings; spans and traces may omit it. */
+  model?: string;
   provider?: string;
   name?: string;
+  /** `generation` (default), `span`, `trace` or `embedding`. */
+  kind?: 'generation' | 'span' | 'trace' | 'embedding';
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  /** Omit to have Flareboard price the call from its model price table. */
   costUsd?: number;
   latencyMs?: number;
   status?: 'success' | 'error';
+  /** Error message when `status` is `error`. */
+  message?: string;
+  traceId?: string;
+  spanId?: string;
+  parentSpanId?: string;
+  /** Span name. */
+  operation?: string;
+  /** Prompt / response (any JSON), capped at 32 KB each; not stored if the website turned content off. */
+  input?: unknown;
+  output?: unknown;
   quality?: string;
   release?: string;
   environment?: string;

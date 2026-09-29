@@ -12,6 +12,7 @@
     "./experiment-stats": "./src/experiment-stats.ts",
     "./insight-query": "./src/insight-query.ts",
     "./survey-flow": "./src/survey-flow.ts",
+    "./llm": "./src/llm.ts",
     "./timezone": "./src/timezone.ts"
   },
   "scripts": {

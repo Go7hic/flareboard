@@ -56,6 +56,7 @@ const WebsiteErrors = lazy(() => import('./pages/WebsiteErrors'));
 const WebsiteErrorDetail = lazy(() => import('./pages/WebsiteErrorDetail'));
 const WebsiteErrorIssue = lazy(() => import('./pages/WebsiteErrorIssue'));
 const WebsiteAiObservability = lazy(() => import('./pages/WebsiteAiObservability'));
+const WebsiteAiTrace = lazy(() => import('./pages/WebsiteAiTrace'));
 const WebsiteLogs = lazy(() => import('./pages/WebsiteLogs'));
 const WebsiteExperiments = lazy(() => import('./pages/WebsiteExperiments'));
 const WebsiteFeatureFlags = lazy(() => import('./pages/WebsiteFeatureFlags'));
@@ -469,6 +470,14 @@ export default function App() {
               element={
                 <LazyPage>
                   <WebsiteAiObservability />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="ai-observability/traces/:traceId"
+              element={
+                <LazyPage>
+                  <WebsiteAiTrace />
                 </LazyPage>
               }
             />

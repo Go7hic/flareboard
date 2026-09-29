@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { INSIGHT_TYPES, insightQuerySchema, propertyFiltersSchema } from './insight-query';
 import { isValidSiteTimezone } from './timezone';
+import { AI_CONTENT_MAX_STRING_LENGTH, AI_EVENT_KINDS } from './llm';
 import {
   FEATURE_FLAG_PAYLOAD_MAX_BYTES,
   featureFlagPayloadBytes,
@@ -135,6 +136,13 @@ export const sendPayloadSchema = z
     latencyMs: z.coerce.number().int().nonnegative().max(86400000).optional(),
     status: z.enum(['success', 'error']).optional(),
     quality: z.string().max(80).optional(),
+    /** AI events: generation (default), span, trace or embedding. */
+    kind: z.enum(AI_EVENT_KINDS).optional(),
+    cacheReadTokens: z.coerce.number().int().nonnegative().max(10000000).optional(),
+    cacheWriteTokens: z.coerce.number().int().nonnegative().max(10000000).optional(),
+    /** AI prompt / response content (any JSON); size-capped at ingest, dropped when the website stores no content. */
+    input: z.unknown().optional(),
+    output: z.unknown().optional(),
     groupType: z.string().min(1).max(80).optional(),
     groupKey: z.string().min(1).max(200).optional(),
   })
@@ -1326,23 +1334,29 @@ export type QueueMessage =
 const EVENT_DATA_MAX_KEYS = 100;
 const EVENT_DATA_MAX_STRING_LENGTH = 2000;
 
+/**
+ * One event_data row per primitive property. Strings are capped at 2000 characters, except keys in
+ * `longStringKeys` (AI prompt / response content), which callers have already size-capped.
+ */
 export function flattenEventData(
   websiteId: string,
   websiteEventId: string,
   data: Record<string, unknown>,
   createdAt: number,
+  longStringKeys?: ReadonlySet<string>,
 ): QueueEventMessage['eventData'] {
   const result: NonNullable<QueueEventMessage['eventData']> = [];
   for (const [key, value] of Object.entries(data)) {
     if (result.length >= EVENT_DATA_MAX_KEYS) break;
     const id = crypto.randomUUID();
     if (typeof value === 'string') {
+      const max = longStringKeys?.has(key) ? AI_CONTENT_MAX_STRING_LENGTH : EVENT_DATA_MAX_STRING_LENGTH;
       result.push({
         id,
         websiteId,
         websiteEventId,
         dataKey: key,
-        stringValue: value.slice(0, EVENT_DATA_MAX_STRING_LENGTH),
+        stringValue: value.slice(0, max),
         dataType: 1,
         createdAt,
       });

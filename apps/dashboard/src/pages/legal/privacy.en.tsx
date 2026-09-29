@@ -267,8 +267,12 @@ const sections: LegalSection[] = [
             remembers in the browser&apos;s <code>localStorage</code> that the survey was answered.
           </li>
           <li>
-            <strong>AI usage data</strong>: model, token counts, cost and latency. Prompts and responses are only
-            stored if a customer includes them in the data they send.
+            <strong>AI usage data</strong> (LLM analytics): model, provider, token counts, cost, latency, status,
+            errors and the structure of each trace (trace, span and parent ids and names). Prompts and responses,
+            and the input and output of traced steps, are stored only when a customer sends them (for example
+            through the PostHog LLM wrappers); each is cut to 32 KB. A customer can turn off content storage for a
+            website, in which case only the metadata above is kept. Stored content follows the website’s
+            retention setting.
           </li>
           <li>
             <strong>Data warehouse imports</strong> a customer sets up: rows fetched from HTTP JSON or CSV addresses

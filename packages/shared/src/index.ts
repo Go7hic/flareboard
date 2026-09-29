@@ -16,6 +16,7 @@ export * from './geoip';
 export * from './insight-query';
 export * from './crypto';
 export * from './jwt';
+export * from './llm';
 export * from './password';
 export * from './schemas';
 export * from './sso';

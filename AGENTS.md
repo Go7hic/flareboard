@@ -92,6 +92,8 @@ Header chrome: `--shell-bg` + `backdrop-filter` on `.shell-nav` / `.landing-nav`
 - **Visitor IDs:** a monthly-salted hash of IP + user agent (`getSalt`, default `'month'`). IPs are never stored. Opt-in exception: a website with "Remember visitors across sessions" (`website.persist_visitors`) gets a random `localStorage` id from `script.js`, which ingest uses instead (`resolveDistinctId` in `apps/ingest/src/lib/tracker-settings.ts`; anonymous ids are dropped on other websites). Keep landing copy and the Privacy Policy consistent with this.
 - **Tracker:** the source is `apps/ingest/src/tracker/script.ts` (tests in `apps/ingest/test-node`, run in a fake browser). Autocapture must never send field values; update the Privacy Policy when it collects anything new.
 - **Logs:** never log one-time links or email bodies in production (`logUndeliveredLink` in `lib/email.ts`).
+- **Security records:** sign-in audit records are pruned after 180 days (`SIGN_IN_RECORD_DAYS` in `data-deletion.ts`) and 2FA secrets, recovery codes and sessions are user-owned tables erased with the account. Both policies promise this.
+- **Warehouse credentials:** Stripe keys are restricted keys only, stored encrypted (`warehouse_credential`) and removed with the data source; never return or log them.
 
 ## Blog
 

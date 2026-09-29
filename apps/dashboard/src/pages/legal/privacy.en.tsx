@@ -271,6 +271,52 @@ const sections: LegalSection[] = [
     ),
   },
   {
+    id: 'assistant',
+    title: 'AI assistant and MCP access',
+    body: (
+      <>
+        <p>
+          Where the operator has enabled it, the dashboard offers “Ask Flareboard”, an assistant that answers
+          questions about a website’s analytics. It is off unless you use it, and it only runs when you send it a
+          question.
+        </p>
+        <ul>
+          <li>
+            <strong>What is sent to Anthropic.</strong> To answer, we send Anthropic PBC (the provider of the
+            Claude models) your question, up to the last 12 messages of the same conversation, the website’s name,
+            domain and timezone, and the results of the queries the assistant runs for you. Those results are
+            limited in size (at most 100 rows per query and a capped number of characters) and can include
+            analytics data such as event names, page URLs, property values and, when a question needs it, the
+            identifiers, email addresses or names of people recorded by the website. Only read-only queries run on
+            behalf of the assistant; it cannot change your data.
+          </li>
+          <li>
+            <strong>How Anthropic uses it.</strong> Anthropic processes this data as our subprocessor to generate
+            the answer, under its commercial terms, which do not allow it to train models on API data. Anthropic
+            may retain API inputs and outputs for a limited period for trust and safety purposes.
+          </li>
+          <li>
+            <strong>What we store.</strong> Your questions and the assistant’s answers (with the charts and tables
+            they show) are stored in your account, visible only to you, for that website. We also count how many
+            questions each account asks per day and the number of tokens used, to apply usage limits. We do not
+            write questions or answers to our logs.
+          </li>
+          <li>
+            <strong>Retention.</strong> You can delete a conversation at any time from the assistant panel.
+            Conversations without activity for 90 days are deleted automatically, and all of them are erased with
+            the website or your account.
+          </li>
+          <li>
+            <strong>MCP access.</strong> You can connect AI tools (such as Claude Desktop, Claude Code or Cursor)
+            to Flareboard through our Model Context Protocol endpoint with a personal API key. The data those tools
+            read is sent to the tool and AI provider you chose, under their terms, not ours. Changes made through
+            MCP (annotations, feature flag toggles) are recorded in the audit log.
+          </li>
+        </ul>
+      </>
+    ),
+  },
+  {
     id: 'legal-bases',
     title: 'Legal bases (EEA and UK)',
     body: (
@@ -399,6 +445,14 @@ const sections: LegalSection[] = [
                 <td>Your IP address and browser details, as part of the request</td>
               </tr>
               <tr>
+                <td>Anthropic PBC</td>
+                <td>
+                  Answers from the “Ask Flareboard” assistant, only when you use it (see{' '}
+                  <a href="#assistant">AI assistant</a>)
+                </td>
+                <td>Your questions, recent conversation messages and capped query results about the website</td>
+              </tr>
+              <tr>
                 <td>favicon.so</td>
                 <td>Shows the icon of each website in your dashboard</td>
                 <td>The domain names of websites you add, plus your IP address as part of the request</td>
@@ -461,6 +515,10 @@ const sections: LegalSection[] = [
           <li>
             <strong>Deleting a website</strong> in the dashboard removes it from your account immediately, and all
             of its stored data, including session replay recordings, is permanently erased within 30 days.
+          </li>
+          <li>
+            <strong>Assistant conversations</strong> are kept until you delete them, and are deleted
+            automatically after 90 days without activity or with the website or your account.
           </li>
           <li>
             <strong>Technical logs</strong> kept by our hosting provider are deleted automatically, typically within

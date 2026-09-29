@@ -48,12 +48,13 @@ describe('insight query helpers', () => {
       BASE + DAY * 2,
     );
 
+    // Every bucket of the range is returned, including empty ones.
     expect(result).toMatchObject({
       kind: 'trend',
-      event: 'signup',
       series: [
         { x: '2026-01-22', y: 1 },
         { x: '2026-01-23', y: 1 },
+        { x: '2026-01-24', y: 0 },
       ],
     });
   });
@@ -139,7 +140,7 @@ describe('insight query helpers', () => {
     expect(serialized).toMatchObject({
       id: 'insight-1',
       type: 'trend',
-      query: { event: 'signup', metric: 'events' },
+      query: { version: 2, series: [{ kind: 'event', event: 'signup', math: 'total' }] },
       createdAt: BASE,
       updatedAt: null,
     });

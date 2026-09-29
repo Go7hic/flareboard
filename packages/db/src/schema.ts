@@ -93,6 +93,11 @@ export const website = sqliteTable(
     // Null keeps raw event data forever; a positive value purges rows older than N days.
     retentionDays: integer('retention_days'),
     timezone: text('timezone').notNull().default('UTC'),
+    // Tracker settings (migration 0047). Autocapture is on for new websites only.
+    autocapture: integer('autocapture', { mode: 'boolean' }).notNull().default(true),
+    // Opt-in: a random localStorage visitor id replaces the monthly IP + user agent hash.
+    persistVisitors: integer('persist_visitors', { mode: 'boolean' }).notNull().default(false),
+    respectDnt: integer('respect_dnt', { mode: 'boolean' }).notNull().default(false),
   },
   (t) => [
     index('website_user_idx').on(t.userId),
@@ -100,6 +105,20 @@ export const website = sqliteTable(
     index('website_created_at_idx').on(t.createdAt),
     index('website_created_by_idx').on(t.createdBy),
   ],
+);
+
+/** Public ingest key (`fb_pk_…`) of a website, accepted wherever ingest accepts the website id. */
+export const websiteProjectKey = sqliteTable(
+  'website_project_key',
+  {
+    websiteId: text('website_id')
+      .primaryKey()
+      .references(() => website.websiteId),
+    projectKey: text('project_key').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    rotatedAt: integer('rotated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [uniqueIndex('website_project_key_key_idx').on(t.projectKey)],
 );
 
 export const session = sqliteTable(
@@ -346,6 +365,25 @@ export const userOauthIdentity = sqliteTable(
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   },
   (t) => [primaryKey({ columns: [t.provider, t.providerUserId] }), index('user_oauth_identity_user_idx').on(t.userId)],
+);
+
+/** Personal API key (`fb_sk_…`): stored as a SHA-256 hash plus a display prefix, never in full. */
+export const personalApiKey = sqliteTable(
+  'personal_api_key',
+  {
+    keyId: text('key_id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.userId),
+    name: text('name').notNull(),
+    keyHash: text('key_hash').notNull(),
+    keyPrefix: text('key_prefix').notNull(),
+    /** Comma-separated subset of `read`, `write`. */
+    scopes: text('scopes').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    lastUsedAt: integer('last_used_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [uniqueIndex('personal_api_key_hash_idx').on(t.keyHash), index('personal_api_key_user_idx').on(t.userId)],
 );
 
 /** One row per link redirect or pixel view (not website events: no website_id). */
@@ -893,6 +931,9 @@ export const errorIssueState = sqliteTable(
     status: text('status').notNull().default('open'),
     note: text('note'),
     assigneeUserId: text('assignee_user_id').references(() => user.userId),
+    resolvedAt: integer('resolved_at', { mode: 'timestamp_ms' }),
+    regressedAt: integer('regressed_at', { mode: 'timestamp_ms' }),
+    regressionCheckedAt: integer('regression_checked_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
   },
@@ -900,6 +941,46 @@ export const errorIssueState = sqliteTable(
     primaryKey({ columns: [t.websiteId, t.fingerprint] }),
     index('error_issue_state_website_status_idx').on(t.websiteId, t.status),
   ],
+);
+
+/** Merging issue B into A stores B -> A; events keep their fingerprint and are mapped at query time. */
+export const errorIssueMerge = sqliteTable(
+  'error_issue_merge',
+  {
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    sourceFingerprint: text('source_fingerprint').notNull(),
+    targetFingerprint: text('target_fingerprint').notNull(),
+    sourceName: text('source_name'),
+    sourceMessage: text('source_message'),
+    mergedBy: text('merged_by').references(() => user.userId),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.websiteId, t.sourceFingerprint] }),
+    index('error_issue_merge_target_idx').on(t.websiteId, t.targetFingerprint),
+  ],
+);
+
+/** One row per time a resolved issue occurred again. */
+export const errorIssueRegression = sqliteTable(
+  'error_issue_regression',
+  {
+    regressionId: text('regression_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    fingerprint: text('fingerprint').notNull(),
+    eventId: text('event_id'),
+    release: text('release'),
+    environment: text('environment'),
+    resolvedAt: integer('resolved_at', { mode: 'timestamp_ms' }),
+    occurredAt: integer('occurred_at', { mode: 'timestamp_ms' }).notNull(),
+    detectedAt: integer('detected_at', { mode: 'timestamp_ms' }).notNull(),
+    notifiedAt: integer('notified_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('error_issue_regression_issue_idx').on(t.websiteId, t.fingerprint, t.detectedAt)],
 );
 
 export const errorIssueComment = sqliteTable(
@@ -926,7 +1007,9 @@ export const errorSourceMap = sqliteTable(
       .references(() => website.websiteId),
     release: text('release').notNull(),
     file: text('file').notNull(),
+    /** Legacy inline map; '' once the content lives in R2 under `objectKey`. */
     content: text('content').notNull(),
+    objectKey: text('object_key'),
     size: integer('size').notNull(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
@@ -953,6 +1036,7 @@ export const errorAlertRule = sqliteTable(
     environment: text('environment'),
     channel: text('channel').notNull().default('record'),
     target: text('target'),
+    notifyRegressions: integer('notify_regressions', { mode: 'boolean' }).notNull().default(true),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
   },

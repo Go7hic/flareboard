@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { AlertTriangle, ExternalLink } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
+import { ErrorStackTrace } from '../components/ErrorStackTrace';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { api, type ErrorEventDetail } from '../lib/api';
@@ -73,6 +74,13 @@ export default function WebsiteErrorDetailPage() {
             </dl>
 
             <div className="error-detail-actions">
+              <Link
+                to={`/websites/${websiteId}/errors/issues/${encodeURIComponent(error.fingerprint)}`}
+                className="inline-link"
+              >
+                {t('errorIssueViewIssue')}
+                <ExternalLink size={12} strokeWidth={2} aria-hidden />
+              </Link>
               <Link to={`/websites/${websiteId}/sessions/${error.sessionId}`} className="inline-link">
                 {t('viewSession')}
                 <ExternalLink size={12} strokeWidth={2} aria-hidden />
@@ -121,34 +129,7 @@ export default function WebsiteErrorDetailPage() {
             </header>
 
             {error.resolvedStack?.length ? (
-              <div className="table-scroll">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>{t('stackFunction')}</th>
-                      <th>{t('stackFile')}</th>
-                      <th>{t('stackLine')}</th>
-                      <th>{t('source')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {error.resolvedStack.map((frame) => (
-                      <tr key={`${frame.file}:${frame.line}:${frame.column}`}>
-                        <td className="mono">{display(frame.functionName)}</td>
-                        <td className="mono">{display(frame.file)}</td>
-                        <td className="mono">
-                          {frame.line}:{frame.column}
-                        </td>
-                        <td className="mono">
-                          {frame.resolved && frame.source
-                            ? `${frame.source}:${frame.sourceLine ?? '?'}:${frame.sourceColumn ?? '?'}`
-                            : '-'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <ErrorStackTrace frames={error.resolvedStack} />
             ) : (
               <EmptyState
                 title={t('errorResolvedStackEmpty')}

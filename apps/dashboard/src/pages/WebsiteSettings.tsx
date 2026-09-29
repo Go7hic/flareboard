@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { IngestSnippetPanel } from '../components/IngestSnippetPanel';
 import { PlanUpgradeBanner } from '../components/PlanUpgradeBanner';
+import { ProjectKeyField } from '../components/ProjectKeyField';
 import {
   ReplayConfigWizard,
   replayConfigFromJson,
@@ -49,6 +50,9 @@ export default function WebsiteSettingsPage() {
   const [emailFrequency, setEmailFrequency] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
   const [recipientEmail, setRecipientEmail] = useState('');
   const [siteTimezone, setSiteTimezone] = useState('UTC');
+  const [autocapture, setAutocapture] = useState(true);
+  const [persistVisitors, setPersistVisitors] = useState(false);
+  const [respectDnt, setRespectDnt] = useState(false);
   const [heatmapConfigJson, setHeatmapConfigJson] = useState('{"sampleRate":0.1,"enabled":true}');
   const [heatmapPreviewUrl, setHeatmapPreviewUrl] = useState('');
   const [importFormat, setImportFormat] = useState<'flareboard' | 'ga4' | 'plausible' | 'matomo'>('ga4');
@@ -113,6 +117,9 @@ export default function WebsiteSettingsPage() {
     setReplayEnabled(Boolean(w.replayEnabled));
     if (w.replayConfig) setReplayConfig(replayConfigFromJson(w.replayConfig));
     setSiteTimezone(w.timezone ?? 'UTC');
+    setAutocapture(w.autocapture !== false);
+    setPersistVisitors(w.persistVisitors === true);
+    setRespectDnt(w.respectDnt === true);
     const heatmapConfig = (w as { heatmapConfig?: HeatmapConfig }).heatmapConfig;
     if (heatmapConfig) {
       setHeatmapConfigJson(JSON.stringify(heatmapConfig, null, 2));
@@ -144,6 +151,9 @@ export default function WebsiteSettingsPage() {
           replayConfig: replayConfigToJson(replayConfig),
           heatmapConfig,
           timezone: siteTimezone || 'UTC',
+          autocapture,
+          persistVisitors,
+          respectDnt,
           // datetime-local is local time; `null` clears a previous reset.
           resetAt: resetAt ? new Date(resetAt).toISOString() : null,
         }),
@@ -253,6 +263,14 @@ export default function WebsiteSettingsPage() {
         ) : null}
 
         <div className="page-settings-main">
+          {websiteId ? (
+            <Panel variant="accent-rail">
+              <h2 className="section-title">{t('projectKeyTitle')}</h2>
+              <p className="section-lead">{t('projectKeyLead')}</p>
+              <ProjectKeyField websiteId={websiteId} />
+            </Panel>
+          ) : null}
+
           {/* Sections are sibling panels; the old outer card nested cards inside a card. */}
           <div className="page-settings-group">
             <form className="page-settings-form" onSubmit={onSubmit}>
@@ -276,6 +294,44 @@ export default function WebsiteSettingsPage() {
                       <option value={siteTimezone}>{siteTimezone}</option>
                     ) : null}
                   </select>
+                </div>
+              </Panel>
+
+              <Panel variant="accent-rail">
+                <h2 className="section-title">{t('trackingSettings')}</h2>
+                <p className="section-lead">{t('trackingSettingsLead')}</p>
+                <div className="field">
+                  <label className="field-inline">
+                    <input
+                      type="checkbox"
+                      checked={autocapture}
+                      onChange={(e) => setAutocapture(e.target.checked)}
+                    />
+                    {t('autocaptureSetting')}
+                  </label>
+                  <p className="field-hint">{t('autocaptureSettingHint')}</p>
+                </div>
+                <div className="field">
+                  <label className="field-inline">
+                    <input
+                      type="checkbox"
+                      checked={persistVisitors}
+                      onChange={(e) => setPersistVisitors(e.target.checked)}
+                    />
+                    {t('persistVisitorsSetting')}
+                  </label>
+                  <p className="field-hint">{t('persistVisitorsSettingHint')}</p>
+                </div>
+                <div className="field">
+                  <label className="field-inline">
+                    <input
+                      type="checkbox"
+                      checked={respectDnt}
+                      onChange={(e) => setRespectDnt(e.target.checked)}
+                    />
+                    {t('respectDntSetting')}
+                  </label>
+                  <p className="field-hint">{t('respectDntSettingHint')}</p>
                 </div>
               </Panel>
 

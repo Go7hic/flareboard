@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema.ts",
-    "./site-store": "./src/site-store-client.ts"
+    "./site-store": "./src/site-store-client.ts",
+    "./property-filters": "./src/property-filters.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

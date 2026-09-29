@@ -4,6 +4,7 @@ import type { Env } from '../env';
 import { checkIpRateLimit, getTrustedClientIp } from '../lib/rate-limit';
 import { badRequest, json } from '../lib/response';
 import { getWebsiteById } from '../lib/queries';
+import { resolveWebsiteRef } from '../lib/project-keys';
 
 type Ctx = Context<{ Bindings: Env }>;
 
@@ -13,6 +14,13 @@ export async function handleSurveyResponse(c: Ctx) {
   if (!rateLimit.allowed) return json({ message: 'Rate limit exceeded' }, 429);
 
   const body = await c.req.json().catch(() => null);
+  // The tracker sends its data-website-id, which may be the site's project key. Survey limits
+  // stay per IP either way: they stop ballot stuffing, not throughput.
+  if (body && typeof body === 'object' && typeof (body as { website?: unknown }).website === 'string') {
+    const ref = await resolveWebsiteRef(c.env, (body as { website: string }).website);
+    if (!ref) return badRequest('Website not found.');
+    (body as { website: string }).website = ref.websiteId;
+  }
   const parsed = submitSurveyResponseSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
 

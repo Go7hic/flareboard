@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bar, BarChart, Line, LineChart } from 'recharts';
-import { AnalyticsChart } from '../components/AnalyticsChart';
+import type { FunnelActorsResult, InsightQuery, InsightResult, InsightType } from '@flareboard/shared/insight-query';
 import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
-import { EventCatalogPicker } from '../components/EventCatalogPicker';
+import { InsightQueryEditor, insightQueryProblem } from '../components/InsightQueryEditor';
+import { InsightResultView, breakdownLabel, type FunnelDrill } from '../components/InsightResultView';
 import {
   MasterDetailLayout,
   MasterDetailListItem,
@@ -14,145 +14,124 @@ import {
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { ProductLineCrossLinks } from '../components/ProductLineCrossLinks';
+import { completeFilters } from '../lib/websiteReportApi';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { api, type Insight, type InsightQuery, type InsightResult, type InsightType, type Website } from '../lib/api';
-import { presetToRange, rangeQueryString } from '../lib/dateRange';
-import { formatNumber, formatPercent } from '../lib/format';
+import { api, type Insight, type Website } from '../lib/api';
+import { presetToRange, rangeQueryString, type DateRangePreset } from '../lib/dateRange';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
-import { useChartColors } from '../lib/useChartColors';
 import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
 
-const DEFAULT_QUERY: InsightQuery = {
-  metric: 'pageviews',
-  dimension: 'path',
-  unit: 'day',
-  actor: 'person',
-  limit: 10,
-  events: ['signup', 'purchase'],
-};
+const INSIGHT_TYPE_OPTIONS: InsightType[] = ['trend', 'funnel', 'retention', 'lifecycle', 'stickiness', 'path', 'table'];
+const RANGE_PRESETS: DateRangePreset[] = ['7d', '30d', '90d'];
 
-function defaultName(type: InsightType) {
+function defaultQuery(type: InsightType): InsightQuery {
   switch (type) {
     case 'trend':
-      return t('insightTypeTrend');
+      return { version: 2, interval: 'day', series: [{ kind: 'pageview', math: 'total' }] };
     case 'funnel':
-      return t('insightTypeFunnel');
+      return {
+        version: 2,
+        countBy: 'person',
+        funnel: {
+          steps: [
+            { kind: 'pageview' },
+            { kind: 'event', event: null },
+          ],
+          window: { value: 14, unit: 'day' },
+          order: 'strict',
+        },
+      };
     case 'retention':
-      return t('insightTypeRetention');
-    case 'path':
-      return t('insightTypePath');
+      return {
+        version: 2,
+        countBy: 'person',
+        retention: { startEvent: { kind: 'pageview' }, returnEvent: { kind: 'pageview' }, period: 'week', periods: 8 },
+      };
+    case 'lifecycle':
+      return { version: 2, interval: 'day', countBy: 'person', series: [{ kind: 'pageview', math: 'total' }] };
     case 'stickiness':
-      return t('insightTypeStickiness');
+      return { version: 2, countBy: 'person', series: [{ kind: 'all', math: 'total' }] };
+    case 'path':
+      return { version: 2, path: { steps: [], limit: 20 } };
     case 'table':
-      return t('insightTypeTable');
-    default:
-      return t('insight');
+      return { version: 2, table: { dimension: 'path', limit: 10 } };
   }
 }
 
-function insightTypeLabel(type: InsightType) {
-  return defaultName(type);
+function typeLabel(type: InsightType | string) {
+  const key = `insightType${type.charAt(0).toUpperCase()}${type.slice(1)}`;
+  const label = t(key);
+  return label === key ? t('insight') : label;
 }
 
-function funnelStepsFromQuery(events: string[] | undefined) {
-  return events?.length ? events : ['signup', 'purchase'];
+/** Drop incomplete filter rows (still being edited) before sending the query. */
+function runnableQuery(query: InsightQuery): InsightQuery {
+  const clean = <T extends { filters?: InsightQuery['filters'] }>(item: T): T =>
+    item.filters ? { ...item, filters: completeFilters(item.filters) } : item;
+  return {
+    ...query,
+    filters: query.filters ? completeFilters(query.filters) : undefined,
+    formula: query.formula?.trim() || null,
+    series: query.series?.map(clean),
+    funnel: query.funnel ? { ...query.funnel, steps: query.funnel.steps.map(clean) } : undefined,
+    retention: query.retention
+      ? {
+          ...query.retention,
+          startEvent: query.retention.startEvent ? clean(query.retention.startEvent) : undefined,
+          returnEvent: query.retention.returnEvent ? clean(query.retention.returnEvent) : undefined,
+        }
+      : undefined,
+  };
 }
 
-function ResultPreview({ result }: { result: InsightResult | null | undefined }) {
-  const chartColors = useChartColors();
-  if (!result) return <EmptyState title={t('insightPreviewEmptyTitle')} description={t('insightPreviewEmptyBody')} />;
-
-  if (result.kind === 'trend') {
-    return (
-      <div className="chart-wrap chart-wrap-compact">
-        <AnalyticsChart Chart={LineChart} data={result.series} margin={{ left: 8, right: 16 }} xAxis={{ dataKey: 'x' }}>
-          <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} />
-        </AnalyticsChart>
-      </div>
-    );
-  }
-
-  if (result.kind === 'funnel') {
-    const rows = result.steps.map((step) => ({ name: step.step, count: step.count }));
-    return (
-      <>
-        <div className="chart-wrap chart-wrap-compact">
-          <AnalyticsChart
-            Chart={BarChart}
-            data={rows}
-            layout="vertical"
-            margin={{ left: 8, right: 16 }}
-            grid={{ horizontal: false }}
-            xAxis={{ type: 'number' }}
-            yAxis={{ type: 'category', dataKey: 'name', width: 110 }}
-          >
-            <Bar dataKey="count" fill={chartColors.accent} radius={[0, 4, 4, 0]} />
-          </AnalyticsChart>
-        </div>
-        <p className="text-muted">{t('overallConversion')}: {formatPercent(result.conversion)}</p>
-      </>
-    );
-  }
-
-  if (result.kind === 'stickiness') {
-    const rows = result.distribution.map((row) => ({ name: `${row.activeDays}d`, actors: row.actors }));
-    return (
-      <div className="chart-wrap chart-wrap-compact">
-        <AnalyticsChart Chart={BarChart} data={rows} margin={{ left: 8, right: 16 }} xAxis={{ dataKey: 'name' }}>
-          <Bar dataKey="actors" fill={chartColors.accent} radius={[4, 4, 0, 0]} />
-        </AnalyticsChart>
-      </div>
-    );
-  }
-
-  if (result.kind === 'retention') {
-    return <p className="text-muted">{t('insightRetentionPreview').replace('{count}', String(result.cohorts.length))}</p>;
-  }
-
-  if (result.kind === 'path') {
-    return (
-      <div className="table-scroll">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>{t('page')}</th>
-              <th className="num">{t('visits')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {result.next.map((row) => (
-              <tr key={row.path}>
-                <td>{row.path}</td>
-                <td className="num">{formatNumber(row.count)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
-
+function FunnelActorsPanel({
+  websiteId,
+  data,
+  drill,
+  onClose,
+}: {
+  websiteId: string;
+  data: FunnelActorsResult;
+  drill: FunnelDrill;
+  onClose: () => void;
+}) {
   return (
-    <div className="table-scroll">
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>{t('value')}</th>
-            <th className="num">{t('events')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {result.rows.map((row) => (
-            <tr key={row.x}>
-              <td>{row.x}</td>
-              <td className="num">{formatNumber(row.y)}</td>
-            </tr>
+    <div className="panel insight-actors-panel">
+      <div className="panel-header compact-panel-header">
+        <div>
+          <h4 className="section-title">
+            {drill.outcome === 'converted' ? t('insightConverted') : t('insightDroppedOff')} · {t('insightStep')} {drill.step + 1}
+            {drill.breakdownValue !== undefined || drill.breakdownOther
+              ? ` · ${breakdownLabel(drill.breakdownValue, drill.breakdownOther)}`
+              : ''}
+          </h4>
+          <p className="text-muted">
+            {t('insightActorsShown').replace('{shown}', formatNumber(data.actors.length)).replace('{total}', formatNumber(data.total))}
+          </p>
+        </div>
+        <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+          {t('close')}
+        </Button>
+      </div>
+      {data.actors.length ? (
+        <ul className="list-plain insight-actors-list">
+          {data.actors.map((actor) => (
+            <li key={actor} className="list-item">
+              {data.countBy === 'session' ? (
+                <Link to={`/websites/${websiteId}/sessions/${encodeURIComponent(actor)}`}>{actor}</Link>
+              ) : (
+                <code>{actor}</code>
+              )}
+            </li>
           ))}
-        </tbody>
-      </table>
+        </ul>
+      ) : (
+        <p className="text-muted">{t('noDataInPeriod')}</p>
+      )}
     </div>
   );
 }
@@ -162,10 +141,12 @@ export default function InsightsPage() {
   const queryClient = useQueryClient();
   const [websiteId, setWebsiteId] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [name, setName] = useState(defaultName('trend'));
+  const [name, setName] = useState(typeLabel('trend'));
   const [description, setDescription] = useState('');
   const [type, setType] = useState<InsightType>('trend');
-  const [query, setQuery] = useState<InsightQuery>(DEFAULT_QUERY);
+  const [query, setQuery] = useState<InsightQuery>(() => defaultQuery('trend'));
+  const [preset, setPreset] = useState<DateRangePreset>('30d');
+  const [drill, setDrill] = useState<FunnelDrill | null>(null);
 
   const websitesQuery = useQuery({
     queryKey: ['websites'],
@@ -174,9 +155,10 @@ export default function InsightsPage() {
 
   const websites = websitesQuery.data ?? [];
   const timezone = websites.find((w) => w.id === websiteId)?.timezone ?? 'UTC';
-  const range = useMemo(() => presetToRange('30d', undefined, undefined, timezone), [timezone]);
+  const range = useMemo(() => presetToRange(preset, undefined, undefined, timezone), [preset, timezone]);
   const rangeQs = rangeQueryString(range.startAt, range.endAt);
   const { canEdit } = useWebsitePermissions(websiteId, 'analytics');
+  const problem = insightQueryProblem(type, query);
 
   useEffect(() => {
     if (!websiteId && websites.length) {
@@ -194,13 +176,22 @@ export default function InsightsPage() {
     mutationFn: () =>
       api<{ data: InsightResult }>(`/api/insights/preview?websiteId=${websiteId}&${rangeQs}`, {
         method: 'POST',
-        body: JSON.stringify({ type, query }),
+        body: JSON.stringify({ type, query: runnableQuery(query) }),
+      }),
+    onMutate: () => setDrill(null),
+  });
+
+  const actorsMutation = useMutation({
+    mutationFn: (next: FunnelDrill) =>
+      api<FunnelActorsResult>(`/api/insights/funnel-actors?websiteId=${websiteId}&${rangeQs}`, {
+        method: 'POST',
+        body: JSON.stringify({ type: 'funnel', query: runnableQuery(query), ...next, limit: 100 }),
       }),
   });
 
   const saveMutation = useMutation({
     mutationFn: () => {
-      const body = JSON.stringify({ websiteId, name, description, type, query });
+      const body = JSON.stringify({ websiteId, name, description, type, query: runnableQuery(query) });
       if (selectedId) {
         return api<Insight>(`/api/insights/${selectedId}`, { method: 'PATCH', body });
       }
@@ -216,26 +207,34 @@ export default function InsightsPage() {
     mutationFn: (id: string) => api(`/api/insights/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       setSelectedId(null);
-      setName(defaultName(type));
+      setName(typeLabel(type));
       queryClient.invalidateQueries({ queryKey: ['insights', websiteId] });
     },
   });
 
+  function reset() {
+    previewMutation.reset();
+    actorsMutation.reset();
+    setDrill(null);
+  }
+
   function selectInsight(insight: Insight) {
+    reset();
     setSelectedId(insight.id);
     setWebsiteId(insight.websiteId);
     setName(insight.name);
     setDescription(insight.description);
     setType(insight.type);
-    setQuery({ ...DEFAULT_QUERY, ...insight.query });
+    setQuery(insight.query?.version === 2 ? insight.query : defaultQuery(insight.type));
   }
 
   function newInsight(nextType: InsightType = 'trend') {
+    reset();
     setSelectedId(null);
     setType(nextType);
-    setName(defaultName(nextType));
+    setName(typeLabel(nextType));
     setDescription('');
-    setQuery(DEFAULT_QUERY);
+    setQuery(defaultQuery(nextType));
   }
 
   return (
@@ -269,7 +268,7 @@ export default function InsightsPage() {
                     selected={selectedId === insight.id}
                     onSelect={() => selectInsight(insight)}
                     title={insight.name}
-                    subtitle={insightTypeLabel(insight.type)}
+                    subtitle={typeLabel(insight.type)}
                   />
                 ))}
               </>
@@ -287,12 +286,18 @@ export default function InsightsPage() {
                 ) : null
               }
             >
-            {canEdit ? (
-            <>
             <div className="workflow-insights-grid">
               <div className="field">
                 <Label htmlFor="insight-website">{t('website')}</Label>
-                <select id="insight-website" className="select" value={websiteId} onChange={(event) => setWebsiteId(event.target.value)}>
+                <select
+                  id="insight-website"
+                  className="select"
+                  value={websiteId}
+                  onChange={(event) => {
+                    reset();
+                    setWebsiteId(event.target.value);
+                  }}
+                >
                   {websites.map((website) => (
                     <option key={website.id} value={website.id}>{website.name}</option>
                   ))}
@@ -306,128 +311,95 @@ export default function InsightsPage() {
                   value={type}
                   onChange={(event) => {
                     const next = event.target.value as InsightType;
+                    reset();
                     setType(next);
-                    if (!selectedId) setName(defaultName(next));
+                    setQuery(defaultQuery(next));
+                    if (!selectedId) setName(typeLabel(next));
                   }}
                 >
-                  <option value="trend">{t('insightTypeTrend')}</option>
-                  <option value="funnel">{t('insightTypeFunnel')}</option>
-                  <option value="retention">{t('insightTypeRetention')}</option>
-                  <option value="path">{t('insightTypePath')}</option>
-                  <option value="stickiness">{t('insightTypeStickiness')}</option>
-                  <option value="table">{t('insightTypeTable')}</option>
+                  {INSIGHT_TYPE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {typeLabel(option)}
+                    </option>
+                  ))}
                 </select>
               </div>
-              <div className="field">
-                <Label htmlFor="insight-name">{t('name')}</Label>
-                <Input id="insight-name" value={name} onChange={(event) => setName(event.target.value)} />
-              </div>
-              <div className="field">
-                <Label htmlFor="insight-description">{t('description')}</Label>
-                <Input id="insight-description" value={description} onChange={(event) => setDescription(event.target.value)} />
-              </div>
-            </div>
-
-            <div className="workflow-insights-grid">
-              {type === 'funnel' ? (
-                <div className="field">
-                  <Label htmlFor="insight-events">{t('funnel')}</Label>
-                  <EventCatalogPicker
-                    mode="multi"
-                    websiteId={websiteId}
-                    id="insight-events"
-                    value={funnelStepsFromQuery(query.events)}
-                    onChange={(events) => setQuery((prev) => ({ ...prev, events }))}
-                    placeholder={t('funnelStepsPlaceholder')}
-                    aria-label={t('funnel')}
-                  />
-                </div>
-              ) : type === 'table' ? (
-                <div className="field">
-                  <Label htmlFor="insight-dimension">{t('dimension')}</Label>
-                  <select
-                    id="insight-dimension"
-                    className="select"
-                    value={query.dimension ?? 'path'}
-                    onChange={(event) => setQuery((prev) => ({ ...prev, dimension: event.target.value }))}
-                  >
-                    <option value="path">{t('page')}</option>
-                    <option value="event">{t('event')}</option>
-                    <option value="browser">{t('browser')}</option>
-                    <option value="country">{t('country')}</option>
-                    <option value="channel">{t('overviewTabChannel')}</option>
-                  </select>
-                </div>
-              ) : type === 'path' ? (
-                <div className="field">
-                  <Label htmlFor="insight-path">{t('insightPathPrefix')}</Label>
-                  <Input
-                    id="insight-path"
-                    value={query.path ?? ''}
-                    onChange={(event) => setQuery((prev) => ({ ...prev, path: event.target.value }))}
-                    placeholder="/pricing"
-                  />
-                </div>
-              ) : type === 'trend' || type === 'stickiness' ? (
-                <div className="field">
-                  <Label htmlFor="insight-event">{t('event')}</Label>
-                  <EventCatalogPicker
-                    mode="single"
-                    websiteId={websiteId}
-                    id="insight-event"
-                    value={query.event ?? ''}
-                    onChange={(event) => setQuery((prev) => ({ ...prev, event }))}
-                    placeholder={type === 'trend' ? t('insightTrendEventPlaceholder') : t('stickinessEventPlaceholder')}
-                    allowEmpty={type === 'stickiness'}
-                  />
-                </div>
-              ) : null}
-
-              {type === 'trend' ? (
-                <div className="field">
-                  <Label htmlFor="insight-metric">{t('metric')}</Label>
-                  <select
-                    id="insight-metric"
-                    className="select"
-                    value={query.metric ?? 'pageviews'}
-                    onChange={(event) => setQuery((prev) => ({ ...prev, metric: event.target.value as InsightQuery['metric'] }))}
-                  >
-                    <option value="pageviews">{t('pageviews')}</option>
-                    <option value="visitors">{t('visitors')}</option>
-                    <option value="events">{t('events')}</option>
-                  </select>
-                </div>
+              {canEdit ? (
+                <>
+                  <div className="field">
+                    <Label htmlFor="insight-name">{t('name')}</Label>
+                    <Input id="insight-name" value={name} onChange={(event) => setName(event.target.value)} />
+                  </div>
+                  <div className="field">
+                    <Label htmlFor="insight-description">{t('description')}</Label>
+                    <Input id="insight-description" value={description} onChange={(event) => setDescription(event.target.value)} />
+                  </div>
+                </>
               ) : null}
             </div>
+
+            {websiteId ? (
+              <InsightQueryEditor websiteId={websiteId} type={type} query={query} onChange={setQuery} rangeQs={rangeQs} />
+            ) : null}
+
+            {problem ? <p className="text-muted insight-problem" role="status">{problem}</p> : null}
 
             <div className="form-actions">
-              <Button type="button" variant="secondary" onClick={() => previewMutation.mutate()} disabled={!websiteId || previewMutation.isPending}>
+              <select
+                className="select insight-range-select"
+                aria-label={t('dateRange')}
+                value={preset}
+                onChange={(event) => {
+                  reset();
+                  setPreset(event.target.value as DateRangePreset);
+                }}
+              >
+                {RANGE_PRESETS.map((option) => (
+                  <option key={option} value={option}>
+                    {t(`datePreset${option}`)}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => previewMutation.mutate()}
+                disabled={!websiteId || Boolean(problem) || previewMutation.isPending}
+              >
                 {t('previewInsight')}
               </Button>
-              <Button type="button" variant="primary" onClick={() => saveMutation.mutate()} disabled={!websiteId || !name.trim() || saveMutation.isPending}>
-                {selectedId ? t('saveChanges') : t('saveInsight')}
-              </Button>
-              {selectedId ? (
+              {canEdit ? (
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => saveMutation.mutate()}
+                  disabled={!websiteId || !name.trim() || Boolean(problem) || saveMutation.isPending}
+                >
+                  {selectedId ? t('saveChanges') : t('saveInsight')}
+                </Button>
+              ) : null}
+              {canEdit && selectedId ? (
                 <Button type="button" variant="danger" onClick={() => confirm({ title: deleteTitle(name), onConfirm: () => deleteMutation.mutate(selectedId) })}>
                   {t('delete')}
                 </Button>
               ) : null}
             </div>
-            <p className="text-muted insight-save-share-hint">
-              {t('insightSaveShareHintBeforeBoards')}{' '}
-              <Link to="/boards">{t('boards')}</Link>
-              {t('insightSaveShareHintBeforeReports')}{' '}
-              <Link to="/reports">{t('reports')}</Link>
-              {t('insightSaveShareHintEnd')}
-            </p>
-            </>
+            {saveMutation.error ? <p className="text-danger">{(saveMutation.error as Error).message}</p> : null}
+            {canEdit ? (
+              <p className="text-muted insight-save-share-hint">
+                {t('insightSaveShareHintBeforeBoards')}{' '}
+                <Link to="/boards">{t('boards')}</Link>
+                {t('insightSaveShareHintBeforeReports')}{' '}
+                <Link to="/reports">{t('reports')}</Link>
+                {t('insightSaveShareHintEnd')}
+              </p>
             ) : null}
 
             <div className="detail-section">
               <div className="panel-header compact-panel-header">
                 <div>
                   <h3 className="section-title experiment-title">{t('insightPreview')}</h3>
-                  <p className="text-muted">{t('insightPreviewLead')}</p>
+                  <p className="text-muted">{t('insightPreviewLeadRange').replace('{range}', t(`datePreset${preset}`))}</p>
                 </div>
               </div>
               <DataViewState
@@ -435,8 +407,34 @@ export default function InsightsPage() {
                 error={previewMutation.isError ? previewMutation.error : null}
                 onRetry={() => previewMutation.mutate()}
               >
-                <ResultPreview result={previewMutation.data?.data} />
+                {previewMutation.data?.data ? (
+                  <InsightResultView
+                    result={previewMutation.data.data}
+                    onFunnelDrill={(next) => {
+                      setDrill(next);
+                      actorsMutation.mutate(next);
+                    }}
+                  />
+                ) : (
+                  <EmptyState title={t('insightPreviewEmptyTitle')} description={t('insightPreviewEmptyBody')} />
+                )}
               </DataViewState>
+              {drill ? (
+                <DataViewState
+                  loading={actorsMutation.isPending}
+                  error={actorsMutation.isError ? actorsMutation.error : null}
+                  onRetry={() => actorsMutation.mutate(drill)}
+                >
+                  {actorsMutation.data ? (
+                    <FunnelActorsPanel
+                      websiteId={websiteId}
+                      data={actorsMutation.data}
+                      drill={drill}
+                      onClose={() => setDrill(null)}
+                    />
+                  ) : null}
+                </DataViewState>
+              ) : null}
             </div>
             </MasterDetailPane>
           }

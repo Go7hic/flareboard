@@ -1,3 +1,4 @@
+import type { InsightQuery as InsightQueryV2, InsightType as InsightTypeV2 } from '@flareboard/shared/insight-query';
 import { apiReturnedHtmlError, apiUrlConfigError, resolveApiUrl } from './api-url';
 
 const LEGACY_TOKEN_KEY = 'flareboard_token';
@@ -197,6 +198,12 @@ export interface Website {
   replayEnabled?: boolean;
   goalConfig?: { goals: Array<{ event: string; target: number; period: string }> };
   timezone?: string;
+  /** Tracker: autocapture clicks, submits, field changes and page leaves. */
+  autocapture?: boolean;
+  /** Tracker: remember visitors across sessions with a random localStorage id. */
+  persistVisitors?: boolean;
+  /** Tracker: send nothing from browsers with Do Not Track / Global Privacy Control. */
+  respectDnt?: boolean;
 }
 
 export interface StatValue {
@@ -253,6 +260,7 @@ export interface EventCatalogDetailResponse {
     visitId: string;
     urlPath: string | null;
     createdAt: number;
+    properties?: Array<{ key: string; value: string | null }>;
   }>;
 }
 
@@ -358,39 +366,34 @@ export interface AnnotationsResponse {
   endAt: number;
 }
 
-export type InsightType = 'trend' | 'funnel' | 'retention' | 'path' | 'stickiness' | 'table';
 
-export type InsightQuery = {
-  event?: string | null;
-  events?: string[];
-  path?: string | null;
-  steps?: string[];
-  metric?: 'pageviews' | 'visitors' | 'visits' | 'events';
-  dimension?: string;
-  actor?: 'person' | 'session';
-  unit?: 'hour' | 'day' | 'week' | 'month';
-  limit?: number;
-};
+export type {
+  InsightQuery,
+  InsightResult,
+  InsightType,
+  PropertyFilter,
+  TrendResult,
+  FunnelResult,
+  RetentionResult,
+  LifecycleResult,
+  StickinessResult,
+} from '@flareboard/shared/insight-query';
 
 export interface Insight {
   id: string;
   websiteId: string;
   userId: string;
-  type: InsightType;
+  type: InsightTypeV2;
   name: string;
   description: string;
-  query: InsightQuery;
+  /** Always the v2 shape (the API upgrades legacy rows on read). */
+  query: InsightQueryV2;
   createdAt: number | null;
   updatedAt: number | null;
 }
 
-export type InsightResult =
-  | { kind: 'trend'; series: Array<{ x: string; y: number }>; startAt: number; endAt: number; event?: string; metric?: string }
-  | { kind: 'funnel'; steps: Array<{ step: string; count: number; rate: number }>; conversion: number; startAt: number; endAt: number }
-  | { kind: 'retention'; cohorts: Array<{ cohortWeek: string; weekOffset: number; users: number }>; startAt: number; endAt: number }
-  | { kind: 'path'; prefix: string[]; depth: number; total: number; next: Array<{ path: string; count: number }>; paths: Array<{ path: string; count: number }>; startAt: number; endAt: number }
-  | { kind: 'stickiness'; distribution: Array<{ activeDays: number; actors: number; events: number; percentage: number }>; totalActors: number; actorDays: number; averageActiveDays: number; startAt: number; endAt: number }
-  | { kind: 'table'; dimension: string; rows: MetricRow[]; startAt: number; endAt: number };
+export type PropertyKeyRow = { key: string; count: number; numeric: boolean };
+export type PropertyValueRow = { value: string; count: number };
 
 export interface ErrorEvent {
   id: string;
@@ -409,6 +412,17 @@ export interface ErrorEvent {
   handled: string | null;
   release: string | null;
   environment: string | null;
+  /** Issue the event belongs to (after merges). */
+  fingerprint: string;
+}
+
+export type ErrorIssueStatus = 'open' | 'resolved' | 'ignored' | 'regressed';
+
+export interface ErrorIssueComment {
+  id: string;
+  userId: string | null;
+  body: string;
+  createdAt: number;
 }
 
 export interface ErrorIssue {
@@ -418,12 +432,20 @@ export interface ErrorIssue {
   severity: string | null;
   events: number;
   sessions: number;
+  users: number;
   firstSeenAt: number | null;
   lastSeenAt: number | null;
   latestEventId: string | null;
-  status: 'open' | 'resolved' | 'ignored';
+  status: ErrorIssueStatus;
   note: string | null;
+  assigneeUserId: string | null;
   stateUpdatedAt: number | null;
+  resolvedAt: number | null;
+  regressedAt: number | null;
+  mergedCount: number;
+  /** Event counts in equal slices of the selected range. */
+  trend: number[];
+  comments: ErrorIssueComment[];
   samples: ErrorEvent[];
 }
 
@@ -431,6 +453,7 @@ export interface ErrorEventsResponse {
   stats: {
     errors: number;
     sessions: number;
+    users: number;
     firstSeenAt: number | null;
     lastSeenAt: number | null;
     releases: Array<{ release: string; errors: number }>;
@@ -442,20 +465,76 @@ export interface ErrorEventsResponse {
   errors: ErrorEvent[];
 }
 
+export interface ResolvedStackFrame {
+  raw: string;
+  functionName: string | null;
+  file: string;
+  line: number | null;
+  column: number | null;
+  inApp: boolean;
+  source: string | null;
+  sourceLine: number | null;
+  sourceColumn: number | null;
+  resolved: boolean;
+  context: { startLine: number; lines: string[] } | null;
+}
+
 export interface ErrorEventDetail extends ErrorEvent {
   properties: Array<{ key: string; value: string | null }>;
-  resolvedStack?: Array<{
-    raw: string;
-    functionName: string | null;
-    file: string;
-    line: number;
-    column: number;
-    source: string | null;
-    sourceLine: number | null;
-    sourceColumn: number | null;
-    resolved: boolean;
-  }>;
+  resolvedStack?: ResolvedStackFrame[];
+  grouping?: {
+    method: 'custom' | 'stack' | 'message';
+    frames: Array<{ file: string; function: string }>;
+  };
 }
+
+export interface ErrorIssueRegression {
+  id: string;
+  fingerprint: string;
+  eventId: string | null;
+  release: string | null;
+  environment: string | null;
+  resolvedAt: number | null;
+  occurredAt: number;
+  detectedAt: number;
+  notifiedAt: number | null;
+}
+
+export interface ErrorIssueDetail {
+  fingerprint: string;
+  name: string | null;
+  message: string | null;
+  severity: string | null;
+  status: ErrorIssueStatus;
+  note: string | null;
+  assigneeUserId: string | null;
+  stateUpdatedAt: number | null;
+  resolvedAt: number | null;
+  regressedAt: number | null;
+  events: number;
+  sessions: number;
+  users: number;
+  firstSeenAt: number | null;
+  lastSeenAt: number | null;
+  trend: number[];
+  trendStartAt: number;
+  trendEndAt: number;
+  samples: ErrorEvent[];
+  latestEvent: ErrorEventDetail | null;
+  comments: ErrorIssueComment[];
+  mergedIssues: Array<{
+    fingerprint: string;
+    name: string | null;
+    message: string | null;
+    mergedAt: number | null;
+    mergedBy: string | null;
+    events: number;
+    lastSeenAt: number | null;
+  }>;
+  regressions: ErrorIssueRegression[];
+}
+
+export type ErrorIssueDetailResponse = { issue: ErrorIssueDetail } | { mergedInto: string };
 
 export interface LogEvent {
   id: string;
@@ -1239,6 +1318,8 @@ export interface ErrorAlertRule {
   environment: string | null;
   channel: 'record' | 'email' | 'webhook';
   target: string | null;
+  /** Also notify when a resolved issue occurs again. */
+  notifyRegressions: boolean;
   createdAt?: number;
   updatedAt?: number;
 }

@@ -3,7 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
-import { api, INGEST_URL, type TrackingStatus } from '../lib/api';
+import { ProjectKeyField, useProjectKey } from './ProjectKeyField';
+import { api, INGEST_URL, INGEST_URL_FOR_DOCS, type TrackingStatus } from '../lib/api';
 import { formatDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
 
@@ -94,6 +95,12 @@ export function IngestSnippetPanel({
   flareboard.group('account', 'acme_inc', { name: 'Acme Inc', plan: 'team' })
   // flareboard.reset()
 
+  // ${t('superPropsSnippetComment')}
+  flareboard.register({ app_version: '2.4.0' })
+
+  // ${t('consentSnippetComment')}
+  // flareboard.optOut()  ·  flareboard.optIn()  ·  flareboard.hasOptedOut()
+
   // ${t('featureFlagSnippetComment')}
   flareboard.featureFlagsReady().then(function () {
     if (flareboard.isFeatureEnabled('checkout.new_flow')) {
@@ -122,6 +129,59 @@ export function IngestSnippetPanel({
     status: 'success'
   })
 </script>`;
+
+  const optionsSnippet = `<script defer src="${INGEST_URL}/script.js" data-website-id="${websiteId}"
+  data-autocapture="false"
+  data-pageleave="true"
+  data-persistence="false"
+  data-respect-dnt></script>
+
+<div data-fb-no-capture>…</div>`;
+
+  const npmSnippet = `npm install @flareboard/js
+
+import { flareboard } from '@flareboard/js'
+
+flareboard.init({
+  host: '${INGEST_URL}',
+  websiteId: '${websiteId}',
+  // autocapture: false, persistence: false, respectDnt: true
+})
+flareboard.track('signup', { plan: 'pro' })
+
+// ${t('embedNpmCommentReact')}
+import { FlareboardProvider, useFeatureFlag } from '@flareboard/js/react'
+
+<FlareboardProvider config={{ host: '${INGEST_URL}', websiteId: '${websiteId}' }}>
+  <App />
+</FlareboardProvider>
+
+const variant = useFeatureFlag('checkout.new_flow')`;
+
+  const projectKey = useProjectKey(websiteId).data?.key ?? 'fb_pk_…';
+  const posthogSnippets = useMemo(
+    () => ({
+      js: `import posthog from 'posthog-js'
+
+posthog.init('${projectKey}', {
+  api_host: '${INGEST_URL_FOR_DOCS}',
+  person_profiles: 'identified_only',
+  // ${t('posthogSnippetUnsupportedComment')}
+  disable_session_recording: true,
+  disable_surveys: true,
+})`,
+      node: `import { PostHog } from 'posthog-node'
+
+const posthog = new PostHog('${projectKey}', { host: '${INGEST_URL_FOR_DOCS}' })
+posthog.capture({ distinctId: 'user_123', event: 'subscription_renewed', properties: { plan: 'pro' } })
+await posthog.shutdown()`,
+      python: `from posthog import Posthog
+
+posthog = Posthog('${projectKey}', host='${INGEST_URL_FOR_DOCS}')
+posthog.capture(distinct_id='user_123', event='subscription_renewed', properties={'plan': 'pro'})`,
+    }),
+    [projectKey],
+  );
 
   const declarativeSnippet = `<!-- ${t('declarativeEvents')} -->
 <button data-flareboard-event="signup" data-flareboard-event-plan="pro">Sign up</button>
@@ -211,6 +271,43 @@ export function IngestSnippetPanel({
         <details className="snippet-advanced">
           <summary>{t('embedAdvanced')}</summary>
           <pre className="code-block snippet-code">{advancedSnippet}</pre>
+        </details>
+        <details className="snippet-advanced">
+          <summary>{t('embedOptions')}</summary>
+          <p className="section-lead snippet-replay-lead">{t('embedOptionsLead')}</p>
+          <pre className="code-block snippet-code">{optionsSnippet}</pre>
+          <ul className="list-plain">
+            {(
+              [
+                ['data-autocapture', 'embedOptionAutocapture'],
+                ['data-pageleave', 'embedOptionPageleave'],
+                ['data-persistence', 'embedOptionPersistence'],
+                ['data-respect-dnt', 'embedOptionRespectDnt'],
+                ['data-fb-no-capture', 'embedOptionNoCapture'],
+              ] as const
+            ).map(([name, key]) => (
+              <li key={name} className="field-hint">
+                <code>{name}</code> — {t(key)}
+              </li>
+            ))}
+          </ul>
+        </details>
+        <details className="snippet-advanced">
+          <summary>{t('embedNpmTitle')}</summary>
+          <p className="section-lead snippet-replay-lead">{t('embedNpmLead')}</p>
+          <pre className="code-block snippet-code">{npmSnippet}</pre>
+        </details>
+        <details className="snippet-advanced">
+          <summary>{t('posthogSdks')}</summary>
+          <p className="section-lead snippet-replay-lead">{t('posthogSdksLead')}</p>
+          <ProjectKeyField websiteId={websiteId} />
+          <p className="text-sm text-[var(--text-muted)] mb-2">posthog-js</p>
+          <pre className="code-block snippet-code">{posthogSnippets.js}</pre>
+          <p className="text-sm text-[var(--text-muted)] mb-2">posthog-node</p>
+          <pre className="code-block snippet-code">{posthogSnippets.node}</pre>
+          <p className="text-sm text-[var(--text-muted)] mb-2">posthog-python</p>
+          <pre className="code-block snippet-code">{posthogSnippets.python}</pre>
+          <p className="field-hint">{t('posthogSdksLimits')}</p>
         </details>
         <details className="snippet-advanced">
           <summary>{t('declarativeEvents')}</summary>

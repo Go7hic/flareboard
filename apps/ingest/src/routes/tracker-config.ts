@@ -3,6 +3,7 @@ import { featureFlagNeedsServerEvaluation, type FeatureFlagJsonValue } from '@fl
 import type { Env } from '../env';
 import { flagConfig, getEnabledFlags, type FlagRow } from '../lib/feature-flags';
 import { getWebsiteById } from '../lib/queries';
+import { resolveWebsiteRef } from '../lib/project-keys';
 import { badRequest, json, notFound } from '../lib/response';
 
 /**
@@ -54,8 +55,10 @@ export function replaySettings(raw: unknown) {
 }
 
 export async function handleTrackerConfig(c: Context<{ Bindings: Env }>) {
-  const websiteId = c.req.query('website');
-  if (!websiteId) return badRequest('website query param required');
+  const websiteRef = c.req.query('website');
+  if (!websiteRef) return badRequest('website query param required');
+  const websiteId = (await resolveWebsiteRef(c.env, websiteRef))?.websiteId;
+  if (!websiteId) return notFound();
 
   const cacheKey = `tracker-config:${websiteId}`;
   const cached = await c.env.CACHE.get(cacheKey);
@@ -98,6 +101,12 @@ export async function handleTrackerConfig(c: Context<{ Bindings: Env }>) {
     }>();
 
   const payload = {
+    websiteId: website.websiteId,
+    // Tracker behavior. script.js lets data-autocapture / data-persistence="false" /
+    // data-respect-dnt on the script tag override these per page.
+    autocapture: website.autocapture !== false,
+    persistence: website.persistVisitors === true,
+    respectDnt: website.respectDnt === true,
     replay: replaySettings(website.replayConfig),
     heatmapSampleRate: Math.min(1, Math.max(0, sampleRate)),
     heatmapEnabled: heatmapConfig.enabled !== false,

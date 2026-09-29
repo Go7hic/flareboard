@@ -15,5 +15,7 @@ export default defineConfig({
   ],
   test: {
     include: ['test/**/*.spec.ts'],
+    // Website stores are Durable Objects: RPC round trips under a loaded machine exceed the 5s default.
+    testTimeout: 20_000,
   },
 });

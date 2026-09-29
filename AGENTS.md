@@ -89,7 +89,8 @@ Header chrome: `--shell-bg` + `backdrop-filter` on `.shell-nav` / `.landing-nav`
 
 - **Deletion:** deleting a website or account only sets `deleted_at`. `apps/api/src/lib/data-deletion.ts` (hourly cron) erases everything after `DELETION_GRACE_DAYS` (30, promised in both policies). It discovers website-scoped tables from the schema, so new tables with a `website_id` column are covered automatically; user references need a line in `USER_OWNED_TABLES` / `USER_REFERENCES`.
 - **Replay:** R2 objects (`<websiteId>/<visitId>/<chunk>`) must be deleted before their `session_replay` rows (see `lib/retention.ts`). Privacy settings reach `recorder.js` through `/api/tracker-config` → `replay`; inputs are masked unless a site opts out.
-- **Visitor IDs:** a monthly-salted hash of IP + user agent (`getSalt`, default `'month'`). IPs are never stored. Keep landing copy and the Privacy Policy consistent with this.
+- **Visitor IDs:** a monthly-salted hash of IP + user agent (`getSalt`, default `'month'`). IPs are never stored. Opt-in exception: a website with "Remember visitors across sessions" (`website.persist_visitors`) gets a random `localStorage` id from `script.js`, which ingest uses instead (`resolveDistinctId` in `apps/ingest/src/lib/tracker-settings.ts`; anonymous ids are dropped on other websites). Keep landing copy and the Privacy Policy consistent with this.
+- **Tracker:** the source is `apps/ingest/src/tracker/script.ts` (tests in `apps/ingest/test-node`, run in a fake browser). Autocapture must never send field values; update the Privacy Policy when it collects anything new.
 - **Logs:** never log one-time links or email bodies in production (`logUndeliveredLink` in `lib/email.ts`).
 
 ## Blog

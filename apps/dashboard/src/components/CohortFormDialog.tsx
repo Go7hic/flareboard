@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import type { PropertyFilter } from '@flareboard/shared/insight-query';
 import { DateRangePicker } from './DateRangePicker';
+import { PropertyFilterBuilder } from './PropertyFilterBuilder';
 import { ModalDialog } from './ModalDialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -8,12 +10,21 @@ import { Label } from './ui/label';
 import { api, type Website } from '../lib/api';
 import { type DateRangePreset, presetToRange } from '../lib/dateRange';
 import { t } from '../lib/i18n';
+import { completeFilters } from '../lib/websiteReportApi';
 
 type CohortCondition = {
-  field: 'event_name' | 'url_path';
+  field: 'event_name' | 'url_path' | 'any_event';
   operator: 'equals' | 'contains';
   value: string;
+  /** Property filters the matching events must also satisfy. */
+  filters?: PropertyFilter[];
 };
+
+function conditionReady(condition: CohortCondition) {
+  return condition.field === 'any_event'
+    ? completeFilters(condition.filters ?? []).length > 0
+    : Boolean(condition.value.trim());
+}
 
 type CohortRow = {
   id: string;
@@ -94,7 +105,10 @@ export function CohortFormDialog({
   const saveMutation = useMutation({
     mutationFn: () => {
       const definition = {
-        conditions: conditions.filter((c) => c.value.trim()),
+        conditions: conditions.filter(conditionReady).map((c) => {
+          const filters = completeFilters(c.filters ?? []);
+          return { ...c, filters: filters.length ? filters : undefined };
+        }),
         windowStart: dateWindow.startAt,
         windowEnd: dateWindow.endAt,
       };
@@ -120,7 +134,7 @@ export function CohortFormDialog({
 
   if (!open) return null;
 
-  const canSave = name.trim() && conditions.some((c) => c.value.trim()) && !saveMutation.isPending;
+  const canSave = name.trim() && conditions.some(conditionReady) && !saveMutation.isPending;
 
   return (
     <ModalDialog className="cohort-dialog" aria-label={isEdit ? t('cohortEdit') : t('createCohort')} onClose={onClose}>
@@ -159,7 +173,9 @@ export function CohortFormDialog({
               >
                 <option value="event_name">{t('cohortEvent')}</option>
                 <option value="url_path">{t('cohortPath')}</option>
+                <option value="any_event">{t('cohortAnyEvent')}</option>
               </select>
+              {conditions[0]?.field === 'any_event' ? null : (
               <Input
                 value={conditions[0]?.value ?? ''}
                 onChange={(e) => {
@@ -171,7 +187,18 @@ export function CohortFormDialog({
                   conditions[0]?.field === 'event_name' ? 'signup' : '/pricing'
                 }
               />
+              )}
             </div>
+            <PropertyFilterBuilder
+              websiteId={websiteId}
+              value={conditions[0]?.filters ?? []}
+              onChange={(filters) => {
+                const next = [...conditions];
+                next[0] = { ...next[0]!, filters };
+                setConditions(next);
+              }}
+              addLabel={t('cohortAddPropertyFilter')}
+            />
           </div>
 
           <div className="field">

@@ -52,6 +52,7 @@ const WebsiteCompare = lazy(() => import('./pages/WebsiteCompare'));
 const WebsiteShareLinks = lazy(() => import('./pages/WebsiteShareLinks'));
 const WebsiteErrors = lazy(() => import('./pages/WebsiteErrors'));
 const WebsiteErrorDetail = lazy(() => import('./pages/WebsiteErrorDetail'));
+const WebsiteErrorIssue = lazy(() => import('./pages/WebsiteErrorIssue'));
 const WebsiteAiObservability = lazy(() => import('./pages/WebsiteAiObservability'));
 const WebsiteLogs = lazy(() => import('./pages/WebsiteLogs'));
 const WebsiteExperiments = lazy(() => import('./pages/WebsiteExperiments'));
@@ -61,6 +62,7 @@ const WebsiteWorkflows = lazy(() => import('./pages/WebsiteWorkflows'));
 const WebsiteWarehouse = lazy(() => import('./pages/WebsiteWarehouse'));
 const WebsiteAuditLog = lazy(() => import('./pages/WebsiteAuditLog'));
 const Billing = lazy(() => import('./pages/Billing'));
+const ApiKeys = lazy(() => import('./pages/ApiKeys'));
 
 function LazyPage({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
@@ -184,6 +186,14 @@ export default function App() {
             element={
               <LazyPage>
                 <Billing />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="/api-keys"
+            element={
+              <LazyPage>
+                <ApiKeys />
               </LazyPage>
             }
           />
@@ -400,6 +410,14 @@ export default function App() {
               element={
                 <LazyPage>
                   <WebsiteErrors />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="errors/issues/:fingerprint"
+              element={
+                <LazyPage>
+                  <WebsiteErrorIssue />
                 </LazyPage>
               }
             />

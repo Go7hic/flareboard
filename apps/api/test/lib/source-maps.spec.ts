@@ -4,6 +4,7 @@ import { EVENT_TYPE } from '@flareboard/shared';
 import { getErrorEvent } from '../../src/lib/errors';
 import { resolveErrorStack } from '../../src/lib/source-maps';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const BASE = Date.UTC(2026, 0, 25, 12);
 
@@ -48,14 +49,14 @@ describe('source map resolution', () => {
   it('returns resolvedStack on error event detail', async () => {
     const eventId = '00000000-0000-0000-0000-00000000e301';
     const sessionId = 'source-map-session';
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT OR IGNORE INTO session (session_id, website_id, distinct_id, browser, country, created_at)
        VALUES (?1, ?2, ?3, 'Chrome', 'US', ?4)`,
     )
       .bind(sessionId, TEST_WEBSITE_ID, 'user-source-map', BASE)
       .run();
 
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
        VALUES (?1, ?2, ?3, ?3, ?4, '/checkout', ?5, 'error')`,
     )
@@ -69,7 +70,7 @@ describe('source map resolution', () => {
       ['message', 'message', 'fail'],
       ['name', 'name', 'Error'],
     ] as const) {
-      await env.DB.prepare(
+      await testSiteDb(TEST_WEBSITE_ID).prepare(
         `INSERT INTO event_data (event_data_id, website_id, website_event_id, data_key, string_value, data_type, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6)`,
       )

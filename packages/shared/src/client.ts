@@ -4,4 +4,5 @@ export * from './constants';
 export * from './core';
 export * from './feature-flag-evaluator';
 export * from './geoip';
+export * from './insight-query';
 export * from './schemas';

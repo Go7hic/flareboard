@@ -29,11 +29,11 @@ describe('ingest integration', () => {
     const response = await fetchWorker('/script.js');
     const text = await response.text();
 
-    expect(text).toContain('identify:function');
+    // Behavior is covered in test-node/ (the script runs in a fake browser there).
+    for (const method of ['identify', 'alias', 'reset', 'getDistinctId', 'register', 'optOut', 'getFeatureFlagPayload', 'onFeatureFlags']) {
+      expect(text).toMatch(new RegExp(`[{,]${method}:`));
+    }
     expect(text).toContain('setDistinctId');
-    expect(text).toContain('alias:function');
-    expect(text).toContain('reset:function');
-    expect(text).toContain('getDistinctId:function');
   });
 
   it('GET /recorder.js returns recorder JavaScript', async () => {

@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { API_URL } from '../lib/api';
 import { getLocale, LOCALE_LABELS, LOCALES, setLocale, t, type Locale } from '../lib/i18n';
 import { resolveTheme, setTheme, themeChangeEventName, type Theme } from '../lib/theme';
@@ -9,6 +10,8 @@ type SidebarUserMenuProps = {
   oauthProviders?: string[];
   onLogout: () => void;
   onDeleteAccount?: () => void;
+  /** Called after following a link in the menu (closes the mobile navigation). */
+  onNavigate?: () => void;
 };
 
 const OAUTH_PROVIDER_LABELS: Record<string, string> = { github: 'GitHub', google: 'Google' };
@@ -76,7 +79,13 @@ function positionFlyout(flyoutEl: HTMLElement, anchorEl: HTMLElement) {
   flyoutEl.style.visibility = '';
 }
 
-export function SidebarUserMenu({ userLabel, oauthProviders = [], onLogout, onDeleteAccount }: SidebarUserMenuProps) {
+export function SidebarUserMenu({
+  userLabel,
+  oauthProviders = [],
+  onLogout,
+  onDeleteAccount,
+  onNavigate,
+}: SidebarUserMenuProps) {
   const [open, setOpen] = useState(false);
   const [activeFlyout, setActiveFlyout] = useState<Flyout | null>(null);
   const [theme, setThemeState] = useState<Theme>(() =>
@@ -295,6 +304,18 @@ export function SidebarUserMenu({ userLabel, oauthProviders = [], onLogout, onDe
 
           <div className="sidebar-user-menu-separator" role="separator" />
 
+          <Link
+            to="/api-keys"
+            role="menuitem"
+            className="sidebar-user-menu-item"
+            onClick={() => {
+              setOpen(false);
+              setActiveFlyout(null);
+              onNavigate?.();
+            }}
+          >
+            <span className="sidebar-user-menu-item-label">{t('apiKeys')}</span>
+          </Link>
           {onDeleteAccount ? (
             <button type="button" role="menuitem" className="sidebar-user-menu-item" onClick={handleDeleteAccount}>
               <span className="sidebar-user-menu-item-label">{t('deleteAccountMenu')}</span>

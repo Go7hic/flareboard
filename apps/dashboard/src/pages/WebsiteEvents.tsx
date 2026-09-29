@@ -18,6 +18,18 @@ import { StatCard } from '../components/ui/stat-card';
 import { api, type EventCatalogDetailResponse, type EventCatalogResponse, type MetricRow } from '../lib/api';
 import { formatDateTime, formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
+import { describeBuiltinEvent, eventDisplayName } from '../lib/autocapture';
+
+/** Readable text for built-in events; otherwise the first few properties. */
+function recentDetails(eventName: string, properties: Array<{ key: string; value: string | null }> | undefined) {
+  const builtin = describeBuiltinEvent(eventName, properties);
+  if (builtin) return builtin;
+  const shown = (properties ?? [])
+    .filter((p) => p.value != null && p.value !== '' && !p.key.startsWith('$'))
+    .slice(0, 3)
+    .map((p) => `${p.key}: ${p.value}`);
+  return shown.length ? shown.join(' · ') : '-';
+}
 
 export default function WebsiteEventsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
@@ -90,8 +102,8 @@ export default function WebsiteEventsPage() {
                 selected={event.eventName === selectedEvent?.eventName}
                 onSelect={() => setSelectedEventName(event.eventName)}
                 icon={<MousePointerClick size={16} strokeWidth={2} aria-hidden />}
-                title={event.eventName}
-                subtitle={`${formatNumber(event.paths)} ${t('eventCatalogPathsCount')}`}
+                title={eventDisplayName(event.eventName)}
+                subtitle={`${eventDisplayName(event.eventName) !== event.eventName ? `${event.eventName} · ` : ''}${formatNumber(event.paths)} ${t('eventCatalogPathsCount')}`}
                 meta={
                   <>
                     <span className="badge">
@@ -105,7 +117,7 @@ export default function WebsiteEventsPage() {
             detail={
               selectedEvent && summary ? (
                 <MasterDetailPane
-                  title={selectedEvent.eventName}
+                  title={eventDisplayName(selectedEvent.eventName)}
                   description={
                     selectedEvent.propertyKeys.length
                       ? selectedEvent.propertyKeys.slice(0, 5).join(', ')
@@ -193,6 +205,7 @@ export default function WebsiteEventsPage() {
                       <table className="data-table">
                         <thead>
                           <tr>
+                            <th>{t('eventCatalogDetails')}</th>
                             <th>{t('page')}</th>
                             <th>{t('session')}</th>
                             <th>{t('created')}</th>
@@ -202,6 +215,7 @@ export default function WebsiteEventsPage() {
                           {(detail?.recent ?? []).length ? (
                             detail!.recent.map((event) => (
                               <tr key={event.id}>
+                                <td>{recentDetails(selectedEvent.eventName, event.properties)}</td>
                                 <td className="text-muted">{event.urlPath ?? '-'}</td>
                                 <td>
                                   <Link to={`/websites/${websiteId}/sessions/${event.sessionId}`} className="inline-link">
@@ -214,7 +228,7 @@ export default function WebsiteEventsPage() {
                             ))
                           ) : (
                             <tr>
-                              <td colSpan={3} className="text-muted">
+                              <td colSpan={4} className="text-muted">
                                 {detailQuery.isLoading ? t('loading') : t('eventCatalogNoRecent')}
                               </td>
                             </tr>

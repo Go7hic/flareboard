@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { INSIGHT_TYPES, insightQuerySchema, propertyFiltersSchema } from './insight-query';
 import { isValidSiteTimezone } from './timezone';
 import {
   FEATURE_FLAG_PAYLOAD_MAX_BYTES,
@@ -80,6 +81,12 @@ export const sendPayloadSchema = z
     userAgent: truncatedString(500).optional(),
     timestamp: z.coerce.number().int().optional(),
     id: z.string().max(128).optional(),
+    /**
+     * Random device id from the tracker when the website remembers visitors. When it equals `id`
+     * (or `id` is absent) the event is anonymous, and ingest honors the id only if the website has
+     * persistence on; otherwise the visitor is counted with the cookieless hash as before.
+     */
+    anonymousId: z.string().max(128).optional(),
     browser: z.string().max(100).optional(),
     os: z.string().max(100).optional(),
     device: z.string().max(100).optional(),
@@ -616,6 +623,23 @@ export const createErrorIssueCommentSchema = z.object({
   body: z.string().min(1).max(2000),
 });
 
+export const mergeErrorIssuesSchema = z.object({
+  targetFingerprint: z.string().min(1).max(1000),
+  sourceFingerprints: z.array(z.string().min(1).max(1000)).min(1).max(50),
+});
+
+/** Ingest -> API: an error event whose fingerprint belongs to a resolved issue. */
+export const errorRegressionReportSchema = z.object({
+  websiteId: z.string().uuid(),
+  fingerprint: z.string().min(1).max(200),
+  occurredAt: z.number().int().positive(),
+  eventId: z.string().max(100).optional().nullable(),
+  release: z.string().max(200).optional().nullable(),
+  environment: z.string().max(100).optional().nullable(),
+  severity: z.string().max(20).optional().nullable(),
+  title: z.string().max(1200).optional().nullable(),
+});
+
 export const uploadErrorSourceMapSchema = z.object({
   release: z.string().trim().min(1).max(200),
   file: z.string().trim().min(1).max(1000),
@@ -634,6 +658,8 @@ export const createErrorAlertRuleSchema = z.object({
   environment: z.string().trim().max(100).optional().nullable(),
   channel: errorAlertChannelSchema.optional().default('record'),
   target: z.string().trim().max(500).optional().nullable(),
+  /** Also notify this rule's channel when a resolved issue occurs again. */
+  notifyRegressions: z.boolean().optional().default(true),
 });
 
 export const updateErrorAlertRuleSchema = createErrorAlertRuleSchema.partial();
@@ -744,6 +770,12 @@ export const updateWebsiteSchema = z.object({
     .max(64)
     .refine(isValidSiteTimezone, { message: 'Invalid IANA timezone' })
     .optional(),
+  /** Tracker: autocapture clicks, form submits, field changes and page leaves. */
+  autocapture: z.boolean().optional(),
+  /** Tracker: remember visitors across sessions with a random localStorage id. */
+  persistVisitors: z.boolean().optional(),
+  /** Tracker: send nothing from browsers with Do Not Track or Global Privacy Control. */
+  respectDnt: z.boolean().optional(),
 });
 
 export const updateProfileSchema = z.object({
@@ -911,22 +943,7 @@ export const updateBoardSchema = z.object({
   parameters: z.record(z.unknown()).optional(),
 });
 
-export const insightTypeSchema = z.enum(['trend', 'funnel', 'retention', 'path', 'stickiness', 'table']);
-
-export const insightQuerySchema = z.object({
-  event: z.string().max(120).optional().nullable(),
-  events: z.array(z.string().min(1).max(120)).max(8).optional(),
-  path: z.string().max(500).optional().nullable(),
-  steps: z.array(z.string().min(1).max(500)).max(8).optional(),
-  metric: z.enum(['pageviews', 'visitors', 'visits', 'events']).optional().default('pageviews'),
-  dimension: z
-    .enum(['path', 'url', 'referrer', 'channel', 'browser', 'os', 'device', 'country', 'region', 'city', 'language', 'event'])
-    .optional()
-    .default('path'),
-  actor: z.enum(['person', 'session']).optional().default('person'),
-  unit: z.enum(['hour', 'day', 'week', 'month']).optional().default('day'),
-  limit: z.coerce.number().int().min(1).max(100).optional().default(10),
-});
+export const insightTypeSchema = z.enum(INSIGHT_TYPES);
 
 export const createInsightSchema = z.object({
   websiteId: z.string().uuid(),
@@ -966,11 +983,23 @@ export const updateSavedReplaySchema = z.object({
   name: z.string().max(100).optional(),
 });
 
-export const cohortConditionSchema = z.object({
-  field: z.enum(['event_name', 'url_path']),
-  operator: z.enum(['equals', 'contains']),
-  value: z.string().max(500),
-});
+export const cohortConditionSchema = z
+  .object({
+    /** event_name / url_path: custom event or pageview. any_event: any pageview or custom event. */
+    field: z.enum(['event_name', 'url_path', 'any_event']),
+    operator: z.enum(['equals', 'contains']),
+    value: z.string().max(500),
+    /** Event, person or dimension filters the matching events must also satisfy. */
+    filters: propertyFiltersSchema.optional(),
+  })
+  .superRefine((condition, ctx) => {
+    if (condition.field === 'any_event' ? !condition.filters?.length : !condition.value.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: condition.field === 'any_event' ? 'Add at least one filter' : 'Enter a value',
+      });
+    }
+  });
 
 export const cohortDefinitionSchema = z.object({
   conditions: z.array(cohortConditionSchema).min(1).max(10),

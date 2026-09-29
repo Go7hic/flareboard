@@ -1,12 +1,12 @@
 import type { Context } from 'hono';
 import { isbot } from 'isbot';
 import {
+  ERROR_FINGERPRINT_PROPERTY,
   COLLECTION_TYPE,
   EVENT_TYPE,
   HEATMAP_NORM_SIZE,
   createCacheToken,
   extractWebVitals,
-  flattenEventData,
   getSalt,
   getSecret,
   parseToken,
@@ -14,12 +14,13 @@ import {
   sendSchema,
   uuid,
   geoFromCf,
+  isProjectKey,
   visitSalt,
   type CacheToken,
   type QueueMessage,
   type SendBody,
 } from '@flareboard/shared';
-import { patchPersonProperties, upsertPerson, upsertPersonGroupMembership } from '@flareboard/db';
+import { upsertPerson, upsertPersonGroupMembership } from '@flareboard/db';
 import type { Env } from '../env';
 import {
   badRequest,
@@ -34,8 +35,14 @@ import { hitAllowed, recordHit, sourceExists, type HitSource } from '../lib/link
 import { bumpRealtimeVisitor } from '../lib/realtime-kv';
 import { appendMatchedActionTags } from '../lib/actions';
 import { assertEventAllowed, recordEventUsageKv } from '../lib/hosted-limits';
-import { checkIpRateLimit, checkRateLimit, getTrustedClientIp } from '../lib/rate-limit';
+import { checkIpRateLimit, checkProjectKeyRateLimit, checkRateLimit, getTrustedClientIp } from '../lib/rate-limit';
 import { fetchApi } from '../lib/api-client';
+import { buildErrorEventDataPayload, reportPossibleRegression } from '../lib/error-tracking';
+import { resolveDistinctId } from '../lib/tracker-settings';
+import { TRACKER_SCRIPT } from '../tracker/script';
+import { eventMessage, pageContext, parsePageUrl, sessionDataMessage, sessionMessage } from '../lib/queue-messages';
+import { recordAlias } from '../lib/person-identity';
+import { resolveWebsiteRef } from '../lib/project-keys';
 
 const SEND_BODY_MAX_BYTES = 65_536;
 const WORKFLOW_DELIVERIES_PER_HOUR = 60;
@@ -83,7 +90,7 @@ export function buildLogEventDataPayload(input: LogEventDataInput) {
 const HTTP_CLIENT_UA =
   /^(?:node|undici|node-fetch|axios|got|python-requests|python-httpx|python-urllib|aiohttp|go-http-client|curl|wget|okhttp|java|apache-httpclient|ruby|faraday|guzzlehttp|php|dart|reqwest)\b/i;
 
-function isBot(userAgent: string) {
+export function isBot(userAgent: string) {
   if (!userAgent || HTTP_CLIENT_UA.test(userAgent)) return false;
   return isbot(userAgent);
 }
@@ -114,6 +121,8 @@ function deviceClass(device: string): string {
 
 type ProcessSendOpts = {
   cacheToken?: string;
+  /** The payload named its website by project key: rate limit per key instead of per IP. */
+  projectKey?: string;
   waitUntil: (promise: Promise<void>) => void;
 };
 
@@ -121,7 +130,7 @@ function deferWrite(waitUntil: ProcessSendOpts['waitUntil'], fn: () => Promise<v
   waitUntil(fn().catch((e) => console.error('waitUntil task failed', e)));
 }
 
-async function recordWorkflowExecutions(
+export async function recordWorkflowExecutions(
   env: Env,
   args: {
     websiteId: string;
@@ -318,6 +327,24 @@ function getWorkflowActionState(
   return { status: 'recorded', error: null };
 }
 
+/**
+ * A project key in `payload.website` (e.g. `data-website-id="fb_pk_…"`) is swapped for the
+ * website id before validation. Returns the key so the request is rate limited per key.
+ */
+async function resolvePayloadWebsite(
+  env: Env,
+  raw: unknown,
+): Promise<{ projectKey?: string } | { error: string }> {
+  const payload = raw && typeof raw === 'object' ? (raw as { payload?: unknown }).payload : undefined;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return {};
+  const record = payload as Record<string, unknown>;
+  if (typeof record.website !== 'string') return {};
+  const ref = await resolveWebsiteRef(env, record.website);
+  if (!ref) return { error: 'Website not found.' };
+  record.website = ref.websiteId;
+  return { projectKey: ref.projectKey };
+}
+
 function parseSendRequest(
   raw: unknown,
 ): { body: SendBody; cacheToken?: string } | { error: string } {
@@ -374,35 +401,6 @@ function applyCacheToken(
   return cache;
 }
 
-/**
- * Page URL resolved against the reported hostname. Client input is not trusted to be
- * well-formed ("exa mple.com", "http://[" ...): a bad value degrades to the site root
- * instead of throwing and turning the whole request into a 500.
- */
-function parsePageUrl(url: string | undefined, hostname: string | undefined): URL {
-  let base = 'https://localhost';
-  if (hostname) {
-    try {
-      base = new URL(`https://${hostname}`).origin;
-    } catch {
-      // keep the neutral base
-    }
-  }
-  try {
-    return new URL(url || '/', base);
-  } catch {
-    return new URL('/', base);
-  }
-}
-
-function parseReferrerUrl(referrer: string, base: URL): URL | null {
-  try {
-    return new URL(referrer, base);
-  } catch {
-    return null;
-  }
-}
-
 /** Backfilled events may be this old; anything earlier (or in the future) is rejected. */
 const MAX_EVENT_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
@@ -434,12 +432,14 @@ async function processSend(
     if (isBot(req.headers.get('user-agent') ?? '')) return json({ beep: 'boop' });
 
     const defer = (fn: () => Promise<void>) => deferWrite(opts.waitUntil, fn);
+    const rateLimit = (websiteId: string, trustedIp: string) =>
+      opts.projectKey ? checkProjectKeyRateLimit(env, opts.projectKey) : checkRateLimit(env, websiteId, trustedIp);
 
     if (type === COLLECTION_TYPE.heatmap) {
       const websiteId = payload.website;
       const trustedIp = getTrustedClientIp(req);
       const [rl, quota] = await Promise.all([
-        checkRateLimit(env, websiteId, trustedIp),
+        rateLimit(websiteId, trustedIp),
         assertEventAllowed(env, websiteId),
       ]);
       if (!rl.allowed) {
@@ -519,7 +519,8 @@ async function processSend(
       title,
       tag,
       timestamp,
-      id,
+      id: claimedId,
+      anonymousId,
       revenue,
       currency,
       message,
@@ -561,7 +562,7 @@ async function processSend(
     let billingUserId = '';
     if (websiteId) {
       const [rl, quota, parsedCache] = await Promise.all([
-        checkRateLimit(env, websiteId, trustedIp),
+        rateLimit(websiteId, trustedIp),
         assertEventAllowed(env, websiteId),
         parseCacheToken(req, secret, opts.cacheToken),
       ]);
@@ -594,6 +595,10 @@ async function processSend(
     } else {
       cache = await parseCacheToken(req, secret, opts.cacheToken);
     }
+
+    // An anonymous tracker id counts the visitor only on websites that remember visitors;
+    // elsewhere it is dropped here and nothing below ever sees it.
+    const id = await resolveDistinctId(env, websiteId, claimedId, anonymousId);
 
     const createdAt = parseEventTimestamp(timestamp) ?? new Date();
     const now = Math.floor(Date.now() / 1000);
@@ -629,9 +634,8 @@ async function processSend(
     } | undefined;
 
     if (!cache?.sessionId) {
-      messages.push({
-        type: 'session',
-        data: {
+      messages.push(
+        sessionMessage({
           id: sessionId,
           websiteId: sourceId,
           browser: client.browser,
@@ -644,39 +648,12 @@ async function processSend(
           city: client.city,
           distinctId: id ?? null,
           createdAt: createdAt.getTime(),
-        },
-      });
+        }),
+      );
     }
 
     if (type === COLLECTION_TYPE.event || type === COLLECTION_TYPE.error || type === COLLECTION_TYPE.log || type === COLLECTION_TYPE.ai) {
-      const currentUrl = parsePageUrl(url, hostname);
-      let urlPath =
-        currentUrl.pathname === '/undefined' ? '' : currentUrl.pathname + currentUrl.hash;
-      const urlQuery = currentUrl.search.substring(1);
-      const urlDomain = currentUrl.hostname.replace(/^www\./, '');
-
-      let referrerPath: string | undefined;
-      let referrerQuery: string | undefined;
-      let referrerDomain: string | undefined;
-
-      const utmSource = currentUrl.searchParams.get('utm_source');
-      const utmMedium = currentUrl.searchParams.get('utm_medium');
-      const utmCampaign = currentUrl.searchParams.get('utm_campaign');
-      const utmContent = currentUrl.searchParams.get('utm_content');
-      const utmTerm = currentUrl.searchParams.get('utm_term');
-      const gclid = currentUrl.searchParams.get('gclid');
-      const fbclid = currentUrl.searchParams.get('fbclid');
-      const msclkid = currentUrl.searchParams.get('msclkid');
-      const ttclid = currentUrl.searchParams.get('ttclid');
-      const lifatid = currentUrl.searchParams.get('li_fat_id');
-      const twclid = currentUrl.searchParams.get('twclid');
-
-      const referrerUrl = referrer ? parseReferrerUrl(referrer, currentUrl) : null;
-      if (referrerUrl) {
-        referrerPath = referrerUrl.pathname;
-        referrerQuery = referrerUrl.search.substring(1);
-        referrerDomain = referrerUrl.hostname.replace(/^www\./, '');
-      }
+      const page = pageContext(url, hostname, referrer);
 
       const eventType =
         type === COLLECTION_TYPE.error
@@ -692,19 +669,20 @@ async function processSend(
       const eventId = crypto.randomUUID();
       let eventDataPayload =
         type === COLLECTION_TYPE.error
-          ? {
-              ...(data ?? {}),
-              message: message ?? name ?? 'Unknown error',
-              name: errorName ?? 'Error',
+          ? buildErrorEventDataPayload({
+              data,
+              message,
+              name,
+              errorName,
               stack,
               source,
               lineno,
               colno,
-              severity: severity ?? 'error',
-              handled: handled ?? false,
+              severity,
+              handled,
               release,
               environment,
-            }
+            })
           : type === COLLECTION_TYPE.log
             ? buildLogEventDataPayload({
                 data,
@@ -750,49 +728,29 @@ async function processSend(
                 : type === COLLECTION_TYPE.ai
                   ? (name ?? 'ai_generation')
                   : (name ?? null),
-          urlPath: safeDecodeURI(urlPath) ?? urlPath,
+          urlPath: page.urlPath,
           data: (eventDataPayload ?? undefined) as Record<string, unknown> | undefined,
         });
         if (eventDataPayload || Object.keys(tagged).length) eventDataPayload = tagged;
       }
 
-      const eventData = eventDataPayload
-        ? flattenEventData(sourceId, eventId, eventDataPayload, createdAt.getTime())
-        : undefined;
-
       if (websiteId && eventType === EVENT_TYPE.pageView) {
         realtimeMeta = {
-          urlPath: safeDecodeURI(urlPath) ?? urlPath,
-          referrerDomain: referrerDomain ?? null,
+          urlPath: page.urlPath,
+          referrerDomain: page.referrerDomain,
           country: client.country ?? null,
         };
       }
 
-      messages.push({
-        type: 'event',
-        data: {
+      messages.push(
+        eventMessage({
           id: eventId,
           websiteId: sourceId,
           sessionId,
           visitId,
           createdAt: createdAt.getTime(),
-          urlPath: safeDecodeURI(urlPath) ?? urlPath,
-          urlQuery: urlQuery || null,
-          utmSource,
-          utmMedium,
-          utmCampaign,
-          utmContent,
-          utmTerm,
-          referrerPath: safeDecodeURI(referrerPath) ?? referrerPath ?? null,
-          referrerQuery: referrerQuery ?? null,
-          referrerDomain: referrerDomain ?? null,
-          pageTitle: safeDecodeURIComponent(title) ?? null,
-          gclid,
-          fbclid,
-          msclkid,
-          ttclid,
-          lifatid,
-          twclid,
+          page,
+          title,
           eventType,
           eventName:
             type === COLLECTION_TYPE.error
@@ -802,11 +760,30 @@ async function processSend(
                 : type === COLLECTION_TYPE.ai
                   ? (name ?? 'ai_generation')
                 : (name ?? null),
-          tag: tag ?? null,
-          hostname: hostname || urlDomain,
-        },
-        eventData,
-      });
+          tag,
+          hostname,
+          data: eventDataPayload as Record<string, unknown> | null | undefined,
+        }),
+      );
+
+      if (websiteId && type === COLLECTION_TYPE.error) {
+        const errorData = eventDataPayload as Record<string, unknown>;
+        const fingerprint = errorData[ERROR_FINGERPRINT_PROPERTY];
+        if (typeof fingerprint === 'string') {
+          defer(() =>
+            reportPossibleRegression(env, {
+              websiteId,
+              fingerprint,
+              occurredAt: createdAt.getTime(),
+              eventId,
+              release: release ?? null,
+              environment: environment ?? null,
+              severity: severity ?? 'error',
+              title: `${errorName ?? 'Error'}: ${message ?? name ?? 'Unknown error'}`,
+            }).then(() => undefined),
+          );
+        }
+      }
 
       if (websiteId && name) {
         defer(() =>
@@ -845,51 +822,18 @@ async function processSend(
             ? data.distinctId.trim()
             : (id ?? '').trim();
         if (alias && canonicalDistinctId) {
-          defer(() =>
-            upsertPerson(env.DB, {
-              websiteId,
-              distinctId: canonicalDistinctId,
-              seenAt: createdAt.getTime(),
-            })
-              .then(() =>
-                patchPersonProperties(
-                  env.DB,
-                  websiteId,
-                  canonicalDistinctId,
-                  { $alias: alias },
-                  createdAt.getTime(),
-                ),
-              )
-              // The alias gets its own person row pointing at the canonical id. Reusing the
-              // canonical person_id (the primary key) made this insert fail every time.
-              .then(() =>
-                upsertPerson(env.DB, {
-                  websiteId,
-                  distinctId: alias,
-                  properties: { $alias: alias, $canonical_distinct_id: canonicalDistinctId },
-                  seenAt: createdAt.getTime(),
-                }),
-              )
-              .then(() => undefined),
-          );
+          defer(() => recordAlias(env, { websiteId, alias, canonicalDistinctId, seenAt: createdAt.getTime() }));
         }
       }
     } else if (type === COLLECTION_TYPE.identify && data) {
-      const items = flattenEventData(sourceId, sessionId, data, createdAt.getTime())?.map((row) => ({
-        id: row.id,
+      const identifyData = sessionDataMessage({
         websiteId: sourceId,
         sessionId,
-        dataKey: row.dataKey,
-        stringValue: row.stringValue,
-        numberValue: row.numberValue,
-        dateValue: row.dateValue,
-        dataType: row.dataType,
         distinctId: id ?? null,
+        data,
         createdAt: createdAt.getTime(),
-      }));
-      if (items?.length) {
-        messages.push({ type: 'session_data', data: items });
-      }
+      });
+      if (identifyData) messages.push(identifyData);
       if (id) {
         defer(() =>
           upsertPerson(env.DB, {
@@ -909,21 +853,14 @@ async function processSend(
           groupData[`$group/${groupType}/${key}`] = value;
         }
       }
-      const items = flattenEventData(sourceId, sessionId, groupData, createdAt.getTime())?.map((row) => ({
-        id: row.id,
+      const groupMessage = sessionDataMessage({
         websiteId: sourceId,
         sessionId,
-        dataKey: row.dataKey,
-        stringValue: row.stringValue,
-        numberValue: row.numberValue,
-        dateValue: row.dateValue,
-        dataType: row.dataType,
         distinctId: id ?? null,
+        data: groupData,
         createdAt: createdAt.getTime(),
-      }));
-      if (items?.length) {
-        messages.push({ type: 'session_data', data: items });
-      }
+      });
+      if (groupMessage) messages.push(groupMessage);
       if (id) {
         defer(() =>
           upsertPersonGroupMembership(env.DB, {
@@ -1067,6 +1004,9 @@ export async function handleSend(c: Context<{ Bindings: Env }>) {
     return badRequest('Invalid JSON');
   }
 
+  const website = await resolvePayloadWebsite(c.env, raw);
+  if ('error' in website) return badRequest(website.error);
+
   const parsed = parseSendRequest(raw);
   if ('error' in parsed) return badRequest(parsed.error);
 
@@ -1076,6 +1016,7 @@ export async function handleSend(c: Context<{ Bindings: Env }>) {
 
   return processSend(c.env, c.req.raw, parsed.body, envSecret(c), {
     cacheToken: parsed.cacheToken,
+    projectKey: website.projectKey,
     waitUntil,
   });
 }
@@ -1085,12 +1026,6 @@ const MAX_BATCH_BYTES = 512 * 1024;
 
 export async function handleBatch(c: Context<{ Bindings: Env }>) {
   try {
-    const trustedIp = getTrustedClientIp(c.req.raw);
-    const batchRl = await checkIpRateLimit(c.env, 'batch', trustedIp);
-    if (!batchRl.allowed) {
-      return json({ message: 'Rate limit exceeded' }, 429);
-    }
-
     const raw = await c.req.text();
     if (raw.length > MAX_BATCH_BYTES) return badRequest('Batch payload too large');
 
@@ -1103,6 +1038,18 @@ export async function handleBatch(c: Context<{ Bindings: Env }>) {
     if (!Array.isArray(body)) return badRequest('Expected array');
     if (body.length > MAX_BATCH_ITEMS) return badRequest(`Batch exceeds ${MAX_BATCH_ITEMS} items`);
 
+    // Batches that name every website by project key are limited per key (each item below);
+    // anything else keeps the per-IP batch limit.
+    const keyed =
+      body.length > 0 &&
+      body.every((item) => isProjectKey((item as { payload?: { website?: unknown } } | null)?.payload?.website));
+    if (!keyed) {
+      const batchRl = await checkIpRateLimit(c.env, 'batch', getTrustedClientIp(c.req.raw));
+      if (!batchRl.allowed) {
+        return json({ message: 'Rate limit exceeded' }, 429);
+      }
+    }
+
     const errors: Array<{ index: number; response: unknown }> = [];
     let index = 0;
     let cache: string | null = null;
@@ -1111,6 +1058,13 @@ export async function handleBatch(c: Context<{ Bindings: Env }>) {
       const serialized = JSON.stringify(data);
       if (serialized.length > SEND_BODY_MAX_BYTES) {
         errors.push({ index, response: { message: 'Payload too large' } });
+        index++;
+        continue;
+      }
+
+      const website = await resolvePayloadWebsite(c.env, data);
+      if ('error' in website) {
+        errors.push({ index, response: { message: website.error } });
         index++;
         continue;
       }
@@ -1130,7 +1084,10 @@ export async function handleBatch(c: Context<{ Bindings: Env }>) {
       const waitUntil = (promise: Promise<void>) => {
         c.executionCtx.waitUntil(promise);
       };
-      const res = await processSend(c.env, req, parsed.data, envSecret(c), { waitUntil });
+      const res = await processSend(c.env, req, parsed.data, envSecret(c), {
+        projectKey: website.projectKey,
+        waitUntil,
+      });
       const resJson = await res.json();
       if (!res.ok) {
         errors.push({ index, response: resJson });
@@ -1200,78 +1157,8 @@ if(d.readyState==='complete')start();else w.addEventListener('load',start);
 }
 
 export function handleScript(_c: Context<{ Bindings: Env }>) {
-  const script = `(function(){'use strict';
-/*
- * SPA pageviews: pushState/replaceState/popstate + hash routes (#/path). In-page anchors
- *   (#section) are not new pages. Hash routes keep the real ?query (utm_*) merged in.
- * Declarative events (Umami-compatible): data-flareboard-event / data-umami-event (event delegation).
- * Heatmap: sample rate from data-heatmap-sample-rate or GET /api/tracker-config (cached per session).
- * Error tracking: window error/unhandledrejection + flareboard.captureException(error, extra).
- *   Failed <img>/<script> loads also fire 'error' (capture phase) but are not code errors; skipped.
- * Logs: flareboard.log(level, message, data) keeps app messages connected to sessions.
- * AI observability: flareboard.ai({ model, inputTokens, outputTokens, costUsd, latencyMs }).
- * Sends use text/plain + cache token in body to avoid CORS preflight.
- */
-var t=window,d=document,l=location,s=sessionStorage,k='flareboard.cache',idKey='flareboard.distinct_id',me=d.currentScript,lastUrl='',hmRate=0.1,hmOn=true,featureFlags=[],surveys=[],flagReady=null,flagExposures={},flagEvalCache={},scrollKey='flareboard.scroll',cacheReady=null,vitalsStarted=0;
-function scriptEl(){if(me)return me;return d.querySelector('script[data-website-id]')}
-function postBody(type,payload){var o={type:type,payload:payload},c=s.getItem(k);if(c)o.cache=c;return JSON.stringify(o)}
-function p(u,type,payload){return fetch(u,{method:'POST',headers:{'Content-Type':'text/plain'},body:postBody(type,payload),keepalive:true})}
-function isHashRoute(h){return h.length>2&&h.charAt(1)==='/'}
-function appPath(){var h=l.hash;if(isHashRoute(h)){var q=h.indexOf('?'),qs=[l.search.slice(1),q>=0?h.slice(q+1):''].filter(Boolean).join('&');return(q>=0?h.slice(1,q):h.slice(1))+(qs?'?'+qs:'')}return l.pathname+l.search}
-function routeKey(){var h=l.hash;return l.pathname+l.search+(isHashRoute(h)?h:'')}
-function r(){return{width:t.innerWidth+'x'+t.innerHeight,language:navigator.language,screen:screen.width+'x'+screen.height,title:d.title,hostname:l.hostname,url:appPath(),referrer:d.referrer}}
-function ingestOrigin(){var el=scriptEl();if(el&&el.src)try{return new URL(el.src).origin}catch(_){}return l.protocol+'//'+l.host}
-function websiteId(a){var el=a||scriptEl();return el&&el.getAttribute('data-website-id')}
-function getDistinctId(){try{return(t.localStorage&&t.localStorage.getItem(idKey))||s.getItem(idKey)||''}catch(_){try{return s.getItem(idKey)||''}catch(__){return''}}}
-function setDistinctId(id){if(!id)return;try{if(t.localStorage)t.localStorage.setItem(idKey,String(id))}catch(_){}try{s.setItem(idKey,String(id))}catch(_){}}
-function clearDistinctId(){try{if(t.localStorage)t.localStorage.removeItem(idKey)}catch(_){}try{s.removeItem(idKey)}catch(_){}}
-function hmCfgKey(w){return 'flareboard.hmCfg:'+w}
-function hasCache(){return!!s.getItem(k)}
-function parseResp(res){if(!res.ok)return res.text().then(function(){throw new Error('send '+res.status)});return res.json()}
-function sendSafe(pr){return pr.catch(function(e){console.warn('[flareboard] send failed',e)})}
-function applySendResp(x){x.cache&&s.setItem(k,x.cache);x.sessionId&&s.setItem('flareboard.sid',x.sessionId);x.visitId&&s.setItem('flareboard.vid',x.visitId);return x}
-function send(type,payload){var go=function(){return p(ingestOrigin()+'/api/send',type,payload).then(parseResp).then(applySendResp)};if(hasCache())return sendSafe(go());if(!cacheReady){cacheReady=go().then(function(x){return x},function(e){cacheReady=null;throw e});return sendSafe(cacheReady)}return sendSafe(cacheReady.catch(function(){}).then(function(){return hasCache()?go():cacheReady}))}
-function withFeatureData(extra){var out=Object.assign({},extra||{}),data=Object.assign({},out.data||{}),k,has=0;for(k in flagExposures){if(Object.prototype.hasOwnProperty.call(flagExposures,k)){data['$feature/'+k]=String(flagExposures[k]);has=1}}if(has)out.data=data;return out}
-function trackEvent(a,extra){var w=websiteId(a);if(!w){console.warn('[flareboard] missing data-website-id');return}var o=sdkMeta();o.website=w;Object.assign(o,withFeatureData(extra));if(extra&&extra.name)setTimeout(function(){showSurvey(extra.name)},200);return send('event',o)}
-function pageview(){trackEvent(scriptEl())}
-function onRoute(){var u=routeKey();if(u!==lastUrl){lastUrl=u;flagEvalCache={};var w=websiteId();if(w)prefetchTargetedFlags(w);pageview()}}
-function setupSpa(){lastUrl=routeKey();var ps=history.pushState,rs=history.replaceState;history.pushState=function(){ps.apply(history,arguments);onRoute()};history.replaceState=function(){rs.apply(history,arguments);onRoute()};t.addEventListener('popstate',onRoute);t.addEventListener('hashchange',onRoute)}
-function eventProps(el){var data={},i,a,n;for(i=0;i<el.attributes.length;i++){a=el.attributes[i];n=a.name;if(n==='data-flareboard-event'||n==='data-umami-event'||n==='data-flareboard-event-tag'||n==='data-umami-event-tag')continue;var m=n.match(/^data-(?:flareboard|umami)-event-(.+)$/);if(m)data[m[1]]=a.value}return data}
-function fireDeclEvent(el){var ev=el.getAttribute('data-flareboard-event')||el.getAttribute('data-umami-event');if(!ev)return;var data=eventProps(el),tag=el.getAttribute('data-flareboard-event-tag')||el.getAttribute('data-umami-event-tag');trackEvent(scriptEl(),{name:ev,data:Object.keys(data).length?data:undefined,tag:tag||undefined})}
-function onDeclClick(e){var el=e.target;while(el&&el!==d){if(el.getAttribute('data-flareboard-event')||el.getAttribute('data-umami-event')){fireDeclEvent(el);break}el=el.parentElement}}
-function hmSample(){return hmOn&&Math.random()<hmRate}
-function sendHeatmap(payload){var w=websiteId();if(!w)return;var o=r();o.website=w;send('heatmap',Object.assign(o,payload))}
-function sdkMeta(extra){var el=scriptEl(),o=Object.assign(r(),extra||{}),did=getDistinctId();if(did&&!o.id)o.id=did;if(el){var rel=el.getAttribute('data-release'),env=el.getAttribute('data-environment');if(rel&&!o.release)o.release=rel;if(env&&!o.environment)o.environment=env}return o}
-function normalizeError(err,extra){var o=sdkMeta(extra),e=err&&err.error?err.error:err,reason=err&&err.reason?err.reason:null,msg='Unknown error',name='Error',stack,src,ln,cn;if(e){if(typeof e==='string')msg=e;else{msg=e.message||String(e);name=e.name||name;stack=e.stack}}else if(reason){msg=reason.message||String(reason);name=reason.name||name;stack=reason.stack}if(err){src=err.filename||err.source;ln=err.lineno;cn=err.colno}o.message=o.message||msg;o.errorName=o.errorName||name;if(stack&&!o.stack)o.stack=String(stack).slice(0,12000);if(src&&!o.source)o.source=String(src);if(ln!=null&&!o.lineno)o.lineno=ln;if(cn!=null&&!o.colno)o.colno=cn;if(o.handled==null)o.handled=false;if(!o.severity)o.severity='error';return o}
-function captureException(err,extra){var w=websiteId();if(!w)return;var o=normalizeError(err,extra);o.website=w;return send('error',o)}
-function setupErrors(){t.addEventListener('error',function(e){if(e&&e.target&&e.target!==t)return;captureException(e,{handled:false})},true);t.addEventListener('unhandledrejection',function(e){captureException(e,{handled:false,message:e.reason&&e.reason.message?e.reason.message:String(e.reason||'Unhandled rejection'),errorName:e.reason&&e.reason.name?e.reason.name:'UnhandledRejection',stack:e.reason&&e.reason.stack?e.reason.stack:undefined})})}
-function onHmClick(e){if(!hmSample())return;var vw=t.innerWidth,vh=t.innerHeight;if(!vw||!vh)return;sendHeatmap({kind:'click',x:Math.round(e.clientX),y:Math.round(e.clientY),viewportWidth:vw,viewportHeight:vh})}
-function scrollDepth(){var docH=Math.max(d.body.scrollHeight,d.documentElement.scrollHeight),vh=t.innerHeight,st=t.scrollY||d.documentElement.scrollTop;return docH<=vh?100:Math.min(100,Math.round((st+vh)/docH*100))}
-function onHmScroll(){var depth=scrollDepth(),path=appPath(),key=scrollKey+':'+path,prev=parseInt(s.getItem(key)||'0',10)||0;if(depth<=prev)return;s.setItem(key,String(depth));if(!hmSample())return;sendHeatmap({kind:'scroll',scrollDepth:depth})}
-function setupHeatmap(){var scrollTimer;d.addEventListener('click',onHmClick,true);t.addEventListener('scroll',function(){clearTimeout(scrollTimer);scrollTimer=setTimeout(onHmScroll,400)},{passive:true})}
-function applyCfg(cfg,w){if(cfg&&typeof cfg.heatmapSampleRate==='number')hmRate=cfg.heatmapSampleRate;if(cfg&&cfg.heatmapEnabled===false)hmOn=false;featureFlags=cfg&&Array.isArray(cfg.featureFlags)?cfg.featureFlags:[];surveys=cfg&&Array.isArray(cfg.surveys)?cfg.surveys:[];if(w)s.setItem(hmCfgKey(w),JSON.stringify({rate:hmRate,on:hmOn,flags:featureFlags,surveys:surveys,exp:Date.now()+6e4}))}
-function loadHmConfig(a){var el=a||scriptEl(),attr=el&&el.getAttribute('data-heatmap-sample-rate');if(attr!=null){var rv=parseFloat(attr);if(!isNaN(rv))hmRate=Math.min(1,Math.max(0,rv))}var w=websiteId(el);if(!w)return Promise.resolve(featureFlags);var cfgKey=hmCfgKey(w),raw=s.getItem(cfgKey);if(raw){try{var c=JSON.parse(raw);if(c.exp>Date.now()){hmRate=c.rate;hmOn=c.on;featureFlags=Array.isArray(c.flags)?c.flags:[];surveys=Array.isArray(c.surveys)?c.surveys:[];flagReady=prefetchTargetedFlags(w).then(function(){return featureFlags});return flagReady}}catch(_){}}flagReady=fetch(ingestOrigin()+'/api/tracker-config?website='+encodeURIComponent(w)).then(function(x){return x.json()}).then(function(cfg){applyCfg(cfg,w);return prefetchTargetedFlags(w).then(function(){return featureFlags})}).catch(function(){return featureFlags});return flagReady}
-function hashFlag(str){var h=2166136261,i;for(i=0;i<str.length;i++){h^=str.charCodeAt(i);h+=(h<<1)+(h<<4)+(h<<7)+(h<<8)+(h<<24)}return Math.abs(h>>>0)%100}
-function flagByKey(key){for(var i=0;i<featureFlags.length;i++)if(featureFlags[i].key===key)return featureFlags[i];return null}
-function flagValue(field){if(field==='path')return appPath();if(field==='url')return l.href;if(field==='hostname')return l.hostname;if(field==='referrer')return d.referrer;if(field==='language')return navigator.language||'';if(field==='userAgent')return navigator.userAgent||'';return null}
-function evalContext(){var el=scriptEl(),o={path:appPath(),url:l.href,hostname:l.hostname,referrer:d.referrer,language:navigator.language||'',userAgent:navigator.userAgent||''},did=getDistinctId();if(did)o.distinctId=did;var sid=s.getItem('flareboard.sid'),vid=s.getItem('flareboard.vid');if(sid)o.sessionId=sid;if(vid)o.visitId=vid;if(el){var rel=el.getAttribute('data-release'),env=el.getAttribute('data-environment');if(rel)o.release=rel;if(env)o.environment=env}return o}
-function prefetchTargetedFlags(w){var keys=[],i;for(i=0;i<featureFlags.length;i++)if(featureFlags[i]&&featureFlags[i].targeted)keys.push(featureFlags[i].key);if(!keys.length)return Promise.resolve(flagEvalCache);return fetch(ingestOrigin()+'/api/feature-flags/evaluate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({website:w,keys:keys,context:evalContext()})}).then(function(x){return x.json()}).then(function(body){flagEvalCache=body&&body.results?body.results:{};return flagEvalCache}).catch(function(){return flagEvalCache})}
-function featureVariant(key,fallback){var f=flagByKey(key);if(!f)return fallback===undefined?false:fallback;if(!f.enabled)return 'control';if(f.targeted){if(Object.prototype.hasOwnProperty.call(flagEvalCache,key))return flagEvalCache[key];return 'control'}var pct=typeof f.rollout==='number'?f.rollout:100,sid=s.getItem('flareboard.sid')||s.getItem('flareboard.vid')||navigator.userAgent||'anonymous';if(pct<=0)return 'control';if(pct<100&&hashFlag(key+':'+sid)>=pct)return 'control';var vars=Array.isArray(f.variants)?f.variants:[];if(vars.length){var b=hashFlag(key+':variant:'+sid),sum=0,last='control';for(var i=0;i<vars.length;i++){var v=vars[i],w=Math.max(0,Math.min(100,Number(v.weight||0)));if(v&&v.key)last=String(v.key);sum+=w;if(b<sum)return last}return sum>=100?last:'control'}return 'test'}
-function exposeFlag(key,variant){if(flagExposures[key])return;flagExposures[key]=String(variant);var data={'$feature_flag':key,'$feature_flag_response':String(variant)};data['$feature/'+key]=String(variant);trackEvent(scriptEl(),{name:'$feature_flag_called',data:data,tag:'feature_flag'})}
-function getFeatureFlag(key,fallback){var v=featureVariant(key,fallback);if(flagByKey(key))exposeFlag(key,v);return v}
-function isFeatureEnabled(key,fallback){var v=getFeatureFlag(key,fallback);return v===true||(v!==false&&v!=='control')}
-function surveyStorageKey(id){return 'flareboard.survey:'+id}
-function surveySeen(id){try{if(t.localStorage&&t.localStorage.getItem(surveyStorageKey(id)))return true}catch(_){}try{return!!s.getItem(surveyStorageKey(id))}catch(_){return false}}
-function markSurvey(id){try{if(t.localStorage)t.localStorage.setItem(surveyStorageKey(id),'1')}catch(_){}try{s.setItem(surveyStorageKey(id),'1')}catch(_){}}
-function surveyRuleMatches(rule){if(!rule||!rule.field||!rule.operator)return false;var v=flagValue(rule.field);if(v==null)return false;var left=String(v).toLowerCase(),right=String(rule.value==null?'':rule.value).toLowerCase(),op=rule.operator;if(op==='equals')return left===right;if(op==='not_equals')return left!==right;if(op==='contains')return left.indexOf(right)>=0;if(op==='not_contains')return left.indexOf(right)<0;return false}
-function surveyMatches(sv,eventName){var pth=appPath(),tr=sv&&sv.triggerPath,ev=sv&&sv.triggerEvent;if(ev&&ev!==eventName)return false;if(!ev&&eventName)return false;if(tr&&!(pth===tr||pth.indexOf(tr+'?')===0||pth.indexOf(tr+'/')===0))return false;var rules=sv&&Array.isArray(sv.displayRules)?sv.displayRules:[];for(var i=0;i<rules.length;i++)if(!surveyRuleMatches(rules[i]))return false;return true}
-function pickSurvey(eventName){for(var i=0;i<surveys.length;i++){if(surveys[i]&&surveys[i].id&&!surveySeen(surveys[i].id)&&surveyMatches(surveys[i],eventName))return surveys[i]}return null}
-function submitSurvey(sv,answer){var w=websiteId();if(!w)return Promise.resolve();return fetch(ingestOrigin()+'/api/surveys/response',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({website:w,surveyId:sv.id,sessionId:s.getItem('flareboard.sid'),visitId:s.getItem('flareboard.vid'),answer:answer,urlPath:appPath()}),keepalive:true})}
-function showSurvey(eventName){if(d.getElementById('flareboard-survey'))return;var sv=pickSurvey(eventName);if(!sv)return;var delay=Math.min(60,Math.max(0,Number(sv.displayDelaySeconds||0)));if(delay>0){sv.displayDelaySeconds=0;setTimeout(function(){showSurvey(eventName)},delay*1000);return}var box=d.createElement('div'),q=d.createElement('div'),inputWrap=d.createElement('div'),ta=null,selected='',actions=d.createElement('div'),sendBtn=d.createElement('button'),closeBtn=d.createElement('button');box.id='flareboard-survey';box.style.cssText='position:fixed;right:18px;bottom:18px;z-index:2147483647;width:min(340px,calc(100vw - 36px));box-sizing:border-box;padding:16px;border:1px solid rgba(148,163,184,.45);border-radius:10px;background:#fff;color:#111827;box-shadow:0 14px 32px rgba(15,23,42,.18);font:14px/1.45 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif';q.textContent=sv.question||sv.name||'Feedback';q.style.cssText='font-weight:700;margin-bottom:10px';inputWrap.style.cssText='display:grid;gap:8px';function chooseButton(btns,b,value){selected=value;for(var bi=0;bi<btns.length;bi++){btns[bi].style.borderColor='rgba(148,163,184,.65)';btns[bi].style.background='#fff';btns[bi].style.color='#111827'}b.style.borderColor='#0d9488';b.style.background='rgba(13,148,136,.1)';b.style.color='#0f766e'}if(sv.type==='choice'&&Array.isArray(sv.options)&&sv.options.length){for(var oi=0;oi<sv.options.length;oi++){var opt=d.createElement('button');opt.type='button';opt.textContent=String(sv.options[oi]);opt.style.cssText='box-sizing:border-box;width:100%;text-align:left;border:1px solid rgba(148,163,184,.65);border-radius:8px;background:#fff;color:#111827;padding:9px 10px;font:inherit;cursor:pointer';inputWrap.appendChild(opt);opt.onclick=function(){chooseButton(inputWrap.querySelectorAll('button'),this,this.textContent||'')}}}else if(sv.type==='rating'){var rating=d.createElement('div');rating.style.cssText='display:grid;grid-template-columns:repeat(5,1fr);gap:6px';inputWrap.appendChild(rating);for(var ri=1;ri<=5;ri++){(function(n){var rb=d.createElement('button');rb.type='button';rb.textContent=String(n);rb.style.cssText='border:1px solid rgba(148,163,184,.65);border-radius:8px;background:#fff;color:#111827;padding:9px 0;font:inherit;font-weight:700;cursor:pointer';rating.appendChild(rb);rb.onclick=function(){chooseButton(rating.querySelectorAll('button'),rb,String(n))}})(ri)}}else{ta=d.createElement('textarea');ta.rows=4;ta.placeholder='Share your feedback';ta.style.cssText='box-sizing:border-box;width:100%;resize:vertical;border:1px solid rgba(148,163,184,.65);border-radius:8px;padding:9px 10px;font:inherit;color:inherit;background:#fff';inputWrap.appendChild(ta)}actions.style.cssText='display:flex;justify-content:flex-end;gap:8px;margin-top:10px';sendBtn.type='button';sendBtn.textContent='Send';sendBtn.style.cssText='border:0;border-radius:8px;background:#0d9488;color:#fff;padding:8px 12px;font-weight:700;cursor:pointer';closeBtn.type='button';closeBtn.textContent='Close';closeBtn.style.cssText='border:1px solid rgba(148,163,184,.65);border-radius:8px;background:#fff;color:#374151;padding:8px 12px;cursor:pointer';closeBtn.onclick=function(){markSurvey(sv.id);box.remove()};sendBtn.onclick=function(){var v=ta?ta.value.trim():selected;if(!v){if(ta)ta.focus();return}sendBtn.disabled=true;submitSurvey(sv,v).then(function(){markSurvey(sv.id);box.remove();trackEvent(scriptEl(),{name:'survey_response',data:{surveyId:sv.id},tag:'survey'})}).catch(function(){sendBtn.disabled=false})};actions.appendChild(closeBtn);actions.appendChild(sendBtn);box.appendChild(q);box.appendChild(inputWrap);box.appendChild(actions);d.body&&d.body.appendChild(box)}
-function collectVitals(a){if(vitalsStarted||!t.PerformanceObserver)return;vitalsStarted=1;var w=websiteId(a);if(!w)return;try{var o=r();o.website=w;var m={},sent=0,clsV=0,obs=[];function readTtfb(){try{var n=t.performance.getEntriesByType('navigation')[0];if(n){var st=n.activationStart||0,v=n.responseStart-st;if(v>=0&&v<6e4)return Math.round(v)}}catch(_){}}function readFcp(){try{var p=t.performance.getEntriesByType('paint'),i;for(i=0;i<p.length;i++)if(p[i].name==='first-contentful-paint')return Math.round(p[i].startTime)}catch(_){}}function readLcp(){try{var e=t.performance.getEntriesByType('largest-contentful-paint');if(e.length)return Math.round(e[e.length-1].startTime)}catch(_){}}function has(){return m.lcp!=null||m.inp!=null||m.cls!=null||m.fcp!=null||m.ttfb!=null}function cleanup(){for(var i=0;i<obs.length;i++)try{obs[i].disconnect()}catch(_){}obs=[];d.removeEventListener('visibilitychange',onVis);t.removeEventListener('pagehide',onLeave)}function flush(){if(sent)return;if(m.ttfb==null)m.ttfb=readTtfb();if(m.fcp==null)m.fcp=readFcp();if(m.lcp==null)m.lcp=readLcp();if(!has())return;sent=1;if(m.lcp!=null)o.lcp=m.lcp;if(m.inp!=null)o.inp=m.inp;if(m.cls!=null)o.cls=m.cls;if(m.fcp!=null)o.fcp=m.fcp;if(m.ttfb!=null)o.ttfb=m.ttfb;send('performance',o);cleanup()}function onVis(){if(d.visibilityState==='hidden')flush()}function onLeave(){flush()}function addObs(ob){try{obs.push(ob)}catch(_){}}try{addObs(new PerformanceObserver(function(l){var e=l.getEntries();if(e.length)m.lcp=Math.round(e[e.length-1].startTime)}));obs[obs.length-1].observe({type:'largest-contentful-paint',buffered:true})}catch(_){}try{addObs(new PerformanceObserver(function(l){var e=l.getEntries(),i;for(i=0;i<e.length;i++)if(e[i].name==='first-contentful-paint')m.fcp=Math.round(e[i].startTime)}));obs[obs.length-1].observe({type:'paint',buffered:true})}catch(_){}try{addObs(new PerformanceObserver(function(l){var e=l.getEntries();if(e.length)m.inp=Math.round(e[e.length-1].duration)}));obs[obs.length-1].observe({type:'event',buffered:true,durationThreshold:40})}catch(_){}try{addObs(new PerformanceObserver(function(l){var e=l.getEntries(),i;for(i=0;i<e.length;i++){if(!e[i].hadRecentInput)clsV+=e[i].value}m.cls=Math.round(clsV*1e4)/1e4}));obs[obs.length-1].observe({type:'layout-shift',buffered:true})}catch(_){}m.ttfb=readTtfb();m.fcp=readFcp();setTimeout(flush,1e4);d.addEventListener('visibilitychange',onVis);t.addEventListener('pagehide',onLeave)}catch(_){}}
-function init(){var a=scriptEl();if(!websiteId(a))return;var cfg=loadHmConfig(a);pageview();setupSpa();d.addEventListener('click',onDeclClick,true);setupHeatmap();setupErrors();collectVitals(a);if(cfg&&cfg.then)cfg.then(function(){setTimeout(showSurvey,600)});else setTimeout(showSurvey,800);var api={track:function(n,data,tag){return trackEvent(scriptEl(),{name:n,data:data||undefined,tag:tag||undefined})},identify:function(id,data){var w=websiteId();if(!w||!id)return;setDistinctId(id);return send('identify',{website:w,id:id,data:data||{}})},alias:function(alias,distinctId){return trackEvent(scriptEl(),{name:'$alias',data:{alias:alias,distinctId:distinctId||getDistinctId()||null},tag:'identity'})},group:function(type,key,data){var w=websiteId();if(!w||!type||!key)return;return send('group',{website:w,id:getDistinctId()||undefined,groupType:String(type),groupKey:String(key),data:data||{}})},reset:function(){clearDistinctId();try{s.removeItem(k);s.removeItem('flareboard.sid');s.removeItem('flareboard.vid')}catch(_){}flagExposures={}},revenue:function(amount,currency,extra){return trackEvent(scriptEl(),Object.assign({revenue:amount,currency:currency||'USD'},extra||{}))},log:function(level,message,data){var w=websiteId();if(!w)return;var o=sdkMeta();o.website=w;o.level=level||'info';o.message=message||'';o.data=data||undefined;return send('log',o)},ai:function(data){var w=websiteId();if(!w)return;var o=sdkMeta(data||{});o.website=w;return send('ai',o)},captureException:function(error,extra){return captureException(error,Object.assign({handled:true},extra||{}))},page:function(){return pageview()},getDistinctId:function(){return getDistinctId()},getSessionId:function(){return s.getItem('flareboard.sid')},getVisitId:function(){return s.getItem('flareboard.vid')},getFeatureFlag:function(key,fallback){return getFeatureFlag(key,fallback)},getFeatureFlagVariant:function(key,fallback){return getFeatureFlag(key,fallback)},isFeatureEnabled:function(key,fallback){return isFeatureEnabled(key,fallback)},featureFlagsReady:function(){return flagReady||Promise.resolve(featureFlags)},showSurvey:function(){return showSurvey()}};t.flareboard=api;t.Flareboard=api}
-init();
-})();`;
+  // The tracker source lives in ../tracker/script.ts (unit-tested there against a fake DOM).
+  const script = TRACKER_SCRIPT;
 
   return new Response(script, {
     headers: {

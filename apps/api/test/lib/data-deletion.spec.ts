@@ -60,6 +60,22 @@ async function seedWebsiteData(websiteId: string) {
     LONG_AGO,
   );
   await env.REPLAY_BUCKET!.put(`${websiteId}/visit-1/0`, '[]');
+  // Error tracking: a source map in R2 (metadata row in D1) and a merged issue + KV regression index.
+  await run(
+    `INSERT INTO error_source_map (source_map_id, website_id, release, file, content, object_key, size, created_at)
+     VALUES (?1, ?2, '1.0.0', 'app.js.map', '', ?3, 2, ?4)`,
+    `${websiteId}-map`,
+    websiteId,
+    `sourcemaps/${websiteId}/${websiteId}-map.map`,
+    LONG_AGO,
+  );
+  await env.REPLAY_BUCKET!.put(`sourcemaps/${websiteId}/${websiteId}-map.map`, '{}');
+  await run(
+    `INSERT INTO error_issue_merge (website_id, source_fingerprint, target_fingerprint, created_at) VALUES (?1, 'aaaa', 'bbbb', ?2)`,
+    websiteId,
+    LONG_AGO,
+  );
+  await env.CACHE.put(`error-resolved:${websiteId}:bbbb`, '{"issue":"bbbb","resolvedAt":1}');
   await run(`INSERT INTO feature_flag (flag_id, website_id, key, name) VALUES (?1, ?2, 'beta', 'Beta')`, flag, websiteId);
   await run(
     `INSERT INTO experiment (experiment_id, website_id, feature_flag_id, name, goal_event) VALUES (?1, ?2, ?3, 'Exp', 'signup')`,
@@ -186,6 +202,12 @@ describe('scheduled data deletion', () => {
     );
     await run(`INSERT INTO user_subscription (user_id, plan_id, status) VALUES (?1, 'cloud', 'canceled')`, GONE_USER);
     await run(
+      `INSERT INTO personal_api_key (key_id, user_id, name, key_hash, key_prefix, scopes, created_at)
+       VALUES ('dd-api-key', ?1, 'CI', 'dd-key-hash', 'fb_sk_dd00', 'read', ?2)`,
+      GONE_USER,
+      LONG_AGO,
+    );
+    await run(
       `INSERT INTO user_oauth_identity (provider, provider_user_id, user_id, created_at) VALUES ('github', 'dd-gh', ?1, ?2)`,
       GONE_USER,
       LONG_AGO,
@@ -224,6 +246,10 @@ describe('scheduled data deletion', () => {
     expect(await count(`SELECT COUNT(*) AS n FROM audit_log WHERE entity_type = 'website' AND entity_id = ?1`, PURGED_SITE)).toBe(0);
     expect(await flagHistoryRows(PURGED_SITE)).toBe(0);
     expect((await env.REPLAY_BUCKET!.list({ prefix: `${PURGED_SITE}/` })).objects).toHaveLength(0);
+    expect((await env.REPLAY_BUCKET!.list({ prefix: `sourcemaps/${PURGED_SITE}/` })).objects).toHaveLength(0);
+    expect(await count('SELECT COUNT(*) AS n FROM error_source_map WHERE website_id = ?1', PURGED_SITE)).toBe(0);
+    expect(await count('SELECT COUNT(*) AS n FROM error_issue_merge WHERE website_id = ?1', PURGED_SITE)).toBe(0);
+    expect((await env.CACHE.list({ prefix: `error-resolved:${PURGED_SITE}:` })).keys).toHaveLength(0);
   });
 
   it('keeps websites still inside the grace period and live websites untouched', async () => {
@@ -232,6 +258,8 @@ describe('scheduled data deletion', () => {
       expect(await websiteRows(site)).toBeGreaterThan(5);
       expect(await flagHistoryRows(site)).toBe(1);
       expect((await env.REPLAY_BUCKET!.list({ prefix: `${site}/` })).objects).toHaveLength(1);
+      expect((await env.REPLAY_BUCKET!.list({ prefix: `sourcemaps/${site}/` })).objects).toHaveLength(1);
+      expect((await env.CACHE.list({ prefix: `error-resolved:${site}:` })).keys).toHaveLength(1);
     }
   });
 
@@ -243,7 +271,7 @@ describe('scheduled data deletion', () => {
     expect(await count(`SELECT COUNT(*) AS n FROM link_pixel_hit WHERE source_id = 'dd-link'`)).toBe(0);
     expect(await count(`SELECT COUNT(*) AS n FROM board WHERE board_id = 'dd-board-own'`)).toBe(0);
     expect(await count(`SELECT COUNT(*) AS n FROM share WHERE share_id = 'dd-board-share'`)).toBe(0);
-    for (const table of ['insight', 'user_subscription', 'user_oauth_identity', 'audit_log', 'team_user']) {
+    for (const table of ['insight', 'user_subscription', 'user_oauth_identity', 'audit_log', 'team_user', 'personal_api_key']) {
       expect(await count(`SELECT COUNT(*) AS n FROM ${table} WHERE user_id = ?1`, GONE_USER)).toBe(0);
     }
   });

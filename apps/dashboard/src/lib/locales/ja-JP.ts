@@ -658,7 +658,6 @@ export const jaJPLocale: Record<string, string> = {
   aiRecentCalls: "最近の AI 呼び出し",
   aiRecentCallsLead: "最近の生成と失敗をセッションごとに確認します。",
   aiEmptyTitle: "この期間の AI 呼び出しはありません",
-  aiEmptyBody: "flareboard.ai({ model, inputTokens, outputTokens, costUsd }) を呼び出すと、ここに AI の利用状況が表示されます。",
   aiTabOverview: "概要",
   aiTabTraces: "トレース",
   aiTabUsers: "ユーザー",

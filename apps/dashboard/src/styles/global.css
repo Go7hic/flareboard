@@ -11627,6 +11627,7 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
+  margin-bottom: 1.25rem;
 }
 
 .llm-chart-grid {

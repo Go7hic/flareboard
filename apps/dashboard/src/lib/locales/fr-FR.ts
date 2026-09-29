@@ -658,7 +658,6 @@ export const frFRLocale: Record<string, string> = {
   aiRecentCalls: "Appels IA récents",
   aiRecentCallsLead: "Inspectez les générations et échecs récents par session.",
   aiEmptyTitle: "Aucun appel IA sur cette période",
-  aiEmptyBody: "Appelez flareboard.ai({ model, inputTokens, outputTokens, costUsd }) pour voir l’usage de l’IA ici.",
   aiTabOverview: "Vue d’ensemble",
   aiTabTraces: "Traces",
   aiTabUsers: "Utilisateurs",

@@ -658,7 +658,6 @@ export const deDELocale: Record<string, string> = {
   aiRecentCalls: "Letzte KI-Aufrufe",
   aiRecentCallsLead: "Letzte Generierungen und Fehlschläge nach Sitzung prüfen.",
   aiEmptyTitle: "Keine KI-Aufrufe in diesem Zeitraum",
-  aiEmptyBody: "flareboard.ai({ model, inputTokens, outputTokens, costUsd }) aufrufen, um hier die KI-Nutzung zu sehen.",
   aiTabOverview: "Übersicht",
   aiTabTraces: "Traces",
   aiTabUsers: "Nutzer",

@@ -122,9 +122,7 @@ export function LlmOverview({
   if (!stats) return null;
   if (!stats.calls) {
     return (
-      <EmptyState title={t('aiEmptyTitle')} description={t('aiSetupBody')}>
-        <p className="text-muted">{t('aiEmptyBody')}</p>
-      </EmptyState>
+      <EmptyState title={t('aiEmptyTitle')} description={t('aiSetupBody')} />
     );
   }
 

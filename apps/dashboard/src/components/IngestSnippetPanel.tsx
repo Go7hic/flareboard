@@ -8,7 +8,8 @@ import { api, INGEST_URL, INGEST_URL_FOR_DOCS, type TrackingStatus } from '../li
 import { formatDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
 
-const RRWEB_CDN = 'https://cdn.jsdelivr.net/npm/rrweb@2/dist/rrweb.min.js';
+// The UMD build defines window.rrweb. dist/rrweb.min.js is an ES module and fails in a classic script tag.
+const RRWEB_CDN = 'https://cdn.jsdelivr.net/npm/rrweb@2/umd/rrweb.min.js';
 
 const NEW_SITE_MS = 30 * 60 * 1000;
 const STORAGE_PREFIX = 'flareboard.embed-expanded.';

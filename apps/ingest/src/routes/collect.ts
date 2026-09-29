@@ -39,6 +39,8 @@ import { checkIpRateLimit, checkProjectKeyRateLimit, checkRateLimit, getTrustedC
 import { fetchApi } from '../lib/api-client';
 import { buildErrorEventDataPayload, reportPossibleRegression } from '../lib/error-tracking';
 import { resolveDistinctId } from '../lib/tracker-settings';
+import { trackerAiProperties } from '../lib/ai-events';
+import { llmCaptureContent } from '../lib/llm-settings';
 import { TRACKER_SCRIPT } from '../tracker/script';
 import { eventMessage, pageContext, parsePageUrl, sessionDataMessage, sessionMessage } from '../lib/queue-messages';
 import { recordAlias } from '../lib/person-identity';
@@ -541,18 +543,15 @@ async function processSend(
       handled,
       release,
       environment,
-      provider,
-      model,
-      inputTokens,
-      outputTokens,
-      totalTokens,
-      costUsd,
-      latencyMs,
       status,
-      quality,
       groupType,
       groupKey,
     } = payload;
+    // The website's LLM privacy setting, read only for AI events that carry content.
+    const captureAiContent =
+      type === COLLECTION_TYPE.ai && websiteId && (payload.input != null || payload.output != null)
+        ? await llmCaptureContent(env, websiteId)
+        : true;
 
     const sourceId = websiteId!;
     const secret = getSecret(appSecret);
@@ -701,20 +700,7 @@ async function processSend(
                 environment,
               })
           : type === COLLECTION_TYPE.ai
-            ? {
-                ...(data ?? {}),
-                provider,
-                model: model ?? name ?? 'unknown',
-                inputTokens,
-                outputTokens,
-                totalTokens: totalTokens ?? ((inputTokens ?? 0) + (outputTokens ?? 0) || undefined),
-                costUsd,
-                latencyMs,
-                status: status ?? 'success',
-                quality,
-                release,
-                environment,
-              }
+            ? trackerAiProperties(payload, captureAiContent)
           : data;
 
       // Tag even when there is no `data`: the tracker's default pageview sends none, and

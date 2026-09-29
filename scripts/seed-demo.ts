@@ -323,6 +323,7 @@ function deleteDemoData(remote: boolean): void {
     `DELETE FROM feature_flag WHERE website_id IN (${ids});`,
     `DELETE FROM survey_response WHERE website_id IN (${ids});`,
     `DELETE FROM survey WHERE website_id IN (${ids});`,
+    `DELETE FROM workflow_execution_attempt WHERE website_id IN (${ids});`,
     `DELETE FROM workflow_execution WHERE website_id IN (${ids});`,
     `DELETE FROM workflow WHERE website_id IN (${ids});`,
     `DELETE FROM error_alert_event WHERE website_id IN (${ids});`,

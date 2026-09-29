@@ -66,6 +66,26 @@
       "name": "EMAIL"
     }
   ],
+  // Durable workflow executions: delays, condition steps and retried deliveries (src/workflows).
+  "workflows": [
+    {
+      "name": "flareboard-workflow-runner",
+      "binding": "WORKFLOW_RUNNER",
+      "class_name": "WorkflowRunner"
+    }
+  ],
+  // Workflow triggers produced by the ingest worker (apps/ingest/src/lib/workflows.ts).
+  "queues": {
+    "consumers": [
+      {
+        "queue": "flareboard-workflow-triggers",
+        "max_batch_size": 20,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "dead_letter_queue": "flareboard-workflow-triggers-dlq"
+      }
+    ]
+  },
   "triggers": {
     "crons": ["0 * * * *"]
   },
@@ -136,6 +156,24 @@
           "name": "EMAIL"
         }
       ],
+      "workflows": [
+        {
+          "name": "flareboard-workflow-runner-production",
+          "binding": "WORKFLOW_RUNNER",
+          "class_name": "WorkflowRunner"
+        }
+      ],
+      "queues": {
+        "consumers": [
+          {
+            "queue": "flareboard-workflow-triggers",
+            "max_batch_size": 20,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+            "dead_letter_queue": "flareboard-workflow-triggers-dlq"
+          }
+        ]
+      },
       "triggers": {
         "crons": ["0 * * * *"]
       },

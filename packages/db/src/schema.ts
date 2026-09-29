@@ -853,8 +853,17 @@ export const workflow = sqliteTable(
     name: text('name').notNull(),
     triggerEvent: text('trigger_event').notNull(),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    /** Summary of the first action step, kept for older readers (see migration 0050). */
     actionType: text('action_type').notNull().default('record'),
     actionConfig: text('action_config', { mode: 'json' }),
+    description: text('description').notNull().default(''),
+    /** JSON array of AND-ed trigger conditions (WorkflowCondition in @flareboard/shared). */
+    triggerFilters: text('trigger_filters'),
+    /** JSON array of ordered flow steps (WorkflowStep in @flareboard/shared). */
+    steps: text('steps'),
+    /** HMAC key for the X-Flareboard-Signature webhook header. Never returned after creation. */
+    signingSecret: text('signing_secret'),
+    signingSecretRotatedAt: integer('signing_secret_rotated_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
   },
@@ -881,12 +890,52 @@ export const workflowExecution = sqliteTable(
     eventName: text('event_name'),
     status: text('status').notNull().default('recorded'),
     error: text('error'),
+    distinctId: text('distinct_id'),
+    currentStep: integer('current_step'),
+    attempts: integer('attempts').notNull().default(0),
+    responseCode: integer('response_code'),
+    nextRetryAt: integer('next_retry_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+    completedAt: integer('completed_at', { mode: 'timestamp_ms' }),
   },
   (t) => [
     index('workflow_execution_workflow_idx').on(t.workflowId),
     index('workflow_execution_website_created_idx').on(t.websiteId, t.createdAt),
     index('workflow_execution_session_idx').on(t.sessionId),
+    index('workflow_execution_created_idx').on(t.createdAt),
+    index('workflow_execution_workflow_created_idx').on(t.workflowId, t.createdAt),
+  ],
+);
+
+/** One row per step outcome of an execution: delivery attempts, condition results, delays. */
+export const workflowExecutionAttempt = sqliteTable(
+  'workflow_execution_attempt',
+  {
+    attemptId: text('attempt_id').primaryKey(),
+    executionId: text('execution_id')
+      .notNull()
+      .references(() => workflowExecution.executionId),
+    workflowId: text('workflow_id')
+      .notNull()
+      .references(() => workflow.workflowId),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    stepIndex: integer('step_index').notNull(),
+    stepType: text('step_type').notNull(),
+    attempt: integer('attempt').notNull().default(1),
+    status: text('status').notNull(),
+    responseCode: integer('response_code'),
+    error: text('error'),
+    responseBody: text('response_body'),
+    durationMs: integer('duration_ms'),
+    nextRetryAt: integer('next_retry_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [
+    index('workflow_execution_attempt_execution_idx').on(t.executionId, t.createdAt),
+    index('workflow_execution_attempt_website_created_idx').on(t.websiteId, t.createdAt),
   ],
 );
 
@@ -1269,6 +1318,7 @@ export type Survey = typeof survey.$inferSelect;
 export type SurveyResponse = typeof surveyResponse.$inferSelect;
 export type Workflow = typeof workflow.$inferSelect;
 export type WorkflowExecution = typeof workflowExecution.$inferSelect;
+export type WorkflowExecutionAttempt = typeof workflowExecutionAttempt.$inferSelect;
 export type ErrorIssueState = typeof errorIssueState.$inferSelect;
 export type ErrorIssueComment = typeof errorIssueComment.$inferSelect;
 export type ErrorSourceMap = typeof errorSourceMap.$inferSelect;

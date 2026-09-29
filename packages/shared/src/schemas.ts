@@ -652,32 +652,6 @@ export const submitSurveyResponseSchema = z.object({
   message: `At most ${SURVEY_MAX_QUESTIONS} answers`,
 });
 
-export const workflowActionConfigSchema = z
-  .object({
-    note: z.string().max(500).optional().default(''),
-    url: z.string().url().max(500).optional().or(z.literal('')),
-    email: z.string().email().max(200).optional().or(z.literal('')),
-  })
-  .default({});
-
-export const workflowActionTypeSchema = z.enum(['record', 'webhook', 'email']);
-
-export const createWorkflowSchema = z.object({
-  name: z.string().min(1).max(120),
-  triggerEvent: z.string().min(1).max(80),
-  enabled: z.boolean().optional().default(true),
-  actionType: workflowActionTypeSchema.optional().default('record'),
-  actionConfig: workflowActionConfigSchema.optional().default({}),
-});
-
-export const updateWorkflowSchema = z.object({
-  name: z.string().min(1).max(120).optional(),
-  triggerEvent: z.string().min(1).max(80).optional(),
-  enabled: z.boolean().optional(),
-  actionType: workflowActionTypeSchema.optional(),
-  actionConfig: workflowActionConfigSchema.optional(),
-});
-
 export const errorIssueStatusSchema = z.enum(['open', 'resolved', 'ignored']);
 
 export const updateErrorIssueStateSchema = z.object({

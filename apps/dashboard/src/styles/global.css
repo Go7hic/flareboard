@@ -4644,6 +4644,91 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   }
 }
 
+.warehouse-toolbar-hints {
+  display: grid;
+  gap: 0.25rem;
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.warehouse-toolbar-hints p,
+.warehouse-note {
+  margin: 0;
+}
+
+.warehouse-toolbar-actions,
+.warehouse-key-form,
+.revenue-attribution-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.warehouse-key-form {
+  margin-top: 0.5rem;
+}
+
+.warehouse-key-form input {
+  max-width: 16rem;
+}
+
+/* Inline query / export error under the editor. */
+.warehouse-error {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.warehouse-imported-table {
+  margin-top: 0.65rem;
+}
+
+.warehouse-imported-table p {
+  margin: 0;
+}
+
+.warehouse-table-card > button {
+  margin-top: 0.5rem;
+}
+
+.revenue-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+}
+
+.revenue-toolbar p {
+  margin: 0;
+}
+
+.revenue-currency {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.revenue-mrr-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+@media (max-width: 900px) {
+  .revenue-mrr-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .workflow-create-form {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(12rem, 100%), 1fr));

@@ -18,6 +18,7 @@ import {
   type WarehouseScheduledQuery,
   type WarehouseSchemaResponse,
 } from '../lib/api';
+import { downloadCsv } from '../lib/downloadCsv';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { formatDateOnly, formatDateTime, formatNumber, formatPercent } from '../lib/format';
@@ -31,6 +32,26 @@ LIMIT 50`;
 
 const WAREHOUSE_TABS = ['query', 'saved', 'history', 'schedules', 'sources'] as const;
 type WarehouseTab = (typeof WAREHOUSE_TABS)[number];
+
+/** Connectors that really import data (API: WAREHOUSE_DATA_SOURCE_TYPES). */
+const SOURCE_TYPES = [
+  { id: 'http_json', label: () => t('warehouseSourceHttpJson') },
+  { id: 'http_csv', label: () => t('warehouseSourceHttpCsv') },
+  { id: 'stripe', label: () => t('warehouseSourceStripe') },
+] as const;
+type SourceType = (typeof SOURCE_TYPES)[number]['id'];
+
+function sourceTypeLabel(type: string) {
+  return SOURCE_TYPES.find((item) => item.id === type)?.label() ?? type;
+}
+
+function isSupportedSource(type: string) {
+  return SOURCE_TYPES.some((item) => item.id === type);
+}
+
+function tableQuery(name: string) {
+  return `SELECT *\nFROM ${name}\nWHERE website_id = ?1\nLIMIT 50`;
+}
 
 function displayValue(value: unknown) {
   if (value == null) return '-';
@@ -53,8 +74,15 @@ export default function WebsiteWarehousePage() {
   const [scheduleDraft, setScheduleDraft] = useState({ name: '', intervalMinutes: 60 });
   const [sourceDraft, setSourceDraft] = useState({
     name: '',
-    type: 'http_json' as WarehouseDataSource['type'],
+    type: 'http_json' as SourceType,
     configText: '{\n  "url": "https://example.com/data.json"\n}',
+    apiKey: '',
+  });
+  const [keyDraft, setKeyDraft] = useState<{ id: string; apiKey: string } | null>(null);
+  const [exportState, setExportState] = useState<{ pending: boolean; error: string | null; truncatedAt: number | null }>({
+    pending: false,
+    error: null,
+    truncatedAt: null,
   });
 
   const schemaQuery = useQuery({
@@ -161,10 +189,15 @@ export default function WebsiteWarehousePage() {
   const createSourceMutation = useMutation({
     mutationFn: () => {
       let config: Record<string, unknown> = {};
-      try {
-        config = JSON.parse(sourceDraft.configText) as Record<string, unknown>;
-      } catch {
-        throw new Error(t('warehouseInvalidJsonConfig'));
+      if (sourceDraft.type === 'stripe') {
+        // The key goes to the API once; it is stored encrypted and never returned.
+        config = { apiKey: sourceDraft.apiKey.trim() };
+      } else {
+        try {
+          config = JSON.parse(sourceDraft.configText) as Record<string, unknown>;
+        } catch {
+          throw new Error(t('warehouseInvalidJsonConfig'));
+        }
       }
       return api<WarehouseDataSource>(`/api/websites/${websiteId}/warehouse/data-sources`, {
         method: 'POST',
@@ -177,8 +210,22 @@ export default function WebsiteWarehousePage() {
       });
     },
     onSuccess: () => {
-      setSourceDraft((prev) => ({ ...prev, name: '' }));
+      setSourceDraft((prev) => ({ ...prev, name: '', apiKey: '' }));
       queryClient.invalidateQueries({ queryKey: ['warehouse-sources', websiteId] });
+      queryClient.invalidateQueries({ queryKey: ['warehouse-schema', websiteId] });
+    },
+  });
+
+  const replaceKeyMutation = useMutation({
+    mutationFn: ({ id, apiKey }: { id: string; apiKey: string }) =>
+      api<WarehouseDataSource>(`/api/websites/${websiteId}/warehouse/data-sources/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ config: { apiKey: apiKey.trim() } }),
+      }),
+    onSuccess: () => {
+      setKeyDraft(null);
+      queryClient.invalidateQueries({ queryKey: ['warehouse-sources', websiteId] });
+      queryClient.invalidateQueries({ queryKey: ['warehouse-schema', websiteId] });
     },
   });
 
@@ -191,15 +238,33 @@ export default function WebsiteWarehousePage() {
   const syncSourceMutation = useMutation({
     mutationFn: (id: string) =>
       api(`/api/websites/${websiteId}/warehouse/data-sources/${id}/sync`, { method: 'POST' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['warehouse-sources', websiteId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['warehouse-sources', websiteId] });
+      queryClient.invalidateQueries({ queryKey: ['warehouse-schema', websiteId] });
+    },
   });
 
+  const exportCsv = () => {
+    setExportState({ pending: true, error: null, truncatedAt: null });
+    downloadCsv(`/api/websites/${websiteId}/warehouse/query/export`, `${websiteId}-warehouse.csv`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sql }),
+    })
+      .then((outcome) => {
+        setExportState({ pending: false, error: null, truncatedAt: outcome.truncated ? outcome.rowCap : null });
+        queryClient.invalidateQueries({ queryKey: ['warehouse-history', websiteId] });
+      })
+      .catch((error: unknown) =>
+        setExportState({ pending: false, error: error instanceof Error ? error.message : t('exportFailed'), truncatedAt: null }),
+      );
+  };
+
   const result = queryMutation.data;
-  const diagnostics =
-    queryMutation.data?.analysis.diagnostics ??
-    (queryMutation.error
-      ? [{ code: 'query_error', level: 'error' as const, message: (queryMutation.error as Error).message }]
-      : []);
+  const queryError = queryMutation.error ? (queryMutation.error as Error).message : null;
+  const diagnostics = queryMutation.data?.analysis.diagnostics ?? [];
+  const limits = schemaQuery.data?.limits;
+  const importedSources = schemaQuery.data?.importedSources ?? [];
 
   const savedQueries = savedQuery.data?.savedQueries ?? [];
   const history = historyQuery.data?.history ?? [];
@@ -244,17 +309,51 @@ export default function WebsiteWarehousePage() {
                 aria-label={t('warehouseSql')}
               />
               <div className="warehouse-toolbar">
-                <p className="text-muted">{t('warehouseSafetyHint')}</p>
-                <Button
-                  type="button"
-                  variant="primary"
-                  disabled={!sql.trim() || queryMutation.isPending}
-                  onClick={() => queryMutation.mutate()}
-                >
-                  {queryMutation.isPending ? t('loading') : t('runQuery')}
-                </Button>
+                <div className="warehouse-toolbar-hints">
+                  <p className="text-muted">{t('warehouseSafetyHint')}</p>
+                  {limits ? (
+                    <p className="text-muted">
+                      {t('warehouseLimitsHint')
+                        .replace('{maxRows}', formatNumber(limits.maxUserLimit))
+                        .replace('{defaultRows}', formatNumber(limits.defaultLimit))
+                        .replace('{scanRows}', formatNumber(limits.maxRowsRead))
+                        .replace('{seconds}', formatNumber(limits.timeoutMs / 1000))}{' '}
+                      {t('warehouseExportHint').replace('{count}', formatNumber(limits.exportRowCap))}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="warehouse-toolbar-actions">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={!sql.trim() || exportState.pending}
+                    onClick={exportCsv}
+                  >
+                    {exportState.pending ? t('loading') : t('exportCsv')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    disabled={!sql.trim() || queryMutation.isPending}
+                    onClick={() => queryMutation.mutate()}
+                  >
+                    {queryMutation.isPending ? t('loading') : t('runQuery')}
+                  </Button>
+                </div>
               </div>
             </div>
+
+            {queryError || exportState.error ? (
+              <div className="warehouse-error" role="alert">
+                <strong>{t('warehouseQueryFailed')}</strong>
+                <span className="mono">{queryError ?? exportState.error}</span>
+              </div>
+            ) : null}
+            {exportState.truncatedAt ? (
+              <p className="text-muted warehouse-note" role="status">
+                {t('warehouseExportTruncated').replace('{count}', formatNumber(exportState.truncatedAt))}
+              </p>
+            ) : null}
 
             {diagnostics.length ? (
               <div className="warehouse-diagnostics" aria-label={t('warehouseDiagnostics')}>
@@ -291,7 +390,45 @@ export default function WebsiteWarehousePage() {
               ))}
             </div>
 
+            {importedSources.length ? (
+              <div className="warehouse-table-list">
+                <h3 className="section-title experiment-title">{t('warehouseImportedData')}</h3>
+                {importedSources.map((source) => (
+                  <details key={source.id} className="warehouse-table-card">
+                    <summary>
+                      {source.name} <span className="text-muted">· {sourceTypeLabel(source.type)}</span>
+                    </summary>
+                    {source.tables.map((table) => (
+                      <div key={table.name} className="warehouse-imported-table">
+                        <p>
+                          <code>{table.name}</code>{' '}
+                          <span className="text-muted">
+                            {t('warehouseImportedRows').replace('{count}', formatNumber(table.rowCount))}
+                          </span>
+                        </p>
+                        {table.columns.length ? (
+                          <div className="warehouse-column-list">
+                            {table.columns.map((column) => (
+                              <code key={column}>{column}</code>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-muted">{t('warehouseNoImportedFields')}</p>
+                        )}
+                      </div>
+                    ))}
+                    {source.exampleSql ? (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setSql(source.exampleSql!)}>
+                        {t('warehouseUseExample')}
+                      </Button>
+                    ) : null}
+                  </details>
+                ))}
+              </div>
+            ) : null}
+
             <div className="warehouse-table-list">
+              <h3 className="section-title experiment-title">{t('warehouseSiteTables')}</h3>
               {(schemaQuery.data?.tables ?? []).map((table) => (
                 <details key={table.name} className="warehouse-table-card">
                   <summary>{table.name}</summary>
@@ -301,6 +438,9 @@ export default function WebsiteWarehousePage() {
                       <code key={column}>{column}</code>
                     ))}
                   </div>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setSql(tableQuery(table.name))}>
+                    {t('warehouseUseTable')}
+                  </Button>
                 </details>
               ))}
               {schemaQuery.isLoading ? <div className="skeleton skeleton-block" aria-busy /> : null}
@@ -570,37 +710,61 @@ export default function WebsiteWarehousePage() {
                   onChange={(event) =>
                     setSourceDraft((prev) => ({
                       ...prev,
-                      type: event.target.value as WarehouseDataSource['type'],
+                      type: event.target.value as SourceType,
                     }))
                   }
                 >
-                  <option value="http_json">http_json</option>
-                  <option value="http_csv">http_csv</option>
-                  <option value="r2_json">r2_json</option>
-                  <option value="d1">d1</option>
-                  <option value="postgres">postgres</option>
-                  <option value="mysql">mysql</option>
+                  {SOURCE_TYPES.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label()}
+                    </option>
+                  ))}
                 </select>
               </div>
-              <div className="field feature-flag-description-field">
-                <Label htmlFor="warehouse-source-config">{t('warehouseDataSourceConfig')}</Label>
-                <textarea
-                  id="warehouse-source-config"
-                  className="textarea"
-                  value={sourceDraft.configText}
-                  onChange={(event) => setSourceDraft((prev) => ({ ...prev, configText: event.target.value }))}
-                />
-              </div>
+              {sourceDraft.type === 'stripe' ? (
+                <div className="field feature-flag-description-field">
+                  <Label htmlFor="warehouse-source-api-key">{t('warehouseStripeApiKey')}</Label>
+                  <Input
+                    id="warehouse-source-api-key"
+                    type="password"
+                    autoComplete="off"
+                    placeholder="rk_live_…"
+                    value={sourceDraft.apiKey}
+                    onChange={(event) => setSourceDraft((prev) => ({ ...prev, apiKey: event.target.value }))}
+                  />
+                  <p className="text-muted">{t('warehouseStripeApiKeyHint')}</p>
+                  <p className="text-muted">{t('warehouseStripeSyncHint')}</p>
+                </div>
+              ) : (
+                <div className="field feature-flag-description-field">
+                  <Label htmlFor="warehouse-source-config">{t('warehouseDataSourceConfig')}</Label>
+                  <textarea
+                    id="warehouse-source-config"
+                    className="textarea"
+                    value={sourceDraft.configText}
+                    onChange={(event) => setSourceDraft((prev) => ({ ...prev, configText: event.target.value }))}
+                  />
+                </div>
+              )}
               <div className="form-actions">
                 <Button
                   type="button"
                   variant="primary"
-                  disabled={!sourceDraft.name.trim() || createSourceMutation.isPending}
+                  disabled={
+                    !sourceDraft.name.trim() ||
+                    (sourceDraft.type === 'stripe' && !sourceDraft.apiKey.trim()) ||
+                    createSourceMutation.isPending
+                  }
                   onClick={() => createSourceMutation.mutate()}
                 >
                   {createSourceMutation.isPending ? t('saving') : t('create')}
                 </Button>
               </div>
+              {createSourceMutation.error ? (
+                <p className="text-danger" role="alert">
+                  {(createSourceMutation.error as Error).message}
+                </p>
+              ) : null}
             </div>
           ) : null}
           {dataSources.length ? (
@@ -617,11 +781,61 @@ export default function WebsiteWarehousePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {dataSources.map((item) => (
+                  {dataSources.map((item) => {
+                    const supported = isSupportedSource(item.type);
+                    const keyHint = typeof item.config.apiKeyHint === 'string' ? item.config.apiKeyHint : null;
+                    return (
                     <tr key={item.id}>
-                      <td>{item.name}</td>
-                      <td className="mono">{item.type}</td>
-                      <td>{item.enabled ? t('enabled') : t('disabled')}{item.lastStatus ? ` · ${item.lastStatus}` : ''}</td>
+                      <td>
+                        {item.name}
+                        {keyHint ? (
+                          <div className="text-muted mono">{t('warehouseStripeKeyHint').replace('{hint}', keyHint)}</div>
+                        ) : null}
+                        {keyDraft?.id === item.id ? (
+                          <div className="warehouse-key-form">
+                            <Input
+                              type="password"
+                              autoComplete="off"
+                              aria-label={t('warehouseStripeApiKey')}
+                              placeholder="rk_live_…"
+                              value={keyDraft.apiKey}
+                              onChange={(event) => setKeyDraft({ id: item.id, apiKey: event.target.value })}
+                            />
+                            <Button
+                              type="button"
+                              variant="danger"
+                              size="sm"
+                              disabled={!keyDraft.apiKey.trim() || replaceKeyMutation.isPending}
+                              onClick={() =>
+                                confirm({
+                                  title: t('warehouseReplaceKey'),
+                                  description: t('warehouseReplaceKeyHint'),
+                                  confirmLabel: t('warehouseReplaceKey'),
+                                  onConfirm: () => replaceKeyMutation.mutate({ id: item.id, apiKey: keyDraft.apiKey }),
+                                })
+                              }
+                            >
+                              {t('save')}
+                            </Button>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => setKeyDraft(null)}>
+                              {t('cancel')}
+                            </Button>
+                            {replaceKeyMutation.error ? (
+                              <span className="text-danger">{(replaceKeyMutation.error as Error).message}</span>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td>{sourceTypeLabel(item.type)}</td>
+                      <td>
+                        {item.enabled ? t('enabled') : t('disabled')}
+                        {item.lastStatus === 'syncing' && item.type === 'stripe'
+                          ? ` · ${t('warehouseSourceBackfilling')}`
+                          : item.lastStatus
+                            ? ` · ${item.lastStatus}`
+                            : ''}
+                        {!supported ? <div className="text-danger">{t('warehouseSourceUnsupported')}</div> : null}
+                      </td>
                       <td className="text-muted">
                         {formatTime(item.lastSyncAt)}
                         {item.lastError ? <div className="text-danger">{item.lastError}</div> : null}
@@ -630,15 +844,22 @@ export default function WebsiteWarehousePage() {
                       {canEdit ? (
                         <td className="cohorts-actions-col">
                           <div className="cohorts-row-actions">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              disabled={syncSourceMutation.isPending}
-                              onClick={() => syncSourceMutation.mutate(item.id)}
-                            >
-                              {t('warehouseSyncNow')}
-                            </Button>
+                            {supported ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={syncSourceMutation.isPending}
+                                onClick={() => syncSourceMutation.mutate(item.id)}
+                              >
+                                {t('warehouseSyncNow')}
+                              </Button>
+                            ) : null}
+                            {item.type === 'stripe' && keyDraft?.id !== item.id ? (
+                              <Button type="button" variant="ghost" size="sm" onClick={() => setKeyDraft({ id: item.id, apiKey: '' })}>
+                                {t('warehouseReplaceKey')}
+                              </Button>
+                            ) : null}
                             <Button
                               type="button"
                               variant="destructive-ghost"
@@ -651,7 +872,8 @@ export default function WebsiteWarehousePage() {
                         </td>
                       ) : null}
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -669,6 +891,13 @@ export default function WebsiteWarehousePage() {
               <p className="text-muted">
                 {result ? t('warehouseRowsReturned').replace('{count}', String(result.rowCount)) : t('warehouseResultsLead')}
               </p>
+              {result ? (
+                <p className="text-muted">
+                  {t('warehouseQueryCost')
+                    .replace('{rows}', formatNumber(result.cost.rowsRead))
+                    .replace('{ms}', formatNumber(Math.round(result.cost.durationMs)))}
+                </p>
+              ) : null}
               {result?.analysis.autoLimit ? (
                 <p className="text-muted">
                   {t('warehouseAutoLimit')}: {t('warehouseLimitApplied').replace('{count}', String(result.analysis.autoLimit))}

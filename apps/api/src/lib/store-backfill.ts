@@ -32,6 +32,13 @@ export const BACKFILL_TABLES: ReadonlyArray<CopySpec> = [
     merge: 'max-count',
     conflict: 'website_id, url_path, day, kind, norm_x, norm_y, device_class',
   },
+  // Appended (not inserted) so saved backfill progress keeps pointing at the same tables.
+  { table: 'stripe_customer', merge: 'replace' },
+  { table: 'stripe_charge', merge: 'replace' },
+  { table: 'stripe_refund', merge: 'replace' },
+  { table: 'stripe_invoice', merge: 'replace' },
+  { table: 'stripe_invoice_line', merge: 'replace' },
+  { table: 'stripe_subscription', merge: 'replace' },
 ];
 
 const CHUNK_ROWS = 200;

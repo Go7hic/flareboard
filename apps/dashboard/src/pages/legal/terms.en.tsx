@@ -140,6 +140,13 @@ const sections: LegalSection[] = [
             pages is excluded from recordings.
           </li>
           <li>Keeping your own copies of Customer Data you need. The Service is not a backup system.</li>
+          <li>
+            Any third-party account you connect as a data source, such as Stripe. You authorize us to read from it
+            with the credentials you provide, you confirm you may share that data with us, and you are responsible
+            for limiting the credentials to read-only access. We store connector credentials encrypted, use them only
+            to import data for you, never display them again, and delete them when you delete the data source or the
+            website.
+          </li>
         </ul>
         <p>
           You can export analytics data on plans that include export. You can delete websites or your whole account

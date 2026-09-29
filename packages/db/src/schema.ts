@@ -1321,6 +1321,186 @@ export const warehouseImport = sqliteTable(
   ],
 );
 
+/** Connector secrets (Stripe restricted keys), encrypted with a key derived from APP_SECRET. */
+export const warehouseCredential = sqliteTable(
+  'warehouse_credential',
+  {
+    dataSourceId: text('data_source_id').primaryKey(),
+    websiteId: text('website_id').notNull(),
+    kind: text('kind').notNull(),
+    ciphertext: text('ciphertext').notNull(),
+    hint: text('hint'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [index('warehouse_credential_website_idx').on(t.websiteId)],
+);
+
+/** Incremental sync cursor of a data source (lib/stripe-connector.ts). */
+export const warehouseSyncState = sqliteTable(
+  'warehouse_sync_state',
+  {
+    dataSourceId: text('data_source_id').primaryKey(),
+    websiteId: text('website_id').notNull(),
+    stateJson: text('state_json').notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [index('warehouse_sync_state_website_idx').on(t.websiteId)],
+);
+
+/*
+ * Stripe connector tables (SITE_TABLES: website store, or D1 in legacy mode). Timestamps are
+ * milliseconds, amounts Stripe minor units, *_major columns decimal units in `currency`.
+ */
+export const stripeCustomer = sqliteTable(
+  'stripe_customer',
+  {
+    websiteId: text('website_id').notNull(),
+    dataSourceId: text('data_source_id').notNull(),
+    customerId: text('customer_id').notNull(),
+    email: text('email'),
+    name: text('name'),
+    distinctId: text('distinct_id'),
+    deleted: integer('deleted').notNull().default(0),
+    metadataJson: text('metadata_json'),
+    payloadJson: text('payload_json').notNull(),
+    createdAt: integer('created_at'),
+    syncedAt: integer('synced_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.dataSourceId, t.customerId] }),
+    index('stripe_customer_website_idx').on(t.websiteId, t.createdAt),
+    index('stripe_customer_distinct_idx').on(t.websiteId, t.distinctId),
+  ],
+);
+
+export const stripeCharge = sqliteTable(
+  'stripe_charge',
+  {
+    websiteId: text('website_id').notNull(),
+    dataSourceId: text('data_source_id').notNull(),
+    chargeId: text('charge_id').notNull(),
+    customerId: text('customer_id'),
+    invoiceId: text('invoice_id'),
+    status: text('status'),
+    paid: integer('paid').notNull().default(0),
+    amount: integer('amount').notNull().default(0),
+    amountRefunded: integer('amount_refunded').notNull().default(0),
+    currency: text('currency').notNull(),
+    amountMajor: real('amount_major').notNull().default(0),
+    payloadJson: text('payload_json').notNull(),
+    createdAt: integer('created_at').notNull(),
+    syncedAt: integer('synced_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.dataSourceId, t.chargeId] }),
+    index('stripe_charge_website_created_idx').on(t.websiteId, t.createdAt),
+    index('stripe_charge_customer_idx').on(t.websiteId, t.customerId),
+  ],
+);
+
+export const stripeRefund = sqliteTable(
+  'stripe_refund',
+  {
+    websiteId: text('website_id').notNull(),
+    dataSourceId: text('data_source_id').notNull(),
+    refundId: text('refund_id').notNull(),
+    chargeId: text('charge_id'),
+    status: text('status'),
+    amount: integer('amount').notNull().default(0),
+    currency: text('currency').notNull(),
+    amountMajor: real('amount_major').notNull().default(0),
+    payloadJson: text('payload_json').notNull(),
+    createdAt: integer('created_at').notNull(),
+    syncedAt: integer('synced_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.dataSourceId, t.refundId] }),
+    index('stripe_refund_website_created_idx').on(t.websiteId, t.createdAt),
+  ],
+);
+
+export const stripeInvoice = sqliteTable(
+  'stripe_invoice',
+  {
+    websiteId: text('website_id').notNull(),
+    dataSourceId: text('data_source_id').notNull(),
+    invoiceId: text('invoice_id').notNull(),
+    customerId: text('customer_id'),
+    subscriptionId: text('subscription_id'),
+    status: text('status'),
+    currency: text('currency').notNull(),
+    total: integer('total').notNull().default(0),
+    amountPaid: integer('amount_paid').notNull().default(0),
+    amountPaidMajor: real('amount_paid_major').notNull().default(0),
+    periodStart: integer('period_start'),
+    periodEnd: integer('period_end'),
+    paidAt: integer('paid_at'),
+    payloadJson: text('payload_json').notNull(),
+    createdAt: integer('created_at').notNull(),
+    syncedAt: integer('synced_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.dataSourceId, t.invoiceId] }),
+    index('stripe_invoice_website_created_idx').on(t.websiteId, t.createdAt),
+  ],
+);
+
+export const stripeInvoiceLine = sqliteTable(
+  'stripe_invoice_line',
+  {
+    websiteId: text('website_id').notNull(),
+    dataSourceId: text('data_source_id').notNull(),
+    invoiceId: text('invoice_id').notNull(),
+    lineId: text('line_id').notNull(),
+    customerId: text('customer_id'),
+    subscriptionId: text('subscription_id'),
+    priceId: text('price_id'),
+    interval: text('interval'),
+    intervalCount: integer('interval_count'),
+    quantity: integer('quantity'),
+    proration: integer('proration').notNull().default(0),
+    amount: integer('amount').notNull().default(0),
+    currency: text('currency').notNull(),
+    amountMajor: real('amount_major').notNull().default(0),
+    mrrMajor: real('mrr_major').notNull().default(0),
+    periodStart: integer('period_start'),
+    periodEnd: integer('period_end'),
+    syncedAt: integer('synced_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.dataSourceId, t.invoiceId, t.lineId] }),
+    index('stripe_invoice_line_period_idx').on(t.websiteId, t.periodEnd),
+  ],
+);
+
+export const stripeSubscription = sqliteTable(
+  'stripe_subscription',
+  {
+    websiteId: text('website_id').notNull(),
+    dataSourceId: text('data_source_id').notNull(),
+    subscriptionId: text('subscription_id').notNull(),
+    customerId: text('customer_id'),
+    status: text('status'),
+    currency: text('currency'),
+    mrrMajor: real('mrr_major').notNull().default(0),
+    startDate: integer('start_date'),
+    canceledAt: integer('canceled_at'),
+    endedAt: integer('ended_at'),
+    cancelAtPeriodEnd: integer('cancel_at_period_end').notNull().default(0),
+    currentPeriodStart: integer('current_period_start'),
+    currentPeriodEnd: integer('current_period_end'),
+    trialEnd: integer('trial_end'),
+    payloadJson: text('payload_json').notNull(),
+    createdAt: integer('created_at').notNull(),
+    syncedAt: integer('synced_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.dataSourceId, t.subscriptionId] }),
+    index('stripe_subscription_website_idx').on(t.websiteId, t.createdAt),
+  ],
+);
+
 export const sessionReplaySaved = sqliteTable(
   'session_replay_saved',
   {

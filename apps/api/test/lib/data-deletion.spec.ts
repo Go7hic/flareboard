@@ -76,6 +76,20 @@ async function seedWebsiteData(websiteId: string) {
     LONG_AGO,
   );
   await env.CACHE.put(`error-resolved:${websiteId}:bbbb`, '{"issue":"bbbb","resolvedAt":1}');
+  // Warehouse connector secrets and cursors (Stripe) leave with the website.
+  await run(
+    `INSERT INTO warehouse_credential (data_source_id, website_id, kind, ciphertext, hint, created_at, updated_at)
+     VALUES (?1, ?2, 'stripe_api_key', 'sealed', 'rk_test_…abcd', ?3, ?3)`,
+    `${websiteId}-stripe`,
+    websiteId,
+    LONG_AGO,
+  );
+  await run(
+    `INSERT INTO warehouse_sync_state (data_source_id, website_id, state_json, updated_at) VALUES (?1, ?2, '{}', ?3)`,
+    `${websiteId}-stripe`,
+    websiteId,
+    LONG_AGO,
+  );
   await run(`INSERT INTO feature_flag (flag_id, website_id, key, name) VALUES (?1, ?2, 'beta', 'Beta')`, flag, websiteId);
   await run(
     `INSERT INTO experiment (experiment_id, website_id, feature_flag_id, name, goal_event) VALUES (?1, ?2, ?3, 'Exp', 'signup')`,
@@ -279,6 +293,8 @@ describe('scheduled data deletion', () => {
     expect((await env.REPLAY_BUCKET!.list({ prefix: `${PURGED_SITE}/` })).objects).toHaveLength(0);
     expect((await env.REPLAY_BUCKET!.list({ prefix: `sourcemaps/${PURGED_SITE}/` })).objects).toHaveLength(0);
     expect(await count('SELECT COUNT(*) AS n FROM error_source_map WHERE website_id = ?1', PURGED_SITE)).toBe(0);
+    expect(await count('SELECT COUNT(*) AS n FROM warehouse_credential WHERE website_id = ?1', PURGED_SITE)).toBe(0);
+    expect(await count('SELECT COUNT(*) AS n FROM warehouse_sync_state WHERE website_id = ?1', PURGED_SITE)).toBe(0);
     expect(await count('SELECT COUNT(*) AS n FROM error_issue_merge WHERE website_id = ?1', PURGED_SITE)).toBe(0);
     expect((await env.CACHE.list({ prefix: `error-resolved:${PURGED_SITE}:` })).keys).toHaveLength(0);
   });

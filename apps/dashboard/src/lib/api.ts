@@ -831,6 +831,58 @@ export interface WarehouseQueryResponse {
 export interface WarehouseSchemaResponse {
   tables: Array<{ name: string; description: string; columns: string[] }>;
   examples: Array<{ name: string; category?: string; sql: string }>;
+  /** Server-side query limits (lib/warehouse.ts WAREHOUSE_QUERY_LIMITS). */
+  limits?: {
+    defaultLimit: number;
+    maxUserLimit: number;
+    maxRowsRead: number;
+    timeoutMs: number;
+    exportRowCap: number;
+  };
+  /** What each data source has imported (row counts, payload fields for HTTP sources). */
+  importedSources?: Array<{
+    id: string;
+    name: string;
+    type: string;
+    tables: Array<{ name: string; rowCount: number; columns: string[] }>;
+    exampleSql: string | null;
+  }>;
+}
+
+export interface RevenueReportResponse {
+  byDay: Array<{ date: string; currency: string; total: number; transactions: number }>;
+  byEvent: Array<{ eventName: string; source: 'event' | 'stripe'; currency: string; total: number; transactions: number }>;
+  totals: Array<{ currency: string; total: number; transactions: number }>;
+}
+
+export interface RevenueMrrPoint {
+  period: string;
+  at: number;
+  currency: string;
+  mrr: number;
+  arr: number;
+  subscribers: number;
+  newMrr: number;
+  expansionMrr: number;
+  contractionMrr: number;
+  churnedMrr: number;
+  newSubscribers: number;
+  churnedSubscribers: number;
+  churnRate: number | null;
+  arpu: number | null;
+}
+
+export interface RevenueSubscriptionsResponse {
+  currencies: string[];
+  latest: RevenueMrrPoint[];
+  series: RevenueMrrPoint[];
+}
+
+export type RevenueAttributionDimension = 'utm_source' | 'utm_medium' | 'utm_campaign' | 'referrer_domain';
+
+export interface RevenueAttributionResponse {
+  dimension: RevenueAttributionDimension;
+  rows: Array<{ value: string | null; currency: string; total: number; transactions: number; customers: number }>;
 }
 
 export type FeatureFlagJson =
@@ -1434,7 +1486,8 @@ export interface WarehouseDataSource {
   id: string;
   websiteId: string;
   name: string;
-  type: 'http_json' | 'http_csv' | 'r2_json' | 'd1' | 'postgres' | 'mysql';
+  /** Supported connectors; sources of removed types (postgres, mysql, …) can still be listed and deleted. */
+  type: 'http_json' | 'http_csv' | 'stripe' | (string & {});
   enabled: boolean;
   config: Record<string, unknown>;
   lastSyncAt: number | null;

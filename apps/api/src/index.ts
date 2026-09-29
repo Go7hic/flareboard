@@ -87,6 +87,8 @@ app.use('*', (c, next) => {
   return cors({
     origin: (origin) => resolveCorsOrigin(c.env, origin),
     allowHeaders: ['Content-Type', 'Authorization'],
+    // CSV exports report their row cap and truncation to the dashboard.
+    exposeHeaders: ['X-Row-Cap', 'X-Row-Count', 'X-Truncated'],
     credentials: true,
   })(c, next);
 });
@@ -250,6 +252,7 @@ app.patch('/api/websites/:websiteId/email-report', emailReports.handleUpdate);
 app.post('/api/websites/:websiteId/import', dataImport.handleImport);
 app.get('/api/websites/:websiteId/warehouse/schema', warehouse.handleSchema);
 app.post('/api/websites/:websiteId/warehouse/query', warehouse.handleQuery);
+app.post('/api/websites/:websiteId/warehouse/query/export', warehouse.handleQueryExport);
 app.get('/api/websites/:websiteId/warehouse/history', warehouse.handleHistoryList);
 app.get('/api/websites/:websiteId/warehouse/schedules', warehouse.handleScheduleList);
 app.post('/api/websites/:websiteId/warehouse/schedules', warehouse.handleScheduleCreate);
@@ -380,6 +383,9 @@ app.patch('/api/websites/:websiteId/segments/:segmentId', segments.handleUpdate)
 app.delete('/api/websites/:websiteId/segments/:segmentId', segments.handleDelete);
 
 app.get('/api/websites/:websiteId/revenue/sessions', revenue.handleSessions);
+app.get('/api/websites/:websiteId/revenue/subscriptions', revenue.handleSubscriptions);
+app.get('/api/websites/:websiteId/revenue/attribution', revenue.handleAttribution);
+app.get('/api/websites/:websiteId/revenue/export', revenue.handleExport);
 
 app.get('/api/websites/:websiteId/replays', replays.handleList);
 app.get('/api/websites/:websiteId/replays/saved', replays.handleSavedList);

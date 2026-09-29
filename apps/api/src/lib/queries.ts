@@ -1376,35 +1376,6 @@ export async function getSessionDataValues(
   return (rows.results ?? []).map((r) => r.value).filter(Boolean);
 }
 
-export async function getRevenueReport(env: Env, websiteId: string, startAt: number, endAt: number) {
-  const byDay = await siteDb(env, websiteId).prepare(
-    `SELECT date(created_at / 1000, 'unixepoch') as date, currency,
-            SUM(revenue) as total, COUNT(*) as transactions
-     FROM revenue
-     WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3
-     GROUP BY date, currency
-     ORDER BY date DESC`,
-  )
-    .bind(websiteId, startAt, endAt)
-    .all<{ date: string; currency: string; total: number; transactions: number }>();
-
-  const byEvent = await siteDb(env, websiteId).prepare(
-    `SELECT event_name as eventName, currency,
-            SUM(revenue) as total, COUNT(*) as transactions
-     FROM revenue
-     WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3
-     GROUP BY event_name, currency
-     ORDER BY total DESC LIMIT 50`,
-  )
-    .bind(websiteId, startAt, endAt)
-    .all<{ eventName: string; currency: string; total: number; transactions: number }>();
-
-  return {
-    byDay: byDay.results ?? [],
-    byEvent: byEvent.results ?? [],
-  };
-}
-
 export async function getAllUsers(env: Env) {
   const db = createDb(env.DB);
   return db

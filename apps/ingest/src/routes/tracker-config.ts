@@ -39,19 +39,43 @@ export function trackerFlag(row: FlagRow) {
   return flag;
 }
 
+/** Longest minimum duration the dashboard offers; longer values are clamped. */
+export const MAX_REPLAY_MIN_DURATION_MS = 60_000;
+
 /**
- * Session replay privacy settings for recorder.js, normalized from website.replay_config
- * (saved by the dashboard's ReplayConfigWizard). Missing config means the safe defaults:
- * mask every input, record every visit, block nothing extra.
+ * Selector list typed in the dashboard ("one per line or comma-separated"). Lines are joined with
+ * commas: a newline inside a CSS selector would otherwise act as a descendant combinator.
+ */
+function selectorList(value: unknown) {
+  if (typeof value !== 'string') return null;
+  const joined = value
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/,$/, '').trim())
+    .filter(Boolean)
+    .join(', ');
+  return joined.slice(0, 1000) || null;
+}
+
+/**
+ * Session replay settings for recorder.js, normalized from website.replay_config (saved by the
+ * dashboard's ReplayConfigWizard). Missing config means the safe defaults: mask every input,
+ * record every visit, no console or network capture, block nothing beyond the built-in
+ * `[data-fb-no-capture]` / `.ph-no-capture` elements (see src/tracker/recorder.ts).
  */
 export function replaySettings(raw: unknown) {
   const cfg = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const rate = typeof cfg.sampleRate === 'number' && Number.isFinite(cfg.sampleRate) ? cfg.sampleRate : 1;
-  const selector = typeof cfg.blockSelectors === 'string' ? cfg.blockSelectors.trim().slice(0, 1000) : '';
+  const minSeconds =
+    typeof cfg.minDurationSeconds === 'number' && Number.isFinite(cfg.minDurationSeconds) ? cfg.minDurationSeconds : 0;
   return {
     sampleRate: Math.min(1, Math.max(0, rate)),
     maskInputs: cfg.maskInputs !== false,
-    blockSelector: selector || null,
+    maskAllText: cfg.maskAllText === true,
+    maskSelector: selectorList(cfg.maskSelectors),
+    blockSelector: selectorList(cfg.blockSelectors),
+    console: cfg.captureConsole === true,
+    network: cfg.captureNetwork === true,
+    minDurationMs: Math.min(MAX_REPLAY_MIN_DURATION_MS, Math.max(0, Math.round(minSeconds * 1000))),
   };
 }
 

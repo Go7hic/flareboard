@@ -520,6 +520,12 @@ export const sessionReplay = sqliteTable(
     startedAt: integer('started_at', { mode: 'timestamp_ms' }).notNull(),
     endedAt: integer('ended_at', { mode: 'timestamp_ms' }).notNull(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    clickCount: integer('click_count').notNull().default(0),
+    inputCount: integer('input_count').notNull().default(0),
+    consoleLogCount: integer('console_log_count').notNull().default(0),
+    consoleWarnCount: integer('console_warn_count').notNull().default(0),
+    consoleErrorCount: integer('console_error_count').notNull().default(0),
+    networkErrorCount: integer('network_error_count').notNull().default(0),
   },
   (t) => [
     index('session_replay_website_idx').on(t.websiteId),
@@ -632,6 +638,12 @@ export const sessionReplaySummary = sqliteTable(
     endedAt: integer('ended_at', { mode: 'timestamp_ms' }).notNull(),
     eventCount: integer('event_count').notNull().default(0),
     chunks: integer('chunks').notNull().default(0),
+    clickCount: integer('click_count').notNull().default(0),
+    inputCount: integer('input_count').notNull().default(0),
+    consoleLogCount: integer('console_log_count').notNull().default(0),
+    consoleWarnCount: integer('console_warn_count').notNull().default(0),
+    consoleErrorCount: integer('console_error_count').notNull().default(0),
+    networkErrorCount: integer('network_error_count').notNull().default(0),
   },
   (t) => [index('session_replay_summary_website_started_idx').on(t.websiteId, t.startedAt)],
 );
@@ -1517,6 +1529,26 @@ export const sessionReplaySaved = sqliteTable(
     index('session_replay_saved_website_idx').on(t.websiteId),
     index('session_replay_saved_visit_idx').on(t.visitId),
     index('session_replay_saved_website_created_idx').on(t.websiteId, t.createdAt),
+  ],
+);
+
+/** Public, revocable link to one replay (token in the URL, optional expiry). */
+export const sessionReplayShare = sqliteTable(
+  'session_replay_share',
+  {
+    shareId: text('share_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    visitId: text('visit_id').notNull(),
+    token: text('token').notNull(),
+    createdBy: text('created_by').references(() => user.userId),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('session_replay_share_token_idx').on(t.token),
+    index('session_replay_share_visit_idx').on(t.websiteId, t.visitId),
   ],
 );
 

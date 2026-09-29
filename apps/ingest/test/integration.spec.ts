@@ -49,12 +49,14 @@ describe('ingest integration', () => {
   it('GET /recorder.js applies replay privacy settings from tracker config', async () => {
     const text = await (await fetchWorker('/recorder.js')).text();
     expect(text).toContain('/api/tracker-config?website=');
-    expect(text).toContain('maskAllInputs:r.maskInputs!==false');
-    expect(text).toContain('o.blockSelector=r.blockSelector');
+    expect(text).toContain('maskAllInputs:true');
+    expect(text).toContain('blockSelector:join(BLOCK,validSel(r.blockSelector))');
     expect(text).toContain("'flareboard.rec.sample.'+vid");
+    expect(text).toContain("optKey='flareboard.opt_out'");
     // rrweb must receive the options object, never a bare {emit}.
-    expect(text).toContain('w.rrweb.record(options)');
-    expect(text).not.toContain('w.rrweb.record({emit');
+    expect(text).toContain('stop=rec(options)');
+    expect(text).not.toContain('record({emit');
+    // Behavior is covered by test-node/recorder.test.ts.
   });
 });
 
@@ -322,7 +324,16 @@ describe('GET /api/tracker-config', () => {
 
     const { body } = await fetchWorkerJson<{ replay: unknown }>(`/api/tracker-config?website=${TEST_WEBSITE_ID}`);
 
-    expect(body.replay).toEqual({ sampleRate: 1, maskInputs: true, blockSelector: null });
+    expect(body.replay).toEqual({
+      sampleRate: 1,
+      maskInputs: true,
+      maskAllText: false,
+      maskSelector: null,
+      blockSelector: null,
+      console: false,
+      network: false,
+      minDurationMs: 0,
+    });
   });
 
   it('returns the website replay privacy settings', async () => {
@@ -334,7 +345,7 @@ describe('GET /api/tracker-config', () => {
 
     const { body } = await fetchWorkerJson<{ replay: unknown }>(`/api/tracker-config?website=${TEST_WEBSITE_ID}`);
 
-    expect(body.replay).toEqual({ sampleRate: 0.25, maskInputs: false, blockSelector: '.secret, #pay' });
+    expect(body.replay).toMatchObject({ sampleRate: 0.25, maskInputs: false, blockSelector: '.secret, #pay' });
     await env.DB.prepare('UPDATE website SET replay_config = NULL WHERE website_id = ?1').bind(TEST_WEBSITE_ID).run();
     await env.CACHE.delete(`tracker-config:${TEST_WEBSITE_ID}`);
   });

@@ -12,6 +12,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 
 const SharePublic = lazy(() => import('./pages/SharePublic'));
+const SharedReplay = lazy(() => import('./pages/SharedReplay'));
 const HostedSurvey = lazy(() => import('./pages/HostedSurvey'));
 const DashboardHome = lazy(() => import('./pages/DashboardHome'));
 const Demo = lazy(() => import('./pages/Demo'));
@@ -91,6 +92,14 @@ export default function App() {
           element={
             <LazyPage>
               <SharePublic />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/shared/replay/:token"
+          element={
+            <LazyPage>
+              <SharedReplay />
             </LazyPage>
           }
         />

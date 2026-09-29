@@ -175,6 +175,24 @@ API additions on `window.flareboard`: `register(props)`, `registerOnce(props)`, 
 before the script loads can be queued on `window.flareboard = { _q: [[method, args], ...] }`; the
 npm package [`@flareboard/js`](../packages/sdk-js/README.md) does this for you.
 
+## Session recorder (`recorder.js`)
+
+Load rrweb's UMD build (`https://cdn.jsdelivr.net/npm/rrweb@2/umd/rrweb.min.js`), `script.js`, then
+`recorder.js` with the same `data-website-id`. Settings come from `tracker-config` → `replay` (edited in
+the website's replay settings); source and full rules in `apps/ingest/src/tracker/recorder.ts`.
+
+- Opted-out visitors (`flareboard.optOut()`) are never recorded; opting out mid-visit stops the recording.
+  Do Not Track / GPC stop it when the website respects them or a script tag has `data-respect-dnt`.
+- Inputs are masked unless the site turns that off; password, payment, one-time-code and sensitive-looking
+  fields stay masked regardless. `maskAllText` masks every text node.
+- Markup: `data-fb-mask` / `.fb-mask` / `.ph-mask` mask text and inputs inside; `data-fb-no-capture` /
+  `.ph-no-capture` / `data-fb-block` / `.fb-block` / `.ph-block` are not recorded (same-size placeholder).
+- Console (`$console` { level, message }) and network (`$network` { method, url, status, duration, size,
+  failed }) capture are per-site opt-ins. URLs lose their query string, messages are scrubbed and capped at
+  1000 characters, headers and bodies are never read. `/api/record` drops these entries when the site has
+  not opted in and rebuilds the rest from that allowlist.
+- `sampleRate` is decided once per visit; `minDurationMs` holds the first chunk until the visit is that long.
+
 ## Feature flag evaluation (`POST /api/feature-flags/evaluate`)
 
 Public endpoint used by the embedded tracker for flags with `targeted: true`. Targeting rules stay server-side.

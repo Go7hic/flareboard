@@ -5,11 +5,20 @@ import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { t } from '../lib/i18n';
 
+/** Saved as website.replay_config; ingest normalizes it for recorder.js (replaySettings). */
 export type ReplayConfig = {
   sampleRate?: number;
+  /** Seconds a visit must last before anything is sent (0 = record everything). */
+  minDurationSeconds?: number;
   maskInputs?: boolean;
+  maskAllText?: boolean;
+  maskSelectors?: string;
   blockSelectors?: string;
+  captureConsole?: boolean;
+  captureNetwork?: boolean;
 };
+
+const MIN_DURATION_OPTIONS = [0, 2, 5, 10, 30] as const;
 
 type Props = {
   enabled: boolean;
@@ -18,12 +27,18 @@ type Props = {
 };
 
 function parseConfig(raw: Record<string, unknown> | undefined): ReplayConfig {
-  if (!raw) return { sampleRate: 1, maskInputs: true, blockSelectors: '' };
-  const rate = typeof raw.sampleRate === 'number' ? raw.sampleRate : 1;
+  const cfg = raw ?? {};
+  const rate = typeof cfg.sampleRate === 'number' ? cfg.sampleRate : 1;
+  const minSeconds = typeof cfg.minDurationSeconds === 'number' ? cfg.minDurationSeconds : 0;
   return {
     sampleRate: Math.min(1, Math.max(0, rate)),
-    maskInputs: raw.maskInputs !== false,
-    blockSelectors: typeof raw.blockSelectors === 'string' ? raw.blockSelectors : '',
+    minDurationSeconds: Math.min(60, Math.max(0, minSeconds)),
+    maskInputs: cfg.maskInputs !== false,
+    maskAllText: cfg.maskAllText === true,
+    maskSelectors: typeof cfg.maskSelectors === 'string' ? cfg.maskSelectors : '',
+    blockSelectors: typeof cfg.blockSelectors === 'string' ? cfg.blockSelectors : '',
+    captureConsole: cfg.captureConsole === true,
+    captureNetwork: cfg.captureNetwork === true,
   };
 }
 
@@ -35,9 +50,15 @@ export function replayConfigToJson(config: ReplayConfig): Record<string, unknown
   const out: Record<string, unknown> = {
     sampleRate: Math.round((config.sampleRate ?? 1) * 1000) / 1000,
     maskInputs: config.maskInputs !== false,
+    maskAllText: config.maskAllText === true,
+    captureConsole: config.captureConsole === true,
+    captureNetwork: config.captureNetwork === true,
   };
-  const selectors = (config.blockSelectors ?? '').trim();
-  if (selectors) out.blockSelectors = selectors;
+  if (config.minDurationSeconds) out.minDurationSeconds = config.minDurationSeconds;
+  const blocks = (config.blockSelectors ?? '').trim();
+  if (blocks) out.blockSelectors = blocks;
+  const masks = (config.maskSelectors ?? '').trim();
+  if (masks) out.maskSelectors = masks;
   return out;
 }
 
@@ -109,6 +130,40 @@ export function ReplayConfigWizard({ enabled, config, onChange }: Props) {
           <p className="field-hint">
             {t('replaySampleRateHint')}
           </p>
+          <Label htmlFor="replay-min-duration" className="mt-4">
+            {t('replayMinDurationSetting')}
+          </Label>
+          <select
+            id="replay-min-duration"
+            className="select max-w-96"
+            value={String(config.minDurationSeconds ?? 0)}
+            onChange={(e) => update({ minDurationSeconds: Number(e.target.value) })}
+          >
+            {MIN_DURATION_OPTIONS.map((seconds) => (
+              <option key={seconds} value={String(seconds)}>
+                {seconds ? t('replayMinDurationSeconds').replace('{n}', String(seconds)) : t('replayMinDurationNone')}
+              </option>
+            ))}
+          </select>
+          <p className="field-hint">{t('replayMinDurationHint')}</p>
+          <label className="field field-inline mt-4">
+            <input
+              type="checkbox"
+              checked={config.captureConsole === true}
+              onChange={(e) => update({ captureConsole: e.target.checked })}
+            />
+            {t('replayCaptureConsole')}
+          </label>
+          <p className="field-hint">{t('replayCaptureConsoleHint')}</p>
+          <label className="field field-inline">
+            <input
+              type="checkbox"
+              checked={config.captureNetwork === true}
+              onChange={(e) => update({ captureNetwork: e.target.checked })}
+            />
+            {t('replayCaptureNetwork')}
+          </label>
+          <p className="field-hint">{t('replayCaptureNetworkHint')}</p>
         </div>
       ) : null}
 
@@ -122,6 +177,27 @@ export function ReplayConfigWizard({ enabled, config, onChange }: Props) {
             />
             {t('replayMaskInputs')}
           </label>
+          <p className="field-hint">{t('replayMaskInputsHint')}</p>
+          <label className="field field-inline">
+            <input
+              type="checkbox"
+              checked={config.maskAllText === true}
+              onChange={(e) => update({ maskAllText: e.target.checked })}
+            />
+            {t('replayMaskAllText')}
+          </label>
+          <div className="field">
+            <Label htmlFor="replay-mask-selectors">{t('replayMaskSelectors')}</Label>
+            <Textarea
+              id="replay-mask-selectors"
+              className="textarea-mono"
+              rows={3}
+              value={config.maskSelectors ?? ''}
+              onChange={(e) => update({ maskSelectors: e.target.value })}
+              placeholder=".customer-name, [data-pii]"
+            />
+            <p className="field-hint">{t('replayMaskSelectorsHint')}</p>
+          </div>
           <div className="field">
             <Label htmlFor="replay-block-selectors">{t('replayBlockSelectors')}</Label>
             <Textarea

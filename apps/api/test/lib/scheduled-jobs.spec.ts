@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { EVENT_TYPE } from '@flareboard/shared';
 import { runScheduledAlertChecks, runScheduledWarehouseQueries } from '../../src/lib/scheduled-jobs';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const BASE = Date.UTC(2026, 0, 24, 12);
 
@@ -13,13 +14,13 @@ describe('scheduled maintenance jobs', () => {
   });
 
   it('runs due warehouse schedules across websites', async () => {
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT OR IGNORE INTO session (session_id, website_id, created_at)
        VALUES ('scheduled-warehouse-session', ?1, ?2)`,
     )
       .bind(TEST_WEBSITE_ID, BASE)
       .run();
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
        VALUES ('scheduled-warehouse-event', ?1, 'scheduled-warehouse-session', 'scheduled-warehouse-session', ?2, '/pricing', ?3, 'view_pricing')`,
     )
@@ -56,13 +57,13 @@ describe('scheduled maintenance jobs', () => {
 
   it('evaluates alert rules during scheduled alert checks', async () => {
     const later = BASE + 60_000;
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
        VALUES ('scheduled-alert-event-1', ?1, 'scheduled-warehouse-session', 'scheduled-warehouse-session', ?2, '/app', ?3, 'TypeError')`,
     )
       .bind(TEST_WEBSITE_ID, later, EVENT_TYPE.error)
       .run();
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT INTO event_data (event_data_id, website_id, website_event_id, data_key, string_value, data_type, created_at)
        VALUES ('scheduled-alert-data-1', ?1, 'scheduled-alert-event-1', 'severity', 'error', 1, ?2)`,
     )

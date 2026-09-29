@@ -1,7 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useEffect, useState } from 'react';
+import type { PropertyFilter } from '@flareboard/shared/insight-query';
 import { EmptyState } from '../components/EmptyState';
 import { JourneyFlowPanel } from '../components/JourneyFlowPanel';
+import { PropertyFilterBuilder } from '../components/PropertyFilterBuilder';
+import { Label } from '../components/ui/label';
 import { SegmentTabs } from '../components/SegmentTabs';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
@@ -9,6 +12,7 @@ import { WebsiteReportControls } from '../components/WebsiteReportControls';
 import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
 import { api } from '../lib/api';
 import { t } from '../lib/i18n';
+import { reportFiltersParam } from '../lib/websiteReportApi';
 import {
   DEFAULT_JOURNEY_DEPTH,
   JOURNEY_DEPTH_OPTIONS,
@@ -19,9 +23,11 @@ import {
 } from '../lib/journey-utils';
 
 export default function WebsiteJourneysPage() {
-  const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl, timezone } =
+  const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl, timezone, rangeQs } =
     useWebsiteReportContext('30d');
   const [displayDepth, setDisplayDepth] = useState(DEFAULT_JOURNEY_DEPTH);
+  const [filters, setFilters] = useState<PropertyFilter[]>([]);
+  const filtersQs = reportFiltersParam(filters);
   const [selectedColumns, setSelectedColumns] = useState<JourneyColumnSelection>(() =>
     emptyJourneySelection(DEFAULT_JOURNEY_DEPTH),
   );
@@ -37,9 +43,9 @@ export default function WebsiteJourneysPage() {
   }, [displayDepth]);
 
   const journeyQuery = useQuery({
-    queryKey: ['reports-journey-flow', websiteId, range, segmentId],
+    queryKey: ['reports-journey-flow', websiteId, range, segmentId, filtersQs],
     enabled: Boolean(websiteId),
-    queryFn: () => api<JourneyFlowResponse>(reportUrl('journey', journeyFlowQuery([], 50))),
+    queryFn: () => api<JourneyFlowResponse>(reportUrl('journey', `${journeyFlowQuery([], 50)}${filtersQs}`)),
     staleTime: 60_000,
   });
 
@@ -85,6 +91,12 @@ export default function WebsiteJourneysPage() {
       />
 
       <PageBody>
+      <section className="panel section-gap">
+        <div className="field">
+          <Label>{t('insightFilters')}</Label>
+          <PropertyFilterBuilder websiteId={websiteId} rangeQs={rangeQs} value={filters} onChange={setFilters} />
+        </div>
+      </section>
       <section className="section-gap">
         {showSkeleton ? (
           <div className="panel">

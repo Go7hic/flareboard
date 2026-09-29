@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { createSecureToken, EVENT_TYPE } from '@flareboard/shared';
 import { fetchWorkerJson } from '../helpers/fetch-worker';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const TEST_USER_ID = '00000000-0000-0000-0000-000000000001';
 const BASE = Date.UTC(2026, 0, 18, 12);
@@ -13,7 +14,7 @@ async function authHeader() {
 }
 
 async function insertSession(id: string) {
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT OR IGNORE INTO session (session_id, website_id, created_at)
      VALUES (?1, ?2, ?3)`,
   )
@@ -22,14 +23,14 @@ async function insertSession(id: string) {
 }
 
 async function insertLog(id: string, message: string, createdAt: number, level = 'info') {
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
      VALUES (?1, ?2, 'logs-tail-session', 'logs-tail-session', ?3, '/checkout', ?4, 'log')`,
   )
     .bind(id, TEST_WEBSITE_ID, createdAt, EVENT_TYPE.log)
     .run();
 
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT INTO event_data (event_data_id, website_id, website_event_id, data_key, string_value, data_type, created_at)
      VALUES
        (?1, ?2, ?3, 'level', ?4, 1, ?8),

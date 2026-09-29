@@ -2,7 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users } from 'lucide-react';
+import type { PropertyFilter } from '@flareboard/shared/insight-query';
 import { CohortFormDialog } from './CohortFormDialog';
+import { describeFilter } from './PropertyFilterBuilder';
 import { EmptyState } from './EmptyState';
 import {
   MasterDetailLayout,
@@ -22,7 +24,7 @@ type CohortRow = {
   name: string;
   createdAt: string;
   definition: {
-    conditions: Array<{ field: string; operator: string; value: string }>;
+    conditions: Array<{ field: string; operator: string; value: string; filters?: PropertyFilter[] }>;
   };
 };
 
@@ -162,7 +164,13 @@ export function CohortsPanel({ websiteId }: { websiteId: string }) {
                         {selectedCohort.definition.conditions.map((condition, index) => (
                           <li key={`${condition.field}-${index}`} className="text-muted">
                             <span className="badge">{condition.field}</span>{' '}
-                            {condition.operator} {condition.value}
+                            {condition.field === 'any_event' ? '' : `${condition.operator} ${condition.value}`}
+                            {(condition.filters ?? []).map((filter, filterIndex) => (
+                              <span key={filterIndex} className="cohort-condition-filter">
+                                {' · '}
+                                {describeFilter(filter)}
+                              </span>
+                            ))}
                           </li>
                         ))}
                       </ul>

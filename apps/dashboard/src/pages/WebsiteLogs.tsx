@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
-import { ExternalLink, Search, TerminalSquare } from 'lucide-react';
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { Pause, Play, Plus, Search, X } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
 import { DataViewState } from '../components/DataViewState';
-import { MasterDetailSidePane, MasterDetailTableLayout } from '../components/master-detail';
+import { MasterDetailTableLayout } from '../components/master-detail';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { SegmentTabs } from '../components/SegmentTabs';
@@ -13,28 +13,45 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { StatCard } from '../components/ui/stat-card';
+import { LogHistogram } from '../components/logs/LogHistogram';
+import { LogDetail } from '../components/logs/LogDetail';
+import { LevelBadge, LogTable } from '../components/logs/LogTable';
+import { formatSpanDuration, TraceWaterfall } from '../components/logs/TraceWaterfall';
+import { TAIL_MAX_LINES, useLogTail } from '../components/logs/useLogTail';
+import {
+  appendLogFilterParams,
+  attributeLabel,
+  EMPTY_LOG_FILTERS,
+  filtersFromSaved,
+  filtersToSaved,
+  hasLogFilters,
+  parseAttributeInput,
+  type LogFilterState,
+} from '../components/logs/log-filters';
 import {
   api,
+  INGEST_URL_FOR_DOCS,
   type LogAlertRule,
+  type LogAttributeFilter,
+  type LogEvent,
   type LogEventsResponse,
+  type LogHistogramResponse,
   type LogSavedFilter,
+  type LogSeverity,
   type LogTraceDetail,
   type LogTraceSummary,
 } from '../lib/api';
-import { formatDateOnly, formatDateTime, formatNumber, formatPercent } from '../lib/format';
+import { LOG_SEVERITIES } from '../lib/chart-colors';
+import { formatDateTime, formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
 
-const LEVELS = ['', 'trace', 'debug', 'info', 'warn', 'error', 'fatal'];
-const LOG_SECONDARY_TABS = ['traces', 'filters', 'alerts'] as const;
-type LogsSecondaryTab = (typeof LOG_SECONDARY_TABS)[number];
-
-function formatTrendDate(value: string) {
-  return formatDateOnly(`${value}T00:00:00Z`);
-}
+const LOG_TABS = ['explore', 'tail', 'traces', 'filters', 'alerts'] as const;
+type LogsTab = (typeof LOG_TABS)[number];
+const PAGE_SIZE = 100;
 
 const DEFAULT_ALERT = {
   name: '',
@@ -45,67 +62,121 @@ const DEFAULT_ALERT = {
   search: '',
   release: '',
   environment: '',
+  attribute: '',
   channel: 'record' as LogAlertRule['channel'],
   target: '',
 };
 
+function initialFilters(params: URLSearchParams): LogFilterState {
+  return {
+    ...EMPTY_LOG_FILTERS,
+    sessionId: params.get('sessionId') ?? '',
+    traceId: params.get('traceId') ?? '',
+    service: params.get('service') ?? '',
+  };
+}
+
 export default function WebsiteLogsPage() {
   const confirm = useConfirm();
   const { websiteId } = useParams<{ websiteId: string }>();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
-  const { canEdit } = useWebsitePermissions(websiteId, 'logs');
+  const { canEdit, viewOnly } = useWebsitePermissions(websiteId, 'logs');
   const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
-  const [secondaryTab, setSecondaryTab] = useState<LogsSecondaryTab | ''>('');
-  const [level, setLevel] = useState('');
-  const [search, setSearch] = useState('');
-  const [releaseFilter, setReleaseFilter] = useState('');
-  const [environmentFilter, setEnvironmentFilter] = useState('');
+  const [tab, setTab] = useState<LogsTab>('explore');
+  const [filters, setFilters] = useState<LogFilterState>(() => initialFilters(searchParams));
+  const [attributeInput, setAttributeInput] = useState('');
+  const [selectedLog, setSelectedLog] = useState<LogEvent | null>(null);
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
+  const [errorsOnly, setErrorsOnly] = useState(false);
+  const [tailPaused, setTailPaused] = useState(false);
   const [filterName, setFilterName] = useState('');
   const [alertDraft, setAlertDraft] = useState(DEFAULT_ALERT);
 
-  const trimmedSearch = search.trim();
-  const debouncedSearch = useDebouncedValue(trimmedSearch, 300);
+  const debouncedSearch = useDebouncedValue(filters.search.trim(), 300);
+  const filterQs = useMemo(
+    () => appendLogFilterParams(new URLSearchParams(), filters, debouncedSearch).toString(),
+    [filters, debouncedSearch],
+  );
   const qs = useMemo(() => {
     const params = new URLSearchParams(rangeQs);
-    if (level) params.set('level', level);
-    if (debouncedSearch) params.set('q', debouncedSearch);
-    if (releaseFilter) params.set('release', releaseFilter);
-    if (environmentFilter) params.set('environment', environmentFilter);
+    for (const [key, value] of new URLSearchParams(filterQs)) params.append(key, value);
     return params.toString();
-  }, [debouncedSearch, environmentFilter, level, rangeQs, releaseFilter]);
+  }, [filterQs, rangeQs]);
 
-  const logsQuery = useQuery({
-    queryKey: ['logs', websiteId, range, level, debouncedSearch, releaseFilter, environmentFilter],
-    enabled: Boolean(websiteId),
-    // The filters live inside the DataViewState below; keeping the previous result while a
-    // new filter loads stops each debounced keystroke from unmounting (and blurring) them.
+  function update(patch: Partial<LogFilterState>) {
+    setFilters((previous) => ({ ...previous, ...patch }));
+  }
+
+  function toggleLevel(level: LogSeverity) {
+    setFilters((previous) => ({
+      ...previous,
+      levels: previous.levels.includes(level) ? previous.levels.filter((item) => item !== level) : [...previous.levels, level],
+    }));
+  }
+
+  function addAttribute(attribute: LogAttributeFilter) {
+    setFilters((previous) => ({
+      ...previous,
+      attributes: [
+        ...previous.attributes.filter((item) => !(item.key === attribute.key && item.value === attribute.value)),
+        attribute,
+      ].slice(-10),
+    }));
+  }
+
+  function openTrace(traceId: string) {
+    setSelectedTraceId(traceId);
+    setSelectedLog(null);
+  }
+
+  const logsQuery = useInfiniteQuery({
+    queryKey: ['logs', websiteId, range, qs],
+    enabled: Boolean(websiteId) && tab === 'explore',
+    initialPageParam: null as string | null,
+    // Keeping the previous result while a filter loads stops each keystroke from unmounting them.
     placeholderData: keepPreviousData,
-    queryFn: () => api<LogEventsResponse>(`/api/websites/${websiteId}/logs?${qs}`),
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams(qs);
+      params.set('limit', String(PAGE_SIZE));
+      if (pageParam) params.set('before', pageParam);
+      return api<LogEventsResponse>(`/api/websites/${websiteId}/logs?${params.toString()}`);
+    },
+    getNextPageParam: (last) => last.nextBefore,
+  });
+
+  const histogramQuery = useQuery({
+    queryKey: ['log-histogram', websiteId, range, qs],
+    enabled: Boolean(websiteId) && tab === 'explore',
+    placeholderData: keepPreviousData,
+    queryFn: () => api<LogHistogramResponse>(`/api/websites/${websiteId}/logs/histogram?${qs}`),
   });
 
   const tracesQuery = useQuery({
-    queryKey: ['log-traces', websiteId, range, level, debouncedSearch, releaseFilter, environmentFilter],
-    enabled: Boolean(websiteId) && secondaryTab === 'traces',
+    queryKey: ['log-traces', websiteId, range, qs, errorsOnly],
+    enabled: Boolean(websiteId) && tab === 'traces',
     placeholderData: keepPreviousData,
-    queryFn: () => api<{ traces: LogTraceSummary[] }>(`/api/websites/${websiteId}/logs/traces?${qs}`),
+    queryFn: () =>
+      api<{ traces: LogTraceSummary[] }>(`/api/websites/${websiteId}/logs/traces?${qs}${errorsOnly ? '&status=error' : ''}`),
   });
 
   const traceDetailQuery = useQuery({
     queryKey: ['log-trace-detail', websiteId, selectedTraceId],
     enabled: Boolean(websiteId && selectedTraceId),
-    queryFn: () => api<LogTraceDetail>(`/api/websites/${websiteId}/logs/traces/${selectedTraceId}`),
+    queryFn: () => api<LogTraceDetail>(`/api/websites/${websiteId}/logs/traces/${encodeURIComponent(selectedTraceId!)}`),
   });
+
+  const tail = useLogTail(websiteId, filterQs, tab === 'tail', tailPaused);
 
   const savedFiltersQuery = useQuery({
     queryKey: ['log-filters', websiteId],
-    enabled: Boolean(websiteId) && secondaryTab === 'filters',
+    enabled: Boolean(websiteId) && tab === 'filters',
     queryFn: () => api<{ filters: LogSavedFilter[] }>(`/api/websites/${websiteId}/logs/filters`),
   });
 
   const alertRulesQuery = useQuery({
     queryKey: ['log-alerts', websiteId],
-    enabled: Boolean(websiteId) && secondaryTab === 'alerts',
+    enabled: Boolean(websiteId) && tab === 'alerts',
     queryFn: () => api<{ alertRules: LogAlertRule[] }>(`/api/websites/${websiteId}/logs/alerts`),
   });
 
@@ -113,15 +184,7 @@ export default function WebsiteLogsPage() {
     mutationFn: () =>
       api<LogSavedFilter>(`/api/websites/${websiteId}/logs/filters`, {
         method: 'POST',
-        body: JSON.stringify({
-          name: filterName.trim(),
-          filters: {
-            level: level || undefined,
-            search: trimmedSearch || undefined,
-            release: releaseFilter || undefined,
-            environment: environmentFilter || undefined,
-          },
-        }),
+        body: JSON.stringify({ name: filterName.trim(), filters: filtersToSaved(filters) }),
       }),
     onSuccess: () => {
       setFilterName('');
@@ -135,8 +198,9 @@ export default function WebsiteLogsPage() {
   });
 
   const createAlertMutation = useMutation({
-    mutationFn: () =>
-      api<LogAlertRule>(`/api/websites/${websiteId}/logs/alerts`, {
+    mutationFn: () => {
+      const attribute = parseAttributeInput(alertDraft.attribute);
+      return api<LogAlertRule>(`/api/websites/${websiteId}/logs/alerts`, {
         method: 'POST',
         body: JSON.stringify({
           name: alertDraft.name.trim(),
@@ -147,11 +211,14 @@ export default function WebsiteLogsPage() {
           search: alertDraft.search.trim() || null,
           release: alertDraft.release.trim() || null,
           environment: alertDraft.environment.trim() || null,
+          attributeKey: attribute?.key ?? null,
+          attributeValue: attribute?.value ?? null,
           channel: alertDraft.channel,
           target: alertDraft.target.trim() || null,
           enabled: true,
         }),
-      }),
+      });
+    },
     onSuccess: () => {
       setAlertDraft(DEFAULT_ALERT);
       queryClient.invalidateQueries({ queryKey: ['log-alerts', websiteId] });
@@ -172,638 +239,651 @@ export default function WebsiteLogsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['log-alerts', websiteId] }),
   });
 
-  const rows = logsQuery.data?.logs ?? [];
-  const stats = logsQuery.data?.stats;
-  const topLevel = stats?.levels[0];
-  const trendRows = stats?.trend ?? [];
-  const levelRows = stats?.levels ?? [];
+  const firstPage = logsQuery.data?.pages[0];
+  const stats = firstPage?.stats;
+  const rows = useMemo(() => logsQuery.data?.pages.flatMap((page) => page.logs) ?? [], [logsQuery.data]);
   const traces = tracesQuery.data?.traces ?? [];
   const savedFilters = savedFiltersQuery.data?.filters ?? [];
   const alertRules = alertRulesQuery.data?.alertRules ?? [];
   const selectedTrace = traceDetailQuery.data;
+  const filtered = hasLogFilters(filters);
 
-  const releaseOptions = useMemo(() => {
-    const values = new Set(stats?.releases?.map((release) => release.release) ?? []);
-    if (releaseFilter) values.add(releaseFilter);
-    return [...values];
-  }, [releaseFilter, stats?.releases]);
-  const environmentOptions = useMemo(() => {
-    const values = new Set(stats?.environments?.map((environment) => environment.environment) ?? []);
-    if (environmentFilter) values.add(environmentFilter);
-    return [...values];
-  }, [environmentFilter, stats?.environments]);
-  const hasFilters = Boolean(level || trimmedSearch || releaseFilter || environmentFilter);
+  const withCurrent = (values: string[], current: string) => (current && !values.includes(current) ? [...values, current] : values);
+  const serviceOptions = withCurrent(stats?.services.map((row) => row.service) ?? [], filters.service);
+  const environmentOptions = withCurrent(stats?.environments.map((row) => row.environment) ?? [], filters.environment);
+  const releaseOptions = withCurrent(stats?.releases.map((row) => row.release) ?? [], filters.release);
 
-  function applySavedFilter(filter: LogSavedFilter) {
-    setLevel(filter.filters.level ?? '');
-    setSearch(filter.filters.search ?? '');
-    setReleaseFilter(filter.filters.release ?? '');
-    setEnvironmentFilter(filter.filters.environment ?? '');
-    setSecondaryTab('');
+  function submitAttribute() {
+    const attribute = parseAttributeInput(attributeInput);
+    if (!attribute) return;
+    addAttribute(attribute);
+    setAttributeInput('');
   }
+
+  const sidePane =
+    selectedTraceId && websiteId ? (
+      selectedTrace ? (
+        <TraceWaterfall
+          trace={selectedTrace}
+          websiteId={websiteId}
+          timezone={timezone}
+          onClose={() => setSelectedTraceId(null)}
+          onSelectLog={(log) => {
+            setSelectedLog(log);
+            setSelectedTraceId(null);
+          }}
+          onFilterAttribute={addAttribute}
+        />
+      ) : traceDetailQuery.isError ? (
+        <EmptyState title={t('noTraces')} description={t('logsTraceMissing')} />
+      ) : (
+        <div className="skeleton" style={{ height: '16rem' }} />
+      )
+    ) : selectedLog && websiteId ? (
+      <LogDetail
+        log={selectedLog}
+        websiteId={websiteId}
+        timezone={timezone}
+        onClose={() => setSelectedLog(null)}
+        onOpenTrace={openTrace}
+        onFilterAttribute={addAttribute}
+      />
+    ) : null;
+
+  const activeChips: Array<{ key: string; label: string; clear: () => void }> = [
+    ...filters.levels.map((level) => ({ key: `level:${level}`, label: `${t('logsLevel')}: ${level}`, clear: () => toggleLevel(level) })),
+    ...(filters.traceId ? [{ key: 'trace', label: `${t('logsTraceId')}: ${filters.traceId.slice(0, 16)}`, clear: () => update({ traceId: '' }) }] : []),
+    ...(filters.sessionId ? [{ key: 'session', label: `${t('session')}: ${filters.sessionId.slice(0, 16)}`, clear: () => update({ sessionId: '' }) }] : []),
+    ...filters.attributes.map((attribute) => ({
+      key: `attr:${attribute.key}=${attribute.value ?? ''}`,
+      label: attributeLabel(attribute),
+      clear: () => update({ attributes: filters.attributes.filter((item) => item !== attribute) }),
+    })),
+  ];
+
+  const filterBar = (
+    <div className="logs-toolbar">
+      <div className="logs-filter-row">
+        <div className="cohorts-search-wrap logs-search-wrap">
+          <Search className="cohorts-search-icon" size={16} strokeWidth={2} aria-hidden />
+          <input
+            type="search"
+            className="input cohorts-search"
+            placeholder={tab === 'traces' ? t('logsSearchSpans') : t('logsSearchPlaceholder')}
+            value={filters.search}
+            onChange={(event) => update({ search: event.target.value })}
+            aria-label={tab === 'traces' ? t('logsSearchSpans') : t('logsSearchPlaceholder')}
+          />
+        </div>
+        <select className="select logs-level-select" value={filters.service} onChange={(event) => update({ service: event.target.value })} aria-label={t('logAlertService')}>
+          <option value="">{t('logsAllServices')}</option>
+          {serviceOptions.map((service) => (
+            <option key={service} value={service}>
+              {service}
+            </option>
+          ))}
+        </select>
+        <select className="select logs-level-select" value={filters.environment} onChange={(event) => update({ environment: event.target.value })} aria-label={t('logsFilterEnvironment')}>
+          <option value="">{t('allEnvironments')}</option>
+          {environmentOptions.map((environment) => (
+            <option key={environment} value={environment}>
+              {environment}
+            </option>
+          ))}
+        </select>
+        {releaseOptions.length ? (
+          <select className="select logs-level-select" value={filters.release} onChange={(event) => update({ release: event.target.value })} aria-label={t('logsFilterRelease')}>
+            <option value="">{t('allReleases')}</option>
+            {releaseOptions.map((release) => (
+              <option key={release} value={release}>
+                {release}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        <select className="select logs-level-select" value={filters.source} onChange={(event) => update({ source: event.target.value as LogFilterState['source'] })} aria-label={t('logsSource')}>
+          <option value="">{t('logsAllSources')}</option>
+          <option value="otlp">{t('logsSourceOtlp')}</option>
+          <option value="browser">{t('logsSourceBrowser')}</option>
+        </select>
+        {tab !== 'traces' ? (
+          <form
+            className="logs-attr-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitAttribute();
+            }}
+          >
+            <Input
+              className="logs-attr-input mono"
+              value={attributeInput}
+              placeholder={t('logsAttributePlaceholder')}
+              aria-label={t('logsAttributeFilter')}
+              onChange={(event) => setAttributeInput(event.target.value)}
+            />
+            <Button type="submit" variant="secondary" size="sm" disabled={!attributeInput.trim()} aria-label={t('logsAddAttributeFilter')}>
+              <Plus size={14} strokeWidth={2} aria-hidden />
+            </Button>
+          </form>
+        ) : null}
+        {filtered ? (
+          <Button type="button" variant="ghost" size="sm" onClick={() => setFilters(EMPTY_LOG_FILTERS)}>
+            {t('reset')}
+          </Button>
+        ) : null}
+      </div>
+      {activeChips.length ? (
+        <ul className="logs-chips" aria-label={t('logsActiveFilters')}>
+          {activeChips.map((chip) => (
+            <li key={chip.key} className="logs-chip">
+              <span className="mono">{chip.label}</span>
+              <button type="button" className="logs-chip-remove" onClick={chip.clear} aria-label={`${t('remove')}: ${chip.label}`}>
+                <X size={12} strokeWidth={2} aria-hidden />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
 
   return (
     <Page className="page-logs">
       <PageHeader
         title={t('logs')}
         lead={t('logsLead')}
-        actions={
-          <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
-        }
+        actions={<WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />}
       />
 
       <PageBody>
-      {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
+        {viewOnly ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
-      <DataViewState
-        loading={logsQuery.isLoading && !logsQuery.data}
-        error={logsQuery.isError ? logsQuery.error : null}
-        onRetry={() => logsQuery.refetch()}
-        loadingFallback={
-          <>
-            <section className="analytics-hero-stats section-gap">
-              <div className="skeleton" style={{ height: '5.5rem' }} />
+        <SegmentTabs
+          aria-label={t('logs')}
+          size="sm"
+          className="section-gap"
+          value={tab}
+          onChange={(id) => setTab(id as LogsTab)}
+          tabs={[
+            { id: 'explore', label: t('logsTabExplore') },
+            { id: 'tail', label: t('logsTabTail') },
+            { id: 'traces', label: t('logsTabTraces') },
+            { id: 'filters', label: t('logsTabFilters') },
+            { id: 'alerts', label: t('logsTabAlerts') },
+          ]}
+        />
+
+        {tab === 'explore' || tab === 'tail' || tab === 'traces' ? <section className="panel section-gap">{filterBar}</section> : null}
+
+        {tab === 'explore' ? (
+          <DataViewState
+            loading={logsQuery.isLoading && !logsQuery.data}
+            error={logsQuery.isError ? logsQuery.error : null}
+            onRetry={() => logsQuery.refetch()}
+            loadingFallback={
+              <section className="panel section-gap">
+                <div className="skeleton" style={{ height: '14rem' }} />
+              </section>
+            }
+          >
+            <section className="analytics-hero-stats section-gap" aria-label={t('logsTotal')}>
+              <StatCard label={t('logsTotal')} value={formatNumber(stats?.logs ?? 0)} />
+              <StatCard label={t('logsAffectedSessions')} value={formatNumber(stats?.sessions ?? 0)} />
+              <StatCard
+                label={t('logsLastSeen')}
+                value={formatDateTime(stats?.lastSeenAt, { timeZone: timezone })}
+                hint={stats?.levels[0] ? `${t('logsTopLevel')}: ${stats.levels[0].level}` : undefined}
+              />
             </section>
+
             <section className="panel section-gap">
-              <div className="skeleton" style={{ height: '14rem' }} />
+              <header className="compact-panel-header">
+                <h2 className="section-title">{t('logsHistogram')}</h2>
+                <p className="text-muted">{t('logsHistogramLead')}</p>
+              </header>
+              <LogHistogram histogram={histogramQuery.data} selected={filters.levels} onToggle={toggleLevel} timezone={timezone} />
             </section>
-          </>
-        }
-      >
-          <section className="analytics-hero-stats section-gap" aria-label={t('logsTabEvents')}>
-            <StatCard label={t('logsTotal')} value={formatNumber(stats?.logs ?? 0)} />
-            <StatCard label={t('logsAffectedSessions')} value={formatNumber(stats?.sessions ?? 0)} />
-            <StatCard
-              label={t('logsLastSeen')}
-              value={formatDateTime(stats?.lastSeenAt)}
-              hint={topLevel ? `${t('logsTopLevel')}: ${topLevel.level}` : undefined}
-            />
+
+            <section className="panel section-gap page-logs-hero">
+              {rows.length ? (
+                <MasterDetailTableLayout
+                  primary={
+                    <>
+                      <LogTable
+                        rows={rows}
+                        selectedId={selectedLog?.id ?? null}
+                        timezone={timezone}
+                        onSelect={(row) => {
+                          setSelectedLog(row);
+                          setSelectedTraceId(null);
+                        }}
+                      />
+                      {logsQuery.hasNextPage ? (
+                        <div className="logs-load-more">
+                          <Button type="button" variant="secondary" size="sm" disabled={logsQuery.isFetchingNextPage} onClick={() => logsQuery.fetchNextPage()}>
+                            {logsQuery.isFetchingNextPage ? t('loading') : t('logsLoadMore')}
+                          </Button>
+                        </div>
+                      ) : null}
+                    </>
+                  }
+                  side={sidePane}
+                />
+              ) : (
+                <>
+                  <EmptyState title={t('logsEmptyTitle')} description={filtered ? t('logsEmptyFiltered') : t('logsEmptyBody')} />
+                  {!filtered && firstPage?.otlpEnabled ? <OtlpSetupHint /> : null}
+                </>
+              )}
+            </section>
+          </DataViewState>
+        ) : null}
+
+        {tab === 'tail' ? (
+          <section className="panel section-gap">
+            <header className="panel-header">
+              <div>
+                <h2 className="section-title">{t('logsTabTail')}</h2>
+                <p className="text-muted">
+                  {tailPaused ? t('logsTailPaused') : t('logsTailLive')} · {formatNumber(tail.lines.length)} / {formatNumber(TAIL_MAX_LINES)}
+                </p>
+              </div>
+              <div className="logs-filter-row">
+                <div className="logs-severity-toggles" role="group" aria-label={t('logsLevel')}>
+                  {LOG_SEVERITIES.map((level) => (
+                    <button
+                      key={level}
+                      type="button"
+                      className={`logs-legend-item${filters.levels.includes(level) ? ' is-active' : ''}`}
+                      aria-pressed={filters.levels.includes(level)}
+                      onClick={() => toggleLevel(level)}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+                <Button type="button" variant="secondary" size="sm" onClick={() => setTailPaused((paused) => !paused)}>
+                  {tailPaused ? <Play size={14} strokeWidth={2} aria-hidden /> : <Pause size={14} strokeWidth={2} aria-hidden />}
+                  {tailPaused ? t('logsTailResume') : t('logsTailPause')}
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={tail.clear}>
+                  {t('logsTailClear')}
+                </Button>
+              </div>
+            </header>
+            {tail.error ? <p className="text-muted">{t('logsTailError')}</p> : null}
+            {tail.lines.length ? (
+              <MasterDetailTableLayout
+                primary={
+                  <LogTable
+                    compact
+                    rows={tail.lines}
+                    selectedId={selectedLog?.id ?? null}
+                    timezone={timezone}
+                    onSelect={(row) => {
+                      setSelectedLog(row);
+                      setSelectedTraceId(null);
+                    }}
+                  />
+                }
+                side={sidePane}
+              />
+            ) : (
+              <EmptyState title={t('logsTailWaiting')} description={t('logsTailWaitingBody')} />
+            )}
           </section>
+        ) : null}
 
-          {(trendRows.length || levelRows.length) ? (
-            <section className="panel section-gap">
-              <div className="error-insights-grid">
-                <div>
-                  <header className="compact-panel-header">
-                    <h2 className="section-title">{t('logsTrend')}</h2>
-                    <p className="text-muted">{t('logsTrendLead')}</p>
-                  </header>
+        {tab === 'traces' ? (
+          <section className="panel section-gap">
+            <header className="panel-header">
+              <div>
+                <h2 className="section-title">{t('logsTraces')}</h2>
+                <p className="text-muted">{t('logsTracesLead')}</p>
+              </div>
+              <label className="logs-errors-only">
+                <input type="checkbox" checked={errorsOnly} onChange={(event) => setErrorsOnly(event.target.checked)} />
+                {t('logsErrorsOnly')}
+              </label>
+            </header>
+            {traces.length ? (
+              <MasterDetailTableLayout
+                primary={
                   <div className="table-scroll">
-                    <table className="data-table logs-table">
+                    <table className="data-table">
                       <thead>
                         <tr>
-                          <th>{t('date')}</th>
-                          <th>{t('logs')}</th>
-                          <th>{t('sessions')}</th>
+                          <th>{t('logsTraceRoot')}</th>
+                          <th>{t('logsTraceSpans')}</th>
+                          <th>{t('logsTraceDuration')}</th>
+                          <th>{t('status')}</th>
+                          <th>{t('logsTime')}</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {trendRows.map((row) => (
-                          <tr key={row.date}>
-                            <td>{formatTrendDate(row.date)}</td>
-                            <td>{formatNumber(row.logs)}</td>
-                            <td>{formatNumber(row.sessions)}</td>
+                        {traces.map((trace) => (
+                          <tr key={trace.traceId} className={trace.traceId === selectedTraceId ? 'active-row' : undefined}>
+                            <td>
+                              <button type="button" className="error-issue-button" onClick={() => openTrace(trace.traceId)}>
+                                <span>{trace.rootName ?? trace.traceId.slice(0, 16)}</span>
+                                <span className="text-muted mono"> {trace.rootService ?? ''}</span>
+                              </button>
+                            </td>
+                            <td>
+                              {trace.spans} · {trace.services} {t('logsTraceServices').toLowerCase()}
+                            </td>
+                            <td className="mono text-muted">{formatSpanDuration(trace.durationMs * 1000)}</td>
+                            <td>
+                              <LevelBadge level={trace.hasError ? 'error' : 'info'} />
+                            </td>
+                            <td className="text-muted">{formatDateTime(trace.startedAt, { timeZone: timezone })}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                </div>
+                }
+                side={sidePane}
+              />
+            ) : tracesQuery.isLoading ? (
+              <div className="skeleton" style={{ height: '8rem' }} />
+            ) : (
+              <EmptyState title={t('noTraces')} description={t('logsTracesEmpty')} />
+            )}
+          </section>
+        ) : null}
 
-                <div className="detail-section error-severity-panel">
-                  <header className="compact-panel-header">
-                    <h2 className="section-title">{t('logsLevelBreakdown')}</h2>
-                    <p className="text-muted">{t('logsLevelBreakdownLead')}</p>
-                  </header>
-                  <div className="breakdown-list">
-                    {levelRows.map((row) => {
-                      const share = stats?.logs ? Math.round((row.logs / stats.logs) * 100) : 0;
-                      return (
-                        <div key={row.level} className="breakdown-row">
-                          <div className="breakdown-meta">
-                            <strong>{row.level}</strong>
-                            <span className="text-muted">
-                              {formatNumber(row.logs)} ({formatPercent(share)})
-                            </span>
-                          </div>
-                          <div className="breakdown-track" aria-hidden>
-                            <span style={{ width: `${share}%` }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </section>
-          ) : null}
-
-          <section className="panel section-gap page-logs-hero">
+        {tab === 'filters' ? (
+          <section className="panel section-gap">
             <header className="panel-header">
               <div>
-                <h2 className="section-title">{t('logsRecent')}</h2>
-                <p className="text-muted">{t('logsFilterHint')}</p>
-              </div>
-              <div className="logs-filter-row">
-                <div className="cohorts-search-wrap logs-search-wrap">
-                  <Search className="cohorts-search-icon" size={16} strokeWidth={2} aria-hidden />
-                  <input
-                    type="search"
-                    className="input cohorts-search"
-                    placeholder={t('logsSearchPlaceholder')}
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    aria-label={t('logsSearchPlaceholder')}
-                  />
-                </div>
-                <select
-                  className="select logs-level-select"
-                  value={level}
-                  onChange={(event) => setLevel(event.target.value)}
-                  aria-label={t('logsLevel')}
-                >
-                  {LEVELS.map((item) => (
-                    <option key={item || 'all'} value={item}>
-                      {item ? item : t('allLevels')}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="select logs-level-select"
-                  value={releaseFilter}
-                  onChange={(event) => setReleaseFilter(event.target.value)}
-                  aria-label={t('logsFilterRelease')}
-                >
-                  <option value="">{t('allReleases')}</option>
-                  {releaseOptions.map((release) => (
-                    <option key={release} value={release}>
-                      {release}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="select logs-level-select"
-                  value={environmentFilter}
-                  onChange={(event) => setEnvironmentFilter(event.target.value)}
-                  aria-label={t('logsFilterEnvironment')}
-                >
-                  <option value="">{t('allEnvironments')}</option>
-                  {environmentOptions.map((environment) => (
-                    <option key={environment} value={environment}>
-                      {environment}
-                    </option>
-                  ))}
-                </select>
-                {hasFilters ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      setLevel('');
-                      setSearch('');
-                      setReleaseFilter('');
-                      setEnvironmentFilter('');
-                    }}
-                  >
-                    {t('reset')}
-                  </Button>
-                ) : null}
+                <h2 className="section-title">{t('logsSavedFilters')}</h2>
+                <p className="text-muted">{t('logsSavedFiltersLead')}</p>
               </div>
             </header>
-
-            {logsQuery.isLoading && logsQuery.data ? (
-              <div className="skeleton" style={{ height: '8rem' }} />
-            ) : null}
-
-            {!logsQuery.isLoading && rows.length ? (
-              <div className="table-scroll">
-                <table className="data-table logs-table">
-                  <thead>
-                    <tr>
-                      <th>{t('message')}</th>
-                      <th>{t('logsLevel')}</th>
-                      <th>{t('page')}</th>
-                      <th>{t('session')}</th>
-                      <th>{t('created')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row) => (
-                      <tr key={row.id}>
-                        <td>
-                          <div className="errors-name-cell">
-                            <TerminalSquare size={16} strokeWidth={2} aria-hidden />
-                            <div>
-                              <div className="errors-message">{row.message ?? row.eventName ?? '-'}</div>
-                              {row.release || row.environment ? (
-                                <div className="text-muted">
-                                  {[row.release, row.environment].filter(Boolean).join(' · ')}
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
-                        </td>
-                        <td>
-                          <span className={`badge log-level-${row.level ?? 'info'}`}>
-                            {row.level ?? 'info'}
-                          </span>
-                        </td>
-                        <td className="text-muted">{row.urlPath || '/'}</td>
-                        <td>
-                          <Link to={`/websites/${websiteId}/sessions/${row.sessionId}`} className="inline-link">
-                            {row.sessionId.slice(0, 8)}
-                            <ExternalLink size={12} strokeWidth={2} aria-hidden />
-                          </Link>
-                        </td>
-                        <td className="text-muted">{formatDateTime(row.createdAt)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
-
-            {!logsQuery.isLoading && !rows.length ? (
-              <EmptyState title={t('logsEmptyTitle')} description={t('logsEmptyBody')} />
-            ) : null}
-          </section>
-      </DataViewState>
-
-      <section className="logs-secondary section-gap" aria-labelledby="logs-secondary-title">
-        <header className="logs-secondary-head">
-          <div>
-            <h2 id="logs-secondary-title" className="logs-secondary-title">
-              {t('overviewMore')}
-            </h2>
-            <p className="text-muted">{t('logsSecondaryLead')}</p>
-          </div>
-          <SegmentTabs
-            aria-label={t('overviewMore')}
-            size="sm"
-            value={secondaryTab}
-            onChange={(id) => setSecondaryTab(id as LogsSecondaryTab)}
-            tabs={[
-              { id: 'traces', label: t('logsTabTraces') },
-              { id: 'filters', label: t('logsTabFilters') },
-              { id: 'alerts', label: t('logsTabAlerts') },
-            ]}
-          />
-        </header>
-
-      {secondaryTab === 'traces' ? (
-        <section className="section-gap">
-          <header className="panel-header">
-            <div>
-              <h2 className="section-title">{t('logsTraces')}</h2>
-              <p className="text-muted">{t('logsTracesLead')}</p>
-            </div>
-          </header>
-          {traces.length ? (
-            <MasterDetailTableLayout
-              primary={
-                <div className="table-scroll">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>{t('logsTraceId')}</th>
-                        <th>{t('logsTraceSpans')}</th>
-                        <th>{t('logsTraceServices')}</th>
-                        <th>{t('logsTraceDuration')}</th>
-                        <th>{t('status')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {traces.map((trace) => (
-                        <tr
-                          key={trace.traceId}
-                          className={trace.traceId === selectedTraceId ? 'active-row' : undefined}
-                        >
-                          <td>
-                            <button type="button" className="error-issue-button" onClick={() => setSelectedTraceId(trace.traceId)}>
-                              <code className="mono">{trace.traceId.slice(0, 16)}</code>
-                            </button>
-                          </td>
-                          <td>{trace.spans}</td>
-                          <td>{trace.services}</td>
-                          <td className="text-muted">{trace.durationMs != null ? `${trace.durationMs}ms` : '-'}</td>
-                          <td>
-                            <span className={`badge ${trace.hasError ? 'experiment-diagnostic-warning' : 'experiment-diagnostic-success'}`}>
-                              {trace.hasError ? t('logsTraceStatusError') : t('logsTraceStatusOk')}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              }
-              side={
-                selectedTrace ? (
-                  <MasterDetailSidePane
-                    title={t('logsTraceDetail')}
-                    description={<span className="mono">{selectedTrace.traceId}</span>}
-                  >
-                    <div className="table-scroll">
-                      <table className="data-table">
-                        <thead>
-                          <tr>
-                            <th>{t('logAlertService')}</th>
-                            <th>{t('logsTraceSpan')}</th>
-                            <th>{t('message')}</th>
-                            <th>{t('logsTraceDuration')}</th>
-                            <th>{t('status')}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedTrace.spans.map((span) => (
-                            <tr key={span.id}>
-                              <td>{span.service}</td>
-                              <td className="mono">{span.spanId}</td>
-                              <td>{span.message ?? span.operation ?? '-'}</td>
-                              <td className="text-muted">{span.durationMs != null ? `${span.durationMs}ms` : '-'}</td>
-                              <td>{span.status ?? span.level ?? '-'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </MasterDetailSidePane>
-                ) : null
-              }
-            />
-          ) : (
-            <EmptyState title={t('noTraces')} description={t('logsTracesLead')} />
-          )}
-        </section>
-      ) : null}
-
-      {secondaryTab === 'filters' ? (
-        <section className="section-gap">
-          <header className="panel-header">
-            <div>
-              <h2 className="section-title">{t('logsSavedFilters')}</h2>
-              <p className="text-muted">{t('logsSavedFiltersLead')}</p>
-            </div>
-          </header>
-          {canEdit ? (
-            <div className="form-row">
-              <div className="field">
-                <Label htmlFor="log-filter-name">{t('name')}</Label>
-                <Input
-                  id="log-filter-name"
-                  value={filterName}
-                  onChange={(event) => setFilterName(event.target.value)}
-                />
-              </div>
-              <Button
-                type="button"
-                variant="primary"
-                disabled={!filterName.trim() || createFilterMutation.isPending}
-                onClick={() => createFilterMutation.mutate()}
-              >
-                {createFilterMutation.isPending ? t('saving') : t('saveFilter')}
-              </Button>
-            </div>
-          ) : null}
-          {savedFilters.length ? (
-            <div className="table-scroll">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>{t('name')}</th>
-                    <th>{t('logsLevel')}</th>
-                    <th>{t('release')}</th>
-                    <th>{t('environment')}</th>
-                    <th className="cohorts-actions-col">{t('actions')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {savedFilters.map((filter) => (
-                    <tr key={filter.id}>
-                      <td>{filter.name}</td>
-                      <td>{filter.filters.level ?? '-'}</td>
-                      <td>{filter.filters.release ?? '-'}</td>
-                      <td>{filter.filters.environment ?? '-'}</td>
-                      <td className="cohorts-actions-col">
-                        <div className="cohorts-row-actions">
-                          <Button type="button" variant="ghost" size="sm" onClick={() => applySavedFilter(filter)}>
-                            {t('applyFilter')}
-                          </Button>
-                          {canEdit ? (
-                            <Button
-                              type="button"
-                              variant="destructive-ghost"
-                              size="sm"
-                              onClick={() => confirm({ title: deleteTitle(filter.name), onConfirm: () => deleteFilterMutation.mutate(filter.id) })}
-                            >
-                              {t('delete')}
-                            </Button>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <EmptyState title={t('noSavedFilters')} description={t('logsSavedFiltersLead')} />
-          )}
-        </section>
-      ) : null}
-
-      {secondaryTab === 'alerts' ? (
-        <section className="section-gap">
-          <header className="panel-header">
-            <div>
-              <h2 className="section-title">{t('logsAlertRules')}</h2>
-              <p className="text-muted">{t('logsAlertRulesLead')}</p>
-            </div>
-          </header>
-          {canEdit ? (
-            <div className="panel-form">
-              <div className="field">
-                <Label htmlFor="log-alert-name">{t('alertRuleName')}</Label>
-                <Input
-                  id="log-alert-name"
-                  value={alertDraft.name}
-                  onChange={(event) => setAlertDraft((prev) => ({ ...prev, name: event.target.value }))}
-                />
-              </div>
-              <div className="field">
-                <Label htmlFor="log-alert-threshold">{t('alertRuleThreshold')}</Label>
-                <Input
-                  id="log-alert-threshold"
-                  type="number"
-                  min={1}
-                  value={alertDraft.threshold}
-                  onChange={(event) => setAlertDraft((prev) => ({ ...prev, threshold: Number(event.target.value) }))}
-                />
-              </div>
-              <div className="field">
-                <Label htmlFor="log-alert-window">{t('alertRuleWindow')}</Label>
-                <Input
-                  id="log-alert-window"
-                  type="number"
-                  min={1}
-                  value={alertDraft.windowMinutes}
-                  onChange={(event) =>
-                    setAlertDraft((prev) => ({ ...prev, windowMinutes: Number(event.target.value) }))
-                  }
-                />
-              </div>
-              <div className="field">
-                <Label htmlFor="log-alert-level">{t('logAlertLevel')}</Label>
-                <select
-                  id="log-alert-level"
-                  className="select"
-                  value={alertDraft.level}
-                  onChange={(event) => setAlertDraft((prev) => ({ ...prev, level: event.target.value }))}
-                >
-                  <option value="">{t('allLevels')}</option>
-                  {LEVELS.filter(Boolean).map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="field">
-                <Label htmlFor="log-alert-service">{t('logAlertService')}</Label>
-                <Input
-                  id="log-alert-service"
-                  value={alertDraft.service}
-                  onChange={(event) => setAlertDraft((prev) => ({ ...prev, service: event.target.value }))}
-                />
-              </div>
-              <div className="field">
-                <Label htmlFor="log-alert-search">{t('search')}</Label>
-                <Input
-                  id="log-alert-search"
-                  value={alertDraft.search}
-                  onChange={(event) => setAlertDraft((prev) => ({ ...prev, search: event.target.value }))}
-                />
-              </div>
-              <div className="field">
-                <Label htmlFor="log-alert-release">{t('release')}</Label>
-                <Input
-                  id="log-alert-release"
-                  value={alertDraft.release}
-                  onChange={(event) => setAlertDraft((prev) => ({ ...prev, release: event.target.value }))}
-                />
-              </div>
-              <div className="field">
-                <Label htmlFor="log-alert-environment">{t('environment')}</Label>
-                <Input
-                  id="log-alert-environment"
-                  value={alertDraft.environment}
-                  onChange={(event) => setAlertDraft((prev) => ({ ...prev, environment: event.target.value }))}
-                />
-              </div>
-              <div className="field">
-                <Label htmlFor="log-alert-channel">{t('alertRuleChannel')}</Label>
-                <select
-                  id="log-alert-channel"
-                  className="select"
-                  value={alertDraft.channel}
-                  onChange={(event) =>
-                    setAlertDraft((prev) => ({
-                      ...prev,
-                      channel: event.target.value as LogAlertRule['channel'],
-                    }))
-                  }
-                >
-                  <option value="record">{t('alertRuleChannel_record')}</option>
-                  <option value="email">{t('alertRuleChannel_email')}</option>
-                  <option value="webhook">{t('alertRuleChannel_webhook')}</option>
-                </select>
-              </div>
-              {alertDraft.channel !== 'record' ? (
+            {canEdit ? (
+              <div className="form-row">
                 <div className="field">
-                  <Label htmlFor="log-alert-target">{t('alertRuleTarget')}</Label>
-                  <Input
-                    id="log-alert-target"
-                    value={alertDraft.target}
-                    placeholder={
-                      alertDraft.channel === 'email' ? 'ops@example.com' : 'https://hooks.example.com/alerts'
-                    }
-                    onChange={(event) => setAlertDraft((prev) => ({ ...prev, target: event.target.value }))}
-                  />
+                  <Label htmlFor="log-filter-name">{t('name')}</Label>
+                  <Input id="log-filter-name" value={filterName} onChange={(event) => setFilterName(event.target.value)} />
                 </div>
-              ) : null}
-              <div className="form-actions">
                 <Button
                   type="button"
                   variant="primary"
-                  disabled={!alertDraft.name.trim() || createAlertMutation.isPending}
-                  onClick={() => createAlertMutation.mutate()}
+                  disabled={!filterName.trim() || !filtered || createFilterMutation.isPending}
+                  onClick={() => createFilterMutation.mutate()}
                 >
-                  {createAlertMutation.isPending ? t('saving') : t('createAlertRule')}
+                  {createFilterMutation.isPending ? t('saving') : t('saveFilter')}
                 </Button>
               </div>
-            </div>
-          ) : null}
-          {alertRules.length ? (
-            <div className="table-scroll">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>{t('alertRuleName')}</th>
-                    <th>{t('alertRuleThreshold')}</th>
-                    <th>{t('alertRuleWindow')}</th>
-                    <th>{t('logAlertLevel')}</th>
-                    <th>{t('alertRuleChannel')}</th>
-                    <th>{t('status')}</th>
-                    <th className="cohorts-actions-col">{t('actions')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {alertRules.map((rule) => (
-                    <tr key={rule.id}>
-                      <td>{rule.name}</td>
-                      <td>{rule.threshold}</td>
-                      <td>{rule.windowMinutes}</td>
-                      <td>{rule.level ?? '-'}</td>
-                      <td>
-                        {t(`alertRuleChannel_${rule.channel}`)}
-                        {rule.target ? <div className="text-muted mono">{rule.target}</div> : null}
-                      </td>
-                      <td>{rule.enabled ? t('enabled') : t('disabled')}</td>
-                      <td className="cohorts-actions-col">
-                        {canEdit ? (
+            ) : null}
+            {canEdit && !filtered ? <p className="text-muted">{t('logsSaveFilterHint')}</p> : null}
+            {savedFilters.length ? (
+              <div className="table-scroll">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>{t('name')}</th>
+                      <th>{t('logsFilters')}</th>
+                      <th className="cohorts-actions-col">{t('actions')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {savedFilters.map((filter) => (
+                      <tr key={filter.id}>
+                        <td>{filter.name}</td>
+                        <td className="mono text-muted">{describeSavedFilter(filter.filters)}</td>
+                        <td className="cohorts-actions-col">
                           <div className="cohorts-row-actions">
                             <Button
                               type="button"
                               variant="ghost"
                               size="sm"
-                              onClick={() => updateAlertMutation.mutate({ id: rule.id, patch: { enabled: !rule.enabled } })}
+                              onClick={() => {
+                                setFilters(filtersFromSaved(filter.filters));
+                                setTab('explore');
+                              }}
                             >
-                              {rule.enabled ? t('disable') : t('enable')}
+                              {t('applyFilter')}
                             </Button>
-                            <Button
-                              type="button"
-                              variant="destructive-ghost"
-                              size="sm"
-                              onClick={() => confirm({ title: deleteTitle(rule.name), onConfirm: () => deleteAlertMutation.mutate(rule.id) })}
-                            >
-                              {t('delete')}
-                            </Button>
+                            {canEdit ? (
+                              <Button
+                                type="button"
+                                variant="destructive-ghost"
+                                size="sm"
+                                onClick={() => confirm({ title: deleteTitle(filter.name), onConfirm: () => deleteFilterMutation.mutate(filter.id) })}
+                              >
+                                {t('delete')}
+                              </Button>
+                            ) : null}
                           </div>
-                        ) : null}
-                      </td>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyState title={t('noSavedFilters')} description={t('logsSavedFiltersLead')} />
+            )}
+          </section>
+        ) : null}
+
+        {tab === 'alerts' ? (
+          <section className="panel section-gap">
+            <header className="panel-header">
+              <div>
+                <h2 className="section-title">{t('logsAlertRules')}</h2>
+                <p className="text-muted">{t('logsAlertRulesLead')}</p>
+              </div>
+            </header>
+            {canEdit ? (
+              <div className="panel-form">
+                <div className="field">
+                  <Label htmlFor="log-alert-name">{t('alertRuleName')}</Label>
+                  <Input id="log-alert-name" value={alertDraft.name} onChange={(event) => setAlertDraft((prev) => ({ ...prev, name: event.target.value }))} />
+                </div>
+                <div className="field">
+                  <Label htmlFor="log-alert-threshold">{t('alertRuleThreshold')}</Label>
+                  <Input
+                    id="log-alert-threshold"
+                    type="number"
+                    min={1}
+                    value={alertDraft.threshold}
+                    onChange={(event) => setAlertDraft((prev) => ({ ...prev, threshold: Number(event.target.value) }))}
+                  />
+                </div>
+                <div className="field">
+                  <Label htmlFor="log-alert-window">{t('alertRuleWindow')}</Label>
+                  <Input
+                    id="log-alert-window"
+                    type="number"
+                    min={1}
+                    value={alertDraft.windowMinutes}
+                    onChange={(event) => setAlertDraft((prev) => ({ ...prev, windowMinutes: Number(event.target.value) }))}
+                  />
+                </div>
+                <div className="field">
+                  <Label htmlFor="log-alert-level">{t('logAlertLevel')}</Label>
+                  <select
+                    id="log-alert-level"
+                    className="select"
+                    value={alertDraft.level}
+                    onChange={(event) => setAlertDraft((prev) => ({ ...prev, level: event.target.value }))}
+                  >
+                    <option value="">{t('allLevels')}</option>
+                    {LOG_SEVERITIES.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <Label htmlFor="log-alert-service">{t('logAlertService')}</Label>
+                  <Input id="log-alert-service" value={alertDraft.service} onChange={(event) => setAlertDraft((prev) => ({ ...prev, service: event.target.value }))} />
+                </div>
+                <div className="field">
+                  <Label htmlFor="log-alert-search">{t('search')}</Label>
+                  <Input id="log-alert-search" value={alertDraft.search} onChange={(event) => setAlertDraft((prev) => ({ ...prev, search: event.target.value }))} />
+                </div>
+                <div className="field">
+                  <Label htmlFor="log-alert-attribute">{t('logsAttributeFilter')}</Label>
+                  <Input
+                    id="log-alert-attribute"
+                    className="mono"
+                    placeholder={t('logsAttributePlaceholder')}
+                    value={alertDraft.attribute}
+                    onChange={(event) => setAlertDraft((prev) => ({ ...prev, attribute: event.target.value }))}
+                  />
+                </div>
+                <div className="field">
+                  <Label htmlFor="log-alert-release">{t('release')}</Label>
+                  <Input id="log-alert-release" value={alertDraft.release} onChange={(event) => setAlertDraft((prev) => ({ ...prev, release: event.target.value }))} />
+                </div>
+                <div className="field">
+                  <Label htmlFor="log-alert-environment">{t('environment')}</Label>
+                  <Input
+                    id="log-alert-environment"
+                    value={alertDraft.environment}
+                    onChange={(event) => setAlertDraft((prev) => ({ ...prev, environment: event.target.value }))}
+                  />
+                </div>
+                <div className="field">
+                  <Label htmlFor="log-alert-channel">{t('alertRuleChannel')}</Label>
+                  <select
+                    id="log-alert-channel"
+                    className="select"
+                    value={alertDraft.channel}
+                    onChange={(event) => setAlertDraft((prev) => ({ ...prev, channel: event.target.value as LogAlertRule['channel'] }))}
+                  >
+                    <option value="record">{t('alertRuleChannel_record')}</option>
+                    <option value="email">{t('alertRuleChannel_email')}</option>
+                    <option value="webhook">{t('alertRuleChannel_webhook')}</option>
+                  </select>
+                </div>
+                {alertDraft.channel !== 'record' ? (
+                  <div className="field">
+                    <Label htmlFor="log-alert-target">{t('alertRuleTarget')}</Label>
+                    <Input
+                      id="log-alert-target"
+                      value={alertDraft.target}
+                      placeholder={alertDraft.channel === 'email' ? 'ops@example.com' : 'https://hooks.example.com/alerts'}
+                      onChange={(event) => setAlertDraft((prev) => ({ ...prev, target: event.target.value }))}
+                    />
+                  </div>
+                ) : null}
+                <div className="form-actions">
+                  <Button
+                    type="button"
+                    variant="primary"
+                    disabled={!alertDraft.name.trim() || createAlertMutation.isPending}
+                    onClick={() => createAlertMutation.mutate()}
+                  >
+                    {createAlertMutation.isPending ? t('saving') : t('createAlertRule')}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+            {alertRules.length ? (
+              <div className="table-scroll">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>{t('alertRuleName')}</th>
+                      <th>{t('alertRuleThreshold')}</th>
+                      <th>{t('alertRuleWindow')}</th>
+                      <th>{t('logsFilters')}</th>
+                      <th>{t('alertRuleChannel')}</th>
+                      <th>{t('status')}</th>
+                      <th className="cohorts-actions-col">{t('actions')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <EmptyState title={t('noAlertRules')} description={t('logsAlertRulesLead')} />
-          )}
-        </section>
-      ) : null}
-      </section>
+                  </thead>
+                  <tbody>
+                    {alertRules.map((rule) => (
+                      <tr key={rule.id}>
+                        <td>{rule.name}</td>
+                        <td>{rule.threshold}</td>
+                        <td>{rule.windowMinutes}</td>
+                        <td className="mono text-muted">
+                          {describeSavedFilter({
+                            level: rule.level ?? undefined,
+                            service: rule.service ?? undefined,
+                            search: rule.search ?? undefined,
+                            release: rule.release ?? undefined,
+                            environment: rule.environment ?? undefined,
+                            attributes: rule.attributeKey
+                              ? [{ key: rule.attributeKey, value: rule.attributeValue ?? undefined }]
+                              : undefined,
+                          })}
+                        </td>
+                        <td>
+                          {t(`alertRuleChannel_${rule.channel}`)}
+                          {rule.target ? <div className="text-muted mono">{rule.target}</div> : null}
+                        </td>
+                        <td>{rule.enabled ? t('enabled') : t('disabled')}</td>
+                        <td className="cohorts-actions-col">
+                          {canEdit ? (
+                            <div className="cohorts-row-actions">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => updateAlertMutation.mutate({ id: rule.id, patch: { enabled: !rule.enabled } })}
+                              >
+                                {rule.enabled ? t('disable') : t('enable')}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="destructive-ghost"
+                                size="sm"
+                                onClick={() => confirm({ title: deleteTitle(rule.name), onConfirm: () => deleteAlertMutation.mutate(rule.id) })}
+                              >
+                                {t('delete')}
+                              </Button>
+                            </div>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyState title={t('noAlertRules')} description={t('logsAlertRulesLead')} />
+            )}
+          </section>
+        ) : null}
       </PageBody>
     </Page>
+  );
+}
+
+function describeSavedFilter(filters: LogSavedFilter['filters']) {
+  const parts = [
+    filters.level,
+    filters.service && `service=${filters.service}`,
+    filters.environment && `env=${filters.environment}`,
+    filters.release && `release=${filters.release}`,
+    filters.source,
+    filters.search && `"${filters.search}"`,
+    filters.traceId && `trace=${filters.traceId.slice(0, 12)}`,
+    filters.sessionId && `session=${filters.sessionId.slice(0, 12)}`,
+    ...(filters.attributes ?? []).map(attributeLabel),
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : '-';
+}
+
+/** Shown on an empty explorer: where to point an OpenTelemetry exporter. */
+function OtlpSetupHint() {
+  const endpoint = INGEST_URL_FOR_DOCS.replace(/\/$/, '');
+  return (
+    <div className="logs-otlp-hint">
+      <h3 className="section-title">{t('logsOtlpHintTitle')}</h3>
+      <p className="text-muted">{t('logsOtlpHintBody')}</p>
+      <pre className="mono">{`OTEL_EXPORTER_OTLP_ENDPOINT=${endpoint}
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer%20fb_pk_…`}</pre>
+    </div>
   );
 }

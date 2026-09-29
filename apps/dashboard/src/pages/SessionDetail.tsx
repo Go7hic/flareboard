@@ -8,6 +8,7 @@ import { Button } from '../components/ui/button';
 import { api } from '../lib/api';
 import { formatDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
+import { describeBuiltinEvent } from '../lib/autocapture';
 
 interface SessionDetail {
   id: string;
@@ -67,7 +68,15 @@ function formatContextProperties(properties: SessionContextItem['properties']) {
   return values.length ? values.join(' · ') : null;
 }
 
-function sourcePath(websiteId: string | undefined, source: SessionContextItem['source']) {
+/** Built-in events read as sentences; their element properties collapse to the selector. */
+function contextDisplay(item: SessionContextItem) {
+  const builtin = item.kind === 'event' ? describeBuiltinEvent(item.title, item.properties) : null;
+  if (!builtin) return { title: item.title, properties: formatContextProperties(item.properties) };
+  const selector = item.properties?.find((p) => p.key === '$el_selector')?.value ?? null;
+  return { title: builtin, properties: selector };
+}
+
+function sourcePath(websiteId: string | undefined, source: SessionContextItem['source'], sessionId?: string) {
   if (!websiteId || !source) return null;
   if (source.module === 'feature_flags') {
     return `/websites/${websiteId}/feature-flags${
@@ -75,7 +84,9 @@ function sourcePath(websiteId: string | undefined, source: SessionContextItem['s
     }`;
   }
   if (source.module === 'errors') return `/websites/${websiteId}/errors`;
-  if (source.module === 'logs') return `/websites/${websiteId}/logs`;
+  if (source.module === 'logs') {
+    return `/websites/${websiteId}/logs${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''}`;
+  }
   if (source.module === 'ai_observability') return `/websites/${websiteId}/ai-observability`;
   if (source.module === 'surveys') {
     return `/websites/${websiteId}/surveys${source.id ? `?survey=${encodeURIComponent(source.id)}` : ''}`;
@@ -164,19 +175,17 @@ export default function SessionDetailPage() {
                 <div>
                   <div className="activity-timeline-path">
                     <span className="badge session-context-kind">{t(contextKindLabels[item.kind])}</span>
-                    <strong>{item.title}</strong>
+                    <strong>{contextDisplay(item).title}</strong>
                     {item.detail ? <span className="text-muted"> · {item.detail}</span> : null}
                   </div>
                   <div className="activity-timeline-time">
                     {item.urlPath ? <span>{item.urlPath}</span> : null}
-                    {formatContextProperties(item.properties) ? (
-                      <span>{formatContextProperties(item.properties)}</span>
-                    ) : null}
+                    {contextDisplay(item).properties ? <span>{contextDisplay(item).properties}</span> : null}
                     <span>{formatDateTime(item.createdAt)}</span>
                   </div>
                 </div>
-                {sourcePath(websiteId, item.source) ? (
-                  <Link to={sourcePath(websiteId, item.source)!} className="inline-link session-context-source">
+                {sourcePath(websiteId, item.source, sessionId) ? (
+                  <Link to={sourcePath(websiteId, item.source, sessionId)!} className="inline-link session-context-source">
                     {t('viewSource')}
                     <ExternalLink size={12} strokeWidth={2} aria-hidden />
                   </Link>

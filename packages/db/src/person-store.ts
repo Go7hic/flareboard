@@ -32,6 +32,8 @@ export async function upsertPerson(
     websiteId: string;
     distinctId: string;
     properties?: PersonProperties;
+    /** Applied only to keys the person does not have yet (PostHog `$set_once`); `properties` still wins. */
+    propertiesOnce?: PersonProperties;
     seenAt: number;
     personId?: string;
   },
@@ -51,7 +53,7 @@ export async function upsertPerson(
 
   const personId = existing?.personId ?? input.personId ?? crypto.randomUUID();
   const properties = mergePersonProperties(
-    parsePersonProperties(existing?.propertiesJson),
+    mergePersonProperties(input.propertiesOnce ?? {}, parsePersonProperties(existing?.propertiesJson)),
     input.properties ?? {},
   );
   const now = input.seenAt;

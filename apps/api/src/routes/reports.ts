@@ -4,6 +4,8 @@ import { createDb, schema } from '@flareboard/db';
 import {
   attributionQuerySchema,
   createReportSchema,
+  propertyFiltersSchema,
+  type PropertyFilter,
   updateReportSchema,
   uuid,
 } from '@flareboard/shared';
@@ -21,10 +23,10 @@ import {
   getStickinessReport,
 } from '../lib/advanced-reports';
 import { applyStatsResetFloor, parseStatsRange } from '../lib/parse-range';
+import { InsightQueryError } from '../lib/property-filters';
 import {
   getGoalReport,
   getReportById,
-  getRevenueReport,
   getSegmentById,
   getUtmReport,
   getUserReports,
@@ -32,6 +34,7 @@ import {
 } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
 import { REPORT_TEMPLATES, readReportParams, summarizeReport } from '../lib/report-templates';
+import { getRevenueReport } from '../lib/revenue-analytics';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
@@ -179,7 +182,44 @@ async function requireReportWebsite(c: Ctx) {
     return { error: notFound() as Response };
   }
   applyStatsResetFloor(c, website.resetAt);
-  return { websiteId, segment: await loadSegmentParams(c, websiteId) };
+  const filters = parseFiltersParam(c.req.query('filters'));
+  if (filters instanceof Response) return { error: filters };
+  return {
+    websiteId,
+    segment: await loadSegmentParams(c, websiteId),
+    filters,
+    timezone: website.timezone ?? 'UTC',
+  };
+}
+
+/** `?filters=<json>`: property filters (event / person / dimension) for funnel, retention, stickiness, journeys. */
+function parseFiltersParam(raw: string | undefined): PropertyFilter[] | Response {
+  if (!raw) return [];
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return badRequest('filters must be JSON');
+  }
+  const parsed = propertyFiltersSchema.safeParse(value);
+  if (!parsed.success) return badRequest(parsed.error.issues[0]?.message ?? 'Invalid filters');
+  return parsed.data;
+}
+
+/** Segment parameters plus `?filters=` (segment `properties` are compiled by buildSegmentSql). */
+function segmentWithFilters(segment: Record<string, unknown> | null, filters: PropertyFilter[]) {
+  if (!filters.length) return segment;
+  const existing = Array.isArray(segment?.properties) ? (segment.properties as unknown[]) : [];
+  return { ...(segment ?? {}), properties: [...existing, ...filters] };
+}
+
+async function withQueryErrors(run: () => Promise<Response>): Promise<Response> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof InsightQueryError) return badRequest(error.message);
+    throw error;
+  }
 }
 
 export async function handleFunnel(c: Ctx) {
@@ -191,16 +231,32 @@ export async function handleFunnel(c: Ctx) {
   // Each step adds bound parameters and a join; keep well under D1's 100-parameter cap.
   if (steps.length > MAX_FUNNEL_STEPS) return badRequest(`At most ${MAX_FUNNEL_STEPS} funnel steps`);
   const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
-  const data = await getFunnelReport(c.env, ctx.websiteId!, startAt, endAt, steps, ctx.segment);
-  return json(data);
+  const windowMs = Number(c.req.query('windowMs'));
+  return withQueryErrors(async () =>
+    json(
+      await getFunnelReport(c.env, ctx.websiteId!, startAt, endAt, steps, ctx.segment, {
+        countBy: c.req.query('countBy') === 'person' ? 'person' : 'session',
+        order: c.req.query('order') === 'any' ? 'any' : 'strict',
+        windowMs: Number.isFinite(windowMs) && windowMs > 0 ? windowMs : undefined,
+        filters: ctx.filters,
+        timezone: ctx.timezone,
+      }),
+    ),
+  );
 }
 
 export async function handleRetention(c: Ctx) {
   const ctx = await requireReportWebsite(c);
   if ('error' in ctx && ctx.error) return ctx.error;
   const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d', clamp: true });
-  const data = await getRetentionReport(c.env, ctx.websiteId!, startAt, endAt, ctx.segment);
-  return json(data);
+  return withQueryErrors(async () =>
+    json(
+      await getRetentionReport(c.env, ctx.websiteId!, startAt, endAt, ctx.segment, {
+        filters: ctx.filters,
+        timezone: ctx.timezone,
+      }),
+    ),
+  );
 }
 
 export async function handleStickiness(c: Ctx) {
@@ -209,8 +265,14 @@ export async function handleStickiness(c: Ctx) {
   const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d', clamp: true });
   const event = c.req.query('event')?.trim() || null;
   const actor = c.req.query('actor') === 'session' ? 'session' : 'person';
-  const data = await getStickinessReport(c.env, ctx.websiteId!, startAt, endAt, event, actor, ctx.segment);
-  return json(data);
+  return withQueryErrors(async () =>
+    json(
+      await getStickinessReport(c.env, ctx.websiteId!, startAt, endAt, event, actor, ctx.segment, {
+        filters: ctx.filters,
+        timezone: ctx.timezone,
+      }),
+    ),
+  );
 }
 
 export async function handleJourney(c: Ctx) {
@@ -225,6 +287,7 @@ export async function handleJourney(c: Ctx) {
     .map((s) => s.trim())
     .filter(Boolean);
 
+  const segment = segmentWithFilters(ctx.segment, ctx.filters);
   const data = flowMode || prefixSteps.length > 0
     ? await getJourneyFlowReport(
         c.env,
@@ -233,7 +296,7 @@ export async function handleJourney(c: Ctx) {
         endAt,
         prefixSteps,
         limit,
-        ctx.segment,
+        segment,
       )
     : await getJourneyReport(
         c.env,
@@ -241,7 +304,7 @@ export async function handleJourney(c: Ctx) {
         startAt,
         endAt,
         limit,
-        ctx.segment,
+        segment,
         offset,
       );
   return json({ ...data, segmentId: segmentId ?? null });

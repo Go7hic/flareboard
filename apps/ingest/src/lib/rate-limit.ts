@@ -3,6 +3,11 @@ import type { Env } from '../env';
 
 const LIMIT = 100;
 const WINDOW_SEC = 60;
+/**
+ * Requests that identify the website by its project key share one budget per key instead of the
+ * per-IP one: server SDKs send everything from a handful of IPs. Hosted event quotas still apply.
+ */
+const PROJECT_KEY_LIMIT_PER_MINUTE = 30_000;
 
 /** Client IP from trusted headers only (never from request body). */
 export function getTrustedClientIp(req: Request): string {
@@ -29,4 +34,21 @@ export async function checkIpRateLimit(
   windowSec = WINDOW_SEC,
 ): Promise<{ allowed: boolean; remaining: number }> {
   return checkDoRateLimit(env.RATE_LIMITER, prefix, ip, limit, windowSec);
+}
+
+function projectKeyLimit(env: Env): number {
+  const configured = Number.parseInt(env.PROJECT_KEY_RATE_LIMIT ?? '', 10);
+  return Number.isFinite(configured) && configured > 0 ? configured : PROJECT_KEY_LIMIT_PER_MINUTE;
+}
+
+/**
+ * Per-key budget (requests per minute); `bucket` separates event capture, flag evaluation and
+ * OpenTelemetry exports, so a chatty log exporter cannot starve analytics capture.
+ */
+export async function checkProjectKeyRateLimit(
+  env: Env,
+  projectKey: string,
+  bucket: 'events' | 'flags' | 'otlp' = 'events',
+): Promise<{ allowed: boolean; remaining: number }> {
+  return checkDoRateLimit(env.RATE_LIMITER, `project-key:${bucket}`, projectKey, projectKeyLimit(env), WINDOW_SEC);
 }

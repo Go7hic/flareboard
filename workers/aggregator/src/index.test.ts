@@ -290,3 +290,135 @@ describe('aggregator queue batching', () => {
     expect(fullSessionInsert.sql).toContain('browser = COALESCE(excluded.browser, browser)');
   });
 });
+
+/** Fake per-website store: records what each website's EventStore would execute. */
+class FakeSiteStores {
+  readonly statements = new Map<string, Array<{ sql: string; params: unknown[] }>>();
+  readonly failing = new Set<string>();
+
+  idFromName(name: string) {
+    return name;
+  }
+
+  get(name: string) {
+    const websiteId = name.replace(/^site:/, '');
+    const record = (sql: string, params: unknown[]) => {
+      const list = this.statements.get(websiteId) ?? [];
+      list.push({ sql, params });
+      this.statements.set(websiteId, list);
+    };
+    const result = (changes: number) => ({ results: [], raw: [], columns: [], changes, lastRowId: null, rowsRead: 0, rowsWritten: changes });
+    return {
+      query: async (_id: string, statement: { sql: string; params: unknown[] }) => {
+        record(statement.sql, statement.params);
+        return result(statement.sql.trimStart().startsWith('SELECT') ? 0 : 1);
+      },
+      batch: async (_id: string, statements: Array<{ sql: string; params: unknown[] }>) => {
+        if (this.failing.has(websiteId)) throw new Error(`store ${websiteId} unavailable`);
+        for (const statement of statements) record(statement.sql, statement.params);
+        return statements.map(() => result(1));
+      },
+      execScript: async () => ({ count: 0 }),
+    };
+  }
+
+  sqlFor(websiteId: string, fragment: string) {
+    return (this.statements.get(websiteId) ?? []).filter((s) => s.sql.includes(fragment));
+  }
+}
+
+function eventFor(id: string, websiteId: string, eventData?: Array<{ dataKey: string; dataType: number; stringValue?: string; numberValue?: number }>) {
+  return createMessage({
+    type: 'event',
+    data: {
+      id,
+      websiteId,
+      sessionId: `session-${id}`,
+      visitId: `visit-${id}`,
+      createdAt: Date.UTC(2026, 0, 1, 12),
+      urlPath: '/pricing',
+      eventType: EVENT_TYPE.customEvent,
+      eventName: 'signup',
+    },
+    eventData: eventData?.map((row, index) => ({
+      id: `${id}-d${index}`,
+      websiteId,
+      websiteEventId: id,
+      createdAt: Date.UTC(2026, 0, 1, 12),
+      ...row,
+    })),
+  } as QueueMessage);
+}
+
+describe('aggregator with per-website stores', () => {
+  it('writes each website to its own store with properties on the event row', async () => {
+    const d1 = new FakeD1Database();
+    const stores = new FakeSiteStores();
+    const a = eventFor('ev-a', 'site-a', [
+      { dataKey: 'plan', dataType: 1, stringValue: 'pro' },
+      { dataKey: 'seats', dataType: 2, numberValue: 3 },
+      { dataKey: 'trial', dataType: 3, stringValue: 'true' },
+    ]);
+    const b = eventFor('ev-b', 'site-b');
+
+    await worker.queue(createBatch([a, b]) as unknown as MessageBatch<QueueMessage>, {
+      DB: d1 as unknown as D1Database,
+      SITE_STORE: stores as unknown as DurableObjectNamespace,
+      EVENT_STORE: 'do',
+    } satisfies Env);
+
+    expect(a.ack).toHaveBeenCalledTimes(1);
+    expect(b.ack).toHaveBeenCalledTimes(1);
+    // Nothing analytics-related lands in the shared D1 database.
+    expect(d1.statementsContaining('website_event')).toHaveLength(0);
+
+    const insertA = stores.sqlFor('site-a', 'INSERT INTO website_event');
+    expect(insertA).toHaveLength(1);
+    expect(insertA[0]!.sql).toContain('properties');
+    expect(JSON.parse(String(insertA[0]!.params.at(-1)))).toEqual({ plan: 'pro', seats: 3, trial: true });
+    expect(stores.sqlFor('site-a', 'INTO event_data')).toHaveLength(0);
+    expect(stores.sqlFor('site-a', 'rollup_event_daily')).toHaveLength(1);
+
+    expect(stores.sqlFor('site-b', 'INSERT INTO website_event')).toHaveLength(1);
+    expect(stores.sqlFor('site-b', 'ev-a').length + stores.sqlFor('site-a', 'ev-b').length).toBe(0);
+    expect(stores.sqlFor('site-a', 'INSERT INTO website_event')[0]!.params).not.toContain('ev-b');
+  });
+
+  it('falls back per message for one failing website without touching the others', async () => {
+    const d1 = new FakeD1Database();
+    const stores = new FakeSiteStores();
+    stores.failing.add('site-bad');
+    const good = eventFor('ev-good', 'site-good');
+    const bad = eventFor('ev-bad', 'site-bad');
+
+    await worker.queue(createBatch([good, bad]) as unknown as MessageBatch<QueueMessage>, {
+      DB: d1 as unknown as D1Database,
+      SITE_STORE: stores as unknown as DurableObjectNamespace,
+      EVENT_STORE: 'do',
+    } satisfies Env);
+
+    expect(good.ack).toHaveBeenCalledTimes(1);
+    // The failing site's message went through the per-message path (query calls on its own store).
+    expect(bad.ack.mock.calls.length + bad.retry.mock.calls.length).toBe(1);
+    expect(stores.sqlFor('site-bad', 'website_event').length).toBeGreaterThan(0);
+  });
+
+  it('dual mode writes D1 first, then copies events into the stores without rollups', async () => {
+    const d1 = new FakeD1Database();
+    const stores = new FakeSiteStores();
+    const event = eventFor('ev-dual', 'site-dual', [{ dataKey: 'plan', dataType: 1, stringValue: 'team' }]);
+    const batch = createBatch([event]);
+
+    await worker.queue(batch as unknown as MessageBatch<QueueMessage>, {
+      DB: d1 as unknown as D1Database,
+      SITE_STORE: stores as unknown as DurableObjectNamespace,
+      EVENT_STORE: 'dual',
+    } satisfies Env);
+
+    expect(batch.ackAll).toHaveBeenCalledTimes(1);
+    expect(d1.statementsContaining('INSERT INTO website_event')).toHaveLength(1);
+    expect(d1.statementsContaining('INSERT INTO event_data')).toHaveLength(1);
+    expect(stores.sqlFor('site-dual', 'INSERT INTO website_event')).toHaveLength(1);
+    expect(stores.sqlFor('site-dual', 'rollup_')).toHaveLength(0);
+  });
+});

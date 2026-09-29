@@ -4,6 +4,7 @@ import type { Env } from '../env';
 import { isHostedMode } from './billing';
 import { sendEmail } from './email';
 import { queryPeriodStats } from './period-stats';
+import { siteDb } from '../lib/site-db';
 
 type ReportRow = {
   websiteId: string;
@@ -38,7 +39,7 @@ function parseRecipients(raw: string): string[] {
 async function websiteDigest(env: Env, websiteId: string, startAt: number, endAt: number) {
   const stats = await queryPeriodStats(env, websiteId, startAt, endAt);
 
-  const topPages = await env.DB.prepare(
+  const topPages = await siteDb(env, websiteId).prepare(
     `SELECT url_path as path, COUNT(*) as views
      FROM website_event
      WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3
@@ -50,7 +51,7 @@ async function websiteDigest(env: Env, websiteId: string, startAt: number, endAt
     .bind(websiteId, startAt, endAt, EVENT_TYPE.pageView)
     .all<{ path: string; views: number }>();
 
-  const topReferrers = await env.DB.prepare(
+  const topReferrers = await siteDb(env, websiteId).prepare(
     `SELECT COALESCE(NULLIF(referrer_domain, ''), '(direct)') as referrer, COUNT(*) as views
      FROM website_event
      WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3

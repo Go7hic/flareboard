@@ -79,11 +79,22 @@ Pass `segmentId` on stats/metrics/pageviews to apply segment filters (`country`,
 
 | Method | Path | Auth |
 |--------|------|------|
-| GET | `/api/websites/:websiteId/replays` | Bearer |
+| GET | `/api/websites/:websiteId/replays` | Bearer — filters below |
 | GET | `/api/websites/:websiteId/replays/:visitId` | Bearer — parallel R2 chunk load |
 | GET/POST | `/api/websites/:websiteId/replays/saved` | Bearer |
 | PATCH/DELETE | `/api/websites/:websiteId/replays/saved/:savedReplayId` | Bearer |
+| GET/POST | `/api/websites/:websiteId/replays/:visitId/shares` | Bearer — public links; POST `{ expiresInDays?: 1-365 \| null }` |
+| DELETE | `/api/websites/:websiteId/replays/shares/:shareId` | Bearer — revoke a link |
+| GET | `/api/replay-shares/:token` | — one shared replay (events + duration), 404 once expired or revoked |
 | POST | `/api/record` | — (ingest) rrweb chunks → D1 + R2 |
+
+Replay list query: `startAt` / `endAt` (by replay start), `minDurationMs`, `maxDurationMs`,
+`hasErrors=true|false` (error events or console errors), `distinctId`, `event` (event name
+performed), `url` (a pageview path containing it), `filters` (JSON array of property filters, as
+in insights: event / person / dimension such as `country`, `browser`, `device`, `path`),
+`sort=newest|oldest|longest|shortest|most_active|most_errors`, `limit` (≤ 500). Rows carry
+activity counters (clicks, inputs, console messages by level, failed requests), the entry path
+and the session's country / browser / OS / device / distinct id.
 
 Load **`script.js` before `recorder.js`** on tracked pages so session IDs align between analytics and replay.
 
@@ -146,7 +157,12 @@ Saved insights are the PostHog-style analysis layer used by the dashboard and bo
 |--------|------|------|
 | GET/POST | `/api/websites/:websiteId/feature-flags` | Bearer |
 | POST | `/api/websites/:websiteId/feature-flags/evaluate` | Bearer |
+| POST | `/api/websites/:websiteId/feature-flags/evaluate-all` (all flags for a `distinctId`; stored person properties merged under supplied `personProperties`) | Bearer |
+| GET | `/api/websites/:websiteId/feature-flags/definitions` (condition groups, payloads, cohorts for SDK local evaluation; server-side only) | Bearer |
+| GET | `/api/websites/:websiteId/feature-flags/early-access?distinctId=` | Bearer |
+| PUT | `/api/websites/:websiteId/feature-flags/early-access/:flagKey/enrollment` (`{ distinctId, enrolled }`) | Bearer |
 | GET/PATCH/DELETE | `/api/websites/:websiteId/feature-flags/:flagId` | Bearer |
+| GET | `/api/websites/:websiteId/feature-flags/:flagId/history?page=&pageSize=` | Bearer |
 | GET/POST | `/api/websites/:websiteId/experiments` | Bearer |
 | GET/PATCH/DELETE | `/api/websites/:websiteId/experiments/:experimentId` | Bearer |
 | GET | `/api/websites/:websiteId/experiments/:experimentId/results` | Bearer |
@@ -160,11 +176,61 @@ Saved insights are the PostHog-style analysis layer used by the dashboard and bo
 | GET | `/api/websites/:websiteId/surveys/feedback` | Bearer |
 | PATCH/DELETE | `/api/websites/:websiteId/surveys/:surveyId` | Bearer |
 | GET | `/api/websites/:websiteId/surveys/:surveyId/responses` | Bearer |
+| GET | `/api/websites/:websiteId/surveys/:surveyId/export` | Bearer |
 | GET/POST | `/api/websites/:websiteId/workflows` | Bearer |
 | PATCH/DELETE | `/api/websites/:websiteId/workflows/:workflowId` | Bearer |
 | GET | `/api/websites/:websiteId/workflows/:workflowId/executions` | Bearer |
+| GET | `/api/websites/:websiteId/workflows/:workflowId/executions/:executionId` | Bearer |
+| POST | `/api/websites/:websiteId/workflows/:workflowId/test` | Bearer |
+| GET | `/api/websites/:websiteId/workflows/:workflowId/sample-event` | Bearer |
+| POST | `/api/websites/:websiteId/workflows/:workflowId/rotate-secret` | Bearer |
 
-Public survey responses are collected by the ingest worker at `POST /api/surveys/response`.
+Surveys hold up to 10 `questions` with branching, plus targeting (`sampleRate`, `responseLimit`, `startsAt`, `endsAt`, `repeatIntervalDays`), hosting (`hostedEnabled`, `slug`) and `appearance`; see `packages/shared/src/survey-flow.ts`. The single-question fields (`question`, `type`, `options`) are still accepted and mirror the first question.
+
+`…/responses` and `…/export` accept `startAt` / `endAt` (ms), `status` (`complete` | `partial`), `q` and `path`. `…/responses` returns `results` (per-question distributions, NPS, choice counts, text answers with sentiment, drop-off and a daily trend) and the latest 100 responses; `…/export` returns CSV with one column per question.
+
+Public survey responses are collected by the ingest worker at `POST /api/surveys/response` (see [ingest.md](./ingest.md#surveys)).
+
+### Workflows
+
+A workflow is a trigger event, optional trigger `filters` (AND-ed `{ field, key, operator, value }`
+conditions on event properties, person properties, `path`, `url` or `hostname`) and an ordered list of
+`steps`: `delay` (`minutes`, up to 7 days each and 30 days per flow), `condition` (stop unless the conditions hold, person properties
+re-read at that moment), `webhook` (`url`, `method`, `headers`, JSON `body` template), `email` (`to`,
+`subject`, `body`) and `slack` (`webhookUrl`, `message`). No steps means executions are only recorded. The old
+`actionType` / `actionConfig` body is still accepted and converted to one step.
+
+Templates use `{{event.name}}`, `{{event.properties.<key>}}`, `{{event.url}}`, `{{event.path}}`,
+`{{event.timestamp}}`, `{{event.distinct_id}}`, `{{person.properties.<key>}}`, `{{person.distinct_id}}`,
+`{{website.name}}`, `{{website.domain}}`, `{{workflow.name}}` and `{{execution.id}}`. In a webhook body a
+placeholder inside a JSON string is escaped as text; outside a string it becomes a JSON value (`null` when
+missing). An empty webhook body sends the default payload (`type`, ids, `eventName`, `event` with properties,
+`person`, `website`). Slack values are escaped so they cannot add mentions or links.
+
+Executions run durably (Cloudflare Workflows). Webhook, email and Slack deliveries that fail with a network
+error, a timeout (10 s), 408, 425, 429 or 5xx are retried up to 5 attempts, 30 s, 2 min, 8 min and 32 min
+apart; other responses fail the execution. Every attempt is recorded (`executions/:executionId` returns them
+with response code, the first 1,000 characters of the response and the next retry time). Limits per website:
+1,000 executions and 60 first delivery attempts per hour, 30 test sends per hour; ingest also limits triggers
+to 30 per minute per client IP and 10 per hour per IP and website. Logs are kept 90 days. Destinations must be
+public http(s) hosts: loopback, private, link-local and other reserved addresses, internal names, IPv6
+literals and redirects are refused.
+
+Webhook requests carry `X-Flareboard-Timestamp` (Unix seconds), `X-Flareboard-Signature: v1=<hex>` where
+hex is HMAC-SHA256 of `` `${timestamp}.${rawBody}` `` with the workflow's signing secret, plus
+`X-Flareboard-Delivery` (stable across retries of one step, for de-duplication), `X-Flareboard-Execution`,
+`X-Flareboard-Attempt` and `X-Flareboard-Event`. The secret (`whsec_…`) is returned once by create and by
+`rotate-secret`. Verify it like this:
+
+```ts
+const expected = createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex');
+const valid = timingSafeEqual(Buffer.from(`v1=${expected}`), Buffer.from(signatureHeader));
+const fresh = Math.abs(Date.now() / 1000 - Number(timestamp)) < 300;
+```
+
+`POST …/test` takes `{ event?: { name, properties, url, distinctId }, personProperties?, send?: boolean }`,
+evaluates the flow against that sample (delays skipped) and returns each step's rendered request and, with
+`send: true`, the destination's response. Test sends carry `X-Flareboard-Test: 1` and are not logged.
 
 ## Quality and observability
 
@@ -266,7 +332,7 @@ Flareboard targets a PostHog-like surface on Cloudflare Workers, D1, R2, KV, Que
 | Warehouse data sources | Scheduled HTTP JSON/CSV import with idempotent upsert by `primaryKey` | Schema inference and multi-table sync |
 | Errors | Issue workflow, alerts, source map upload, stack resolution on detail | Automatic issue assignment rules |
 | Experiments | Flag-linked A/B with apply-winner | Multivariate design tooling |
-| Workflows | Webhook and email actions from ingest triggers | Delayed or branching workflow graphs |
+| Workflows | Filtered triggers, delays, condition steps, signed webhooks, email and Slack with durable retries | Parallel branches and cross-event waits |
 
 ## Dashboard routes (SPA)
 

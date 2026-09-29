@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { syncWarehouseDataSource } from '../../src/lib/warehouse';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 describe('syncWarehouseDataSource', () => {
   beforeAll(async () => {
@@ -48,7 +49,7 @@ describe('syncWarehouseDataSource', () => {
     const second = await syncWarehouseDataSource(env, TEST_WEBSITE_ID, dataSourceId, now + 60_000);
     expect(second).toMatchObject({ ok: true, skipped: false, imported: 1 });
 
-    const row = await env.DB.prepare(
+    const row = await testSiteDb(TEST_WEBSITE_ID).prepare(
       `SELECT payload_json as payloadJson
        FROM warehouse_import
        WHERE website_id = ?1 AND data_source_id = ?2 AND primary_key = 'u-1'
@@ -87,7 +88,7 @@ describe('syncWarehouseDataSource', () => {
     const result = await syncWarehouseDataSource(env, TEST_WEBSITE_ID, dataSourceId, now);
     expect(result).toMatchObject({ ok: true, skipped: false, imported: 2 });
 
-    const row = await env.DB.prepare(
+    const row = await testSiteDb(TEST_WEBSITE_ID).prepare(
       `SELECT payload_json as payloadJson
        FROM warehouse_import
        WHERE website_id = ?1 AND data_source_id = ?2 AND primary_key = 'u-2'

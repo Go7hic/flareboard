@@ -49,6 +49,8 @@ export const team = sqliteTable(
     name: text('name').notNull(),
     accessCode: text('access_code').unique(),
     logoUrl: text('logo_url'),
+    /** Members without two-factor authentication lose access to the team until they enroll. */
+    requireTwoFactor: integer('require_two_factor', { mode: 'boolean' }).notNull().default(false),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
     deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
@@ -93,6 +95,11 @@ export const website = sqliteTable(
     // Null keeps raw event data forever; a positive value purges rows older than N days.
     retentionDays: integer('retention_days'),
     timezone: text('timezone').notNull().default('UTC'),
+    // Tracker settings (migration 0047). Autocapture is on for new websites only.
+    autocapture: integer('autocapture', { mode: 'boolean' }).notNull().default(true),
+    // Opt-in: a random localStorage visitor id replaces the monthly IP + user agent hash.
+    persistVisitors: integer('persist_visitors', { mode: 'boolean' }).notNull().default(false),
+    respectDnt: integer('respect_dnt', { mode: 'boolean' }).notNull().default(false),
   },
   (t) => [
     index('website_user_idx').on(t.userId),
@@ -100,6 +107,20 @@ export const website = sqliteTable(
     index('website_created_at_idx').on(t.createdAt),
     index('website_created_by_idx').on(t.createdBy),
   ],
+);
+
+/** Public ingest key (`fb_pk_…`) of a website, accepted wherever ingest accepts the website id. */
+export const websiteProjectKey = sqliteTable(
+  'website_project_key',
+  {
+    websiteId: text('website_id')
+      .primaryKey()
+      .references(() => website.websiteId),
+    projectKey: text('project_key').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    rotatedAt: integer('rotated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [uniqueIndex('website_project_key_key_idx').on(t.projectKey)],
 );
 
 export const session = sqliteTable(
@@ -348,6 +369,69 @@ export const userOauthIdentity = sqliteTable(
   (t) => [primaryKey({ columns: [t.provider, t.providerUserId] }), index('user_oauth_identity_user_idx').on(t.userId)],
 );
 
+/** TOTP second factor. The secret is AES-GCM encrypted; `enabledAt` is null while enrollment is pending. */
+export const userTwoFactor = sqliteTable('user_two_factor', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => user.userId),
+  secretEnc: text('secret_enc').notNull(),
+  enabledAt: integer('enabled_at', { mode: 'timestamp_ms' }),
+  /** Last accepted TOTP time step, so a code cannot be replayed within its window. */
+  lastUsedStep: integer('last_used_step'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+/** One-time recovery codes, stored only as HMAC-SHA256 hashes and deleted when used. */
+export const userRecoveryCode = sqliteTable(
+  'user_recovery_code',
+  {
+    codeHash: text('code_hash').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.userId),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [index('user_recovery_code_user_idx').on(t.userId)],
+);
+
+/** Dashboard sign-in session (`sid` in the session token). No IP address or full user agent. */
+export const userSession = sqliteTable(
+  'user_session',
+  {
+    sessionId: text('session_id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.userId),
+    /** Coarse summary such as "Chrome on macOS". */
+    device: text('device'),
+    /** How the session was started: password, google, github, sso, email. */
+    method: text('method').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [index('user_session_user_idx').on(t.userId), index('user_session_expires_idx').on(t.expiresAt)],
+);
+
+/** Personal API key (`fb_sk_…`): stored as a SHA-256 hash plus a display prefix, never in full. */
+export const personalApiKey = sqliteTable(
+  'personal_api_key',
+  {
+    keyId: text('key_id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.userId),
+    name: text('name').notNull(),
+    keyHash: text('key_hash').notNull(),
+    keyPrefix: text('key_prefix').notNull(),
+    /** Comma-separated subset of `read`, `write`. */
+    scopes: text('scopes').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    lastUsedAt: integer('last_used_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [uniqueIndex('personal_api_key_hash_idx').on(t.keyHash), index('personal_api_key_user_idx').on(t.userId)],
+);
+
 /** One row per link redirect or pixel view (not website events: no website_id). */
 export const linkPixelHit = sqliteTable(
   'link_pixel_hit',
@@ -405,6 +489,170 @@ export const insight = sqliteTable(
   ],
 );
 
+/** "Ask Flareboard" conversations (apps/api/src/lib/assistant.ts). One owner per conversation. */
+export const aiConversation = sqliteTable(
+  'ai_conversation',
+  {
+    conversationId: text('conversation_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.userId),
+    title: text('title').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [
+    index('ai_conversation_owner_idx').on(t.userId, t.websiteId, t.updatedAt),
+    index('ai_conversation_updated_idx').on(t.updatedAt),
+  ],
+);
+
+export const aiMessage = sqliteTable(
+  'ai_message',
+  {
+    messageId: text('message_id').primaryKey(),
+    conversationId: text('conversation_id')
+      .notNull()
+      .references(() => aiConversation.conversationId),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.userId),
+    /** `user` | `assistant` */
+    role: text('role').notNull(),
+    /** JSON: user text, or the assistant answer with its tool calls and rendered results. */
+    content: text('content').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [index('ai_message_conversation_idx').on(t.conversationId, t.createdAt)],
+);
+
+/** Per-account daily assistant usage (hosted-mode cap). Counts only. */
+export const aiUsageDaily = sqliteTable(
+  'ai_usage_daily',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.userId),
+    day: text('day').notNull(),
+    requests: integer('requests').notNull().default(0),
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.day] })],
+);
+
+/** Threshold alert on a trend insight, checked by the hourly cron once per `checkInterval`. */
+export const insightAlert = sqliteTable(
+  'insight_alert',
+  {
+    alertId: text('alert_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    insightId: text('insight_id')
+      .notNull()
+      .references(() => insight.insightId),
+    name: text('name').notNull(),
+    /** value_above | value_below | increase_above | decrease_above (percent vs previous interval). */
+    condition: text('condition').notNull(),
+    threshold: real('threshold').notNull(),
+    /** Trend result line: series letter (A…E) or `formula`. */
+    seriesKey: text('series_key').notNull().default('A'),
+    checkInterval: text('check_interval').notNull().default('day'),
+    channel: text('channel').notNull().default('email'),
+    target: text('target'),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    snoozedUntil: integer('snoozed_until', { mode: 'timestamp_ms' }),
+    lastCheckedAt: integer('last_checked_at', { mode: 'timestamp_ms' }),
+    lastState: text('last_state'),
+    createdBy: text('created_by').references(() => user.userId),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [
+    index('insight_alert_website_idx').on(t.websiteId, t.enabled),
+    index('insight_alert_insight_idx').on(t.insightId),
+  ],
+);
+
+export const insightAlertCheck = sqliteTable(
+  'insight_alert_check',
+  {
+    checkId: text('check_id').primaryKey(),
+    alertId: text('alert_id')
+      .notNull()
+      .references(() => insightAlert.alertId),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    intervalStart: integer('interval_start').notNull(),
+    intervalEnd: integer('interval_end').notNull(),
+    value: real('value'),
+    previousValue: real('previous_value'),
+    /** firing | ok | error */
+    state: text('state').notNull(),
+    delivered: integer('delivered', { mode: 'boolean' }).notNull().default(false),
+    error: text('error'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [uniqueIndex('insight_alert_check_interval_idx').on(t.alertId, t.intervalStart)],
+);
+
+/** Scheduled email summary of a board (websiteId null) or of an insight. */
+export const reportSubscription = sqliteTable(
+  'report_subscription',
+  {
+    subscriptionId: text('subscription_id').primaryKey(),
+    websiteId: text('website_id').references(() => website.websiteId),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.userId),
+    targetType: text('target_type').notNull(),
+    targetId: text('target_id').notNull(),
+    title: text('title').notNull(),
+    frequency: text('frequency').notNull(),
+    weekday: integer('weekday').notNull().default(1),
+    hour: integer('hour').notNull().default(8),
+    timezone: text('timezone').notNull().default('UTC'),
+    /** JSON array of email addresses. */
+    recipients: text('recipients', { mode: 'json' }).notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    nextRunAt: integer('next_run_at').notNull(),
+    lastSentAt: integer('last_sent_at', { mode: 'timestamp_ms' }),
+    lastError: text('last_error'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [
+    index('report_subscription_due_idx').on(t.enabled, t.nextRunAt),
+    index('report_subscription_target_idx').on(t.targetType, t.targetId),
+  ],
+);
+
+/** Website-scoped document of text, insight and replay blocks. */
+export const notebook = sqliteTable(
+  'notebook',
+  {
+    notebookId: text('notebook_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    title: text('title').notNull(),
+    content: text('content', { mode: 'json' }).notNull(),
+    createdBy: text('created_by').references(() => user.userId),
+    updatedBy: text('updated_by').references(() => user.userId),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('notebook_website_idx').on(t.websiteId, t.updatedAt)],
+);
+
 export const share = sqliteTable(
   'share',
   {
@@ -436,6 +684,12 @@ export const sessionReplay = sqliteTable(
     startedAt: integer('started_at', { mode: 'timestamp_ms' }).notNull(),
     endedAt: integer('ended_at', { mode: 'timestamp_ms' }).notNull(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    clickCount: integer('click_count').notNull().default(0),
+    inputCount: integer('input_count').notNull().default(0),
+    consoleLogCount: integer('console_log_count').notNull().default(0),
+    consoleWarnCount: integer('console_warn_count').notNull().default(0),
+    consoleErrorCount: integer('console_error_count').notNull().default(0),
+    networkErrorCount: integer('network_error_count').notNull().default(0),
   },
   (t) => [
     index('session_replay_website_idx').on(t.websiteId),
@@ -548,6 +802,12 @@ export const sessionReplaySummary = sqliteTable(
     endedAt: integer('ended_at', { mode: 'timestamp_ms' }).notNull(),
     eventCount: integer('event_count').notNull().default(0),
     chunks: integer('chunks').notNull().default(0),
+    clickCount: integer('click_count').notNull().default(0),
+    inputCount: integer('input_count').notNull().default(0),
+    consoleLogCount: integer('console_log_count').notNull().default(0),
+    consoleWarnCount: integer('console_warn_count').notNull().default(0),
+    consoleErrorCount: integer('console_error_count').notNull().default(0),
+    networkErrorCount: integer('network_error_count').notNull().default(0),
   },
   (t) => [index('session_replay_summary_website_started_idx').on(t.websiteId, t.startedAt)],
 );
@@ -609,6 +869,32 @@ export const websiteEmailReport = sqliteTable('website_email_report', {
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
 });
 
+/** LLM analytics: whether AI events keep prompt/response content (no row = yes). */
+export const llmWebsiteSetting = sqliteTable('llm_website_setting', {
+  websiteId: text('website_id')
+    .primaryKey()
+    .references(() => website.websiteId),
+  captureContent: integer('capture_content', { mode: 'boolean' }).notNull().default(true),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+/** LLM analytics: per-website model prices (USD per 1M tokens) replacing the built-in table. */
+export const llmModelPrice = sqliteTable(
+  'llm_model_price',
+  {
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    model: text('model').notNull(),
+    inputPerMillion: real('input_per_million').notNull(),
+    outputPerMillion: real('output_per_million').notNull(),
+    cacheReadPerMillion: real('cache_read_per_million'),
+    cacheWritePerMillion: real('cache_write_per_million'),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.websiteId, t.model] })],
+);
+
 export const cohort = sqliteTable(
   'cohort',
   {
@@ -637,15 +923,26 @@ export const featureFlag = sqliteTable(
     name: text('name').notNull(),
     description: text('description').notNull().default(''),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    /** @deprecated mirror of the first condition group, kept for older readers (migration 0045). */
     rollout: integer('rollout').notNull().default(100),
+    /** Variants with weights and optional per-variant `payload`. */
     variants: text('variants', { mode: 'json' }),
+    /** @deprecated mirror of the first condition group, kept for older readers (migration 0045). */
     targetingRules: text('targeting_rules', { mode: 'json' }),
+    /** OR-ed release condition groups; NULL means "derive one group from the legacy columns". */
+    conditionGroups: text('condition_groups', { mode: 'json' }),
+    /** Raw JSON payload of a boolean flag (see parsePayloadColumn). */
+    payload: text('payload'),
+    earlyAccess: integer('early_access', { mode: 'boolean' }).notNull().default(false),
+    earlyAccessName: text('early_access_name').notNull().default(''),
+    earlyAccessDescription: text('early_access_description').notNull().default(''),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
   },
   (t) => [
     index('feature_flag_website_idx').on(t.websiteId),
     index('feature_flag_website_key_idx').on(t.websiteId, t.key),
+    index('feature_flag_website_early_access_idx').on(t.websiteId, t.earlyAccess),
   ],
 );
 
@@ -662,7 +959,15 @@ export const experiment = sqliteTable(
     name: text('name').notNull(),
     description: text('description').notNull().default(''),
     status: text('status').notNull().default('draft'),
+    /** Event of the primary metric, kept in sync for older readers. */
     goalEvent: text('goal_event').notNull(),
+    /** ExperimentMetric JSON (null only on rows created before migration 0044). */
+    primaryMetric: text('primary_metric', { mode: 'json' }),
+    secondaryMetrics: text('secondary_metrics', { mode: 'json' }).notNull().default([]),
+    /** Relative lift in percent the sample-size guidance plans for (null = default). */
+    minimumDetectableEffect: real('minimum_detectable_effect'),
+    /** ExperimentAllocation JSON captured when the experiment starts. */
+    allocation: text('allocation', { mode: 'json' }),
     startedAt: integer('started_at', { mode: 'timestamp_ms' }),
     endedAt: integer('ended_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
@@ -736,12 +1041,23 @@ export const survey = sqliteTable(
     displayRules: text('display_rules', { mode: 'json' }).$type<
       Array<{ field: string; operator: string; value: string; key?: string }>
     >(),
+    /** JSON array of questions (packages/shared/src/surveys.ts). NULL = legacy columns only. */
+    questions: text('questions', { mode: 'json' }).$type<unknown[]>(),
+    appearance: text('appearance', { mode: 'json' }).$type<Record<string, unknown>>(),
+    sampleRate: integer('sample_rate').notNull().default(100),
+    responseLimit: integer('response_limit'),
+    startsAt: integer('starts_at'),
+    endsAt: integer('ends_at'),
+    repeatIntervalDays: integer('repeat_interval_days'),
+    hostedEnabled: integer('hosted_enabled', { mode: 'boolean' }).notNull().default(false),
+    slug: text('slug'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
   },
   (t) => [
     index('survey_website_idx').on(t.websiteId),
     index('survey_website_enabled_idx').on(t.websiteId, t.enabled),
+    uniqueIndex('survey_slug_unique').on(t.slug),
   ],
 );
 
@@ -759,10 +1075,17 @@ export const surveyResponse = sqliteTable(
     visitId: text('visit_id'),
     answer: text('answer').notNull(),
     urlPath: text('url_path'),
+    /** JSON object keyed by question id. NULL on rows written before migration 0049's backfill. */
+    answers: text('answers', { mode: 'json' }).$type<Record<string, unknown>>(),
+    completed: integer('completed', { mode: 'boolean' }).notNull().default(true),
+    source: text('source').notNull().default('widget'),
+    distinctId: text('distinct_id'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
   },
   (t) => [
     index('survey_response_survey_idx').on(t.surveyId),
+    index('survey_response_survey_created_idx').on(t.surveyId, t.createdAt),
     index('survey_response_website_created_idx').on(t.websiteId, t.createdAt),
     index('survey_response_session_idx').on(t.sessionId),
   ],
@@ -778,8 +1101,17 @@ export const workflow = sqliteTable(
     name: text('name').notNull(),
     triggerEvent: text('trigger_event').notNull(),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    /** Summary of the first action step, kept for older readers (see migration 0050). */
     actionType: text('action_type').notNull().default('record'),
     actionConfig: text('action_config', { mode: 'json' }),
+    description: text('description').notNull().default(''),
+    /** JSON array of AND-ed trigger conditions (WorkflowCondition in @flareboard/shared). */
+    triggerFilters: text('trigger_filters'),
+    /** JSON array of ordered flow steps (WorkflowStep in @flareboard/shared). */
+    steps: text('steps'),
+    /** HMAC key for the X-Flareboard-Signature webhook header. Never returned after creation. */
+    signingSecret: text('signing_secret'),
+    signingSecretRotatedAt: integer('signing_secret_rotated_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
   },
@@ -806,12 +1138,52 @@ export const workflowExecution = sqliteTable(
     eventName: text('event_name'),
     status: text('status').notNull().default('recorded'),
     error: text('error'),
+    distinctId: text('distinct_id'),
+    currentStep: integer('current_step'),
+    attempts: integer('attempts').notNull().default(0),
+    responseCode: integer('response_code'),
+    nextRetryAt: integer('next_retry_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+    completedAt: integer('completed_at', { mode: 'timestamp_ms' }),
   },
   (t) => [
     index('workflow_execution_workflow_idx').on(t.workflowId),
     index('workflow_execution_website_created_idx').on(t.websiteId, t.createdAt),
     index('workflow_execution_session_idx').on(t.sessionId),
+    index('workflow_execution_created_idx').on(t.createdAt),
+    index('workflow_execution_workflow_created_idx').on(t.workflowId, t.createdAt),
+  ],
+);
+
+/** One row per step outcome of an execution: delivery attempts, condition results, delays. */
+export const workflowExecutionAttempt = sqliteTable(
+  'workflow_execution_attempt',
+  {
+    attemptId: text('attempt_id').primaryKey(),
+    executionId: text('execution_id')
+      .notNull()
+      .references(() => workflowExecution.executionId),
+    workflowId: text('workflow_id')
+      .notNull()
+      .references(() => workflow.workflowId),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    stepIndex: integer('step_index').notNull(),
+    stepType: text('step_type').notNull(),
+    attempt: integer('attempt').notNull().default(1),
+    status: text('status').notNull(),
+    responseCode: integer('response_code'),
+    error: text('error'),
+    responseBody: text('response_body'),
+    durationMs: integer('duration_ms'),
+    nextRetryAt: integer('next_retry_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [
+    index('workflow_execution_attempt_execution_idx').on(t.executionId, t.createdAt),
+    index('workflow_execution_attempt_website_created_idx').on(t.websiteId, t.createdAt),
   ],
 );
 
@@ -825,6 +1197,9 @@ export const errorIssueState = sqliteTable(
     status: text('status').notNull().default('open'),
     note: text('note'),
     assigneeUserId: text('assignee_user_id').references(() => user.userId),
+    resolvedAt: integer('resolved_at', { mode: 'timestamp_ms' }),
+    regressedAt: integer('regressed_at', { mode: 'timestamp_ms' }),
+    regressionCheckedAt: integer('regression_checked_at', { mode: 'timestamp_ms' }),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
   },
@@ -832,6 +1207,46 @@ export const errorIssueState = sqliteTable(
     primaryKey({ columns: [t.websiteId, t.fingerprint] }),
     index('error_issue_state_website_status_idx').on(t.websiteId, t.status),
   ],
+);
+
+/** Merging issue B into A stores B -> A; events keep their fingerprint and are mapped at query time. */
+export const errorIssueMerge = sqliteTable(
+  'error_issue_merge',
+  {
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    sourceFingerprint: text('source_fingerprint').notNull(),
+    targetFingerprint: text('target_fingerprint').notNull(),
+    sourceName: text('source_name'),
+    sourceMessage: text('source_message'),
+    mergedBy: text('merged_by').references(() => user.userId),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.websiteId, t.sourceFingerprint] }),
+    index('error_issue_merge_target_idx').on(t.websiteId, t.targetFingerprint),
+  ],
+);
+
+/** One row per time a resolved issue occurred again. */
+export const errorIssueRegression = sqliteTable(
+  'error_issue_regression',
+  {
+    regressionId: text('regression_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    fingerprint: text('fingerprint').notNull(),
+    eventId: text('event_id'),
+    release: text('release'),
+    environment: text('environment'),
+    resolvedAt: integer('resolved_at', { mode: 'timestamp_ms' }),
+    occurredAt: integer('occurred_at', { mode: 'timestamp_ms' }).notNull(),
+    detectedAt: integer('detected_at', { mode: 'timestamp_ms' }).notNull(),
+    notifiedAt: integer('notified_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('error_issue_regression_issue_idx').on(t.websiteId, t.fingerprint, t.detectedAt)],
 );
 
 export const errorIssueComment = sqliteTable(
@@ -858,7 +1273,9 @@ export const errorSourceMap = sqliteTable(
       .references(() => website.websiteId),
     release: text('release').notNull(),
     file: text('file').notNull(),
+    /** Legacy inline map; '' once the content lives in R2 under `objectKey`. */
     content: text('content').notNull(),
+    objectKey: text('object_key'),
     size: integer('size').notNull(),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
@@ -885,6 +1302,7 @@ export const errorAlertRule = sqliteTable(
     environment: text('environment'),
     channel: text('channel').notNull().default('record'),
     target: text('target'),
+    notifyRegressions: integer('notify_regressions', { mode: 'boolean' }).notNull().default(true),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
   },
@@ -943,6 +1361,8 @@ export const logAlertRule = sqliteTable(
     search: text('search'),
     release: text('release'),
     environment: text('environment'),
+    attributeKey: text('attribute_key'),
+    attributeValue: text('attribute_value'),
     channel: text('channel').notNull().default('record'),
     target: text('target'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
@@ -1105,6 +1525,186 @@ export const warehouseImport = sqliteTable(
   ],
 );
 
+/** Connector secrets (Stripe restricted keys), encrypted with a key derived from APP_SECRET. */
+export const warehouseCredential = sqliteTable(
+  'warehouse_credential',
+  {
+    dataSourceId: text('data_source_id').primaryKey(),
+    websiteId: text('website_id').notNull(),
+    kind: text('kind').notNull(),
+    ciphertext: text('ciphertext').notNull(),
+    hint: text('hint'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [index('warehouse_credential_website_idx').on(t.websiteId)],
+);
+
+/** Incremental sync cursor of a data source (lib/stripe-connector.ts). */
+export const warehouseSyncState = sqliteTable(
+  'warehouse_sync_state',
+  {
+    dataSourceId: text('data_source_id').primaryKey(),
+    websiteId: text('website_id').notNull(),
+    stateJson: text('state_json').notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [index('warehouse_sync_state_website_idx').on(t.websiteId)],
+);
+
+/*
+ * Stripe connector tables (SITE_TABLES: website store, or D1 in legacy mode). Timestamps are
+ * milliseconds, amounts Stripe minor units, *_major columns decimal units in `currency`.
+ */
+export const stripeCustomer = sqliteTable(
+  'stripe_customer',
+  {
+    websiteId: text('website_id').notNull(),
+    dataSourceId: text('data_source_id').notNull(),
+    customerId: text('customer_id').notNull(),
+    email: text('email'),
+    name: text('name'),
+    distinctId: text('distinct_id'),
+    deleted: integer('deleted').notNull().default(0),
+    metadataJson: text('metadata_json'),
+    payloadJson: text('payload_json').notNull(),
+    createdAt: integer('created_at'),
+    syncedAt: integer('synced_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.dataSourceId, t.customerId] }),
+    index('stripe_customer_website_idx').on(t.websiteId, t.createdAt),
+    index('stripe_customer_distinct_idx').on(t.websiteId, t.distinctId),
+  ],
+);
+
+export const stripeCharge = sqliteTable(
+  'stripe_charge',
+  {
+    websiteId: text('website_id').notNull(),
+    dataSourceId: text('data_source_id').notNull(),
+    chargeId: text('charge_id').notNull(),
+    customerId: text('customer_id'),
+    invoiceId: text('invoice_id'),
+    status: text('status'),
+    paid: integer('paid').notNull().default(0),
+    amount: integer('amount').notNull().default(0),
+    amountRefunded: integer('amount_refunded').notNull().default(0),
+    currency: text('currency').notNull(),
+    amountMajor: real('amount_major').notNull().default(0),
+    payloadJson: text('payload_json').notNull(),
+    createdAt: integer('created_at').notNull(),
+    syncedAt: integer('synced_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.dataSourceId, t.chargeId] }),
+    index('stripe_charge_website_created_idx').on(t.websiteId, t.createdAt),
+    index('stripe_charge_customer_idx').on(t.websiteId, t.customerId),
+  ],
+);
+
+export const stripeRefund = sqliteTable(
+  'stripe_refund',
+  {
+    websiteId: text('website_id').notNull(),
+    dataSourceId: text('data_source_id').notNull(),
+    refundId: text('refund_id').notNull(),
+    chargeId: text('charge_id'),
+    status: text('status'),
+    amount: integer('amount').notNull().default(0),
+    currency: text('currency').notNull(),
+    amountMajor: real('amount_major').notNull().default(0),
+    payloadJson: text('payload_json').notNull(),
+    createdAt: integer('created_at').notNull(),
+    syncedAt: integer('synced_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.dataSourceId, t.refundId] }),
+    index('stripe_refund_website_created_idx').on(t.websiteId, t.createdAt),
+  ],
+);
+
+export const stripeInvoice = sqliteTable(
+  'stripe_invoice',
+  {
+    websiteId: text('website_id').notNull(),
+    dataSourceId: text('data_source_id').notNull(),
+    invoiceId: text('invoice_id').notNull(),
+    customerId: text('customer_id'),
+    subscriptionId: text('subscription_id'),
+    status: text('status'),
+    currency: text('currency').notNull(),
+    total: integer('total').notNull().default(0),
+    amountPaid: integer('amount_paid').notNull().default(0),
+    amountPaidMajor: real('amount_paid_major').notNull().default(0),
+    periodStart: integer('period_start'),
+    periodEnd: integer('period_end'),
+    paidAt: integer('paid_at'),
+    payloadJson: text('payload_json').notNull(),
+    createdAt: integer('created_at').notNull(),
+    syncedAt: integer('synced_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.dataSourceId, t.invoiceId] }),
+    index('stripe_invoice_website_created_idx').on(t.websiteId, t.createdAt),
+  ],
+);
+
+export const stripeInvoiceLine = sqliteTable(
+  'stripe_invoice_line',
+  {
+    websiteId: text('website_id').notNull(),
+    dataSourceId: text('data_source_id').notNull(),
+    invoiceId: text('invoice_id').notNull(),
+    lineId: text('line_id').notNull(),
+    customerId: text('customer_id'),
+    subscriptionId: text('subscription_id'),
+    priceId: text('price_id'),
+    interval: text('interval'),
+    intervalCount: integer('interval_count'),
+    quantity: integer('quantity'),
+    proration: integer('proration').notNull().default(0),
+    amount: integer('amount').notNull().default(0),
+    currency: text('currency').notNull(),
+    amountMajor: real('amount_major').notNull().default(0),
+    mrrMajor: real('mrr_major').notNull().default(0),
+    periodStart: integer('period_start'),
+    periodEnd: integer('period_end'),
+    syncedAt: integer('synced_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.dataSourceId, t.invoiceId, t.lineId] }),
+    index('stripe_invoice_line_period_idx').on(t.websiteId, t.periodEnd),
+  ],
+);
+
+export const stripeSubscription = sqliteTable(
+  'stripe_subscription',
+  {
+    websiteId: text('website_id').notNull(),
+    dataSourceId: text('data_source_id').notNull(),
+    subscriptionId: text('subscription_id').notNull(),
+    customerId: text('customer_id'),
+    status: text('status'),
+    currency: text('currency'),
+    mrrMajor: real('mrr_major').notNull().default(0),
+    startDate: integer('start_date'),
+    canceledAt: integer('canceled_at'),
+    endedAt: integer('ended_at'),
+    cancelAtPeriodEnd: integer('cancel_at_period_end').notNull().default(0),
+    currentPeriodStart: integer('current_period_start'),
+    currentPeriodEnd: integer('current_period_end'),
+    trialEnd: integer('trial_end'),
+    payloadJson: text('payload_json').notNull(),
+    createdAt: integer('created_at').notNull(),
+    syncedAt: integer('synced_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.dataSourceId, t.subscriptionId] }),
+    index('stripe_subscription_website_idx').on(t.websiteId, t.createdAt),
+  ],
+);
+
 export const sessionReplaySaved = sqliteTable(
   'session_replay_saved',
   {
@@ -1121,6 +1721,26 @@ export const sessionReplaySaved = sqliteTable(
     index('session_replay_saved_website_idx').on(t.websiteId),
     index('session_replay_saved_visit_idx').on(t.visitId),
     index('session_replay_saved_website_created_idx').on(t.websiteId, t.createdAt),
+  ],
+);
+
+/** Public, revocable link to one replay (token in the URL, optional expiry). */
+export const sessionReplayShare = sqliteTable(
+  'session_replay_share',
+  {
+    shareId: text('share_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    visitId: text('visit_id').notNull(),
+    token: text('token').notNull(),
+    createdBy: text('created_by').references(() => user.userId),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('session_replay_share_token_idx').on(t.token),
+    index('session_replay_share_visit_idx').on(t.websiteId, t.visitId),
   ],
 );
 
@@ -1148,6 +1768,7 @@ export type Survey = typeof survey.$inferSelect;
 export type SurveyResponse = typeof surveyResponse.$inferSelect;
 export type Workflow = typeof workflow.$inferSelect;
 export type WorkflowExecution = typeof workflowExecution.$inferSelect;
+export type WorkflowExecutionAttempt = typeof workflowExecutionAttempt.$inferSelect;
 export type ErrorIssueState = typeof errorIssueState.$inferSelect;
 export type ErrorIssueComment = typeof errorIssueComment.$inferSelect;
 export type ErrorSourceMap = typeof errorSourceMap.$inferSelect;

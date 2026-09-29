@@ -7,7 +7,14 @@ import { handleTrackerConfig } from './routes/tracker-config';
 import { handleLinkRedirect, handleLinkRedirectApi, handlePixelGif } from './routes/public';
 import { handleActiveUsers } from './routes/active';
 import { handleRecord } from './routes/record';
-import { handleSurveyResponse } from './routes/surveys';
+import { handleActiveSurveys, handleHostedSurvey, handleSurveyResponse } from './routes/surveys';
+import {
+  handleCapture as handlePostHogCapture,
+  handleFlags as handlePostHogFlags,
+  handleRemoteConfig as handlePostHogRemoteConfig,
+  handleRemoteConfigJs as handlePostHogRemoteConfigJs,
+} from './routes/posthog';
+import { handleOtlpLogs, handleOtlpTraces } from './routes/otlp';
 import { json } from './lib/response';
 
 export { RateLimiter } from '@flareboard/rate-limiter';
@@ -18,7 +25,7 @@ app.use(
   '*',
   cors({
     origin: '*',
-    allowHeaders: ['Content-Type', 'Authorization', 'x-flareboard-cache'],
+    allowHeaders: ['Content-Type', 'Content-Encoding', 'Authorization', 'x-flareboard-cache', 'x-flareboard-key'],
     maxAge: 86400,
   }),
 );
@@ -38,8 +45,26 @@ app.post('/api/send', (c) => handleSend(c));
 app.post('/api/batch', (c) => handleBatch(c));
 app.post('/api/record', (c) => handleRecord(c));
 app.post('/api/surveys/response', (c) => handleSurveyResponse(c));
+app.get('/api/surveys', (c) => handleActiveSurveys(c));
+app.get('/api/surveys/hosted/:key', (c) => handleHostedSurvey(c));
 app.post('/api/feature-flags/evaluate', (c) => handleFeatureFlagEvaluate(c));
 app.get('/api/heartbeat', (c) => handleHeartbeat(c));
+
+// PostHog-compatible ingestion (docs/ingest-posthog-compat.md). SDKs call these with and without
+// the trailing slash.
+for (const path of ['/capture', '/e', '/i/v0/e', '/batch', '/track']) {
+  app.post(path, (c) => handlePostHogCapture(c));
+  app.post(`${path}/`, (c) => handlePostHogCapture(c));
+}
+for (const path of ['/decide', '/flags']) {
+  app.post(path, (c) => handlePostHogFlags(c));
+  app.post(`${path}/`, (c) => handlePostHogFlags(c));
+}
+// OpenTelemetry (OTLP/HTTP) logs and traces, docs/logs-otlp.md.
+app.post('/v1/logs', (c) => handleOtlpLogs(c));
+app.post('/v1/traces', (c) => handleOtlpTraces(c));
+app.get('/array/:token/config', (c) => handlePostHogRemoteConfig(c));
+app.get('/array/:token/config.js', (c) => handlePostHogRemoteConfigJs(c));
 app.get('/api/tracker-config', (c) => handleTrackerConfig(c));
 app.get('/api/websites/:websiteId/active', (c) => handleActiveUsers(c));
 app.get('/script.js', (c) => handleScript(c));

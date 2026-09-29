@@ -2,6 +2,8 @@ import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from './helpers/migrations';
 import { fetchWorker, fetchWorkerJson } from './helpers/fetch-worker';
+import { fetchWorkerWithEnv, recordingQueue } from './helpers/queue';
+import { testSiteDb } from './helpers/site-db';
 
 describe('ingest integration', () => {
   it('GET / returns service metadata', async () => {
@@ -29,11 +31,11 @@ describe('ingest integration', () => {
     const response = await fetchWorker('/script.js');
     const text = await response.text();
 
-    expect(text).toContain('identify:function');
+    // Behavior is covered in test-node/ (the script runs in a fake browser there).
+    for (const method of ['identify', 'alias', 'reset', 'getDistinctId', 'register', 'optOut', 'getFeatureFlagPayload', 'onFeatureFlags']) {
+      expect(text).toMatch(new RegExp(`[{,]${method}:`));
+    }
     expect(text).toContain('setDistinctId');
-    expect(text).toContain('alias:function');
-    expect(text).toContain('reset:function');
-    expect(text).toContain('getDistinctId:function');
   });
 
   it('GET /recorder.js returns recorder JavaScript', async () => {
@@ -47,12 +49,14 @@ describe('ingest integration', () => {
   it('GET /recorder.js applies replay privacy settings from tracker config', async () => {
     const text = await (await fetchWorker('/recorder.js')).text();
     expect(text).toContain('/api/tracker-config?website=');
-    expect(text).toContain('maskAllInputs:r.maskInputs!==false');
-    expect(text).toContain('o.blockSelector=r.blockSelector');
+    expect(text).toContain('maskAllInputs:true');
+    expect(text).toContain('blockSelector:join(BLOCK,validSel(r.blockSelector))');
     expect(text).toContain("'flareboard.rec.sample.'+vid");
+    expect(text).toContain("optKey='flareboard.opt_out'");
     // rrweb must receive the options object, never a bare {emit}.
-    expect(text).toContain('w.rrweb.record(options)');
-    expect(text).not.toContain('w.rrweb.record({emit');
+    expect(text).toContain('stop=rec(options)');
+    expect(text).not.toContain('record({emit');
+    // Behavior is covered by test-node/recorder.test.ts.
   });
 });
 
@@ -133,7 +137,7 @@ describe('POST /api/send', () => {
     expect(body.cache).toBeTruthy();
   });
 
-  it('records workflow executions when an event matches an enabled workflow', async () => {
+  it('queues a workflow trigger when an event matches an enabled workflow', async () => {
     await seedTestWebsite(env.DB);
     const now = Date.now();
     await env.DB.prepare(
@@ -143,7 +147,8 @@ describe('POST /api/send', () => {
       .bind(TEST_WEBSITE_ID, now)
       .run();
 
-    const { response } = await fetchWorkerJson<{ cache?: string; sessionId?: string }>(
+    const recorder = recordingQueue();
+    const response = await fetchWorkerWithEnv(
       '/api/send',
       {
         method: 'POST',
@@ -158,23 +163,19 @@ describe('POST /api/send', () => {
           },
         }),
       },
+      { WORKFLOW_QUEUE: recorder.queue },
     );
 
     expect(response.status).toBe(200);
-    const row = await env.DB.prepare(
-      `SELECT workflow_id as workflowId, status, event_name as eventName
-       FROM workflow_execution
-       WHERE website_id = ?1 AND workflow_id = 'workflow-send-email'
-       LIMIT 1`,
-    )
-      .bind(TEST_WEBSITE_ID)
-      .first<{ workflowId: string; status: string; eventName: string }>();
-
-    expect(row).toEqual({
-      workflowId: 'workflow-send-email',
-      status: 'recorded',
-      eventName: 'checkout_completed',
-    });
+    // Executions are recorded by the API worker, which consumes this queue.
+    expect(recorder.messages).toEqual([
+      expect.objectContaining({
+        type: 'workflow_trigger',
+        websiteId: TEST_WEBSITE_ID,
+        workflowIds: ['workflow-send-email'],
+        event: expect.objectContaining({ name: 'checkout_completed', urlPath: '/checkout' }),
+      }),
+    ]);
   });
 
   it('stores identify payloads in the person table', async () => {
@@ -197,7 +198,7 @@ describe('POST /api/send', () => {
     );
 
     expect(response.status).toBe(200);
-    const row = await env.DB.prepare(
+    const row = await testSiteDb(TEST_WEBSITE_ID).prepare(
       `SELECT distinct_id as distinctId, properties_json as propertiesJson
        FROM person
        WHERE website_id = ?1 AND distinct_id = 'identify-user-1'
@@ -323,7 +324,16 @@ describe('GET /api/tracker-config', () => {
 
     const { body } = await fetchWorkerJson<{ replay: unknown }>(`/api/tracker-config?website=${TEST_WEBSITE_ID}`);
 
-    expect(body.replay).toEqual({ sampleRate: 1, maskInputs: true, blockSelector: null });
+    expect(body.replay).toEqual({
+      sampleRate: 1,
+      maskInputs: true,
+      maskAllText: false,
+      maskSelector: null,
+      blockSelector: null,
+      console: false,
+      network: false,
+      minDurationMs: 0,
+    });
   });
 
   it('returns the website replay privacy settings', async () => {
@@ -335,7 +345,7 @@ describe('GET /api/tracker-config', () => {
 
     const { body } = await fetchWorkerJson<{ replay: unknown }>(`/api/tracker-config?website=${TEST_WEBSITE_ID}`);
 
-    expect(body.replay).toEqual({ sampleRate: 0.25, maskInputs: false, blockSelector: '.secret, #pay' });
+    expect(body.replay).toMatchObject({ sampleRate: 0.25, maskInputs: false, blockSelector: '.secret, #pay' });
     await env.DB.prepare('UPDATE website SET replay_config = NULL WHERE website_id = ?1').bind(TEST_WEBSITE_ID).run();
     await env.CACHE.delete(`tracker-config:${TEST_WEBSITE_ID}`);
   });

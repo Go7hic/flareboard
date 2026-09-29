@@ -30,7 +30,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': {
+      // `/api/` only: SPA routes like /api-keys must stay with Vite.
+      '^/api/': {
         target: 'http://localhost:8788',
         changeOrigin: true,
       },

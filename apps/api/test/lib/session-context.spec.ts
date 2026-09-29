@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { EVENT_TYPE } from '@flareboard/shared';
 import { getSessionContext } from '../../src/lib/session-context';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const BASE = Date.UTC(2026, 0, 4, 12);
 const SESSION_ID = 'context-session';
@@ -14,7 +15,7 @@ async function insertEvent(
   createdAt: number,
   data: Record<string, string> = {},
 ) {
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
      VALUES (?1, ?2, ?3, ?3, ?4, '/checkout', ?5, ?6)`,
   )
@@ -23,7 +24,7 @@ async function insertEvent(
 
   let index = 0;
   for (const [key, value] of Object.entries(data)) {
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT INTO event_data (event_data_id, website_id, website_event_id, data_key, string_value, data_type, created_at)
        VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6)`,
     )
@@ -39,7 +40,7 @@ describe('getSessionContext', () => {
   });
 
   it('combines feature exposures, errors, logs, surveys, and workflows for a session', async () => {
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT OR IGNORE INTO session (session_id, website_id, created_at)
        VALUES (?1, ?2, ?3)`,
     )

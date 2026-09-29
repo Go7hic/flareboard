@@ -3,13 +3,14 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { EVENT_TYPE } from '@flareboard/shared';
 import { runInsightQuery, serializeInsight } from '../../src/lib/insights';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const TEST_USER_ID = '00000000-0000-0000-0000-000000000001';
 const BASE = Date.UTC(2026, 0, 22, 12);
 const DAY = 24 * 60 * 60 * 1000;
 
 async function insertSession(id: string, createdAt: number) {
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT OR IGNORE INTO session (session_id, website_id, distinct_id, browser, country, created_at)
      VALUES (?1, ?2, ?3, 'Chrome', 'US', ?4)`,
   )
@@ -18,7 +19,7 @@ async function insertSession(id: string, createdAt: number) {
 }
 
 async function insertEvent(id: string, sessionId: string, eventName: string | null, eventType: number, createdAt: number, path = '/app') {
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
      VALUES (?1, ?2, ?3, ?3, ?4, ?5, ?6, ?7)`,
   )
@@ -48,12 +49,13 @@ describe('insight query helpers', () => {
       BASE + DAY * 2,
     );
 
+    // Every bucket of the range is returned, including empty ones.
     expect(result).toMatchObject({
       kind: 'trend',
-      event: 'signup',
       series: [
         { x: '2026-01-22', y: 1 },
         { x: '2026-01-23', y: 1 },
+        { x: '2026-01-24', y: 0 },
       ],
     });
   });
@@ -139,7 +141,7 @@ describe('insight query helpers', () => {
     expect(serialized).toMatchObject({
       id: 'insight-1',
       type: 'trend',
-      query: { event: 'signup', metric: 'events' },
+      query: { version: 2, series: [{ kind: 'event', event: 'signup', math: 'total' }] },
       createdAt: BASE,
       updatedAt: null,
     });

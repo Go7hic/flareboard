@@ -7,6 +7,7 @@ import { cachedRead } from './cache';
 import { channelCaseSql } from './channel';
 import { queryPeriodStats } from './period-stats';
 import { buildSegmentSql, type SegmentParams } from './segment-filters';
+import { siteDb } from '../lib/site-db';
 
 export async function getUserByUsername(env: Env, username: string) {
   const db = createDb(env.DB);
@@ -47,6 +48,12 @@ export async function getUserWebsites(env: Env, userId: string) {
     .orderBy(schema.website.createdAt);
 }
 
+/** A team requiring two-factor authentication counts only once the member has enabled it. */
+const twoFactorSatisfied = or(
+  eq(schema.team.requireTwoFactor, false),
+  sql`EXISTS (SELECT 1 FROM user_two_factor tf WHERE tf.user_id = ${schema.teamUser.userId} AND tf.enabled_at IS NOT NULL)`,
+);
+
 export async function getAccessibleWebsites(env: Env, userId: string) {
   const db = createDb(env.DB);
   // Only live teams count; see canAccessWebsite for the matching per-site rule.
@@ -54,7 +61,7 @@ export async function getAccessibleWebsites(env: Env, userId: string) {
     .select({ teamId: schema.teamUser.teamId })
     .from(schema.teamUser)
     .innerJoin(schema.team, eq(schema.team.teamId, schema.teamUser.teamId))
-    .where(and(eq(schema.teamUser.userId, userId), isNull(schema.team.deletedAt)));
+    .where(and(eq(schema.teamUser.userId, userId), isNull(schema.team.deletedAt), twoFactorSatisfied));
   const teamIds = new Set(memberships.map((m) => m.teamId));
   // Sites the user created stay theirs unless they sit in a live team they are no longer in.
   const created = await getUserWebsites(env, userId);
@@ -156,7 +163,7 @@ export async function getPageviews(
     if (rollupSeries) return rollupSeries;
   }
 
-  const db = createDb(env.DB);
+  const db = createDb(siteDb(env, websiteId));
   const format =
     unit === 'hour'
       ? "%Y-%m-%d %H:00"
@@ -214,7 +221,7 @@ export async function getWebsiteMetricsSeries(
           ? '%Y'
           : '%Y-%m-%d';
   const local = siteLocalMsSql('created_at', startAt, endAt, bucketTz);
-  const { results } = await env.DB.prepare(
+  const { results } = await siteDb(env, websiteId).prepare(
     `SELECT strftime('${format}', datetime(${local} / 1000, 'unixepoch')) as x,
             SUM(CASE WHEN event_type = ?4 THEN 1 ELSE 0 END) as pageviews,
             COUNT(DISTINCT CASE WHEN event_type = ?4 THEN session_id END) as visitors
@@ -243,15 +250,7 @@ export type DashboardSiteMetric = {
 /** D1 allows 100 bound parameters per statement; site lists are queried in chunks. */
 const D1_SAFE_IN_LIST = 90;
 
-function chunkIds(ids: string[]): string[][] {
-  const out: string[][] = [];
-  for (let i = 0; i < ids.length; i += D1_SAFE_IN_LIST) out.push(ids.slice(i, i + D1_SAFE_IN_LIST));
-  return out;
-}
 
-function sqlInPlaceholders(count: number, startIndex = 1) {
-  return Array.from({ length: count }, (_, i) => `?${startIndex + i}`).join(', ');
-}
 
 /** Per-site totals for dashboard ranking. */
 export async function getDashboardMetricsByWebsite(
@@ -266,23 +265,25 @@ export async function getDashboardMetricsByWebsite(
   const rollupMetrics = await getDashboardMetricsFromRollups(env, websiteIds, startAt, endAt);
   if (rollupMetrics) return rollupMetrics;
 
-  // Rows are per site, so chunk results concatenate.
-  const metrics: DashboardSiteMetric[] = [];
-  for (const ids of chunkIds(websiteIds)) {
-    const { results } = await env.DB.prepare(
-      `SELECT website_id as websiteId,
-              SUM(CASE WHEN event_type = ?1 THEN 1 ELSE 0 END) as pageviews,
-              COUNT(DISTINCT session_id) as visitors,
-              COUNT(DISTINCT visit_id) as visits
-       FROM website_event
-       WHERE website_id IN (${sqlInPlaceholders(ids.length, 4)})
-         AND created_at >= ?2 AND created_at <= ?3
-       GROUP BY website_id`,
+  // Each site has its own store: query them in parallel and concatenate.
+  const metrics = (
+    await Promise.all(
+      websiteIds.map((websiteId) =>
+        siteDb(env, websiteId)
+          .prepare(
+            `SELECT ?4 as websiteId,
+                    SUM(CASE WHEN event_type = ?1 THEN 1 ELSE 0 END) as pageviews,
+                    COUNT(DISTINCT session_id) as visitors,
+                    COUNT(DISTINCT visit_id) as visits
+             FROM website_event
+             WHERE website_id = ?4 AND created_at >= ?2 AND created_at <= ?3
+             HAVING COUNT(*) > 0`,
+          )
+          .bind(EVENT_TYPE.pageView, startAt, endAt, websiteId)
+          .first<DashboardSiteMetric>(),
+      ),
     )
-      .bind(EVENT_TYPE.pageView, startAt, endAt, ...ids)
-      .all<DashboardSiteMetric>();
-    metrics.push(...(results ?? []));
-  }
+  ).filter((row): row is DashboardSiteMetric => row !== null);
   return metrics.sort((a, b) => b.pageviews - a.pageviews);
 }
 
@@ -309,21 +310,25 @@ export async function getAggregateMetricsForWebsites(
 
   const format =
     unit === 'hour' ? '%Y-%m-%d %H:00' : unit === 'month' ? '%Y-%m' : '%Y-%m-%d';
-  // Sessions and visits belong to one site, so per-chunk bucket counts add up exactly.
+  // Sessions and visits belong to one site, so per-site bucket counts add up exactly.
   const byBucket = new Map<string, { pageviews: number; visitors: number; visits: number }>();
-  for (const ids of chunkIds(websiteIds)) {
-    const { results } = await env.DB.prepare(
-      `SELECT strftime('${format}', datetime(created_at / 1000, 'unixepoch')) as x,
-              SUM(CASE WHEN event_type = ?1 THEN 1 ELSE 0 END) as pageviews,
-              COUNT(DISTINCT session_id) as visitors,
-              COUNT(DISTINCT visit_id) as visits
-       FROM website_event
-       WHERE website_id IN (${sqlInPlaceholders(ids.length, 4)})
-         AND created_at >= ?2 AND created_at <= ?3
-       GROUP BY x`,
-    )
-      .bind(EVENT_TYPE.pageView, startAt, endAt, ...ids)
-      .all<{ x: string; pageviews: number; visitors: number; visits: number }>();
+  const perSite = await Promise.all(
+    websiteIds.map((websiteId) =>
+      siteDb(env, websiteId)
+        .prepare(
+          `SELECT strftime('${format}', datetime(created_at / 1000, 'unixepoch')) as x,
+                  SUM(CASE WHEN event_type = ?1 THEN 1 ELSE 0 END) as pageviews,
+                  COUNT(DISTINCT session_id) as visitors,
+                  COUNT(DISTINCT visit_id) as visits
+           FROM website_event
+           WHERE website_id = ?4 AND created_at >= ?2 AND created_at <= ?3
+           GROUP BY x`,
+        )
+        .bind(EVENT_TYPE.pageView, startAt, endAt, websiteId)
+        .all<{ x: string; pageviews: number; visitors: number; visits: number }>(),
+    ),
+  );
+  for (const { results } of perSite) {
     for (const row of results ?? []) {
       const cur = byBucket.get(row.x) ?? { pageviews: 0, visitors: 0, visits: 0 };
       byBucket.set(row.x, {
@@ -356,7 +361,7 @@ async function getVisitUrlMetrics(
   limit: number,
 ) {
   const order = mode === 'entry' ? 'ASC' : 'DESC';
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `WITH ranked AS (
        SELECT e.url_path,
          ROW_NUMBER() OVER (PARTITION BY e.visit_id ORDER BY e.created_at ${order}) as rn
@@ -385,7 +390,7 @@ async function getChannelMetrics(
   limit: number,
 ) {
   const channelExpr = channelCaseSql('e');
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT ${channelExpr} as x, COUNT(*) as y
      FROM website_event e
      WHERE e.website_id = ?1 AND e.event_type = ?2
@@ -409,7 +414,7 @@ export async function getTrafficHeatmap(
 ): Promise<TrafficHeatmapData> {
   // Weekday/hour cells are shown as-is, so compute them in the site's timezone.
   const local = siteLocalMsSql('created_at', startAt, endAt, timezone);
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT CAST(strftime('%w', datetime(${local} / 1000, 'unixepoch')) AS INTEGER) as dow,
             CAST(strftime('%H', datetime(${local} / 1000, 'unixepoch')) AS INTEGER) as hour,
             COUNT(*) as count
@@ -445,7 +450,7 @@ export async function getMetrics(
   const rollupMetrics = await getMetricsFromRollups(env, websiteId, startAt, endAt, type, limit);
   if (rollupMetrics) return rollupMetrics;
 
-  const db = createDb(env.DB);
+  const db = createDb(siteDb(env, websiteId));
   const timeFilter = eventTimeFilter(websiteId, startAt, endAt);
 
   if (type === 'url' || type === 'path') {
@@ -518,7 +523,7 @@ export async function getCustomEvents(
   const rollupEvents = await getCustomEventsFromRollups(env, websiteId, startAt, endAt);
   if (rollupEvents) return rollupEvents;
 
-  const db = createDb(env.DB);
+  const db = createDb(siteDb(env, websiteId));
   const rows = await db
     .select({
       x: schema.websiteEvent.eventName,
@@ -545,7 +550,7 @@ export async function getEventSeries(
   unit: string,
   timezone = 'UTC',
 ) {
-  const db = createDb(env.DB);
+  const db = createDb(siteDb(env, websiteId));
   const format = unit === 'hour' ? "%Y-%m-%d %H:00" : '%Y-%m-%d';
   const bucket = timeBucketExpr(format, startAt, endAt, seriesTimezone(unit, timezone));
   const rows = await db
@@ -567,7 +572,7 @@ export async function getEventSeries(
 }
 
 export async function getEventStats(env: Env, websiteId: string, startAt: number, endAt: number) {
-  const db = createDb(env.DB);
+  const db = createDb(siteDb(env, websiteId));
   const filter = and(
     eventTimeFilter(websiteId, startAt, endAt),
     eq(schema.websiteEvent.eventType, EVENT_TYPE.customEvent),
@@ -591,6 +596,7 @@ export async function getUserTeams(env: Env, userId: string) {
       name: schema.team.name,
       accessCode: schema.team.accessCode,
       role: schema.teamUser.role,
+      requireTwoFactor: schema.team.requireTwoFactor,
       createdAt: schema.team.createdAt,
     })
     .from(schema.teamUser)
@@ -639,9 +645,22 @@ export async function getUserShares(env: Env, userId: string) {
   const websiteIds = websites.map((w) => w.websiteId);
   const boards = await getAccessibleBoards(env, userId);
   const boardIds = boards.map((b) => b.boardId);
-  const entityIds = [...websiteIds, ...boardIds];
+  const insightIds = websiteIds.length
+    ? (
+        await db
+          .select({ insightId: schema.insight.insightId })
+          .from(schema.insight)
+          .where(inArray(schema.insight.websiteId, websiteIds))
+      ).map((row) => row.insightId)
+    : [];
+  const entityIds = [...websiteIds, ...boardIds, ...insightIds];
   if (!entityIds.length) return [];
-  return db.select().from(schema.share).where(inArray(schema.share.entityId, entityIds));
+  // Chunked: D1 caps bound parameters per statement.
+  const rows: Array<typeof schema.share.$inferSelect> = [];
+  for (let i = 0; i < entityIds.length; i += 90) {
+    rows.push(...(await db.select().from(schema.share).where(inArray(schema.share.entityId, entityIds.slice(i, i + 90)))));
+  }
+  return rows;
 }
 
 export async function getShareBySlug(env: Env, slug: string) {
@@ -730,7 +749,7 @@ export async function getRealtime(env: Env, websiteId: string) {
   const [kv, window30] = await Promise.all([
     getRealtimeFromKv(env, websiteId, since),
     cachedRead(env, `realtime-30m:${websiteId}`, 30, async () => {
-      const row = await env.DB.prepare(
+      const row = await siteDb(env, websiteId).prepare(
         `SELECT
            SUM(CASE WHEN event_type = ?4 THEN 1 ELSE 0 END) as pageviews,
            COUNT(DISTINCT session_id) as visitors,
@@ -819,7 +838,7 @@ export async function getRevenueSessions(
   startAt: number,
   endAt: number,
 ) {
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT r.session_id as sessionId, r.event_name as eventName, r.currency,
             SUM(r.revenue) as revenue, COUNT(*) as transactions, MAX(r.created_at) as lastAt
      FROM revenue r
@@ -837,7 +856,7 @@ export async function getRevenueSessions(
       lastAt: number;
     }>();
 
-  const summary = await env.DB.prepare(
+  const summary = await siteDb(env, websiteId).prepare(
     `SELECT currency, SUM(revenue) as total, COUNT(*) as transactions
      FROM revenue
      WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3
@@ -879,7 +898,8 @@ async function dbTeamIds(env: Env, userId: string) {
   const memberships = await db
     .select({ teamId: schema.teamUser.teamId })
     .from(schema.teamUser)
-    .where(eq(schema.teamUser.userId, userId));
+    .innerJoin(schema.team, eq(schema.team.teamId, schema.teamUser.teamId))
+    .where(and(eq(schema.teamUser.userId, userId), twoFactorSatisfied));
   return memberships.map((m) => m.teamId);
 }
 
@@ -1060,7 +1080,7 @@ export async function getGoalReport(
   }
 
   async function countEvents(from: number, to: number, event: string) {
-    const row = await env.DB.prepare(
+    const row = await siteDb(env, websiteId).prepare(
       `SELECT COUNT(*) as count FROM website_event
        WHERE website_id = ?1 AND event_type = ?2 AND event_name = ?3
          AND created_at >= ?4 AND created_at <= ?5`,
@@ -1088,7 +1108,7 @@ export async function getGoalReport(
     }),
   );
 
-  const db = createDb(env.DB);
+  const db = createDb(siteDb(env, websiteId));
   const filter = and(
     eq(schema.websiteEvent.websiteId, websiteId),
     eq(schema.websiteEvent.eventType, EVENT_TYPE.customEvent),
@@ -1137,7 +1157,7 @@ export async function getPageMetrics(
   const orderCol =
     sortBy === 'visitors' ? 'visitors' : sortBy === 'time' ? 'avg_time_sec' : 'views';
 
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `WITH page_events AS (
        SELECT e.url_path, e.session_id, e.visit_id, e.created_at,
          LEAD(e.created_at) OVER (PARTITION BY e.visit_id ORDER BY e.created_at) as next_at
@@ -1169,100 +1189,6 @@ export async function getPageMetrics(
   }));
 }
 
-export async function getWebsiteReplays(
-  env: Env,
-  websiteId: string,
-  limit = 50,
-  range?: { startAt: number; endAt: number },
-) {
-  const rows = await env.DB.prepare(
-    `WITH replay_meta AS (
-       SELECT visit_id as visitId,
-              session_id as sessionId,
-              started_at as startedAt,
-              ended_at as endedAt,
-              event_count as eventCount,
-              chunks
-       FROM session_replay_summary
-       WHERE website_id = ?1
-         AND (?8 IS NULL OR started_at >= ?8) AND (?9 IS NULL OR started_at <= ?9)
-       UNION ALL
-       SELECT r.visit_id as visitId,
-              r.session_id as sessionId,
-              MIN(r.started_at) as startedAt,
-              MAX(r.ended_at) as endedAt,
-              SUM(r.event_count) as eventCount,
-              COUNT(*) as chunks
-       FROM session_replay r
-       WHERE r.website_id = ?1
-         AND NOT EXISTS (
-           SELECT 1
-           FROM session_replay_summary s
-           WHERE s.website_id = r.website_id AND s.visit_id = r.visit_id
-         )
-       GROUP BY r.visit_id, r.session_id
-       HAVING (?8 IS NULL OR MIN(r.started_at) >= ?8) AND (?9 IS NULL OR MIN(r.started_at) <= ?9)
-     ),
-     context_counts AS (
-       SELECT e.visit_id as visitId,
-              SUM(CASE WHEN e.event_type = ?3 THEN 1 ELSE 0 END) as pageviews,
-              SUM(CASE WHEN e.event_type = ?4 THEN 1 ELSE 0 END) as customEvents,
-              SUM(CASE WHEN e.event_type = ?5 THEN 1 ELSE 0 END) as errors,
-              SUM(CASE WHEN e.event_type = ?6 THEN 1 ELSE 0 END) as logs,
-              SUM(CASE WHEN e.event_type = ?7 THEN 1 ELSE 0 END) as aiCalls,
-              MAX(CASE WHEN e.event_type IN (?5, ?6) THEN e.created_at ELSE NULL END) as lastIssueAt
-       FROM website_event e
-       INNER JOIN replay_meta rm ON rm.visitId = e.visit_id
-       WHERE e.website_id = ?1
-       GROUP BY e.visit_id
-     )
-     SELECT replay_meta.visitId,
-            replay_meta.sessionId,
-            replay_meta.startedAt,
-            replay_meta.endedAt,
-            replay_meta.eventCount,
-            replay_meta.chunks,
-            MAX(replay_meta.endedAt - replay_meta.startedAt, 0) as durationMs,
-            COALESCE(context_counts.pageviews, 0) as pageviews,
-            COALESCE(context_counts.customEvents, 0) as customEvents,
-            COALESCE(context_counts.errors, 0) as errors,
-            COALESCE(context_counts.logs, 0) as logs,
-            COALESCE(context_counts.aiCalls, 0) as aiCalls,
-            context_counts.lastIssueAt
-     FROM replay_meta
-     LEFT JOIN context_counts ON context_counts.visitId = replay_meta.visitId
-     ORDER BY replay_meta.startedAt DESC
-     LIMIT ?2`,
-  )
-    .bind(
-      websiteId,
-      limit,
-      EVENT_TYPE.pageView,
-      EVENT_TYPE.customEvent,
-      EVENT_TYPE.error,
-      EVENT_TYPE.log,
-      EVENT_TYPE.ai,
-      range?.startAt ?? null,
-      range?.endAt ?? null,
-    )
-    .all<{
-      visitId: string;
-      sessionId: string;
-      startedAt: number;
-      endedAt: number;
-      eventCount: number;
-      chunks: number;
-      durationMs: number;
-      pageviews: number;
-      customEvents: number;
-      errors: number;
-      logs: number;
-      aiCalls: number;
-      lastIssueAt: number | null;
-    }>();
-  return rows.results ?? [];
-}
-
 function coalesceValueSql() {
   return `COALESCE(string_value, CAST(number_value AS TEXT), '')`;
 }
@@ -1273,7 +1199,7 @@ export async function getEventDataProperties(
   startAt: number,
   endAt: number,
 ) {
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT DISTINCT data_key as propertyName
      FROM event_data
      WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3
@@ -1315,7 +1241,7 @@ export async function getEventDataStats(
   endAt: number,
 ) {
   const valueExpr = coalesceValueSql();
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT ${valueExpr} as value, COUNT(*) as total
      FROM event_data
      WHERE website_id = ?1 AND data_key = ?2
@@ -1335,7 +1261,7 @@ export async function getSessionDataProperties(
   startAt: number,
   endAt: number,
 ) {
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT DISTINCT data_key as propertyName
      FROM session_data
      WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3
@@ -1367,35 +1293,6 @@ export async function getSessionDataValues(
   sql += ` ORDER BY value LIMIT 100`;
   const rows = await env.DB.prepare(sql).bind(...binds).all<{ value: string }>();
   return (rows.results ?? []).map((r) => r.value).filter(Boolean);
-}
-
-export async function getRevenueReport(env: Env, websiteId: string, startAt: number, endAt: number) {
-  const byDay = await env.DB.prepare(
-    `SELECT date(created_at / 1000, 'unixepoch') as date, currency,
-            SUM(revenue) as total, COUNT(*) as transactions
-     FROM revenue
-     WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3
-     GROUP BY date, currency
-     ORDER BY date DESC`,
-  )
-    .bind(websiteId, startAt, endAt)
-    .all<{ date: string; currency: string; total: number; transactions: number }>();
-
-  const byEvent = await env.DB.prepare(
-    `SELECT event_name as eventName, currency,
-            SUM(revenue) as total, COUNT(*) as transactions
-     FROM revenue
-     WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3
-     GROUP BY event_name, currency
-     ORDER BY total DESC LIMIT 50`,
-  )
-    .bind(websiteId, startAt, endAt)
-    .all<{ eventName: string; currency: string; total: number; transactions: number }>();
-
-  return {
-    byDay: byDay.results ?? [],
-    byEvent: byEvent.results ?? [],
-  };
 }
 
 export async function getAllUsers(env: Env) {

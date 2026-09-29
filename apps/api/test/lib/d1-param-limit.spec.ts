@@ -4,6 +4,7 @@ import { EVENT_TYPE } from '@flareboard/shared';
 import { getAggregateMetricsForWebsites, getDashboardMetricsByWebsite } from '../../src/lib/queries';
 import { getWebsiteStatsFromRollups } from '../../src/lib/rollups';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const DAY = 86_400_000;
 const END = Date.UTC(2026, 5, 30, 23, 59, 59, 999);
@@ -13,12 +14,12 @@ describe('queries stay under D1’s 100 bound-parameter limit', () => {
   beforeAll(async () => {
     await applyTestMigrations(env.DB);
     await seedTestWebsite(env.DB);
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT OR IGNORE INTO session (session_id, website_id, created_at) VALUES ('param-limit-session', ?1, ?2)`,
     )
       .bind(TEST_WEBSITE_ID, START + DAY)
       .run();
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT OR IGNORE INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type)
        VALUES ('param-limit-event', ?1, 'param-limit-session', 'param-limit-visit', ?2, '/', ?3)`,
     )

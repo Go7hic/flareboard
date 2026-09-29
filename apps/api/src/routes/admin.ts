@@ -11,6 +11,8 @@ import {
   uuid,
 } from '@flareboard/shared';
 import type { Env } from '../env';
+import { eventStoreMode, siteDb, siteStoreStub } from '../lib/site-db';
+import { backfillWebsite, getBackfillState, resetBackfill, verifyWebsiteStore } from '../lib/store-backfill';
 import { bumpTokenVersion } from '../lib/auth-token';
 import { logAdminAction, listAuditLog } from '../lib/audit';
 import { getAllTeamsAdmin, getAllUsers, getAllWebsitesAdmin } from '../lib/queries';
@@ -248,7 +250,7 @@ export async function handleExport(c: Ctx) {
     );
   } else if (type === 'events') {
     if (!websiteId) return badRequest('websiteId required for events export');
-    const events = await db
+    const events = await createDb(siteDb(c.env, websiteId))
       .select({
         eventId: schema.websiteEvent.eventId,
         sessionId: schema.websiteEvent.sessionId,
@@ -287,4 +289,52 @@ export async function handleExport(c: Ctx) {
       'Content-Disposition': `attachment; filename="flareboard-${type}${websiteId ? `-${websiteId}` : ''}.csv"`,
     },
   });
+}
+
+/** Storage migration status: mode, and backfill progress (plus row-count verification with ?verify=1). */
+export async function handleStorageStatus(c: Ctx) {
+  const denied = requireAdmin(c);
+  if (denied) return denied;
+  const verify = c.req.query('verify') === '1';
+  const websites = await getAllWebsitesAdmin(c.env);
+  const rows = [];
+  for (const website of websites.filter((w) => !w.deletedAt)) {
+    const state = await getBackfillState(c.env, website.websiteId);
+    rows.push({
+      id: website.websiteId,
+      name: website.name,
+      backfill: state,
+      verification: verify ? await verifyWebsiteStore(c.env, website.websiteId) : undefined,
+    });
+  }
+  return json({ mode: eventStoreMode(c.env), websites: rows });
+}
+
+/** Runs backfill chunks for one website now (instead of waiting for the cron). */
+export async function handleStorageBackfill(c: Ctx) {
+  const denied = requireAdmin(c);
+  if (denied) return denied;
+  const body = (await c.req.json().catch(() => null)) as { websiteId?: string; restart?: boolean } | null;
+  if (!body?.websiteId) return badRequest('websiteId required');
+  if (body.restart) await resetBackfill(c.env, body.websiteId);
+  const state = await backfillWebsite(c.env, body.websiteId, 50);
+  await logAdminAction(c.env, c.get('user').userId, 'backfill', 'website', body.websiteId, { done: state.done });
+  return json(state);
+}
+
+/** Recomputes a website store's rollups from its events (run once more right after switching to `do`). */
+export async function handleStorageRebuildRollups(c: Ctx) {
+  const denied = requireAdmin(c);
+  if (denied) return denied;
+  const body = (await c.req.json().catch(() => null)) as { websiteId?: string } | null;
+  const ids = body?.websiteId
+    ? [body.websiteId]
+    : (await getAllWebsitesAdmin(c.env)).filter((w) => !w.deletedAt).map((w) => w.websiteId);
+  const results = [];
+  for (const websiteId of ids) {
+    const { pageviews } = await siteStoreStub(c.env, websiteId).rebuildRollups(websiteId);
+    results.push({ websiteId, pageviews });
+  }
+  await logAdminAction(c.env, c.get('user').userId, 'rebuild_rollups', 'website', body?.websiteId ?? null, { count: ids.length });
+  return json({ rebuilt: results });
 }

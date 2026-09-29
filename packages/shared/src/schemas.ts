@@ -1,5 +1,18 @@
 import { z } from 'zod';
+import { INSIGHT_TYPES, insightQuerySchema, propertyFiltersSchema } from './insight-query';
 import { isValidSiteTimezone } from './timezone';
+import { AI_CONTENT_MAX_STRING_LENGTH, AI_EVENT_KINDS } from './llm';
+import {
+  FEATURE_FLAG_PAYLOAD_MAX_BYTES,
+  featureFlagPayloadBytes,
+  type FeatureFlagJsonValue,
+} from './feature-flag-evaluator';
+import {
+  SURVEY_MAX_QUESTIONS,
+  surveyAppearanceSchema,
+  surveyQuestionsSchema,
+  surveySlugSchema,
+} from './surveys';
 
 /**
  * Collected page context is truncated rather than rejected: landing URLs with ad click
@@ -75,6 +88,12 @@ export const sendPayloadSchema = z
     userAgent: truncatedString(500).optional(),
     timestamp: z.coerce.number().int().optional(),
     id: z.string().max(128).optional(),
+    /**
+     * Random device id from the tracker when the website remembers visitors. When it equals `id`
+     * (or `id` is absent) the event is anonymous, and ingest honors the id only if the website has
+     * persistence on; otherwise the visitor is counted with the cookieless hash as before.
+     */
+    anonymousId: z.string().max(128).optional(),
     browser: z.string().max(100).optional(),
     os: z.string().max(100).optional(),
     device: z.string().max(100).optional(),
@@ -117,6 +136,13 @@ export const sendPayloadSchema = z
     latencyMs: z.coerce.number().int().nonnegative().max(86400000).optional(),
     status: z.enum(['success', 'error']).optional(),
     quality: z.string().max(80).optional(),
+    /** AI events: generation (default), span, trace or embedding. */
+    kind: z.enum(AI_EVENT_KINDS).optional(),
+    cacheReadTokens: z.coerce.number().int().nonnegative().max(10000000).optional(),
+    cacheWriteTokens: z.coerce.number().int().nonnegative().max(10000000).optional(),
+    /** AI prompt / response content (any JSON); size-capped at ingest, dropped when the website stores no content. */
+    input: z.unknown().optional(),
+    output: z.unknown().optional(),
     groupType: z.string().min(1).max(80).optional(),
     groupKey: z.string().min(1).max(200).optional(),
   })
@@ -220,86 +246,282 @@ export const featureFlagKeySchema = z
   .max(80)
   .regex(/^[a-zA-Z][a-zA-Z0-9_.:-]*$/, 'Use letters, numbers, dot, colon, underscore, or dash');
 
+/**
+ * Any JSON value up to FEATURE_FLAG_PAYLOAD_MAX_BYTES once serialized. Payloads are delivered to
+ * browsers (tracker config) and SDKs verbatim, so they must never hold secrets.
+ */
+export const featureFlagPayloadSchema = z.unknown().superRefine((value, ctx) => {
+  const size = featureFlagPayloadBytes(value);
+  if (size === null) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Payload must be valid JSON' });
+  } else if (size > FEATURE_FLAG_PAYLOAD_MAX_BYTES) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Payload must be at most ${FEATURE_FLAG_PAYLOAD_MAX_BYTES / 1024} KB`,
+    });
+  }
+}) as z.ZodType<FeatureFlagJsonValue>;
+
 export const featureFlagVariantSchema = z.object({
   key: featureFlagKeySchema,
   name: z.string().min(1).max(120),
   weight: z.coerce.number().int().min(0).max(100),
+  /** null clears the payload. */
+  payload: featureFlagPayloadSchema.optional(),
 });
 
-const featureFlagVariantsSchema = z.array(featureFlagVariantSchema).max(8).default([]);
+const featureFlagVariantsSchema = z
+  .array(featureFlagVariantSchema)
+  .max(8)
+  .default([])
+  .superRefine((variants, ctx) => {
+    const keys = new Set<string>();
+    let weight = 0;
+    for (const variant of variants) {
+      if (keys.has(variant.key)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Duplicate variant key "${variant.key}"` });
+      }
+      keys.add(variant.key);
+      weight += variant.weight;
+    }
+    if (weight > 100) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Variant weights must add up to 100 or less' });
+    }
+  });
 
-export const featureFlagTargetingRuleSchema = z.object({
-  field: z.enum([
-    'path',
-    'url',
-    'hostname',
-    'referrer',
-    'language',
-    'userAgent',
-    'distinctId',
-    'userId',
-    'environment',
-    'release',
-    'group',
-    'property',
-  ]),
-  key: z.string().min(1).max(120).optional(),
-  operator: z.enum([
-    'equals',
-    'contains',
-    'starts_with',
-    'ends_with',
-    'not_equals',
-    'not_contains',
-    'greater_than',
-    'greater_than_or_equal',
-    'less_than',
-    'less_than_or_equal',
-    'exists',
-    'not_exists',
-  ]),
-  value: z.string().max(200).default(''),
-}).refine((rule) => (rule.field === 'group' || rule.field === 'property' ? Boolean(rule.key?.trim()) : true), {
-  message: 'Group and property rules require a key',
-});
+const FEATURE_FLAG_KEYED_FIELDS = new Set(['group', 'property', 'person', 'group_property']);
+
+export const featureFlagTargetingRuleSchema = z
+  .object({
+    field: z.enum([
+      'path',
+      'url',
+      'hostname',
+      'referrer',
+      'language',
+      'userAgent',
+      'distinctId',
+      'userId',
+      'environment',
+      'release',
+      'group',
+      'property',
+      'person',
+      'group_property',
+      'cohort',
+    ]),
+    key: z.string().min(1).max(120).optional(),
+    /** Group type for `group_property` conditions. */
+    groupType: z.string().min(1).max(120).optional(),
+    operator: z.enum([
+      'equals',
+      'contains',
+      'starts_with',
+      'ends_with',
+      'not_equals',
+      'not_contains',
+      'greater_than',
+      'greater_than_or_equal',
+      'less_than',
+      'less_than_or_equal',
+      'exists',
+      'not_exists',
+      'in_cohort',
+      'not_in_cohort',
+    ]),
+    /** Compared value; the cohort id for `cohort` conditions. */
+    value: z.string().max(200).default(''),
+  })
+  .superRefine((rule, ctx) => {
+    if (FEATURE_FLAG_KEYED_FIELDS.has(rule.field) && !rule.key?.trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Group, property and person rules require a key' });
+    }
+    if (rule.field === 'group_property' && !rule.groupType?.trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Group property rules require a group type' });
+    }
+    const cohortOperator = rule.operator === 'in_cohort' || rule.operator === 'not_in_cohort';
+    if (rule.field === 'cohort') {
+      if (!cohortOperator) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Cohort rules use in_cohort or not_in_cohort' });
+      }
+      if (!rule.value.trim()) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Cohort rules require a cohort' });
+      }
+    } else if (cohortOperator) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'in_cohort and not_in_cohort apply to cohort rules only' });
+    }
+  });
 
 const featureFlagTargetingRulesSchema = z.array(featureFlagTargetingRuleSchema).max(12).default([]);
 
-export const createFeatureFlagSchema = z.object({
+export const featureFlagConditionGroupSchema = z.object({
+  conditions: featureFlagTargetingRulesSchema,
+  rollout: z.coerce.number().int().min(0).max(100).default(100),
+  /** Serve this variant to the group instead of the weighted split (null for none). */
+  variant: featureFlagKeySchema.nullable().optional(),
+  description: z.string().max(200).optional(),
+});
+
+const featureFlagConditionGroupsSchema = z.array(featureFlagConditionGroupSchema).min(1).max(20);
+
+/** Public copy of an early access feature; null turns early access off. */
+export const featureFlagEarlyAccessSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    description: z.string().trim().max(1000).default(''),
+  })
+  .nullable();
+
+const featureFlagFields = {
   key: featureFlagKeySchema,
   name: z.string().min(1).max(120),
-  description: z.string().max(500).optional().default(''),
-  enabled: z.boolean().optional().default(true),
-  rollout: z.coerce.number().int().min(0).max(100).optional().default(100),
-  variants: featureFlagVariantsSchema.optional().default([]),
-  targetingRules: featureFlagTargetingRulesSchema.optional().default([]),
+  description: z.string().max(500),
+  enabled: z.boolean(),
+  /** @deprecated single-group shorthand; ignored when conditionGroups is given. */
+  rollout: z.coerce.number().int().min(0).max(100),
+  variants: featureFlagVariantsSchema,
+  /** @deprecated single-group shorthand; ignored when conditionGroups is given. */
+  targetingRules: featureFlagTargetingRulesSchema,
+  conditionGroups: featureFlagConditionGroupsSchema,
+  /** Payload of a boolean flag (null clears it). Multivariate flags use variant payloads. */
+  payload: featureFlagPayloadSchema,
+  earlyAccess: featureFlagEarlyAccessSchema,
+};
+
+export const createFeatureFlagSchema = z.object({
+  key: featureFlagFields.key,
+  name: featureFlagFields.name,
+  description: featureFlagFields.description.optional().default(''),
+  enabled: featureFlagFields.enabled.optional().default(true),
+  rollout: featureFlagFields.rollout.optional().default(100),
+  variants: featureFlagFields.variants.optional().default([]),
+  targetingRules: featureFlagFields.targetingRules.optional().default([]),
+  conditionGroups: featureFlagFields.conditionGroups.optional(),
+  payload: featureFlagFields.payload.optional(),
+  earlyAccess: featureFlagFields.earlyAccess.optional(),
 });
 
 export const updateFeatureFlagSchema = z.object({
-  key: featureFlagKeySchema.optional(),
-  name: z.string().min(1).max(120).optional(),
-  description: z.string().max(500).optional(),
-  enabled: z.boolean().optional(),
-  rollout: z.coerce.number().int().min(0).max(100).optional(),
-  variants: featureFlagVariantsSchema.optional(),
-  targetingRules: featureFlagTargetingRulesSchema.optional(),
+  key: featureFlagFields.key.optional(),
+  name: featureFlagFields.name.optional(),
+  description: featureFlagFields.description.optional(),
+  enabled: featureFlagFields.enabled.optional(),
+  rollout: featureFlagFields.rollout.optional(),
+  variants: featureFlagFields.variants.optional(),
+  targetingRules: featureFlagFields.targetingRules.optional(),
+  conditionGroups: featureFlagFields.conditionGroups.optional(),
+  payload: featureFlagFields.payload.optional(),
+  earlyAccess: featureFlagFields.earlyAccess.optional(),
+});
+
+/** Body of the evaluate-all endpoint (and the future /decide): who is asking, plus overrides. */
+export const featureFlagEvaluateAllSchema = z.object({
+  distinctId: z.string().trim().min(1).max(200),
+  keys: z.array(featureFlagKeySchema).max(200).optional(),
+  /** Merged over the stored person properties (caller wins). */
+  personProperties: z.record(z.unknown()).optional(),
+  /** Group type → group key. Stored memberships fill the types that are not given. */
+  groups: z.record(z.string().max(200)).optional(),
+  /** Group type → properties, merged over stored group properties (caller wins). */
+  groupProperties: z.record(z.record(z.unknown())).optional(),
+  /** Request / event properties for `property` conditions. */
+  properties: z.record(z.unknown()).optional(),
+  sessionId: z.string().max(200).optional(),
+  userId: z.string().max(200).optional(),
+  anonymousId: z.string().max(200).optional(),
+  path: z.string().max(2000).optional(),
+  url: z.string().max(4000).optional(),
+  hostname: z.string().max(500).optional(),
+  referrer: z.string().max(4000).optional(),
+  language: z.string().max(100).optional(),
+  userAgent: z.string().max(1000).optional(),
+  environment: z.string().max(200).optional(),
+  release: z.string().max(200).optional(),
+});
+
+export const featureEnrollmentSchema = z.object({
+  distinctId: z.string().trim().min(1).max(200),
+  enrolled: z.boolean(),
 });
 
 export const experimentStatusSchema = z.enum(['draft', 'running', 'paused', 'completed']);
 
-export const createExperimentSchema = z.object({
-  name: z.string().min(1).max(120),
-  description: z.string().max(500).optional().default(''),
-  featureFlagId: z.string().uuid(),
-  goalEvent: z.string().min(1).max(80),
-  status: experimentStatusSchema.optional().default('draft'),
-});
+/**
+ * How an experiment metric turns a unit's events into one number:
+ * - conversion: 1 if the unit did `event` after exposure, else 0 (a rate)
+ * - count: occurrences of `event` per unit (a mean)
+ * - property_sum: sum of the numeric `property` over the unit's `event`s, 0 without events
+ * - property_mean: mean of `property` over the unit's `event`s, for units with at least one
+ */
+export const EXPERIMENT_METRIC_TYPES = ['conversion', 'count', 'property_sum', 'property_mean'] as const;
+export type ExperimentMetricType = (typeof EXPERIMENT_METRIC_TYPES)[number];
+export const MAX_EXPERIMENT_SECONDARY_METRICS = 5;
+/** Relative minimum detectable effect (percent) used for sample-size guidance when unset. */
+export const DEFAULT_EXPERIMENT_MDE_PERCENT = 10;
+
+export type ExperimentMetric = {
+  type: ExperimentMetricType;
+  event: string;
+  /** Numeric event property, only for property_sum / property_mean. */
+  property?: string;
+  /** Optional display label. */
+  name?: string;
+};
+
+export function isPropertyMetricType(type: ExperimentMetricType): boolean {
+  return type === 'property_sum' || type === 'property_mean';
+}
+
+export const experimentMetricSchema = z
+  .object({
+    type: z.enum(EXPERIMENT_METRIC_TYPES),
+    event: z.string().trim().min(1).max(80),
+    property: z.string().trim().max(120).optional(),
+    name: z.string().trim().max(120).optional(),
+  })
+  .refine((metric) => !isPropertyMetricType(metric.type) || Boolean(metric.property), {
+    message: 'Property metrics require a numeric event property',
+    path: ['property'],
+  })
+  .transform(
+    (metric): ExperimentMetric => ({
+      type: metric.type,
+      event: metric.event,
+      ...(isPropertyMetricType(metric.type) ? { property: metric.property } : {}),
+      ...(metric.name ? { name: metric.name } : {}),
+    }),
+  );
+
+const experimentSecondaryMetricsSchema = z.array(experimentMetricSchema).max(MAX_EXPERIMENT_SECONDARY_METRICS);
+const experimentMdeSchema = z.number().min(0.1).max(100);
+
+export const createExperimentSchema = z
+  .object({
+    name: z.string().min(1).max(120),
+    description: z.string().max(500).optional().default(''),
+    featureFlagId: z.string().uuid(),
+    /** Legacy: becomes a primary conversion metric when `primaryMetric` is absent. */
+    goalEvent: z.string().trim().min(1).max(80).optional(),
+    primaryMetric: experimentMetricSchema.optional(),
+    secondaryMetrics: experimentSecondaryMetricsSchema.optional().default([]),
+    /** Relative lift in percent that the sample-size guidance plans for. */
+    minimumDetectableEffect: experimentMdeSchema.nullable().optional(),
+    status: experimentStatusSchema.optional().default('draft'),
+  })
+  .refine((body) => Boolean(body.primaryMetric || body.goalEvent), {
+    message: 'A primary metric is required',
+    path: ['primaryMetric'],
+  });
 
 export const updateExperimentSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   description: z.string().max(500).optional(),
   featureFlagId: z.string().uuid().optional(),
-  goalEvent: z.string().min(1).max(80).optional(),
+  /** Legacy: changes the event of the primary metric. */
+  goalEvent: z.string().trim().min(1).max(80).optional(),
+  primaryMetric: experimentMetricSchema.optional(),
+  secondaryMetrics: experimentSecondaryMetricsSchema.optional(),
+  minimumDetectableEffect: experimentMdeSchema.nullable().optional(),
   status: experimentStatusSchema.optional(),
 });
 
@@ -361,70 +583,81 @@ export const surveyDisplayRuleSchema = z.object({
 
 const surveyDisplayRulesSchema = z.array(surveyDisplayRuleSchema).max(12).default([]);
 
+/** Targeting, limits, hosting and appearance: identical on create and update. */
+const surveySettingsFields = {
+  /** Percent of eligible people who see the survey (deterministic per person). */
+  sampleRate: z.coerce.number().int().min(0).max(100).optional(),
+  /** Stop showing the survey after this many completed responses. */
+  responseLimit: z.coerce.number().int().min(1).max(1_000_000).optional().nullable(),
+  startsAt: z.number().int().min(0).optional().nullable(),
+  endsAt: z.number().int().min(0).optional().nullable(),
+  /** Null = show once per person; N = may show again N days after it was last shown. */
+  repeatIntervalDays: z.coerce.number().int().min(1).max(365).optional().nullable(),
+  hostedEnabled: z.boolean().optional(),
+  slug: surveySlugSchema.optional().nullable(),
+  appearance: surveyAppearanceSchema.optional(),
+};
+
+const scheduleOrdered = (data: { startsAt?: number | null; endsAt?: number | null }) =>
+  data.startsAt == null || data.endsAt == null || data.startsAt < data.endsAt;
+
 export const createSurveySchema = z.object({
   template: surveyTemplateSchema.optional(),
   name: z.string().min(1).max(120).optional(),
   question: z.string().min(1).max(500).optional(),
   type: surveyTypeSchema.optional().default('text'),
   options: surveyOptionsSchema.optional().default([]),
+  /** Multi-question surveys. When present, question/type/options are derived from it. */
+  questions: surveyQuestionsSchema.optional(),
   enabled: z.boolean().optional().default(true),
   triggerPath: z.string().max(500).optional().nullable(),
   triggerEvent: z.string().min(1).max(80).optional().nullable(),
   displayDelaySeconds: z.coerce.number().int().min(0).max(60).optional().default(0),
   displayRules: surveyDisplayRulesSchema.optional().default([]),
-}).refine((data) => data.type !== 'choice' || data.options.length >= 2, {
+  ...surveySettingsFields,
+}).refine((data) => Boolean(data.questions) || data.type !== 'choice' || data.options.length >= 2, {
   message: 'Choice surveys require at least two options',
-}).refine((data) => Boolean(data.template || (data.name && data.question)), {
+}).refine((data) => Boolean(data.template || (data.name && (data.question || data.questions))), {
   message: 'Survey name and question are required unless a template is used',
-});
+}).refine(scheduleOrdered, { message: 'The survey end date must be after its start date' });
 
 export const updateSurveySchema = z.object({
   name: z.string().min(1).max(120).optional(),
   question: z.string().min(1).max(500).optional(),
   type: surveyTypeSchema.optional(),
   options: surveyOptionsSchema.optional(),
+  questions: surveyQuestionsSchema.optional(),
   enabled: z.boolean().optional(),
   triggerPath: z.string().max(500).optional().nullable(),
   triggerEvent: z.string().min(1).max(80).optional().nullable(),
   displayDelaySeconds: z.coerce.number().int().min(0).max(60).optional(),
   displayRules: surveyDisplayRulesSchema.optional(),
+  ...surveySettingsFields,
 }).refine((data) => data.type !== 'choice' || data.options === undefined || data.options.length >= 2, {
   message: 'Choice surveys require at least two options',
-});
+}).refine(scheduleOrdered, { message: 'The survey end date must be after its start date' });
 
+/**
+ * One submission. `answer` is the legacy single-answer form (trackers before multi-question
+ * surveys); `answers` maps question id to value. `responseId` (client-generated) lets a partial
+ * response be completed later instead of creating a second row.
+ */
 export const submitSurveyResponseSchema = z.object({
   website: z.string().uuid(),
-  surveyId: z.string(),
+  surveyId: z.string().min(1).max(64),
   sessionId: z.string().max(128).optional().nullable(),
   visitId: z.string().max(128).optional().nullable(),
-  answer: z.string().min(1).max(2000),
+  distinctId: z.string().max(200).optional().nullable(),
+  answer: z.string().min(1).max(2000).optional(),
+  answers: z.record(z.string().max(40), z.unknown()).optional(),
+  completed: z.boolean().optional(),
+  responseId: z.string().uuid().optional(),
+  source: z.enum(['widget', 'hosted', 'api']).optional(),
   urlPath: z.string().max(500).optional().nullable(),
-});
-
-export const workflowActionConfigSchema = z
-  .object({
-    note: z.string().max(500).optional().default(''),
-    url: z.string().url().max(500).optional().or(z.literal('')),
-    email: z.string().email().max(200).optional().or(z.literal('')),
-  })
-  .default({});
-
-export const workflowActionTypeSchema = z.enum(['record', 'webhook', 'email']);
-
-export const createWorkflowSchema = z.object({
-  name: z.string().min(1).max(120),
-  triggerEvent: z.string().min(1).max(80),
-  enabled: z.boolean().optional().default(true),
-  actionType: workflowActionTypeSchema.optional().default('record'),
-  actionConfig: workflowActionConfigSchema.optional().default({}),
-});
-
-export const updateWorkflowSchema = z.object({
-  name: z.string().min(1).max(120).optional(),
-  triggerEvent: z.string().min(1).max(80).optional(),
-  enabled: z.boolean().optional(),
-  actionType: workflowActionTypeSchema.optional(),
-  actionConfig: workflowActionConfigSchema.optional(),
+}).refine((data) => data.answer !== undefined || Boolean(data.answers && Object.keys(data.answers).length), {
+  message: 'answer or answers is required',
+}).refine((data) => !data.answers || Object.keys(data.answers).length <= SURVEY_MAX_QUESTIONS, {
+  message: `At most ${SURVEY_MAX_QUESTIONS} answers`,
 });
 
 export const errorIssueStatusSchema = z.enum(['open', 'resolved', 'ignored']);
@@ -439,6 +672,23 @@ export const updateErrorIssueStateSchema = z.object({
 export const createErrorIssueCommentSchema = z.object({
   fingerprint: z.string().min(1).max(1000),
   body: z.string().min(1).max(2000),
+});
+
+export const mergeErrorIssuesSchema = z.object({
+  targetFingerprint: z.string().min(1).max(1000),
+  sourceFingerprints: z.array(z.string().min(1).max(1000)).min(1).max(50),
+});
+
+/** Ingest -> API: an error event whose fingerprint belongs to a resolved issue. */
+export const errorRegressionReportSchema = z.object({
+  websiteId: z.string().uuid(),
+  fingerprint: z.string().min(1).max(200),
+  occurredAt: z.number().int().positive(),
+  eventId: z.string().max(100).optional().nullable(),
+  release: z.string().max(200).optional().nullable(),
+  environment: z.string().max(100).optional().nullable(),
+  severity: z.string().max(20).optional().nullable(),
+  title: z.string().max(1200).optional().nullable(),
 });
 
 export const uploadErrorSourceMapSchema = z.object({
@@ -459,6 +709,8 @@ export const createErrorAlertRuleSchema = z.object({
   environment: z.string().trim().max(100).optional().nullable(),
   channel: errorAlertChannelSchema.optional().default('record'),
   target: z.string().trim().max(500).optional().nullable(),
+  /** Also notify this rule's channel when a resolved issue occurs again. */
+  notifyRegressions: z.boolean().optional().default(true),
 });
 
 export const updateErrorAlertRuleSchema = createErrorAlertRuleSchema.partial();
@@ -470,6 +722,12 @@ export const logSavedFilterValueSchema = z.object({
   environment: z.string().trim().max(100).optional(),
   service: z.string().trim().max(120).optional(),
   traceId: z.string().trim().max(200).optional(),
+  sessionId: z.string().trim().max(200).optional(),
+  source: z.enum(['otlp', 'browser']).optional(),
+  attributes: z
+    .array(z.object({ key: z.string().trim().min(1).max(256), value: z.string().max(500).optional() }))
+    .max(10)
+    .optional(),
 });
 
 export const createLogSavedFilterSchema = z.object({
@@ -494,6 +752,8 @@ export const createLogAlertRuleSchema = z.object({
   search: z.string().trim().max(200).optional().nullable(),
   release: z.string().trim().max(200).optional().nullable(),
   environment: z.string().trim().max(100).optional().nullable(),
+  attributeKey: z.string().trim().max(256).optional().nullable(),
+  attributeValue: z.string().max(500).optional().nullable(),
   channel: errorAlertChannelSchema.optional().default('record'),
   target: z.string().trim().max(500).optional().nullable(),
 });
@@ -534,7 +794,8 @@ export const updateWarehouseScheduledQuerySchema = z.object({
   nextRunAt: z.coerce.number().int().optional(),
 });
 
-const warehouseDataSourceTypeSchema = z.enum(['http_json', 'http_csv', 'r2_json', 'd1', 'postgres', 'mysql']);
+/** Connectors that really import data (lib/warehouse.ts WAREHOUSE_DATA_SOURCE_TYPES). */
+const warehouseDataSourceTypeSchema = z.enum(['http_json', 'http_csv', 'stripe']);
 const warehouseDataSourceStatusSchema = z.enum(['connected', 'failed', 'syncing']).nullable();
 
 export const createWarehouseDataSourceSchema = z.object({
@@ -569,6 +830,12 @@ export const updateWebsiteSchema = z.object({
     .max(64)
     .refine(isValidSiteTimezone, { message: 'Invalid IANA timezone' })
     .optional(),
+  /** Tracker: autocapture clicks, form submits, field changes and page leaves. */
+  autocapture: z.boolean().optional(),
+  /** Tracker: remember visitors across sessions with a random localStorage id. */
+  persistVisitors: z.boolean().optional(),
+  /** Tracker: send nothing from browsers with Do Not Track or Global Privacy Control. */
+  respectDnt: z.boolean().optional(),
 });
 
 export const updateProfileSchema = z.object({
@@ -637,6 +904,8 @@ export const createTeamSchema = z.object({
 
 export const updateTeamSchema = z.object({
   name: z.string().max(100).optional(),
+  /** Owners only: members without two-factor authentication lose access until they enroll. */
+  requireTwoFactor: z.boolean().optional(),
 });
 
 export const joinTeamSchema = z.object({
@@ -736,22 +1005,7 @@ export const updateBoardSchema = z.object({
   parameters: z.record(z.unknown()).optional(),
 });
 
-export const insightTypeSchema = z.enum(['trend', 'funnel', 'retention', 'path', 'stickiness', 'table']);
-
-export const insightQuerySchema = z.object({
-  event: z.string().max(120).optional().nullable(),
-  events: z.array(z.string().min(1).max(120)).max(8).optional(),
-  path: z.string().max(500).optional().nullable(),
-  steps: z.array(z.string().min(1).max(500)).max(8).optional(),
-  metric: z.enum(['pageviews', 'visitors', 'visits', 'events']).optional().default('pageviews'),
-  dimension: z
-    .enum(['path', 'url', 'referrer', 'channel', 'browser', 'os', 'device', 'country', 'region', 'city', 'language', 'event'])
-    .optional()
-    .default('path'),
-  actor: z.enum(['person', 'session']).optional().default('person'),
-  unit: z.enum(['hour', 'day', 'week', 'month']).optional().default('day'),
-  limit: z.coerce.number().int().min(1).max(100).optional().default(10),
-});
+export const insightTypeSchema = z.enum(INSIGHT_TYPES);
 
 export const createInsightSchema = z.object({
   websiteId: z.string().uuid(),
@@ -791,11 +1045,64 @@ export const updateSavedReplaySchema = z.object({
   name: z.string().max(100).optional(),
 });
 
-export const cohortConditionSchema = z.object({
-  field: z.enum(['event_name', 'url_path']),
-  operator: z.enum(['equals', 'contains']),
-  value: z.string().max(500),
+export const REPLAY_SORTS = ['newest', 'oldest', 'longest', 'shortest', 'most_active', 'most_errors'] as const;
+export type ReplaySort = (typeof REPLAY_SORTS)[number];
+
+const queryBoolean = z.enum(['true', 'false', '1', '0']).transform((value) => value === 'true' || value === '1');
+
+/**
+ * Query string of GET /api/websites/:websiteId/replays (besides startAt / endAt). `filters` is a
+ * JSON array of property filters (event, person or dimension such as country / browser /
+ * device / path); a replay matches when some event of its visit matches each positive filter
+ * and no event matches the negated ones.
+ */
+export const replayListQuerySchema = z.object({
+  minDurationMs: z.coerce.number().int().min(0).optional(),
+  maxDurationMs: z.coerce.number().int().min(0).optional(),
+  hasErrors: queryBoolean.optional(),
+  distinctId: z.string().trim().min(1).max(200).optional(),
+  event: z.string().trim().min(1).max(200).optional(),
+  url: z.string().trim().min(1).max(500).optional(),
+  filters: z
+    .string()
+    .max(8000)
+    .transform((raw, ctx) => {
+      try {
+        return JSON.parse(raw) as unknown;
+      } catch {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'filters must be JSON' });
+        return z.NEVER;
+      }
+    })
+    .pipe(propertyFiltersSchema)
+    .optional(),
+  sort: z.enum(REPLAY_SORTS).default('newest'),
+  limit: z.coerce.number().int().min(1).max(500).default(200),
 });
+export type ReplayListQuery = z.infer<typeof replayListQuerySchema>;
+
+/** A public link to one replay; no expiry when `expiresInDays` is null or missing. */
+export const createReplayShareSchema = z.object({
+  expiresInDays: z.number().int().min(1).max(365).nullable().optional(),
+});
+
+export const cohortConditionSchema = z
+  .object({
+    /** event_name / url_path: custom event or pageview. any_event: any pageview or custom event. */
+    field: z.enum(['event_name', 'url_path', 'any_event']),
+    operator: z.enum(['equals', 'contains']),
+    value: z.string().max(500),
+    /** Event, person or dimension filters the matching events must also satisfy. */
+    filters: propertyFiltersSchema.optional(),
+  })
+  .superRefine((condition, ctx) => {
+    if (condition.field === 'any_event' ? !condition.filters?.length : !condition.value.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: condition.field === 'any_event' ? 'Add at least one filter' : 'Enter a value',
+      });
+    }
+  });
 
 export const cohortDefinitionSchema = z.object({
   conditions: z.array(cohortConditionSchema).min(1).max(10),
@@ -1035,23 +1342,29 @@ export type QueueMessage =
 const EVENT_DATA_MAX_KEYS = 100;
 const EVENT_DATA_MAX_STRING_LENGTH = 2000;
 
+/**
+ * One event_data row per primitive property. Strings are capped at 2000 characters, except keys in
+ * `longStringKeys` (AI prompt / response content), which callers have already size-capped.
+ */
 export function flattenEventData(
   websiteId: string,
   websiteEventId: string,
   data: Record<string, unknown>,
   createdAt: number,
+  longStringKeys?: ReadonlySet<string>,
 ): QueueEventMessage['eventData'] {
   const result: NonNullable<QueueEventMessage['eventData']> = [];
   for (const [key, value] of Object.entries(data)) {
     if (result.length >= EVENT_DATA_MAX_KEYS) break;
     const id = crypto.randomUUID();
     if (typeof value === 'string') {
+      const max = longStringKeys?.has(key) ? AI_CONTENT_MAX_STRING_LENGTH : EVENT_DATA_MAX_STRING_LENGTH;
       result.push({
         id,
         websiteId,
         websiteEventId,
         dataKey: key,
-        stringValue: value.slice(0, EVENT_DATA_MAX_STRING_LENGTH),
+        stringValue: value.slice(0, max),
         dataType: 1,
         createdAt,
       });

@@ -1,4 +1,5 @@
 import type { Env } from '../env';
+import { siteDb } from '../lib/site-db';
 
 export type ActionRule = {
   field: 'event_name' | 'url_path' | 'property';
@@ -112,7 +113,7 @@ export async function getActionSummary(
 ) {
   const filter = buildActionWhere(websiteId, startAt, endAt, rules);
   const [summary, trend, paths, recent] = await Promise.all([
-    env.DB.prepare(
+    siteDb(env, websiteId).prepare(
       `SELECT COUNT(*) as events,
               COUNT(DISTINCT e.session_id) as sessions,
               COUNT(DISTINCT e.visit_id) as visits,
@@ -129,7 +130,7 @@ export async function getActionSummary(
         firstSeenAt: number | null;
         lastSeenAt: number | null;
       }>(),
-    env.DB.prepare(
+    siteDb(env, websiteId).prepare(
       `SELECT date(e.created_at / 1000, 'unixepoch') as date,
               COUNT(*) as events,
               COUNT(DISTINCT e.session_id) as sessions
@@ -140,7 +141,7 @@ export async function getActionSummary(
     )
       .bind(...filter.bindings)
       .all<{ date: string; events: number; sessions: number }>(),
-    env.DB.prepare(
+    siteDb(env, websiteId).prepare(
       `SELECT e.url_path as path,
               COUNT(*) as events,
               COUNT(DISTINCT e.session_id) as sessions,
@@ -153,7 +154,7 @@ export async function getActionSummary(
     )
       .bind(...filter.bindings)
       .all<{ path: string; events: number; sessions: number; lastSeenAt: number | null }>(),
-    env.DB.prepare(
+    siteDb(env, websiteId).prepare(
       `SELECT e.event_id as id,
               e.session_id as sessionId,
               e.visit_id as visitId,

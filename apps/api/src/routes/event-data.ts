@@ -9,6 +9,7 @@ import {
 import { badRequest, json } from '../lib/response';
 import { requireWebsiteOr404 } from '../lib/website';
 import type { ApiVariables } from '../middleware/auth';
+import { siteDb } from '../lib/site-db';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
 
@@ -52,7 +53,7 @@ export async function handleFields(c: Ctx) {
   if (response) return response;
   const { startAt, endAt } = parseStatsRange(c, { defaultSpan: '30d' });
 
-  const rows = await c.env.DB.prepare(
+  const rows = await siteDb(c.env, website!.websiteId).prepare(
     `SELECT data_key as field, COUNT(*) as count
      FROM event_data
      WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3

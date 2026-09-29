@@ -1,5 +1,6 @@
 import { EVENT_TYPE } from '@flareboard/shared';
 import type { Env } from '../env';
+import { siteDb } from '../lib/site-db';
 
 export type GroupFilters = {
   search?: string;
@@ -22,7 +23,7 @@ function searchClause(filters: GroupFilters = {}) {
 }
 
 export async function listGroupTypes(env: Env, websiteId: string) {
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT DISTINCT substr(data_key, 8) as type
      FROM session_data
      WHERE website_id = ?1
@@ -47,7 +48,7 @@ export async function listGroups(
   filters: GroupFilters = {},
 ) {
   const filter = searchClause(filters);
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `WITH group_sessions AS (
        SELECT sd.session_id as sessionId,
               sd.string_value as groupKey,
@@ -118,7 +119,7 @@ export async function listGroups(
 }
 
 export async function getGroupDetail(env: Env, websiteId: string, groupType: string, groupId: string) {
-  const sessions = await env.DB.prepare(
+  const sessions = await siteDb(env, websiteId).prepare(
     `WITH group_sessions AS (
        SELECT sd.session_id as sessionId,
               MIN(sd.created_at) as joinedAt
@@ -155,7 +156,7 @@ export async function getGroupDetail(env: Env, websiteId: string, groupType: str
 
   if (!(sessions.results ?? []).length) return null;
 
-  const properties = await env.DB.prepare(
+  const properties = await siteDb(env, websiteId).prepare(
     `WITH group_sessions AS (
        SELECT sd.session_id as sessionId
        FROM session_data sd
@@ -177,7 +178,7 @@ export async function getGroupDetail(env: Env, websiteId: string, groupType: str
     .bind(websiteId, groupKey(groupType), groupId, groupPropertyPrefix(groupType), `${groupPropertyPrefix(groupType)}%`)
     .all<{ key: string; value: string | null; updatedAt: number | null }>();
 
-  const events = await env.DB.prepare(
+  const events = await siteDb(env, websiteId).prepare(
     `WITH group_sessions AS (
        SELECT sd.session_id as sessionId
        FROM session_data sd

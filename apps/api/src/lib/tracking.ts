@@ -1,4 +1,5 @@
 import type { Env } from '../env';
+import { siteDb } from '../lib/site-db';
 
 const RECENT_MS = 15 * 60 * 1000;
 const PAGEVIEW_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -8,7 +9,7 @@ export async function getTrackingStatus(env: Env, websiteId: string) {
   const sinceRecent = now - RECENT_MS;
   const since24h = now - PAGEVIEW_WINDOW_MS;
 
-  const row = await env.DB.prepare(
+  const row = await siteDb(env, websiteId).prepare(
     `SELECT
        MAX(created_at) as lastEventAt,
        SUM(CASE WHEN created_at >= ?2 THEN 1 ELSE 0 END) as recentCount,

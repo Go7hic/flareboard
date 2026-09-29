@@ -11,12 +11,13 @@ import {
   getTraceSummaries,
 } from '../../src/lib/logs';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const BASE = Date.UTC(2026, 0, 3, 12);
 const DAY = 24 * 60 * 60 * 1000;
 
 async function insertSession(id: string) {
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT OR IGNORE INTO session (session_id, website_id, created_at)
      VALUES (?1, ?2, ?3)`,
   )
@@ -34,14 +35,14 @@ async function insertLog(
   environment = 'production',
   extra: Record<string, string | number> = {},
 ) {
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
      VALUES (?1, ?2, ?3, ?3, ?4, '/checkout', ?5, 'log')`,
   )
     .bind(id, TEST_WEBSITE_ID, sessionId, createdAt, EVENT_TYPE.log)
     .run();
 
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT INTO event_data (event_data_id, website_id, website_event_id, data_key, string_value, data_type, created_at)
      VALUES
        (?1, ?2, ?3, 'level', ?4, 1, ?6),
@@ -65,7 +66,7 @@ async function insertLog(
     .run();
 
   for (const [key, value] of Object.entries(extra)) {
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT INTO event_data (event_data_id, website_id, website_event_id, data_key, string_value, number_value, data_type, created_at)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
     )
@@ -112,6 +113,7 @@ describe('logs query helpers', () => {
       trend: [{ date: '2026-01-03', logs: 3, sessions: 2 }],
       releases: [{ release: '1.0.0', logs: 3 }],
       environments: [{ environment: 'production', logs: 3 }],
+      services: [],
       lastSeenAt: BASE + 3000,
     });
     expect(rows.map((row) => ({ message: row.message, level: row.level }))).toEqual([
@@ -164,6 +166,7 @@ describe('logs query helpers', () => {
       trend: [{ date: '2026-01-03', logs: 1, sessions: 1 }],
       releases: [{ release: '1.0.0', logs: 1 }],
       environments: [{ environment: 'production', logs: 1 }],
+      services: [],
       lastSeenAt: BASE + 5000,
     });
     expect(rows.map((row) => ({ message: row.message, level: row.level }))).toEqual([
@@ -232,6 +235,7 @@ describe('logs query helpers', () => {
       sessions: 1,
       releases: [{ release: '2.0.0', logs: 1 }],
       environments: [{ environment: 'production', logs: 1 }],
+      services: [],
       lastSeenAt: later + 1000,
     });
     expect(rows.map((row) => row.id)).toEqual(['log-filter-1']);
@@ -283,8 +287,11 @@ describe('logs query helpers', () => {
         traceId: 'trace-checkout-1',
         spans: 2,
         services: 2,
-        durationMs: 1000,
+        // First span start to last span end (the child ends 380 ms after it starts).
+        durationMs: 1380,
         maxSpanDurationMs: 380,
+        rootName: 'GET /checkout',
+        rootService: 'web',
         hasError: true,
       }),
     ]);
@@ -298,7 +305,7 @@ describe('logs query helpers', () => {
           spanId: 'span-root',
           parentSpanId: null,
           service: 'web',
-          operation: 'GET /checkout',
+          name: 'GET /checkout',
           durationMs: 120,
           status: 'ok',
         },
@@ -307,7 +314,7 @@ describe('logs query helpers', () => {
           spanId: 'span-payment',
           parentSpanId: 'span-root',
           service: 'payments',
-          operation: 'POST /payments',
+          name: 'POST /payments',
           durationMs: 380,
           status: 'error',
         },

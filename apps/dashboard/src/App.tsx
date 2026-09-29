@@ -12,6 +12,8 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 
 const SharePublic = lazy(() => import('./pages/SharePublic'));
+const SharedReplay = lazy(() => import('./pages/SharedReplay'));
+const HostedSurvey = lazy(() => import('./pages/HostedSurvey'));
 const DashboardHome = lazy(() => import('./pages/DashboardHome'));
 const Demo = lazy(() => import('./pages/Demo'));
 const Privacy = lazy(() => import('./pages/Privacy'));
@@ -23,6 +25,8 @@ const LinkAnalytics = lazy(() => import('./pages/LinkAnalytics'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Insights = lazy(() => import('./pages/Insights'));
 const Boards = lazy(() => import('./pages/Boards'));
+const BoardDetail = lazy(() => import('./pages/BoardDetail'));
+const Notebooks = lazy(() => import('./pages/Notebooks'));
 const Admin = lazy(() => import('./pages/Admin'));
 const WebsiteStats = lazy(() => import('./pages/WebsiteStats'));
 const Sessions = lazy(() => import('./pages/Sessions'));
@@ -52,7 +56,9 @@ const WebsiteCompare = lazy(() => import('./pages/WebsiteCompare'));
 const WebsiteShareLinks = lazy(() => import('./pages/WebsiteShareLinks'));
 const WebsiteErrors = lazy(() => import('./pages/WebsiteErrors'));
 const WebsiteErrorDetail = lazy(() => import('./pages/WebsiteErrorDetail'));
+const WebsiteErrorIssue = lazy(() => import('./pages/WebsiteErrorIssue'));
 const WebsiteAiObservability = lazy(() => import('./pages/WebsiteAiObservability'));
+const WebsiteAiTrace = lazy(() => import('./pages/WebsiteAiTrace'));
 const WebsiteLogs = lazy(() => import('./pages/WebsiteLogs'));
 const WebsiteExperiments = lazy(() => import('./pages/WebsiteExperiments'));
 const WebsiteFeatureFlags = lazy(() => import('./pages/WebsiteFeatureFlags'));
@@ -61,6 +67,8 @@ const WebsiteWorkflows = lazy(() => import('./pages/WebsiteWorkflows'));
 const WebsiteWarehouse = lazy(() => import('./pages/WebsiteWarehouse'));
 const WebsiteAuditLog = lazy(() => import('./pages/WebsiteAuditLog'));
 const Billing = lazy(() => import('./pages/Billing'));
+const ApiKeys = lazy(() => import('./pages/ApiKeys'));
+const AccountSecurity = lazy(() => import('./pages/AccountSecurity'));
 
 function LazyPage({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
@@ -87,6 +95,22 @@ export default function App() {
           element={
             <LazyPage>
               <SharePublic />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/shared/replay/:token"
+          element={
+            <LazyPage>
+              <SharedReplay />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/s/:key"
+          element={
+            <LazyPage>
+              <HostedSurvey />
             </LazyPage>
           }
         />
@@ -180,10 +204,42 @@ export default function App() {
             }
           />
           <Route
+            path="/boards/:boardId"
+            element={
+              <LazyPage>
+                <BoardDetail />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="/notebooks"
+            element={
+              <LazyPage>
+                <Notebooks />
+              </LazyPage>
+            }
+          />
+          <Route
             path="/billing"
             element={
               <LazyPage>
                 <Billing />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="/api-keys"
+            element={
+              <LazyPage>
+                <ApiKeys />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="/account/security"
+            element={
+              <LazyPage>
+                <AccountSecurity />
               </LazyPage>
             }
           />
@@ -404,6 +460,14 @@ export default function App() {
               }
             />
             <Route
+              path="errors/issues/:fingerprint"
+              element={
+                <LazyPage>
+                  <WebsiteErrorIssue />
+                </LazyPage>
+              }
+            />
+            <Route
               path="errors/:eventId"
               element={
                 <LazyPage>
@@ -424,6 +488,14 @@ export default function App() {
               element={
                 <LazyPage>
                   <WebsiteAiObservability />
+                </LazyPage>
+              }
+            />
+            <Route
+              path="ai-observability/traces/:traceId"
+              element={
+                <LazyPage>
+                  <WebsiteAiTrace />
                 </LazyPage>
               }
             />

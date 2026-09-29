@@ -1,7 +1,7 @@
 import type { Env } from '../env';
 
 export type SendEmailInput = {
-  to: string;
+  to: string | string[];
   subject: string;
   html: string;
   text: string;

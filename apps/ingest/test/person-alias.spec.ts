@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from './helpers/migrations';
 import { fetchWorker } from './helpers/fetch-worker';
+import { testSiteDb } from './helpers/site-db';
 
 describe('$alias', () => {
   beforeAll(async () => {
@@ -30,7 +31,7 @@ describe('$alias', () => {
     });
     expect(response.status).toBe(200);
 
-    const rows = await env.DB.prepare(
+    const rows = await testSiteDb(TEST_WEBSITE_ID).prepare(
       `SELECT distinct_id AS distinctId, properties_json AS props FROM person
        WHERE website_id = ?1 AND distinct_id IN ('user-42', 'anon-7f3') ORDER BY distinct_id`,
     )

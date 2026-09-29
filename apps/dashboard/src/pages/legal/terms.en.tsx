@@ -56,6 +56,12 @@ const sections: LegalSection[] = [
           account and for the actions of any team members you invite.
         </li>
         <li>
+          If you turn on two-factor authentication, keep your recovery codes somewhere safe. If you lose both your
+          authenticator and your recovery codes we may be unable to restore access, and we may ask for proof that
+          the account is yours before we try. Team owners can require two-factor authentication for their team;
+          members who have not turned it on cannot use the team’s resources until they do.
+        </li>
+        <li>
           Tell us promptly at <Mail /> if you believe your account has been compromised.
         </li>
       </ul>
@@ -125,7 +131,7 @@ const sections: LegalSection[] = [
             electronic communications and consumer protection laws.
           </li>
           <li>
-            Not sending us sensitive data through custom events, user properties, logs, errors or session replay,
+            Not sending us sensitive data through custom events, user properties, logs, traces, errors or session replay,
             including passwords, payment card numbers, government identification numbers, health data, other
             special categories of personal data, or data about children under 16.
           </li>
@@ -134,6 +140,13 @@ const sections: LegalSection[] = [
             pages is excluded from recordings.
           </li>
           <li>Keeping your own copies of Customer Data you need. The Service is not a backup system.</li>
+          <li>
+            Any third-party account you connect as a data source, such as Stripe. You authorize us to read from it
+            with the credentials you provide, you confirm you may share that data with us, and you are responsible
+            for limiting the credentials to read-only access. We store connector credentials encrypted, use them only
+            to import data for you, never display them again, and delete them when you delete the data source or the
+            website.
+          </li>
         </ul>
         <p>
           You can export analytics data on plans that include export. You can delete websites or your whole account
@@ -226,13 +239,33 @@ const sections: LegalSection[] = [
     body: (
       <>
         <p>
-          Public share links let anyone with the link see the dashboards and statistics you choose to share. You are
-          responsible for what you share and with whom; revoke a link when it is no longer needed.
+          Public share links let anyone with the link see the dashboards, insights and statistics you choose to share.
+          You are responsible for what you share and with whom; revoke a link when it is no longer needed. Only send
+          alert and subscription emails to recipients who expect them.
         </p>
         <p>
           When you connect webhooks, email destinations, data sources or other third-party services, you instruct
           us to send data to or receive data from them. Those services are governed by their own terms, and we are
           not responsible for them.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: 'ai-features',
+    title: 'AI features',
+    body: (
+      <>
+        <p>
+          The “Ask Flareboard” assistant, where offered, sends your questions and limited query results to our AI
+          provider, as described in our <Link to="/privacy#assistant">Privacy Policy</Link>. Its answers are
+          generated automatically and may be incomplete or wrong: check important figures against your reports
+          before relying on them. Hosted plans include a daily number of assistant questions, which we may change.
+        </p>
+        <p>
+          The MCP endpoint lets AI tools you connect act with your personal API key. You are responsible for the
+          tools you connect and for the scopes you give the key; a key with the write scope lets the tool create
+          annotations and turn feature flags on or off.
         </p>
       </>
     ),

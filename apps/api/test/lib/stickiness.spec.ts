@@ -3,12 +3,13 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { EVENT_TYPE } from '@flareboard/shared';
 import { getStickinessReport } from '../../src/lib/advanced-reports';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const BASE = Date.UTC(2026, 0, 20, 12);
 const DAY = 24 * 60 * 60 * 1000;
 
 async function insertSession(id: string, distinctId: string | null, createdAt: number) {
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT OR IGNORE INTO session (session_id, website_id, distinct_id, created_at)
      VALUES (?1, ?2, ?3, ?4)`,
   )
@@ -17,7 +18,7 @@ async function insertSession(id: string, distinctId: string | null, createdAt: n
 }
 
 async function insertEvent(id: string, sessionId: string, eventName: string | null, createdAt: number) {
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
      VALUES (?1, ?2, ?3, ?3, ?4, '/app', ?5, ?6)`,
   )

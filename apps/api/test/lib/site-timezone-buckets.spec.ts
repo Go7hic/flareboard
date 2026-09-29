@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { EVENT_TYPE } from '@flareboard/shared';
 import { getPageviews, getTrafficHeatmap } from '../../src/lib/queries';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 // Tokyo is UTC+9: 10:00Z is 19:00 on Mar 5 locally, 16:00Z is 01:00 on Mar 6.
 const EVENING = Date.UTC(2026, 2, 5, 10);
@@ -14,13 +15,13 @@ describe('site timezone bucketing', () => {
   beforeAll(async () => {
     await applyTestMigrations(env.DB);
     await seedTestWebsite(env.DB);
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT OR IGNORE INTO session (session_id, website_id, created_at) VALUES ('tz-session', ?1, ?2)`,
     )
       .bind(TEST_WEBSITE_ID, EVENING)
       .run();
     for (const [i, at] of [EVENING, AFTER_MIDNIGHT].entries()) {
-      await env.DB.prepare(
+      await testSiteDb(TEST_WEBSITE_ID).prepare(
         `INSERT OR IGNORE INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type)
          VALUES (?1, ?2, 'tz-session', ?1, ?3, '/', ?4)`,
       )

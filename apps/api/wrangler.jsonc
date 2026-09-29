@@ -11,7 +11,9 @@
     "@flareboard/db": "../../packages/db/src/index.ts"
   },
   "vars": {
-    "ENVIRONMENT": "development"
+    "ENVIRONMENT": "development",
+    // Analytics storage: d1 (legacy) | dual (write both, read D1) | do (per-website Durable Objects)
+    "EVENT_STORE": "do"
   },
   "dev": {
     "port": 8788
@@ -41,6 +43,11 @@
       {
         "name": "RATE_LIMITER",
         "class_name": "RateLimiter"
+      },
+      {
+        // One SQLite store per website for analytics tables (src/store, lib/site-db.ts).
+        "name": "SITE_STORE",
+        "class_name": "EventStore"
       }
     ]
   },
@@ -48,6 +55,10 @@
     {
       "tag": "v1-rate-limiter",
       "new_sqlite_classes": ["RateLimiter"]
+    },
+    {
+      "tag": "v2-event-store",
+      "new_sqlite_classes": ["EventStore"]
     }
   ],
   "send_email": [
@@ -55,6 +66,26 @@
       "name": "EMAIL"
     }
   ],
+  // Durable workflow executions: delays, condition steps and retried deliveries (src/workflows).
+  "workflows": [
+    {
+      "name": "flareboard-workflow-runner",
+      "binding": "WORKFLOW_RUNNER",
+      "class_name": "WorkflowRunner"
+    }
+  ],
+  // Workflow triggers produced by the ingest worker (apps/ingest/src/lib/workflows.ts).
+  "queues": {
+    "consumers": [
+      {
+        "queue": "flareboard-workflow-triggers",
+        "max_batch_size": 20,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "dead_letter_queue": "flareboard-workflow-triggers-dlq"
+      }
+    ]
+  },
   "triggers": {
     "crons": ["0 * * * *"]
   },
@@ -70,6 +101,8 @@
     "production": {
       "vars": {
         "ENVIRONMENT": "production",
+        // Switch to "dual", backfill, verify, then "do" (docs/parity/storage-migration.md).
+        "EVENT_STORE": "d1",
         "HOSTED_MODE": "true",
         "EMAIL_FROM": "noreply@flareboard.dev",
         "EMAIL_FROM_NAME": "Flareboard",
@@ -101,6 +134,10 @@
           {
             "name": "RATE_LIMITER",
             "class_name": "RateLimiter"
+          },
+          {
+            "name": "SITE_STORE",
+            "class_name": "EventStore"
           }
         ]
       },
@@ -108,6 +145,10 @@
         {
           "tag": "v1-rate-limiter",
           "new_sqlite_classes": ["RateLimiter"]
+        },
+        {
+          "tag": "v2-event-store",
+          "new_sqlite_classes": ["EventStore"]
         }
       ],
       "send_email": [
@@ -115,6 +156,24 @@
           "name": "EMAIL"
         }
       ],
+      "workflows": [
+        {
+          "name": "flareboard-workflow-runner-production",
+          "binding": "WORKFLOW_RUNNER",
+          "class_name": "WorkflowRunner"
+        }
+      ],
+      "queues": {
+        "consumers": [
+          {
+            "queue": "flareboard-workflow-triggers",
+            "max_batch_size": 20,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+            "dead_letter_queue": "flareboard-workflow-triggers-dlq"
+          }
+        ]
+      },
       "triggers": {
         "crons": ["0 * * * *"]
       },

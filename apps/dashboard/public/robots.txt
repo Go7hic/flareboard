@@ -1,4 +1,6 @@
 User-agent: *
 Allow: /
+# Hosted survey links are for respondents, not search results.
+Disallow: /s/
 
 Sitemap: https://flareboard.dev/sitemap.xml

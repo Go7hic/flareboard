@@ -6,9 +6,15 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./ai": "./src/ai.ts",
     "./client": "./src/client.ts",
     "./csv": "./src/csv.ts",
+    "./dashboards": "./src/dashboards.ts",
     "./date-range": "./src/date-range.ts",
+    "./experiment-stats": "./src/experiment-stats.ts",
+    "./insight-query": "./src/insight-query.ts",
+    "./survey-flow": "./src/survey-flow.ts",
+    "./llm": "./src/llm.ts",
     "./timezone": "./src/timezone.ts"
   },
   "scripts": {

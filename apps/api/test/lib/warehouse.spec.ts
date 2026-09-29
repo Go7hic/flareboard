@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { EVENT_TYPE } from '@flareboard/shared';
 import { analyzeWarehouseQuery, enforceWarehouseQueryCost, getWarehouseSchema, runWarehouseQuery, WAREHOUSE_QUERY_LIMITS } from '../../src/lib/warehouse';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const BASE = Date.UTC(2026, 0, 6, 12);
 
@@ -13,13 +14,13 @@ describe('runWarehouseQuery', () => {
   });
 
   it('runs scoped read-only queries against analytics tables', async () => {
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT OR IGNORE INTO session (session_id, website_id, created_at)
        VALUES ('warehouse-session', ?1, ?2)`,
     )
       .bind(TEST_WEBSITE_ID, BASE)
       .run();
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
        VALUES ('warehouse-event', ?1, 'warehouse-session', 'warehouse-session', ?2, '/pricing', ?3, 'signup')`,
     )

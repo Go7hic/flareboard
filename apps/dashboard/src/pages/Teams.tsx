@@ -7,11 +7,14 @@ import { PlanUpgradeBanner } from '../components/PlanUpgradeBanner';
 import { EmptyState } from '../components/EmptyState';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
+import { AuditLogTable } from '../components/AuditLogTable';
+import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Skeleton } from '../components/ui/skeleton';
-import { api, type Team, type Website } from '../lib/api';
+import { Switch } from '../components/ui/switch';
+import { api, ApiError, type AuditLogPage, type Team, type Website } from '../lib/api';
 import { t } from '../lib/i18n';
 import { useConfirm } from '../components/ConfirmDialog';
 
@@ -24,6 +27,15 @@ interface TeamMember {
   userId: string;
   username: string;
   role: string;
+}
+
+/** `GET /api/teams/:teamId/status` (only the fields this page reads). */
+interface TeamStatus {
+  canManageMembers: boolean;
+  /** Owner or global admin: may change the team's security settings. */
+  canManageSecurity?: boolean;
+  requireTwoFactor?: boolean;
+  members: Array<{ userId: string; username: string; role: string; twoFactorEnabled?: boolean }>;
 }
 
 function formatTeamRole(role: string | undefined): string {
@@ -80,6 +92,34 @@ export default function Teams() {
     queryKey: ['team-members', selectedTeamId],
     enabled: Boolean(selectedTeamId),
     queryFn: () => api<TeamMember[]>(`/api/teams/${selectedTeamId}/users`),
+  });
+
+  const statusQuery = useQuery({
+    queryKey: ['team-status', selectedTeamId],
+    enabled: Boolean(selectedTeamId),
+    queryFn: () => api<TeamStatus>(`/api/teams/${selectedTeamId}/status`),
+  });
+
+  const canManageMembers = Boolean(statusQuery.data?.canManageMembers);
+
+  const auditQuery = useQuery({
+    queryKey: ['team-audit-log', selectedTeamId],
+    enabled: Boolean(selectedTeamId) && canManageMembers,
+    queryFn: () => api<AuditLogPage>(`/api/teams/${selectedTeamId}/audit-log?page=1&pageSize=50`),
+  });
+
+  const requireTwoFactorMutation = useMutation({
+    mutationFn: (requireTwoFactor: boolean) =>
+      api<Team>(`/api/teams/${selectedTeamId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ requireTwoFactor }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['team-status', selectedTeamId] });
+      queryClient.invalidateQueries({ queryKey: ['team', selectedTeamId] });
+      queryClient.invalidateQueries({ queryKey: ['team-audit-log', selectedTeamId] });
+      queryClient.invalidateQueries({ queryKey: ['teams'] });
+    },
   });
 
   const createMutation = useMutation({
@@ -177,6 +217,20 @@ export default function Teams() {
 
   const teamWebsites = teamDetailQuery.data?.websites ?? [];
   const members = membersQuery.data ?? [];
+  const selectedTeam = teams.find((team) => team.id === selectedTeamId);
+  const canManageSecurity = Boolean(statusQuery.data?.canManageSecurity);
+  const requireTwoFactor = Boolean(statusQuery.data?.requireTwoFactor ?? selectedTeam?.requireTwoFactor);
+  const twoFactorByUser = new Map(
+    (statusQuery.data?.members ?? []).map((member) => [member.userId, member.twoFactorEnabled]),
+  );
+  // Who lacks 2FA matters to owners deciding whether to require it, and to everyone once it is on.
+  const showTwoFactorBadges = requireTwoFactor || canManageSecurity;
+  const requireTwoFactorError = requireTwoFactorMutation.error;
+  const ownerNeedsTwoFactor =
+    requireTwoFactorError instanceof ApiError &&
+    requireTwoFactorError.status === 409 &&
+    requireTwoFactorError.data?.code === 'owner_two_factor_required';
+  const auditItems = auditQuery.data?.items ?? [];
 
   return (
     <Page className="page-teams">
@@ -255,6 +309,7 @@ export default function Teams() {
                     onSelect={() => {
                       setSelectedTeamId(team.id);
                       setAccessCodeCopied(false);
+                      requireTwoFactorMutation.reset();
                     }}
                   >
                     <span className="teams-sidebar-item-name">{team.name}</span>
@@ -285,7 +340,14 @@ export default function Teams() {
                     <ul className="list-plain">
                       {members.map((m) => (
                         <li key={m.id} className="list-item teams-member-row">
-                          <span className="teams-member-name">{m.username}</span>
+                          <span className="teams-member-name">
+                            {m.username}
+                            {showTwoFactorBadges && twoFactorByUser.get(m.userId) === false ? (
+                              <Badge variant="warning" className="ml-2">
+                                {t('teamMemberNoTwoFactor')}
+                              </Badge>
+                            ) : null}
+                          </span>
                           {canManageTeam ? (
                             <span className="teams-member-actions">
                               <select
@@ -323,6 +385,38 @@ export default function Teams() {
                     </ul>
                   )}
                 </section>
+
+                {canManageSecurity ? (
+                  <section className="teams-detail-block">
+                    <h3 className="section-title">{t('teamSecurity')}</h3>
+                    <label className="teams-security-toggle">
+                      <Switch
+                        checked={requireTwoFactor}
+                        disabled={requireTwoFactorMutation.isPending || statusQuery.isLoading}
+                        onCheckedChange={(checked) => requireTwoFactorMutation.mutate(checked)}
+                      />
+                      <span>
+                        <span className="teams-security-toggle-label">{t('teamRequireTwoFactor')}</span>
+                        <span className="teams-security-toggle-hint">{t('teamRequireTwoFactorHint')}</span>
+                      </span>
+                    </label>
+                    {ownerNeedsTwoFactor ? (
+                      <p className="text-danger text-sm mt-2" role="alert">
+                        {t('teamRequireTwoFactorOwnerFirst')}{' '}
+                        <Link to="/account/security">{t('accountSecurity')}</Link>
+                      </p>
+                    ) : requireTwoFactorError ? (
+                      <p className="text-danger text-sm mt-2" role="alert">
+                        {(requireTwoFactorError as Error).message}
+                      </p>
+                    ) : null}
+                  </section>
+                ) : requireTwoFactor ? (
+                  <section className="teams-detail-block">
+                    <h3 className="section-title">{t('teamSecurity')}</h3>
+                    <p className="teams-empty-hint">{t('teamRequiresTwoFactorInfo')}</p>
+                  </section>
+                ) : null}
 
                 {canManageTeam && teamDetailQuery.data.accessCode ? (
                   <section className="teams-detail-block">
@@ -402,6 +496,19 @@ export default function Teams() {
                         <p className="text-danger">{(createWebsiteMutation.error as Error).message}</p>
                       ) : null}
                     </form>
+                  </section>
+                ) : null}
+
+                {canManageMembers ? (
+                  <section className="teams-detail-block">
+                    <h3 className="section-title">{t('teamActivity')}</h3>
+                    <p className="section-lead">{t('teamActivityLead')}</p>
+                    {auditQuery.isLoading ? <Skeleton className="h-8 w-full" /> : null}
+                    {auditQuery.error ? <p className="text-danger">{(auditQuery.error as Error).message}</p> : null}
+                    {auditQuery.data && !auditItems.length ? (
+                      <p className="teams-empty-hint">{t('teamActivityEmpty')}</p>
+                    ) : null}
+                    {auditItems.length ? <AuditLogTable entries={auditItems} showActor /> : null}
                   </section>
                 ) : null}
 

@@ -1,8 +1,9 @@
 import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { createSecureToken, EVENT_TYPE } from '@flareboard/shared';
+import { createSecureToken, EVENT_TYPE, messageFingerprint } from '@flareboard/shared';
 import { fetchWorkerJson } from '../helpers/fetch-worker';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const TEST_USER_ID = '00000000-0000-0000-0000-000000000001';
 const BASE = Date.UTC(2026, 0, 12, 12);
@@ -13,20 +14,20 @@ async function authHeader() {
 }
 
 async function insertError() {
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT OR IGNORE INTO session (session_id, website_id, created_at)
      VALUES ('error-route-session', ?1, ?2)`,
   )
     .bind(TEST_WEBSITE_ID, BASE)
     .run();
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT OR REPLACE INTO website_event
        (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
      VALUES ('error-route-1', ?1, 'error-route-session', 'error-route-session', ?2, '/checkout', ?3, ?4)`,
   )
     .bind(TEST_WEBSITE_ID, BASE + 1000, EVENT_TYPE.error, 'Assigned route issue')
     .run();
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT OR REPLACE INTO event_data
        (event_data_id, website_id, website_event_id, data_key, string_value, data_type, created_at)
      VALUES
@@ -92,7 +93,7 @@ describe('error issue workflow routes', () => {
     });
 
     expect(list.body.issues[0]).toMatchObject({
-      fingerprint,
+      fingerprint: messageFingerprint('TypeError', 'Assigned route issue'),
       assigneeUserId: TEST_USER_ID,
       comments: [{ body: 'Checking the minified stack trace.' }],
     });

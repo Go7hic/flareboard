@@ -2,11 +2,22 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { BrandLogo } from '../components/BrandLogo';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { TwoFactorCodeField } from '../components/TwoFactorCodeField';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { api, API_URL, bootstrapSession, markSession, type LoginResponse } from '../lib/api';
+import {
+  api,
+  ApiError,
+  API_URL,
+  bootstrapSession,
+  isTwoFactorChallenge,
+  markSession,
+  type LoginResponse,
+  type LoginResult,
+} from '../lib/api';
 import { t } from '../lib/i18n';
+import { normalizeTwoFactorCode, twoFactorErrorMessage } from '../lib/two-factor';
 
 const POST_LOGIN_PATH = '/dashboard';
 
@@ -38,10 +49,29 @@ export default function Login() {
   const [oauthProviders, setOauthProviders] = useState<string[]>([]);
   const [registrationEnabled, setRegistrationEnabled] = useState(false);
   const [environment, setEnvironment] = useState('development');
-  const [mode, setMode] = useState<'login' | 'forgot' | 'reset'>('login');
+  const [mode, setMode] = useState<'login' | 'forgot' | 'reset' | 'two-factor'>('login');
+  /** Pending second step: the short-lived challenge from the first step and where to go after. */
+  const [twoFactor, setTwoFactor] = useState<{ challenge: string; next: string } | null>(null);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [twoFactorPending, setTwoFactorPending] = useState(false);
   const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+
+  /** Finish a first-step response: either signed in, or on to the two-factor step. */
+  function completeSignIn(res: LoginResult, next: string, { replace = false } = {}) {
+    if (isTwoFactorChallenge(res)) {
+      setTwoFactor({ challenge: res.challenge, next });
+      setTwoFactorCode('');
+      setError(null);
+      setMessage(null);
+      setMode('two-factor');
+      return;
+    }
+    markSession(true);
+    window.flareboard?.track('login_success');
+    navigate(next, { replace });
+  }
 
   useEffect(() => {
     api<AppConfig>('/api/config')
@@ -56,13 +86,12 @@ export default function Login() {
     if (verify) {
       void (async () => {
         try {
-          const res = await api<LoginResponse>('/api/auth/verify-email', {
+          const res = await api<LoginResult>('/api/auth/verify-email', {
             method: 'POST',
             body: JSON.stringify({ token: verify }),
           });
-          markSession(true);
           setSearchParams({}, { replace: true });
-          navigate(POST_LOGIN_PATH, { replace: true });
+          completeSignIn(res, POST_LOGIN_PATH, { replace: true });
         } catch (err) {
           setError(err instanceof Error ? err.message : t('requestFailed'));
           setSearchParams({}, { replace: true });
@@ -76,14 +105,12 @@ export default function Login() {
     if (code) {
       void (async () => {
         try {
-          const res = await api<LoginResponse>('/api/auth/oauth/exchange', {
+          const res = await api<LoginResult>('/api/auth/oauth/exchange', {
             method: 'POST',
             body: JSON.stringify({ code }),
           });
-          markSession(true);
           setSearchParams({}, { replace: true });
-          window.flareboard?.track('login_success');
-          navigate(next, { replace: true });
+          completeSignIn(res, next, { replace: true });
         } catch {
           setError(t('requestFailed'));
           setSearchParams({}, { replace: true });
@@ -108,6 +135,7 @@ export default function Login() {
     }
 
     // Already signed in (e.g. an old tab or a bookmarked /login): continue instead of asking again.
+    // Clearing ?verify / ?code re-runs this effect; a pending two-factor step is not signed in yet.
     if (!reset) {
       void bootstrapSession().then((active) => {
         if (active) navigate(next, { replace: true });
@@ -119,16 +147,49 @@ export default function Login() {
     e.preventDefault();
     setError(null);
     try {
-      const res = await api<LoginResponse>('/api/auth/login', {
+      const res = await api<LoginResult>('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ username, password }),
       });
-      markSession(true);
-      window.flareboard?.track('login_success');
-      navigate(safeNextPath(searchParams.get('next')));
+      completeSignIn(res, safeNextPath(searchParams.get('next')));
     } catch (err) {
       setError(err instanceof Error ? err.message : t('loginFailed'));
     }
+  }
+
+  async function onTwoFactor(e: FormEvent) {
+    e.preventDefault();
+    const code = normalizeTwoFactorCode(twoFactorCode);
+    if (!twoFactor || !code || twoFactorPending) return;
+    setError(null);
+    setTwoFactorPending(true);
+    try {
+      await api<LoginResponse>('/api/auth/login/2fa', {
+        method: 'POST',
+        body: JSON.stringify({ challenge: twoFactor.challenge, code }),
+      });
+      markSession(true);
+      window.flareboard?.track('login_success');
+      navigate(twoFactor.next, { replace: true });
+    } catch (err) {
+      if (err instanceof ApiError && err.data?.code === 'challenge_expired') {
+        backToPasswordStep();
+        setError(t('twoFactorChallengeExpired'));
+      } else {
+        setError(twoFactorErrorMessage(err) ?? t('loginFailed'));
+      }
+    } finally {
+      setTwoFactorPending(false);
+    }
+  }
+
+  function backToPasswordStep() {
+    setTwoFactor(null);
+    setTwoFactorCode('');
+    setPassword('');
+    setError(null);
+    setMessage(null);
+    setMode('login');
   }
 
   async function onForgot(e: FormEvent) {
@@ -184,7 +245,15 @@ export default function Login() {
           </span>
           <div className="login-brand">
             <BrandLogo showWordmark={false} size={32} />
-            <h1>{mode === 'forgot' ? t('forgotPassword') : mode === 'reset' ? t('resetPassword') : t('signIn')}</h1>
+            <h1>
+              {mode === 'forgot'
+                ? t('forgotPassword')
+                : mode === 'reset'
+                  ? t('resetPassword')
+                  : mode === 'two-factor'
+                    ? t('twoFactorTitle')
+                    : t('signIn')}
+            </h1>
           </div>
           {mode === 'login' ? (
             <>
@@ -243,6 +312,33 @@ export default function Login() {
                 </div>
               ) : null}
             </>
+          ) : mode === 'two-factor' ? (
+            <form onSubmit={onTwoFactor}>
+              <p className="login-hint">{t('twoFactorLoginHint')}</p>
+              <TwoFactorCodeField
+                id="two-factor-code"
+                value={twoFactorCode}
+                onChange={setTwoFactorCode}
+                autoFocus
+                disabled={twoFactorPending}
+              />
+              {error ? (
+                <p className="text-danger mb-4" role="alert">
+                  {error}
+                </p>
+              ) : null}
+              <Button
+                variant="primary"
+                className="w-full"
+                type="submit"
+                disabled={twoFactorPending || !normalizeTwoFactorCode(twoFactorCode)}
+              >
+                {t('twoFactorVerify')}
+              </Button>
+              <Button type="button" variant="ghost" className="w-full mt-2" onClick={backToPasswordStep}>
+                {t('backToSignIn')}
+              </Button>
+            </form>
           ) : mode === 'forgot' ? (
             <form onSubmit={onForgot}>
               <p className="login-hint">{t('forgotPasswordHint')}</p>

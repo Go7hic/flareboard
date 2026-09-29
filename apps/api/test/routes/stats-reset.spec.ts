@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { createSecureToken, EVENT_TYPE, ROLES } from '@flareboard/shared';
 import { fetchWorkerJson } from '../helpers/fetch-worker';
 import { applyTestMigrations } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const OWNER_ID = 'stats-reset-owner';
 const WEBSITE_ID = 'stats-reset-site';
@@ -35,14 +36,14 @@ describe('statistics reset', () => {
     )
       .bind(WEBSITE_ID, OWNER_ID, START)
       .run();
-    await env.DB.prepare(
+    await testSiteDb(WEBSITE_ID).prepare(
       `INSERT OR IGNORE INTO session (session_id, website_id, created_at) VALUES ('stats-reset-session', ?1, ?2)`,
     )
       .bind(WEBSITE_ID, START)
       .run();
     const times = [START + 60_000, START + 3_600_000, RESET_AT + 60_000];
     for (const [i, at] of times.entries()) {
-      await env.DB.prepare(
+      await testSiteDb(WEBSITE_ID).prepare(
         `INSERT OR IGNORE INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type)
          VALUES (?1, ?2, 'stats-reset-session', ?3, ?4, '/', ?5)`,
       )

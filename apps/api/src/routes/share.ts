@@ -1,18 +1,21 @@
 import type { Context } from 'hono';
 import { eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
-import { ENTITY_TYPE, createShareSchema, statsQuerySchema, updateShareSchema, uuid } from '@flareboard/shared';
-import { rolling24hRange } from '@flareboard/shared/date-range';
-import { siteCalendarDaysRange } from '@flareboard/shared/timezone';
+import {
+  ENTITY_TYPE,
+  createEntityShareSchema,
+  createShareSchema,
+  parseBoardFilters,
+  statsQuerySchema,
+  updateShareSchema,
+  uuid,
+} from '@flareboard/shared';
 import type { Env } from '../env';
 import { checkIpRateLimit, getTrustedClientIp } from '../lib/rate-limit';
 import { clampReportRange } from '../lib/report-range';
 import { canAccessTeamResource, canAccessWebsite, canMutateTeamResource, canMutateWebsite } from '../lib/access';
-import {
-  filterBoardWidgetsForPublicShare,
-  parseBoardWidgets,
-  resolveBoardOwner,
-} from '../lib/board-widgets';
+import { resolveBoardOwner } from '../lib/board-widgets';
+import { boardPresetRange, runBoardWidgets, runSavedInsight } from '../lib/board-run';
 import { cachedRead } from '../lib/cache';
 import {
   getMetrics,
@@ -22,8 +25,10 @@ import {
   getWebsiteById,
   getWebsiteStats,
 } from '../lib/queries';
+import { logAdminAction } from '../lib/audit';
 import { badRequest, json, notFound } from '../lib/response';
-import { runInsightQuery, type InsightQuery, type InsightType } from '../lib/insights';
+import { serializeInsight } from '../lib/insights';
+import { InsightQueryError } from '../lib/property-filters';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
@@ -103,18 +108,37 @@ export async function handleCreate(c: Ctx) {
   });
 
   const rows = await db.select().from(schema.share).where(eq(schema.share.shareId, shareId)).limit(1);
+  // metadata.websiteId lets the website purge erase this entry with the website.
+  await logAdminAction(c.env, c.get('user').userId, 'create', 'share', shareId, {
+    websiteId: website.websiteId,
+    name: rows[0]!.name,
+    expiresAt: rows[0]!.expiresAt ?? null,
+  });
   return json(serializeShare(rows[0]!), 201);
+}
+
+async function loadInsight(c: Ctx, insightId: string) {
+  const db = createDb(c.env.DB);
+  const [insight] = await db.select().from(schema.insight).where(eq(schema.insight.insightId, insightId)).limit(1);
+  if (!insight) return null;
+  const website = await getWebsiteById(c.env, insight.websiteId);
+  return website ? { insight, website } : null;
+}
+
+async function loadBoard(c: Ctx, boardId: string) {
+  const db = createDb(c.env.DB);
+  const [board] = await db.select().from(schema.board).where(eq(schema.board.boardId, boardId)).limit(1);
+  return board ?? null;
 }
 
 async function userOwnsShare(c: Ctx, share: typeof schema.share.$inferSelect) {
   if (share.shareType === ENTITY_TYPE.board) {
-    const db = createDb(c.env.DB);
-    const [board] = await db
-      .select()
-      .from(schema.board)
-      .where(eq(schema.board.boardId, share.entityId))
-      .limit(1);
+    const board = await loadBoard(c, share.entityId);
     return board ? canAccessTeamResource(c.env, board, c.get('user')) : false;
+  }
+  if (share.shareType === ENTITY_TYPE.insight) {
+    const found = await loadInsight(c, share.entityId);
+    return found ? canAccessWebsite(c.env, found.website, c.get('user')) : false;
   }
   const website = await getWebsiteById(c.env, share.entityId);
   return website ? canAccessWebsite(c.env, website, c.get('user')) : false;
@@ -122,16 +146,60 @@ async function userOwnsShare(c: Ctx, share: typeof schema.share.$inferSelect) {
 
 async function canMutateShare(c: Ctx, share: typeof schema.share.$inferSelect) {
   if (share.shareType === ENTITY_TYPE.board) {
-    const db = createDb(c.env.DB);
-    const [board] = await db
-      .select()
-      .from(schema.board)
-      .where(eq(schema.board.boardId, share.entityId))
-      .limit(1);
+    const board = await loadBoard(c, share.entityId);
     return board ? canMutateTeamResource(c.env, board, c.get('user')) : false;
+  }
+  if (share.shareType === ENTITY_TYPE.insight) {
+    const found = await loadInsight(c, share.entityId);
+    return found ? canMutateWebsite(c.env, found.website, c.get('user')) : false;
   }
   const website = await getWebsiteById(c.env, share.entityId);
   return website ? canMutateWebsite(c.env, website, c.get('user')) : false;
+}
+
+/** Public, read-only link to one saved insight (revocable, optional expiry). */
+export async function handleInsightShareCreate(c: Ctx) {
+  const found = await loadInsight(c, c.req.param('insightId') ?? '');
+  if (!found || !(await canAccessWebsite(c.env, found.website, c.get('user')))) return notFound();
+  if (!(await canMutateWebsite(c.env, found.website, c.get('user')))) return json({ message: 'Read-only access' }, 403);
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = createEntityShareSchema.safeParse(body ?? {});
+  if (!parsed.success) return badRequest(parsed.error.message);
+
+  const shareId = uuid();
+  const now = new Date();
+  const db = createDb(c.env.DB);
+  await db.insert(schema.share).values({
+    shareId,
+    entityId: found.insight.insightId,
+    name: parsed.data.name || found.insight.name,
+    shareType: ENTITY_TYPE.insight,
+    slug: shareSlug(),
+    parameters: { insightId: found.insight.insightId, websiteId: found.insight.websiteId },
+    expiresAt: parsed.data.expiresInDays ? daysFromNow(parsed.data.expiresInDays) : null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await logAdminAction(c.env, c.get('user').userId, 'create', 'share', shareId, {
+    insightId: found.insight.insightId,
+    websiteId: found.insight.websiteId,
+    name: parsed.data.name || found.insight.name,
+  });
+  const [row] = await db.select().from(schema.share).where(eq(schema.share.shareId, shareId)).limit(1);
+  return json(serializeShare(row!), 201);
+}
+
+/** Shares of one board or insight: `?entityId=`. */
+export async function handleListForEntity(c: Ctx) {
+  const entityId = c.req.query('entityId');
+  if (!entityId) return handleList(c);
+  const db = createDb(c.env.DB);
+  const rows = await db.select().from(schema.share).where(eq(schema.share.entityId, entityId));
+  const visible = [];
+  for (const row of rows) {
+    if (await userOwnsShare(c, row)) visible.push(row);
+  }
+  return json(visible.map(serializeShare));
 }
 
 export async function handleUpdate(c: Ctx) {
@@ -175,13 +243,6 @@ export async function handleDelete(c: Ctx) {
   return json({ ok: true });
 }
 
-function presetRange(preset: unknown, timezone: string) {
-  if (preset === '24h') return rolling24hRange();
-  if (preset === '30d') return siteCalendarDaysRange(30, timezone);
-  if (preset === '90d') return siteCalendarDaysRange(90, timezone);
-  return siteCalendarDaysRange(7, timezone);
-}
-
 function parsePublicRange(
   c: Context<{ Bindings: Env }>,
   defaultPreset?: unknown,
@@ -192,7 +253,7 @@ function parsePublicRange(
   const { startAt, endAt } =
     query.success && query.data.startAt != null && query.data.endAt != null
       ? clampReportRange(query.data.startAt, query.data.endAt)
-      : presetRange(defaultPreset ?? '24h', timezone);
+      : boardPresetRange(defaultPreset ?? '24h', timezone);
   // Default to hourly points for short windows (the default view is 24h).
   const unit =
     query.success && query.data.unit ? query.data.unit : endAt - startAt <= 48 * 60 * 60 * 1000 ? 'hour' : 'day';
@@ -229,42 +290,53 @@ export async function handlePublicGet(c: Context<{ Bindings: Env }>) {
 
     const params = board.parameters as { rangePreset?: string; widgets?: unknown };
     const { startAt, endAt } = parsePublicRange(c, params.rangePreset);
-    const widgets = await filterBoardWidgetsForPublicShare(c.env, owner, parseBoardWidgets(params));
-    const enriched = await Promise.all(
-      widgets.map(async (w) => {
-        if (w.type === 'stats' && w.websiteId) {
-          const [stats, pageviews] = await Promise.all([
-            getWebsiteStats(c.env, w.websiteId, startAt, endAt),
-            getPageviews(c.env, w.websiteId, startAt, endAt, 'day'),
-          ]);
-          return { ...w, stats, series: pageviews.pageviews };
-        }
-        if (w.type === 'insight' && w.insightId) {
-          const [insight] = await db
-            .select()
-            .from(schema.insight)
-            .where(eq(schema.insight.insightId, w.insightId))
-            .limit(1);
-          if (!insight) return w;
-          const result = await runInsightQuery(
-            c.env,
-            insight.websiteId,
-            insight.type as InsightType,
-            insight.query as InsightQuery,
-            startAt,
-            endAt,
-          );
-          return { ...w, result };
-        }
-        return w;
-      }),
-    );
+    // Viewers get the board as its owner sees it: saved board filters apply, widgets the owner
+    // can no longer access are dropped.
+    const filters = parseBoardFilters(board.parameters);
+    const widgets = await runBoardWidgets(c.env, owner, board.parameters, { startAt, endAt, filters });
 
     return json({
-      board: { ...serializeBoard(board), parameters: { rangePreset: params.rangePreset, widgets: enriched } },
-      share: { name: share.name, slug: share.slug },
+      board: { ...serializeBoard(board), parameters: { rangePreset: params.rangePreset, filters, widgets } },
+      share: { name: share.name, slug: share.slug, expiresAt: share.expiresAt },
       period: { startAt, endAt },
     });
+  }
+
+  if (share.shareType === ENTITY_TYPE.insight) {
+    const db = createDb(c.env.DB);
+    const [insight] = await db
+      .select()
+      .from(schema.insight)
+      .where(eq(schema.insight.insightId, share.entityId))
+      .limit(1);
+    const website = insight ? await getWebsiteById(c.env, insight.websiteId) : null;
+    if (!insight || !website) return notFound();
+    const { startAt, endAt } = parsePublicRange(c, '30d', website.timezone ?? 'UTC');
+    const payload = await cachedRead(c.env, `share-insight:${slug}:${startAt}:${endAt}`, 60, async () => {
+      const result = await runSavedInsight(c.env, insight, startAt, endAt, []).catch((error: unknown) => {
+        if (error instanceof InsightQueryError) return null;
+        throw error;
+      });
+      const { query: _query, userId: _userId, ...publicInsight } = serializeInsight({
+        id: insight.insightId,
+        websiteId: insight.websiteId,
+        userId: insight.userId,
+        type: insight.type,
+        name: insight.name,
+        description: insight.description,
+        query: insight.query,
+        createdAt: insight.createdAt,
+        updatedAt: insight.updatedAt,
+      });
+      return {
+        insight: publicInsight,
+        website: { name: website.name, domain: website.domain, timezone: website.timezone ?? 'UTC' },
+        result,
+        share: { name: share.name, slug: share.slug, expiresAt: share.expiresAt },
+        period: { startAt, endAt },
+      };
+    });
+    return json(payload);
   }
 
   if (share.shareType !== ENTITY_TYPE.website) {

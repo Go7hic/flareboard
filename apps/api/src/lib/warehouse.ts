@@ -1,4 +1,15 @@
 import type { Env } from '../env';
+import { eventStoreMode, siteDb, siteStoreStub } from './site-db';
+import type { StoreParam, StoreResult } from '@flareboard/db/site-store';
+import {
+  deleteStripeSourceData,
+  deleteWarehouseSyncState,
+  isStripeApiKey,
+  loadStripeSyncState,
+  syncStripeDataSource,
+  type StripeSyncOptions,
+} from './stripe-connector';
+import { deleteWarehouseCredential, saveWarehouseCredential, secretHint } from './warehouse-credentials';
 
 const FORBIDDEN_SQL = /\b(insert|update|delete|drop|alter|create|replace|truncate|attach|detach|pragma|vacuum|reindex)\b/i;
 const UNSAFE_SCOPE_SQL = [
@@ -13,10 +24,14 @@ const DEFAULT_LIMIT = 100;
 const MAX_USER_LIMIT = 1000;
 const MAX_ROWS_READ = 100_000;
 const QUERY_TIMEOUT_MS = 10_000;
+/** Most rows a CSV export of a warehouse query returns (documented in the editor). */
+export const WAREHOUSE_EXPORT_ROW_CAP = 10_000;
 const MAX_IMPORT_ROWS = 10_000;
 const IMPORT_BATCH_SIZE = 100;
 const MAX_IMPORT_RESPONSE_BYTES = 5 * 1024 * 1024;
 const MAX_SYNC_WEBSITES_PER_TICK = 50;
+const MAX_STRIPE_REQUESTS_PER_TICK = 300;
+const MAX_STRIPE_REQUESTS_PER_SOURCE = 40;
 const MIN_SCHEDULE_INTERVAL_MINUTES = 1;
 
 export type WarehouseQueryCost = {
@@ -120,6 +135,17 @@ export type WarehouseScheduledQueryRow = {
   updatedAt: number | null;
   analysis: WarehouseQueryAnalysis;
 };
+
+/**
+ * Connectors that really sync. Earlier builds also offered r2_json / d1 / postgres / mysql, which
+ * never imported anything; migration 0053 disables saved ones and sync reports them as failed.
+ */
+export const WAREHOUSE_DATA_SOURCE_TYPES = ['http_json', 'http_csv', 'stripe'] as const;
+export type WarehouseDataSourceType = (typeof WAREHOUSE_DATA_SOURCE_TYPES)[number];
+
+function isSupportedDataSourceType(type: string): type is WarehouseDataSourceType {
+  return (WAREHOUSE_DATA_SOURCE_TYPES as readonly string[]).includes(type);
+}
 
 export type WarehouseDataSourceInput = {
   name: string;
@@ -229,8 +255,18 @@ export const WAREHOUSE_SCHEMA = {
       ],
     },
     {
+      name: 'revenue',
+      description: 'Revenue tracked by the tracker or SDK (one row per revenue event, amount in `currency`).',
+      columns: ['revenue_id', 'website_id', 'session_id', 'event_id', 'event_name', 'currency', 'revenue', 'created_at'],
+    },
+    {
+      name: 'person',
+      description: 'Identified people and their properties (JSON).',
+      columns: ['person_id', 'website_id', 'distinct_id', 'properties_json', 'first_seen_at', 'last_seen_at', 'created_at'],
+    },
+    {
       name: 'warehouse_import',
-      description: 'Rows imported from external HTTP JSON warehouse data sources.',
+      description: 'Rows imported from HTTP JSON / CSV data sources. Read fields with json_extract(payload_json, \'$.field\').',
       columns: [
         'import_row_id',
         'website_id',
@@ -239,6 +275,36 @@ export const WAREHOUSE_SCHEMA = {
         'payload_json',
         'imported_at',
       ],
+    },
+    {
+      name: 'stripe_customer',
+      description: 'Stripe customers. distinct_id links a customer to a person (metadata distinct_id or matching email).',
+      columns: ['website_id', 'data_source_id', 'customer_id', 'email', 'name', 'distinct_id', 'deleted', 'metadata_json', 'payload_json', 'created_at', 'synced_at'],
+    },
+    {
+      name: 'stripe_charge',
+      description: 'Stripe charges. amount is in minor units, amount_major in `currency` units (captured amount).',
+      columns: ['website_id', 'data_source_id', 'charge_id', 'customer_id', 'invoice_id', 'status', 'paid', 'amount', 'amount_refunded', 'currency', 'amount_major', 'payload_json', 'created_at', 'synced_at'],
+    },
+    {
+      name: 'stripe_refund',
+      description: 'Stripe refunds (amount_major in `currency` units).',
+      columns: ['website_id', 'data_source_id', 'refund_id', 'charge_id', 'status', 'amount', 'currency', 'amount_major', 'payload_json', 'created_at', 'synced_at'],
+    },
+    {
+      name: 'stripe_invoice',
+      description: 'Stripe invoices (line items are in stripe_invoice_line).',
+      columns: ['website_id', 'data_source_id', 'invoice_id', 'customer_id', 'subscription_id', 'status', 'currency', 'total', 'amount_paid', 'amount_paid_major', 'period_start', 'period_end', 'paid_at', 'payload_json', 'created_at', 'synced_at'],
+    },
+    {
+      name: 'stripe_invoice_line',
+      description: 'Stripe invoice line items. mrr_major is the monthly-normalized amount of recurring, non-proration lines.',
+      columns: ['website_id', 'data_source_id', 'invoice_id', 'line_id', 'customer_id', 'subscription_id', 'price_id', 'interval', 'interval_count', 'quantity', 'proration', 'amount', 'currency', 'amount_major', 'mrr_major', 'period_start', 'period_end', 'synced_at'],
+    },
+    {
+      name: 'stripe_subscription',
+      description: 'Stripe subscriptions with their current list-price MRR.',
+      columns: ['website_id', 'data_source_id', 'subscription_id', 'customer_id', 'status', 'currency', 'mrr_major', 'start_date', 'canceled_at', 'ended_at', 'cancel_at_period_end', 'current_period_start', 'current_period_end', 'trial_end', 'payload_json', 'created_at', 'synced_at'],
     },
   ],
   examples: [
@@ -311,6 +377,26 @@ LEFT JOIN event_data message ON message.website_event_id = e.event_id AND messag
 WHERE e.website_id = ?1 AND e.event_name = '$exception'
 ORDER BY e.created_at DESC
 LIMIT 50`,
+    },
+    {
+      name: 'Stripe revenue by month',
+      category: 'Revenue',
+      sql: `SELECT strftime('%Y-%m', created_at / 1000, 'unixepoch') as month, currency, SUM(amount_major) as revenue, COUNT(*) as charges
+FROM stripe_charge
+WHERE website_id = ?1 AND paid = 1 AND status = 'succeeded'
+GROUP BY month, currency
+ORDER BY month DESC
+LIMIT 24`,
+    },
+    {
+      name: 'Active subscriptions by status',
+      category: 'Revenue',
+      sql: `SELECT status, currency, COUNT(*) as subscriptions, SUM(mrr_major) as mrr
+FROM stripe_subscription
+WHERE website_id = ?1
+GROUP BY status, currency
+ORDER BY subscriptions DESC
+LIMIT 20`,
     },
     {
       name: 'AI cost by model',
@@ -534,8 +620,8 @@ async function withQueryTimeout<T>(promise: Promise<T>, timeoutMs: number) {
 
 const SAFE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-async function listDatabaseTables(env: Env): Promise<string[]> {
-  const { results } = await env.DB.prepare(
+async function listDatabaseTables(db: D1Database): Promise<string[]> {
+  const { results } = await db.prepare(
     `SELECT name FROM sqlite_master
      WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND name NOT LIKE '\\_cf\\_%' ESCAPE '\\'`,
   ).all<{ name: string }>();
@@ -563,9 +649,50 @@ export function scopeToWebsite(sql: string, tables: string[]): string {
   return `WITH ${shadows.join(', ')} ${sql}`;
 }
 
-export async function runWarehouseQuery(env: Env, websiteId: string, sql: string) {
-  const analysis = assertReadOnlyScoped(sql);
-  const scopedSql = scopeToWebsite(analysis.executableSql!, await listDatabaseTables(env));
+/** D1-only tables the warehouse exposes; in store mode they are attached to the query. */
+const ATTACHED_D1_TABLES = ['survey_response', 'workflow_execution'] as const;
+/** Upper bound on rows attached per D1 table (larger queries belong in a real export). */
+const ATTACH_ROW_LIMIT = 50_000;
+
+function catalogColumns(name: string): string[] {
+  return WAREHOUSE_SCHEMA.tables.find((table) => table.name === name)?.columns ?? [];
+}
+
+/** Store mode: user SQL runs inside the website's own store, so it can only ever see this site. */
+async function runWarehouseQueryInStore(env: Env, websiteId: string, executableSql: string) {
+  const referenced = ATTACHED_D1_TABLES.filter((name) =>
+    new RegExp(`\\b${name}\\b`, 'i').test(stripStringLiterals(executableSql)),
+  );
+  const attachments = [];
+  for (const name of referenced) {
+    const columns = catalogColumns(name);
+    const rows = await env.DB.prepare(
+      `SELECT ${columns.join(', ')} FROM ${name} WHERE website_id = ?1 ORDER BY created_at DESC LIMIT ${ATTACH_ROW_LIMIT}`,
+    )
+      .bind(websiteId)
+      .raw<StoreParam[]>();
+    attachments.push({ name, columns, rows });
+  }
+  const storeTables = await listDatabaseTables(siteDb(env, websiteId));
+  const tables = [...new Set([...storeTables, ...referenced])];
+  const scopedSql = scopeToWebsite(executableSql, tables);
+  const startedAt = Date.now();
+  const result = await withQueryTimeout(
+    siteStoreStub(env, websiteId).queryWithAttachments(
+      websiteId,
+      { sql: scopedSql, params: [websiteId], mode: 'all' },
+      attachments,
+    ) as Promise<StoreResult>,
+    QUERY_TIMEOUT_MS,
+  );
+  const cost = enforceWarehouseQueryCost({ rows_read: result.rowsRead }, Date.now() - startedAt);
+  return { rows: result.results, cost };
+}
+
+/** Runs analyzed, limit-bounded SQL for one website with the scan and timeout limits enforced. */
+async function executeWarehouseSql(env: Env, websiteId: string, executableSql: string) {
+  if (eventStoreMode(env) === 'do') return runWarehouseQueryInStore(env, websiteId, executableSql);
+  const scopedSql = scopeToWebsite(executableSql, await listDatabaseTables(env.DB));
   const startedAt = Date.now();
   const rows = await withQueryTimeout(
     env.DB.prepare(scopedSql).bind(websiteId).all<Record<string, unknown>>(),
@@ -573,7 +700,12 @@ export async function runWarehouseQuery(env: Env, websiteId: string, sql: string
   );
   const wallMs = Date.now() - startedAt;
   const cost = enforceWarehouseQueryCost(rows.meta, queryDurationMs(rows.meta, wallMs));
-  const resultRows = rows.results ?? [];
+  return { rows: rows.results ?? [], cost };
+}
+
+export async function runWarehouseQuery(env: Env, websiteId: string, sql: string) {
+  const analysis = assertReadOnlyScoped(sql);
+  const { rows: resultRows, cost } = await executeWarehouseSql(env, websiteId, analysis.executableSql!);
   const columns = resultRows.length ? Object.keys(resultRows[0]!) : [];
   return {
     columns,
@@ -584,8 +716,132 @@ export async function runWarehouseQuery(env: Env, websiteId: string, sql: string
   };
 }
 
+/**
+ * Warehouse CSV export: the same checks as an interactive query, but results are capped at
+ * WAREHOUSE_EXPORT_ROW_CAP rows instead of the interactive 1,000 (a smaller LIMIT in the SQL
+ * still wins). `truncated` tells the caller the cap was hit.
+ */
+export async function runWarehouseExport(env: Env, websiteId: string, sql: string) {
+  const analysis = assertReadOnlyScoped(sql);
+  const { rows, cost } = await executeWarehouseSql(
+    env,
+    websiteId,
+    `SELECT * FROM (${analysis.normalizedSql}) LIMIT ${WAREHOUSE_EXPORT_ROW_CAP + 1}`,
+  );
+  const truncated = rows.length > WAREHOUSE_EXPORT_ROW_CAP;
+  const resultRows = truncated ? rows.slice(0, WAREHOUSE_EXPORT_ROW_CAP) : rows;
+  const columns = resultRows.length ? Object.keys(resultRows[0]!) : [];
+  return { columns, rows: resultRows, rowCount: resultRows.length, truncated, cost, analysis };
+}
+
 export function getWarehouseSchema() {
   return WAREHOUSE_SCHEMA;
+}
+
+const STRIPE_CATALOG_TABLES = WAREHOUSE_SCHEMA.tables.filter((table) => table.name.startsWith('stripe_'));
+const IMPORT_SAMPLE_ROWS = 25;
+const IMPORT_MAX_COLUMNS = 60;
+const SQL_KEYWORDS = new Set(
+  (
+    'abort action add all alter and as asc attach between by case cast check collate column commit create cross ' +
+    'current default delete desc detach distinct drop else end escape except exists filter from full glob group ' +
+    'having if in index inner insert intersect into is join key left like limit match natural not null of offset ' +
+    'on or order outer over pragma primary references regexp reindex replace right select set table then to ' +
+    'transaction truncate union unique update using vacuum values view when where window with'
+  ).split(' '),
+);
+
+export type WarehouseImportedSource = {
+  id: string;
+  name: string;
+  type: string;
+  tables: Array<{ name: string; rowCount: number; columns: string[] }>;
+  exampleSql: string | null;
+};
+
+/**
+ * Catalog for the SQL editor: the fixed tables, query limits, and what each data source has
+ * imported (row counts, and for HTTP sources the payload fields seen in recent rows).
+ */
+export async function getWarehouseSchemaForWebsite(env: Env, websiteId: string) {
+  const sources = await listWarehouseDataSources(env, websiteId);
+  const db = siteDb(env, websiteId);
+  const importedSources: WarehouseImportedSource[] = [];
+  for (const source of sources) {
+    if (source.type === 'stripe') {
+      const counts = await db
+        .prepare(
+          `SELECT ${STRIPE_CATALOG_TABLES.map(
+            (table) => `(SELECT COUNT(*) FROM ${table.name} WHERE website_id = ?1 AND data_source_id = ?2) AS ${table.name}`,
+          ).join(', ')}`,
+        )
+        .bind(websiteId, source.id)
+        .first<Record<string, number>>();
+      importedSources.push({
+        id: source.id,
+        name: source.name,
+        type: source.type,
+        tables: STRIPE_CATALOG_TABLES.map((table) => ({
+          name: table.name,
+          rowCount: Number(counts?.[table.name] ?? 0),
+          columns: table.columns,
+        })),
+        exampleSql: `SELECT customer_id, email, distinct_id, created_at
+FROM stripe_customer
+WHERE website_id = ?1 AND data_source_id = '${source.id}'
+ORDER BY created_at DESC
+LIMIT 50`,
+      });
+      continue;
+    }
+    if (source.type !== 'http_json' && source.type !== 'http_csv') continue;
+    const [count, sample] = await Promise.all([
+      db
+        .prepare(`SELECT COUNT(*) AS n FROM warehouse_import WHERE website_id = ?1 AND data_source_id = ?2`)
+        .bind(websiteId, source.id)
+        .first<{ n: number }>(),
+      db
+        .prepare(
+          `SELECT payload_json AS payload FROM warehouse_import
+           WHERE website_id = ?1 AND data_source_id = ?2 ORDER BY imported_at DESC LIMIT ${IMPORT_SAMPLE_ROWS}`,
+        )
+        .bind(websiteId, source.id)
+        .all<{ payload: string }>(),
+    ]);
+    const fields = new Set<string>();
+    for (const row of sample.results ?? []) {
+      try {
+        const parsed = JSON.parse(row.payload) as Record<string, unknown>;
+        for (const key of Object.keys(parsed)) {
+          if (fields.size < IMPORT_MAX_COLUMNS && SAFE_IDENTIFIER.test(key)) fields.add(key);
+        }
+      } catch {
+        /* skip unreadable payloads */
+      }
+    }
+    const columns = [...fields];
+    // Field names become column aliases in the example, so SQL keywords are left out of it.
+    const selected = columns
+      .filter((key) => !SQL_KEYWORDS.has(key.toLowerCase()))
+      .slice(0, 5)
+      .map((key) => `json_extract(payload_json, '$.${key}') as ${key}`);
+    importedSources.push({
+      id: source.id,
+      name: source.name,
+      type: source.type,
+      tables: [{ name: 'warehouse_import', rowCount: Number(count?.n ?? 0), columns }],
+      exampleSql: `SELECT primary_key${selected.length ? `, ${selected.join(', ')}` : ''}, imported_at
+FROM warehouse_import
+WHERE website_id = ?1 AND data_source_id = '${source.id}'
+ORDER BY imported_at DESC
+LIMIT 50`,
+    });
+  }
+  return {
+    ...WAREHOUSE_SCHEMA,
+    limits: { ...WAREHOUSE_QUERY_LIMITS, exportRowCap: WAREHOUSE_EXPORT_ROW_CAP },
+    importedSources,
+  };
 }
 
 function serializeSavedQuery(row: Omit<WarehouseSavedQueryRow, 'analysis'>) {
@@ -1038,10 +1294,24 @@ export async function getWarehouseDataSource(env: Env, websiteId: string, dataSo
 }
 
 function assertDataSourceConfig(type: string, config: Record<string, unknown>) {
-  if (type !== 'http_json' && type !== 'http_csv') return;
+  if (!isSupportedDataSourceType(type)) throw new Error(`Unsupported data source type: ${type}`);
+  if (type === 'stripe') return;
   const url = typeof config.url === 'string' ? config.url.trim() : '';
   if (!url) throw new Error('Missing config.url');
   assertHttpImportUrl(url);
+}
+
+/**
+ * Splits a Stripe config into what is stored in config_json (never the key) and the API key,
+ * which goes to warehouse_credential encrypted.
+ */
+function splitStripeSecret(config: Record<string, unknown>) {
+  const { apiKey, ...rest } = config;
+  if (apiKey === undefined || apiKey === null || apiKey === '') return { config: rest, apiKey: null };
+  if (!isStripeApiKey(apiKey)) {
+    throw new Error('Stripe needs a restricted API key (rk_live_… or rk_test_…) with read access');
+  }
+  return { config: { ...rest, apiKeyHint: secretHint(apiKey) }, apiKey: apiKey.trim() };
 }
 
 export async function createWarehouseDataSource(
@@ -1051,8 +1321,15 @@ export async function createWarehouseDataSource(
   input: WarehouseDataSourceInput,
 ) {
   assertDataSourceConfig(input.type, input.config);
+  let config = input.config;
+  let apiKey: string | null = null;
+  if (input.type === 'stripe') {
+    ({ config, apiKey } = splitStripeSecret(input.config));
+    if (!apiKey) throw new Error('Stripe needs a restricted API key (config.apiKey)');
+  }
   const now = Date.now();
   const id = crypto.randomUUID();
+  if (apiKey) await saveWarehouseCredential(env, websiteId, id, 'stripe_api_key', apiKey, now);
   await env.DB.prepare(
     `INSERT INTO warehouse_data_source
        (data_source_id, website_id, user_id, name, type, enabled, config_json, created_at, updated_at)
@@ -1065,7 +1342,7 @@ export async function createWarehouseDataSource(
       input.name.trim(),
       input.type,
       input.enabled ? 1 : 0,
-      JSON.stringify(input.config),
+      JSON.stringify(config),
       now,
     )
     .run();
@@ -1083,8 +1360,21 @@ export async function updateWarehouseDataSource(
   const existing = await getWarehouseDataSource(env, websiteId, dataSourceId);
   if (!existing) return null;
   const nextType = patch.type ?? existing.type;
-  const nextConfig = patch.config ?? existing.config;
-  assertDataSourceConfig(nextType, nextConfig);
+  if (nextType !== existing.type && (nextType === 'stripe' || existing.type === 'stripe')) {
+    throw new Error('The type of a Stripe data source cannot be changed; create a new source instead');
+  }
+  let nextConfig = patch.config ?? existing.config;
+  if (patch.config) assertDataSourceConfig(nextType, nextConfig);
+  if (nextType === 'stripe' && patch.config) {
+    const { config, apiKey } = splitStripeSecret(patch.config);
+    nextConfig = { ...config, apiKeyHint: config.apiKeyHint ?? existing.config.apiKeyHint };
+    if (apiKey) {
+      // A new key may belong to another Stripe account: start over from a clean slate.
+      await saveWarehouseCredential(env, websiteId, dataSourceId, 'stripe_api_key', apiKey);
+      await deleteStripeSourceData(env, websiteId, dataSourceId);
+      await deleteWarehouseSyncState(env, websiteId, dataSourceId);
+    }
+  }
   const now = Date.now();
   await env.DB.prepare(
     `UPDATE warehouse_data_source
@@ -1104,7 +1394,7 @@ export async function updateWarehouseDataSource(
       patch.name?.trim() ?? existing.name,
       patch.type ?? existing.type,
       (patch.enabled ?? existing.enabled) ? 1 : 0,
-      JSON.stringify(patch.config ?? existing.config),
+      JSON.stringify(nextConfig),
       patch.lastSyncAt === undefined ? existing.lastSyncAt : patch.lastSyncAt,
       patch.lastStatus === undefined ? existing.lastStatus : patch.lastStatus,
       patch.lastError === undefined ? existing.lastError : patch.lastError,
@@ -1117,6 +1407,19 @@ export async function updateWarehouseDataSource(
 export async function deleteWarehouseDataSource(env: Env, websiteId: string, dataSourceId: string) {
   const existing = await getWarehouseDataSource(env, websiteId, dataSourceId);
   if (!existing) return false;
+  await siteDb(env, websiteId)
+    .prepare(`DELETE FROM warehouse_import WHERE website_id = ?1 AND data_source_id = ?2`)
+    .bind(websiteId, dataSourceId)
+    .run();
+  if (eventStoreMode(env) !== 'd1') {
+    // Rows written before the store migration may still sit in D1.
+    await env.DB.prepare(`DELETE FROM warehouse_import WHERE website_id = ?1 AND data_source_id = ?2`)
+      .bind(websiteId, dataSourceId)
+      .run();
+  }
+  if (existing.type === 'stripe') await deleteStripeSourceData(env, websiteId, dataSourceId);
+  await deleteWarehouseCredential(env, websiteId, dataSourceId);
+  await deleteWarehouseSyncState(env, websiteId, dataSourceId);
   await env.DB.prepare(`DELETE FROM warehouse_data_source WHERE website_id = ?1 AND data_source_id = ?2`)
     .bind(websiteId, dataSourceId)
     .run();
@@ -1289,7 +1592,7 @@ async function importHttpRows(
     if (!primaryKey) continue;
 
     statements.push(
-      env.DB.prepare(
+      siteDb(env, websiteId).prepare(
         `INSERT OR REPLACE INTO warehouse_import
          (import_row_id, website_id, data_source_id, primary_key, payload_json, imported_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
@@ -1298,7 +1601,7 @@ async function importHttpRows(
   }
 
   for (let offset = 0; offset < statements.length; offset += IMPORT_BATCH_SIZE) {
-    await env.DB.batch(statements.slice(offset, offset + IMPORT_BATCH_SIZE));
+    await siteDb(env, websiteId).batch(statements.slice(offset, offset + IMPORT_BATCH_SIZE));
   }
 
   return statements.length;
@@ -1357,18 +1660,33 @@ export async function syncWarehouseDataSource(
   websiteId: string,
   dataSourceId: string,
   now = Date.now(),
+  options: { stripe?: StripeSyncOptions } = {},
 ) {
   const source = await getWarehouseDataSource(env, websiteId, dataSourceId);
   if (!source?.enabled) return { ok: false as const, skipped: true };
 
   const intervalMs = syncIntervalMs(source.config);
-  if (intervalMs && source.lastSyncAt && now - source.lastSyncAt < intervalMs) {
+  // An unfinished Stripe backfill continues on every run regardless of the interval.
+  const backfilling =
+    source.type === 'stripe' && (await loadStripeSyncState(env, websiteId, dataSourceId)).phase === 'backfill';
+  if (intervalMs && !backfilling && source.lastSyncAt && now - source.lastSyncAt < intervalMs) {
     return { ok: true as const, skipped: true };
   }
 
   await updateWarehouseDataSource(env, websiteId, dataSourceId, { lastStatus: 'syncing', lastError: null });
 
   try {
+    if (source.type === 'stripe') {
+      const result = await syncStripeDataSource(env, websiteId, dataSourceId, { now, ...options.stripe });
+      const imported = Object.values(result.imported).reduce((sum, value) => sum + value, 0);
+      await updateWarehouseDataSource(env, websiteId, dataSourceId, {
+        // Still importing history: the next run picks up from the saved cursor.
+        lastStatus: result.complete ? 'connected' : 'syncing',
+        lastError: null,
+        lastSyncAt: now,
+      });
+      return { ok: true as const, skipped: false, imported, complete: result.complete, requests: result.requests };
+    }
     if (source.type === 'http_json') {
       const imported = await importHttpJsonSource(env, websiteId, dataSourceId, source.config, now);
       await updateWarehouseDataSource(env, websiteId, dataSourceId, {
@@ -1387,12 +1705,7 @@ export async function syncWarehouseDataSource(
       });
       return { ok: true as const, skipped: false, imported };
     }
-    await updateWarehouseDataSource(env, websiteId, dataSourceId, {
-      lastStatus: 'connected',
-      lastError: null,
-      lastSyncAt: now,
-    });
-    return { ok: true as const, skipped: false };
+    throw new Error(`Unsupported data source type: ${source.type}. Delete this source.`);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Sync failed';
     await updateWarehouseDataSource(env, websiteId, dataSourceId, {
@@ -1421,11 +1734,20 @@ export async function runDueWarehouseDataSourceSyncs(env: Env, now = Date.now())
   let failed = 0;
   let skipped = 0;
 
+  // Stripe requests are shared by every source in this tick (Worker subrequest limit).
+  let stripeBudget = MAX_STRIPE_REQUESTS_PER_TICK;
   for (const row of rows.results ?? []) {
     websites++;
     const sources = await listWarehouseDataSources(env, row.websiteId);
     for (const source of sources) {
-      const result = await syncWarehouseDataSource(env, row.websiteId, source.id, now);
+      if (source.type === 'stripe' && stripeBudget <= 0) {
+        skipped++;
+        continue;
+      }
+      const maxRequests = Math.min(MAX_STRIPE_REQUESTS_PER_SOURCE, stripeBudget);
+      const result = await syncWarehouseDataSource(env, row.websiteId, source.id, now, { stripe: { maxRequests } });
+      if ('requests' in result && typeof result.requests === 'number') stripeBudget -= result.requests;
+      else if (source.type === 'stripe' && !result.skipped) stripeBudget -= maxRequests;
       if (result.skipped) skipped++;
       else if (result.ok) synced++;
       else failed++;

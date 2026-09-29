@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
+import type { PropertyFilter } from '@flareboard/shared/insight-query';
 import { useQuery } from '@tanstack/react-query';
 import { Bar, BarChart } from 'recharts';
 import { AnalyticsChart } from '../components/AnalyticsChart';
 import { DataViewState } from '../components/DataViewState';
 import { EventCatalogPicker } from '../components/EventCatalogPicker';
+import { PropertyFilterBuilder } from '../components/PropertyFilterBuilder';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';
 import { Label } from '../components/ui/label';
 import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
@@ -12,6 +14,7 @@ import { formatNumber, formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
+import { reportFiltersParam } from '../lib/websiteReportApi';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 
@@ -33,20 +36,22 @@ type StickinessResponse = {
 
 export default function WebsiteStickinessPage() {
   const chartColors = useChartColors();
-  const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl, timezone } =
+  const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl, timezone, rangeQs } =
     useWebsiteReportContext('30d');
   const [eventName, setEventName] = useState('');
   const [actor, setActor] = useState<'person' | 'session'>('person');
   const debouncedEventName = useDebouncedValue(eventName, 300);
+  const [filters, setFilters] = useState<PropertyFilter[]>([]);
+  const filtersQs = reportFiltersParam(filters);
 
   const stickinessQuery = useQuery({
-    queryKey: ['reports-stickiness', websiteId, debouncedEventName, actor, range, segmentId],
+    queryKey: ['reports-stickiness', websiteId, debouncedEventName, actor, range, segmentId, filtersQs],
     enabled: Boolean(websiteId),
     queryFn: () =>
       api<StickinessResponse>(
         reportUrl(
           'stickiness',
-          `&actor=${actor}${debouncedEventName.trim() ? `&event=${encodeURIComponent(debouncedEventName.trim())}` : ''}`,
+          `&actor=${actor}${debouncedEventName.trim() ? `&event=${encodeURIComponent(debouncedEventName.trim())}` : ''}${filtersQs}`,
         ),
       ),
   });
@@ -106,6 +111,10 @@ export default function WebsiteStickinessPage() {
               <option value="session">{t('stickinessActorSession')}</option>
             </select>
           </div>
+        </div>
+        <div className="field">
+          <Label>{t('insightFilters')}</Label>
+          <PropertyFilterBuilder websiteId={websiteId} rangeQs={rangeQs} value={filters} onChange={setFilters} />
         </div>
       </section>
 

@@ -1,12 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
+import { propertyFiltersSchema, type PropertyFilter } from '@flareboard/shared/insight-query';
 import { ModalDialog } from './ModalDialog';
+import { PropertyFilterBuilder } from './PropertyFilterBuilder';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { api, type Segment } from '../lib/api';
 import { t } from '../lib/i18n';
+import { completeFilters } from '../lib/websiteReportApi';
 import {
   conditionsToParams,
   defaultSegmentCondition,
@@ -14,6 +17,12 @@ import {
   SEGMENT_FIELD_OPTIONS,
   type SegmentCondition,
 } from '../lib/segment-utils';
+
+/** Property filters saved under `parameters.properties` (invalid entries are dropped). */
+function readProperties(params: Record<string, unknown> | null | undefined): PropertyFilter[] {
+  const parsed = propertyFiltersSchema.safeParse(params?.properties ?? []);
+  return parsed.success ? parsed.data : [];
+}
 
 export function SegmentFormDialog({
   open,
@@ -31,8 +40,13 @@ export function SegmentFormDialog({
   const [name, setName] = useState('');
   const [showJson, setShowJson] = useState(false);
   const [conditions, setConditions] = useState<SegmentCondition[]>([defaultSegmentCondition()]);
+  const [properties, setProperties] = useState<PropertyFilter[]>([]);
 
-  const paramsPreview = useMemo(() => conditionsToParams(conditions), [conditions]);
+  const paramsPreview = useMemo(() => {
+    const params = conditionsToParams(conditions);
+    const complete = completeFilters(properties);
+    return complete.length ? { ...params, properties: complete } : params;
+  }, [conditions, properties]);
   const paramsJson = useMemo(() => JSON.stringify(paramsPreview, null, 2), [paramsPreview]);
 
   const segmentQuery = useQuery({
@@ -47,11 +61,13 @@ export function SegmentFormDialog({
       const row = segmentQuery.data;
       setName(row.name);
       setConditions(paramsToConditions(row.parameters ?? {}));
+      setProperties(readProperties(row.parameters));
       return;
     }
     if (!isEdit) {
       setName('');
       setConditions([defaultSegmentCondition()]);
+      setProperties([]);
       setShowJson(false);
     }
   }, [open, segmentQuery.data, isEdit]);
@@ -177,6 +193,16 @@ export function SegmentFormDialog({
           </div>
 
           <div className="field">
+            <Label>{t('segmentPropertyFilters')}</Label>
+            <PropertyFilterBuilder
+              websiteId={websiteId}
+              value={properties}
+              onChange={setProperties}
+              allowedTypes={['event', 'person']}
+            />
+          </div>
+
+          <div className="field">
             <Button type="button" variant="secondary" size="sm" onClick={() => setShowJson(!showJson)}>
               {showJson ? t('segmentHideAdvanced') : t('segmentShowAdvanced')}
             </Button>
@@ -192,6 +218,7 @@ export function SegmentFormDialog({
                   try {
                     const parsed = JSON.parse(e.target.value) as Record<string, unknown>;
                     setConditions(paramsToConditions(parsed));
+                    setProperties(readProperties(parsed));
                   } catch {
                     /* ignore while typing */
                   }

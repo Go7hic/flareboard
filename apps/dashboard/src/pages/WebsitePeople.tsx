@@ -18,6 +18,7 @@ import { StatCard } from '../components/ui/stat-card';
 import { api, type PeopleResponse, type PersonDetailResponse, type PersonSummary } from '../lib/api';
 import { formatDateOnly, formatDateTime, formatNumber, identityPrimary } from '../lib/format';
 import { t } from '../lib/i18n';
+import { eventDisplayName } from '../lib/autocapture';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
@@ -306,7 +307,7 @@ export default function WebsitePeoplePage() {
                           {(detailQuery.data?.events ?? []).length ? (
                             detailQuery.data!.events.slice(0, 25).map((event) => (
                               <tr key={event.id}>
-                                <td>{event.eventName ?? (event.eventType === 1 ? t('pageview') : '-')}</td>
+                                <td>{event.eventName ? eventDisplayName(event.eventName) : event.eventType === 1 ? t('pageview') : '-'}</td>
                                 <td className="text-muted">{event.urlPath ?? '-'}</td>
                                 <td>
                                   <Link to={`/websites/${websiteId}/sessions/${event.sessionId}`} className="inline-link">

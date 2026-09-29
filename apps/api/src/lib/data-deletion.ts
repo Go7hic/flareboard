@@ -1,4 +1,7 @@
 import type { Env } from '../env';
+import { resolvedIssueKvPrefix } from './error-issue-keys';
+import { eventStoreMode, siteStoreStub } from './site-db';
+import { sourceMapObjectPrefix } from './source-maps';
 
 /**
  * Hard deletion behind the soft deletes in the API. Deleting a website or an account only sets
@@ -46,7 +49,10 @@ async function drain(env: Env, budget: Budget, table: string, where: string, ...
   return false;
 }
 
-/** Deletes every replay chunk under `prefix` (keys are `<websiteId>/<visitId>/<chunk>`). */
+/**
+ * Deletes every R2 object under `prefix`: replay chunks (`<websiteId>/<visitId>/<chunk>`) and
+ * source maps (`sourcemaps/<websiteId>/<id>.map`) share the bucket.
+ */
 async function deleteReplayObjects(env: Env, budget: Budget, prefix: string) {
   const bucket = env.REPLAY_BUCKET;
   if (!bucket) return true;
@@ -100,13 +106,42 @@ export async function websiteScopedTables(env: Env): Promise<string[]> {
   return ordered;
 }
 
+/** Deletes the website's KV index of resolved error issues (`error-resolved:<websiteId>:*`). */
+async function deleteResolvedIssueKeys(env: Env, budget: Budget, websiteId: string) {
+  const prefix = resolvedIssueKvPrefix(websiteId);
+  while (budget.left > 0) {
+    budget.left--;
+    const page = await env.CACHE.list({ prefix, limit: R2_PAGE });
+    if (page.keys.length) {
+      budget.left -= page.keys.length;
+      await Promise.all(page.keys.map((key) => env.CACHE.delete(key.name)));
+    }
+    if (page.list_complete) return true;
+  }
+  return false;
+}
+
 async function purgeWebsite(env: Env, budget: Budget, websiteId: string, tables: string[]) {
   if (!(await deleteReplayObjects(env, budget, `${websiteId}/`))) return false;
+  if (!(await deleteReplayObjects(env, budget, sourceMapObjectPrefix(websiteId)))) return false;
+  if (!(await deleteResolvedIssueKeys(env, budget, websiteId))) return false;
+  if (eventStoreMode(env) !== 'd1') {
+    // Analytics rows live in the website's own store: erase it in one call.
+    budget.left--;
+    await siteStoreStub(env, websiteId).erase();
+  }
+  // Insight shares point at insight ids, not the website: erase them before the insights go.
+  const insightShares = `share_type = 5 AND entity_id IN (SELECT insight_id FROM insight WHERE website_id = ?1)`;
+  if (!(await drain(env, budget, 'share', insightShares, websiteId))) return false;
   for (const table of tables) {
+    // SITE_TABLES left in D1 (legacy or dual mode) and D1 config tables with a website_id.
     if (!(await drain(env, budget, table, 'website_id = ?1', websiteId))) return false;
   }
   if (!(await drain(env, budget, 'share', 'entity_id = ?1', websiteId))) return false;
   if (!(await drain(env, budget, 'audit_log', "entity_type = 'website' AND entity_id = ?1", websiteId))) return false;
+  // History of website-scoped entities (feature flag changes, …) names its website in the metadata.
+  const scopedHistory = `entity_type <> 'website' AND CASE WHEN json_valid(metadata) THEN json_extract(metadata, '$.websiteId') END = ?1`;
+  if (!(await drain(env, budget, 'audit_log', scopedHistory, websiteId))) return false;
   if (budget.left <= 0) return false;
   await exec(env, budget, 'DELETE FROM website WHERE website_id = ?1', websiteId);
   await Promise.all([env.CACHE.delete(`website:${websiteId}`), env.CACHE.delete(`tracker-config:${websiteId}`)]);
@@ -118,23 +153,40 @@ const OWNED_BY_USER = `user_id = ?1 AND (team_id IS NULL OR team_id IN (SELECT t
 
 /** Rows that cannot exist without the user (NOT NULL user_id). */
 const USER_OWNED_TABLES = [
+  // Messages reference their conversation: erase them first.
+  'ai_message',
+  'ai_conversation',
+  'ai_usage_daily',
   'annotation',
   'insight',
+  'personal_api_key',
   'report',
+  'report_subscription',
   'usage_monthly',
   'user_oauth_identity',
+  'user_recovery_code',
+  'user_session',
   'user_subscription',
+  'user_two_factor',
   'team_user',
   'audit_log',
 ] as const;
+
+/** Sign-in records (successful and failed) are kept this long; the Privacy Policy states it. */
+export const SIGN_IN_RECORD_DAYS = 180;
 
 /** Shared team content that survives with the author cleared (nullable references). */
 const USER_REFERENCES: ReadonlyArray<[table: string, column: string]> = [
   ['board', 'user_id'],
   ['link', 'user_id'],
   ['pixel', 'user_id'],
+  ['session_replay_share', 'created_by'],
   ['error_issue_comment', 'user_id'],
+  ['error_issue_merge', 'merged_by'],
   ['error_issue_state', 'assignee_user_id'],
+  ['insight_alert', 'created_by'],
+  ['notebook', 'created_by'],
+  ['notebook', 'updated_by'],
   ['log_saved_filter', 'user_id'],
   ['warehouse_data_source', 'user_id'],
   ['warehouse_query_history', 'user_id'],
@@ -158,8 +210,21 @@ async function purgeUser(env: Env, budget: Budget, userId: string) {
   if (!(await drain(env, budget, 'share', `entity_id IN (SELECT board_id FROM board WHERE ${OWNED_BY_USER})`, userId))) {
     return false;
   }
+  const boardSubscriptions = `target_type = 'board' AND target_id IN (SELECT board_id FROM board WHERE ${OWNED_BY_USER})`;
+  if (!(await drain(env, budget, 'report_subscription', boardSubscriptions, userId))) return false;
   for (const table of ['link', 'pixel', 'board']) {
     if (!(await drain(env, budget, table, OWNED_BY_USER, userId))) return false;
+  }
+  // The user's insights leave with them (USER_OWNED_TABLES): first what hangs off those insights.
+  const ownInsights = `SELECT insight_id FROM insight WHERE user_id = ?1`;
+  const insightDependents: Array<[string, string]> = [
+    ['insight_alert_check', `alert_id IN (SELECT alert_id FROM insight_alert WHERE insight_id IN (${ownInsights}))`],
+    ['insight_alert', `insight_id IN (${ownInsights})`],
+    ['report_subscription', `target_type = 'insight' AND target_id IN (${ownInsights})`],
+    ['share', `share_type = 5 AND entity_id IN (${ownInsights})`],
+  ];
+  for (const [table, where] of insightDependents) {
+    if (!(await drain(env, budget, table, where, userId))) return false;
   }
   for (const table of USER_OWNED_TABLES) {
     if (!(await drain(env, budget, table, 'user_id = ?1', userId))) return false;
@@ -224,7 +289,25 @@ export async function runDataDeletion(env: Env, now = Date.now()) {
 
   const deadEventsDone = budget.left > 0 && (await drain(env, budget, 'dead_event', 'created_at < ?1', cutoff));
 
-  const summary = { websites, users, deadEventsDone, budgetLeft: Math.max(0, budget.left) };
+  // Expired sign-in sessions and old sign-in records.
+  const sessionsDone = budget.left > 0 && (await drain(env, budget, 'user_session', 'expires_at < ?1', now));
+  const signInsDone =
+    budget.left > 0 &&
+    (await drain(
+      env,
+      budget,
+      'audit_log',
+      "entity_type = 'user' AND action IN ('login', 'login_failed') AND created_at < ?1",
+      now - SIGN_IN_RECORD_DAYS * DAY_MS,
+    ));
+
+  const summary = {
+    websites,
+    users,
+    deadEventsDone,
+    securityRecordsDone: sessionsDone && signInsDone,
+    budgetLeft: Math.max(0, budget.left),
+  };
   console.log(JSON.stringify({ event: 'data_deletion_complete', ...summary }));
   return summary;
 }

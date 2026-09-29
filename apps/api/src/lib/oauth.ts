@@ -2,11 +2,18 @@ import { hashPassword, ROLES, uuid } from '@flareboard/shared';
 import { createDb, schema } from '@flareboard/db';
 import type { Env } from '../env';
 import { isHostedMode } from './billing';
-import { getUserById, getUserByUsername } from './queries';
+import { getUserByEmail, getUserById, getUserByUsername } from './queries';
 
 export type OAuthProvider = 'google' | 'github';
 
 const OAUTH_STATE_TTL = 600;
+
+type OAuthProfile = {
+  id: string;
+  username: string;
+  /** Only set when the provider says the address is verified. */
+  verifiedEmail?: string;
+};
 
 type OAuthState = {
   provider: OAuthProvider;
@@ -77,7 +84,7 @@ async function exchangeCode(
   provider: OAuthProvider,
   code: string,
   origin: string,
-): Promise<{ id: string; username: string; email?: string } | null> {
+): Promise<OAuthProfile | null> {
   const redirect = redirectUri(origin, provider);
 
   if (provider === 'google' && env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
@@ -100,10 +107,14 @@ async function exchangeCode(
       headers: { Authorization: `Bearer ${tokenJson.access_token}` },
     });
     if (!profileRes.ok) return null;
-    const profile = (await profileRes.json()) as { sub?: string; email?: string; name?: string };
+    const profile = (await profileRes.json()) as { sub?: string; email?: string; email_verified?: boolean };
     if (!profile.sub) return null;
     const username = profile.email ?? `google_${profile.sub.slice(0, 12)}`;
-    return { id: profile.sub, username, email: profile.email };
+    return {
+      id: profile.sub,
+      username,
+      verifiedEmail: profile.email && profile.email_verified === true ? profile.email : undefined,
+    };
   }
 
   if (provider === 'github' && env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET) {
@@ -132,16 +143,30 @@ async function exchangeCode(
       },
     });
     if (!profileRes.ok) return null;
-    const profile = (await profileRes.json()) as { id?: number; login?: string; email?: string | null };
+    const profile = (await profileRes.json()) as { id?: number; login?: string };
     if (!profile.id || !profile.login) return null;
     return {
       id: String(profile.id),
       username: profile.login,
-      email: profile.email ?? undefined,
+      verifiedEmail: await githubPrimaryVerifiedEmail(tokenJson.access_token),
     };
   }
 
   return null;
+}
+
+/** The account's primary email if GitHub has verified it (the profile email may be unverified). */
+async function githubPrimaryVerifiedEmail(accessToken: string): Promise<string | undefined> {
+  const res = await fetch('https://api.github.com/user/emails', {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'flareboard-oauth',
+    },
+  });
+  if (!res.ok) return undefined;
+  const emails = (await res.json().catch(() => [])) as Array<{ email?: string; primary?: boolean; verified?: boolean }>;
+  return Array.isArray(emails) ? emails.find((entry) => entry.primary && entry.verified && entry.email)?.email : undefined;
 }
 
 async function findLinkedUser(env: Env, provider: OAuthProvider, providerUserId: string) {
@@ -181,19 +206,34 @@ async function availableUsername(env: Env, login: string) {
   return `${base}-${crypto.randomUUID()}`;
 }
 
+/** How a callback created a new identity link: from a signed-in session, or by verified email. */
+export type OAuthLinkKind = 'session' | 'email';
+
 type LinkResult =
-  | { user: NonNullable<Awaited<ReturnType<typeof getUserById>>> }
+  | { user: NonNullable<Awaited<ReturnType<typeof getUserById>>>; linked: OAuthLinkKind | null }
   | { error: 'oauth_account_not_linked' | 'oauth_identity_in_use' | 'User creation failed' };
 
 /**
- * Resolves the local user for a provider identity. Never matches on username or
- * email: a provider account that shares a name with a local user must not take it
- * over. New accounts are only created where self-registration is open (hosted).
+ * The local account a new identity may attach to by email: only when the provider verified
+ * the address AND the local account verified the same address. Matching an unverified
+ * address on either side would let someone pre-register (or claim) another person's email.
+ */
+async function userWithVerifiedEmail(env: Env, email: string | undefined) {
+  if (!email) return null;
+  const user = await getUserByEmail(env, email);
+  return user?.emailVerifiedAt ? user : null;
+}
+
+/**
+ * Resolves the local user for a provider identity. Never matches on username: a provider
+ * account that shares a name with a local user must not take it over. Email matches only
+ * when both sides verified it. New accounts are only created where self-registration is
+ * open (hosted).
  */
 async function resolveOAuthUser(
   env: Env,
   provider: OAuthProvider,
-  profile: { id: string; username: string },
+  profile: OAuthProfile,
   linkUserId?: string,
 ): Promise<LinkResult> {
   const linked = await findLinkedUser(env, provider, profile.id);
@@ -203,10 +243,17 @@ async function resolveOAuthUser(
     const user = await getUserById(env, linkUserId);
     if (!user) return { error: 'User creation failed' };
     await saveIdentity(env, provider, profile.id, user.userId);
-    return { user };
+    return { user, linked: linked ? null : 'session' };
   }
 
-  if (linked) return { user: linked };
+  if (linked) return { user: linked, linked: null };
+
+  const byEmail = await userWithVerifiedEmail(env, profile.verifiedEmail);
+  if (byEmail) {
+    await saveIdentity(env, provider, profile.id, byEmail.userId);
+    return { user: byEmail, linked: 'email' };
+  }
+
   if (!isHostedMode(env)) return { error: 'oauth_account_not_linked' };
 
   const userId = uuid();
@@ -223,7 +270,7 @@ async function resolveOAuthUser(
     });
   await saveIdentity(env, provider, profile.id, userId);
   const user = await getUserById(env, userId);
-  return user ? { user } : { error: 'User creation failed' };
+  return user ? { user, linked: null } : { error: 'User creation failed' };
 }
 
 export async function handleOAuthCallbackFlow(
@@ -250,7 +297,7 @@ export async function handleOAuthCallbackFlow(
   const resolved = await resolveOAuthUser(env, providerParam, profile, stored.linkUserId);
   if ('error' in resolved) return { error: resolved.error };
 
-  return { user: resolved.user, returnTo: stored.returnTo };
+  return { user: resolved.user, returnTo: stored.returnTo, provider: providerParam, linked: resolved.linked };
 }
 
 export { isProvider };

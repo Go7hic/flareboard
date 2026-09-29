@@ -12,8 +12,10 @@
   },
   "vars": {
     "ENVIRONMENT": "development",
-    // Local fallback for email workflow actions; production uses the `API` service binding.
-    "API_URL": "http://localhost:8788"
+    // Local fallback for fetchApi (src/lib/api-client.ts); production uses the `API` service binding.
+    "API_URL": "http://localhost:8788",
+    // Analytics storage mode, see @flareboard/db/site-store: d1 | dual | do.
+    "EVENT_STORE": "do"
   },
   "dev": {
     "port": 8787
@@ -37,6 +39,11 @@
       {
         "binding": "EVENT_QUEUE",
         "queue": "flareboard-events"
+      },
+      {
+        // Workflow triggers, consumed and executed by the API worker.
+        "binding": "WORKFLOW_QUEUE",
+        "queue": "flareboard-workflow-triggers"
       }
     ]
   },
@@ -45,6 +52,12 @@
       {
         "name": "RATE_LIMITER",
         "class_name": "RateLimiter"
+      },
+      // Per-website analytics stores live in the API worker (deploy the API first).
+      {
+        "name": "SITE_STORE",
+        "class_name": "EventStore",
+        "script_name": "flareboard-api"
       }
     ]
   },
@@ -72,9 +85,11 @@
     "production": {
       "vars": {
         "ENVIRONMENT": "production",
-        "HOSTED_MODE": "true"
+        "HOSTED_MODE": "true",
+        // Switch to "dual", backfill, verify, then "do" (docs/parity/storage-migration.md).
+        "EVENT_STORE": "d1"
       },
-      // Workflow email actions call the API worker in-network (no public hop, no WAF challenge).
+      // fetchApi calls the API worker in-network (no public hop, no WAF challenge).
       "services": [
         {
           "binding": "API",
@@ -100,6 +115,10 @@
           {
             "binding": "EVENT_QUEUE",
             "queue": "flareboard-events"
+          },
+          {
+            "binding": "WORKFLOW_QUEUE",
+            "queue": "flareboard-workflow-triggers"
           }
         ]
       },
@@ -108,6 +127,11 @@
           {
             "name": "RATE_LIMITER",
             "class_name": "RateLimiter"
+          },
+          {
+            "name": "SITE_STORE",
+            "class_name": "EventStore",
+            "script_name": "flareboard-api-production"
           }
         ]
       },

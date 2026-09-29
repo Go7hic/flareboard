@@ -1,3 +1,5 @@
+import type { InsightQuery as InsightQueryV2, InsightType as InsightTypeV2 } from '@flareboard/shared/insight-query';
+import type { SurveyAnswers, SurveyAppearance, SurveyQuestion } from '@flareboard/shared/survey-flow';
 import { apiReturnedHtmlError, apiUrlConfigError, resolveApiUrl } from './api-url';
 
 const LEGACY_TOKEN_KEY = 'flareboard_token';
@@ -86,6 +88,12 @@ const AUTH_FORM_PATHS = new Set([
   // Re-authenticated account actions: 401 means a wrong password, not a lost session.
   '/api/me/password',
   '/api/me/delete',
+  // Two-factor: 401 means a wrong code or an expired sign-in challenge.
+  '/api/auth/login/2fa',
+  '/api/me/2fa/setup',
+  '/api/me/2fa/enable',
+  '/api/me/2fa/disable',
+  '/api/me/2fa/recovery-codes',
 ]);
 
 let sessionRedirectPending = false;
@@ -186,6 +194,34 @@ async function parseJsonBody<T>(res: Response): Promise<T> {
 export interface LoginResponse {
   user: { id: string; username: string; role: string };
   token?: string;
+  /** Returned by `/api/auth/login/2fa` when a recovery code was used. */
+  recoveryCodesRemaining?: number;
+}
+
+/** Returned instead of a session (HTTP 200, no cookie) when the account has two-factor on. */
+export interface TwoFactorChallenge {
+  twoFactorRequired: true;
+  challenge: string;
+}
+
+/** `GET /api/me` (cached under the `['me']` query key). */
+export interface MeResponse {
+  id: string;
+  username: string;
+  role?: string;
+  displayName?: string | null;
+  /** False for accounts created through Google/GitHub: they have no password to confirm. */
+  passwordRequired?: boolean;
+  twoFactorEnabled?: boolean;
+  /** Teams that require two-factor authentication, which the user cannot reach without it. */
+  twoFactorRequiredBy?: Array<{ id: string; name: string }>;
+}
+
+/** Result of `/api/auth/login`,`/api/auth/oauth/exchange` and `/api/auth/verify-email`. */
+export type LoginResult = LoginResponse | TwoFactorChallenge;
+
+export function isTwoFactorChallenge(res: LoginResult | null | undefined): res is TwoFactorChallenge {
+  return Boolean(res && 'twoFactorRequired' in res && res.twoFactorRequired && typeof res.challenge === 'string');
 }
 
 export interface Website {
@@ -197,6 +233,12 @@ export interface Website {
   replayEnabled?: boolean;
   goalConfig?: { goals: Array<{ event: string; target: number; period: string }> };
   timezone?: string;
+  /** Tracker: autocapture clicks, submits, field changes and page leaves. */
+  autocapture?: boolean;
+  /** Tracker: remember visitors across sessions with a random localStorage id. */
+  persistVisitors?: boolean;
+  /** Tracker: send nothing from browsers with Do Not Track / Global Privacy Control. */
+  respectDnt?: boolean;
 }
 
 export interface StatValue {
@@ -253,6 +295,7 @@ export interface EventCatalogDetailResponse {
     visitId: string;
     urlPath: string | null;
     createdAt: number;
+    properties?: Array<{ key: string; value: string | null }>;
   }>;
 }
 
@@ -358,39 +401,123 @@ export interface AnnotationsResponse {
   endAt: number;
 }
 
-export type InsightType = 'trend' | 'funnel' | 'retention' | 'path' | 'stickiness' | 'table';
 
-export type InsightQuery = {
-  event?: string | null;
-  events?: string[];
-  path?: string | null;
-  steps?: string[];
-  metric?: 'pageviews' | 'visitors' | 'visits' | 'events';
-  dimension?: string;
-  actor?: 'person' | 'session';
-  unit?: 'hour' | 'day' | 'week' | 'month';
-  limit?: number;
-};
+export type {
+  InsightQuery,
+  InsightResult,
+  InsightType,
+  PropertyFilter,
+  TrendResult,
+  FunnelResult,
+  RetentionResult,
+  LifecycleResult,
+  StickinessResult,
+} from '@flareboard/shared/insight-query';
 
 export interface Insight {
   id: string;
   websiteId: string;
   userId: string;
-  type: InsightType;
+  type: InsightTypeV2;
   name: string;
   description: string;
-  query: InsightQuery;
+  /** Always the v2 shape (the API upgrades legacy rows on read). */
+  query: InsightQueryV2;
   createdAt: number | null;
   updatedAt: number | null;
 }
 
-export type InsightResult =
-  | { kind: 'trend'; series: Array<{ x: string; y: number }>; startAt: number; endAt: number; event?: string; metric?: string }
-  | { kind: 'funnel'; steps: Array<{ step: string; count: number; rate: number }>; conversion: number; startAt: number; endAt: number }
-  | { kind: 'retention'; cohorts: Array<{ cohortWeek: string; weekOffset: number; users: number }>; startAt: number; endAt: number }
-  | { kind: 'path'; prefix: string[]; depth: number; total: number; next: Array<{ path: string; count: number }>; paths: Array<{ path: string; count: number }>; startAt: number; endAt: number }
-  | { kind: 'stickiness'; distribution: Array<{ activeDays: number; actors: number; events: number; percentage: number }>; totalActors: number; actorDays: number; averageActiveDays: number; startAt: number; endAt: number }
-  | { kind: 'table'; dimension: string; rows: MetricRow[]; startAt: number; endAt: number };
+export interface Board {
+  id: string;
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  userId: string | null;
+  teamId: string | null;
+  canEdit?: boolean;
+  createdAt: number | string | null;
+  updatedAt: number | string | null;
+}
+
+export type BoardTemplateSummary = {
+  id: 'product-analytics' | 'web-analytics' | 'revenue';
+  name: string;
+  description: string;
+  rangePreset: string;
+  widgets: Array<{ key: string; name: string; type: InsightTypeV2; size: string }>;
+};
+
+export type ReportSubscription = {
+  id: string;
+  targetType: 'board' | 'insight';
+  targetId: string;
+  title: string;
+  frequency: 'daily' | 'weekly';
+  weekday: number;
+  hour: number;
+  timezone: string;
+  recipients: string[];
+  enabled: boolean;
+  nextRunAt: number;
+  lastSentAt: number | null;
+  lastError: string | null;
+};
+
+export type InsightAlertCondition = 'value_above' | 'value_below' | 'increase_above' | 'decrease_above';
+
+export type InsightAlert = {
+  id: string;
+  insightId: string;
+  name: string;
+  condition: InsightAlertCondition;
+  threshold: number;
+  seriesKey: string;
+  checkInterval: 'hour' | 'day' | 'week';
+  channel: 'email' | 'webhook';
+  target: string | null;
+  enabled: boolean;
+  snoozedUntil: number | null;
+  lastCheckedAt: number | null;
+  lastState: 'firing' | 'ok' | 'error' | null;
+};
+
+export type InsightAlertCheck = {
+  id: string;
+  intervalStart: number;
+  intervalEnd: number;
+  value: number | null;
+  previousValue: number | null;
+  state: 'firing' | 'ok' | 'error';
+  delivered: boolean;
+  error: string | null;
+};
+
+export type NotebookBlock =
+  | { id: string; type: 'text'; text: string }
+  | { id: string; type: 'insight'; insightId: string; rangePreset?: '24h' | '7d' | '30d' | '90d' }
+  | { id: string; type: 'replay'; sessionId: string; label?: string };
+
+export type NotebookSummary = {
+  id: string;
+  websiteId: string;
+  title: string;
+  blockCount: number;
+  updatedAt: number | null;
+};
+
+export type Notebook = {
+  id: string;
+  websiteId: string;
+  title: string;
+  content: { blocks: NotebookBlock[] };
+  createdBy: string | null;
+  updatedBy: string | null;
+  createdAt: number | null;
+  updatedAt: number | null;
+};
+
+export type PropertyKeyRow = { key: string; count: number; numeric: boolean };
+export type PropertyValueRow = { value: string; count: number };
 
 export interface ErrorEvent {
   id: string;
@@ -409,6 +536,17 @@ export interface ErrorEvent {
   handled: string | null;
   release: string | null;
   environment: string | null;
+  /** Issue the event belongs to (after merges). */
+  fingerprint: string;
+}
+
+export type ErrorIssueStatus = 'open' | 'resolved' | 'ignored' | 'regressed';
+
+export interface ErrorIssueComment {
+  id: string;
+  userId: string | null;
+  body: string;
+  createdAt: number;
 }
 
 export interface ErrorIssue {
@@ -418,12 +556,20 @@ export interface ErrorIssue {
   severity: string | null;
   events: number;
   sessions: number;
+  users: number;
   firstSeenAt: number | null;
   lastSeenAt: number | null;
   latestEventId: string | null;
-  status: 'open' | 'resolved' | 'ignored';
+  status: ErrorIssueStatus;
   note: string | null;
+  assigneeUserId: string | null;
   stateUpdatedAt: number | null;
+  resolvedAt: number | null;
+  regressedAt: number | null;
+  mergedCount: number;
+  /** Event counts in equal slices of the selected range. */
+  trend: number[];
+  comments: ErrorIssueComment[];
   samples: ErrorEvent[];
 }
 
@@ -431,6 +577,7 @@ export interface ErrorEventsResponse {
   stats: {
     errors: number;
     sessions: number;
+    users: number;
     firstSeenAt: number | null;
     lastSeenAt: number | null;
     releases: Array<{ release: string; errors: number }>;
@@ -442,36 +589,100 @@ export interface ErrorEventsResponse {
   errors: ErrorEvent[];
 }
 
-export interface ErrorEventDetail extends ErrorEvent {
-  properties: Array<{ key: string; value: string | null }>;
-  resolvedStack?: Array<{
-    raw: string;
-    functionName: string | null;
-    file: string;
-    line: number;
-    column: number;
-    source: string | null;
-    sourceLine: number | null;
-    sourceColumn: number | null;
-    resolved: boolean;
-  }>;
+export interface ResolvedStackFrame {
+  raw: string;
+  functionName: string | null;
+  file: string;
+  line: number | null;
+  column: number | null;
+  inApp: boolean;
+  source: string | null;
+  sourceLine: number | null;
+  sourceColumn: number | null;
+  resolved: boolean;
+  context: { startLine: number; lines: string[] } | null;
 }
 
-export interface LogEvent {
+export interface ErrorEventDetail extends ErrorEvent {
+  properties: Array<{ key: string; value: string | null }>;
+  resolvedStack?: ResolvedStackFrame[];
+  grouping?: {
+    method: 'custom' | 'stack' | 'message';
+    frames: Array<{ file: string; function: string }>;
+  };
+}
+
+export interface ErrorIssueRegression {
   id: string;
-  sessionId: string;
-  visitId: string;
-  urlPath: string;
-  eventName: string | null;
-  createdAt: number;
-  browser: string | null;
-  os: string | null;
-  device: string | null;
-  country: string | null;
-  message: string | null;
-  level: string | null;
+  fingerprint: string;
+  eventId: string | null;
   release: string | null;
   environment: string | null;
+  resolvedAt: number | null;
+  occurredAt: number;
+  detectedAt: number;
+  notifiedAt: number | null;
+}
+
+export interface ErrorIssueDetail {
+  fingerprint: string;
+  name: string | null;
+  message: string | null;
+  severity: string | null;
+  status: ErrorIssueStatus;
+  note: string | null;
+  assigneeUserId: string | null;
+  stateUpdatedAt: number | null;
+  resolvedAt: number | null;
+  regressedAt: number | null;
+  events: number;
+  sessions: number;
+  users: number;
+  firstSeenAt: number | null;
+  lastSeenAt: number | null;
+  trend: number[];
+  trendStartAt: number;
+  trendEndAt: number;
+  samples: ErrorEvent[];
+  latestEvent: ErrorEventDetail | null;
+  comments: ErrorIssueComment[];
+  mergedIssues: Array<{
+    fingerprint: string;
+    name: string | null;
+    message: string | null;
+    mergedAt: number | null;
+    mergedBy: string | null;
+    events: number;
+    lastSeenAt: number | null;
+  }>;
+  regressions: ErrorIssueRegression[];
+}
+
+export type ErrorIssueDetailResponse = { issue: ErrorIssueDetail } | { mergedInto: string };
+
+export type LogSeverity = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+export type LogSource = 'otlp' | 'browser';
+
+/** One log line: OpenTelemetry (`otlp`) or the tracker's flareboard.log() (`browser`). */
+export interface LogEvent {
+  id: string;
+  source: LogSource;
+  createdAt: number;
+  timeUs: number;
+  level: LogSeverity;
+  severityText: string | null;
+  message: string | null;
+  service: string | null;
+  release: string | null;
+  environment: string | null;
+  scope: string | null;
+  traceId: string | null;
+  spanId: string | null;
+  sessionId: string | null;
+  visitId: string | null;
+  urlPath: string | null;
+  attributes: Record<string, unknown> | null;
+  resource: Record<string, unknown> | null;
 }
 
 export interface LogEventsResponse {
@@ -479,26 +690,50 @@ export interface LogEventsResponse {
     logs: number;
     sessions: number;
     lastSeenAt: number | null;
-    levels: Array<{ level: string; logs: number }>;
+    levels: Array<{ level: LogSeverity; logs: number }>;
     trend: Array<{ date: string; logs: number; sessions: number }>;
     releases: Array<{ release: string; logs: number }>;
     environments: Array<{ environment: string; logs: number }>;
+    services: Array<{ service: string; logs: number }>;
   };
   logs: LogEvent[];
+  /** Pass as `before` for the next page; null on the last page. */
+  nextBefore: string | null;
+  /** False when OpenTelemetry ingestion is unavailable (legacy D1 storage). */
+  otlpEnabled: boolean;
 }
+
+export interface LogHistogramResponse {
+  bucketMs: number;
+  buckets: Array<{ t: number; total: number } & Record<LogSeverity, number>>;
+}
+
+export interface LogTailResponse {
+  cursor: number;
+  seq: string;
+  logs: LogEvent[];
+}
+
+export type AiCostSource = 'reported' | 'override' | 'builtin';
 
 export interface AiObservationEvent {
   id: string;
   sessionId: string;
-  visitId: string;
+  distinctId: string | null;
   urlPath: string;
   createdAt: number;
+  kind: string;
+  traceId: string;
   provider: string | null;
   model: string | null;
   inputTokens: number | null;
   outputTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheWriteTokens: number | null;
   totalTokens: number | null;
+  /** Null when the model has no known price. */
   costUsd: number | null;
+  costSource: AiCostSource | null;
   latencyMs: number | null;
   status: string | null;
   quality: string | null;
@@ -506,39 +741,143 @@ export interface AiObservationEvent {
   environment: string | null;
 }
 
+export interface AiTally {
+  calls: number;
+  tokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  unpricedCalls: number;
+  errors: number;
+  errorRate: number;
+  avgLatencyMs: number | null;
+}
+
 export interface AiObservabilityResponse {
-  stats: {
-    calls: number;
+  stats: AiTally & {
+    unit: 'hour' | 'day';
     sessions: number;
-    tokens: number;
-    costUsd: number;
-    errors: number;
-    avgLatencyMs: number | null;
-    models: Array<{
-      model: string;
-      calls: number;
-      tokens: number;
-      costUsd: number;
-      errors: number;
-      avgLatencyMs: number | null;
-      errorRate: number;
-    }>;
+    users: number;
+    traces: number;
+    p50LatencyMs: number | null;
+    p95LatencyMs: number | null;
+    truncated: boolean;
+    models: Array<AiTally & { model: string; provider: string | null; priceSource: 'override' | 'builtin' | null }>;
     statuses: Array<{ status: string; calls: number }>;
-    providers: Array<{ provider: string; calls: number; costUsd: number; errors: number }>;
+    providers: Array<AiTally & { provider: string }>;
     qualities: Array<{ quality: string; calls: number }>;
     releases: Array<{ release: string; calls: number; costUsd: number; errors: number }>;
     environments: Array<{ environment: string; calls: number; costUsd: number; errors: number }>;
-    trend: Array<{
-      date: string;
-      calls: number;
-      sessions: number;
-      tokens: number;
-      costUsd: number;
-      errors: number;
-      avgLatencyMs: number | null;
-    }>;
+    /** `date` is an ISO hour (UTC) when unit is hour, else a site-local YYYY-MM-DD. */
+    trend: Array<AiTally & { date: string; sessions: number; p50LatencyMs: number | null; p95LatencyMs: number | null }>;
   };
   events: AiObservationEvent[];
+}
+
+export interface AiTraceSummary {
+  traceId: string;
+  name: string | null;
+  startedAt: number;
+  lastAt: number;
+  latencyMs: number;
+  generations: number;
+  spans: number;
+  errors: number;
+  tokens: number;
+  costUsd: number;
+  unpricedCalls: number;
+  models: string[];
+  providers: string[];
+  distinctId: string | null;
+  sessionId: string;
+}
+
+export interface AiTraceEvent {
+  id: string;
+  kind: string;
+  eventName: string | null;
+  createdAt: number;
+  startMs: number;
+  endMs: number;
+  spanId: string | null;
+  parentId: string | null;
+  name: string | null;
+  model: string | null;
+  provider: string | null;
+  status: string;
+  isError: boolean;
+  error: string | null;
+  httpStatus: number | null;
+  latencyMs: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheWriteTokens: number | null;
+  tokens: number;
+  costUsd: number | null;
+  costSource: AiCostSource | null;
+  input: string | null;
+  output: string | null;
+  inputTruncated: boolean;
+  outputTruncated: boolean;
+  contentOmitted: boolean;
+  properties: Record<string, string | number | null>;
+}
+
+export interface AiTraceNode {
+  id: string;
+  event: AiTraceEvent | null;
+  depth: number;
+  startMs: number;
+  endMs: number;
+  totals: { costUsd: number; tokens: number; errors: number; generations: number };
+  children: AiTraceNode[];
+}
+
+export interface AiTraceDetail {
+  traceId: string;
+  name: string | null;
+  distinctId: string | null;
+  sessionId: string;
+  startedAt: number;
+  endedAt: number;
+  latencyMs: number;
+  costUsd: number;
+  tokens: number;
+  errors: number;
+  generations: number;
+  unpricedCalls: number;
+  truncated: boolean;
+  tree: AiTraceNode;
+}
+
+export interface AiUserRow {
+  distinctId: string | null;
+  sessionId: string;
+  calls: number;
+  traces: number;
+  errors: number;
+  tokens: number;
+  costUsd: number;
+  unpricedCalls: number;
+  firstAt: number;
+  lastAt: number;
+  models: string[];
+}
+
+export interface AiModelPrice {
+  model: string;
+  inputPerMillion: number;
+  outputPerMillion: number;
+  cacheReadPerMillion: number | null;
+  cacheWritePerMillion: number | null;
+}
+
+export interface AiSettings {
+  captureContent: boolean;
+  priceOverrides: AiModelPrice[];
+  builtInPrices: Array<AiModelPrice & { provider: string }>;
+  pricesReviewedAt: string;
 }
 
 export interface WorkflowSummary {
@@ -546,6 +885,7 @@ export interface WorkflowSummary {
   lastExecutionAt: number | null;
   failures: number;
   successes: number;
+  inProgress: number;
   successRate: number;
   statuses: Array<{ status: string; executions: number; percentage: number }>;
   events: Array<{ eventName: string; executions: number; lastExecutionAt: number | null }>;
@@ -558,14 +898,61 @@ export interface WorkflowSummary {
   }>;
 }
 
+export type WorkflowConditionField = 'property' | 'person' | 'path' | 'url' | 'hostname';
+export type WorkflowConditionOperator =
+  | 'equals'
+  | 'not_equals'
+  | 'contains'
+  | 'not_contains'
+  | 'starts_with'
+  | 'ends_with'
+  | 'exists'
+  | 'not_exists'
+  | 'greater_than'
+  | 'greater_than_or_equal'
+  | 'less_than'
+  | 'less_than_or_equal';
+
+export interface WorkflowCondition {
+  field: WorkflowConditionField;
+  key: string;
+  operator: WorkflowConditionOperator;
+  value: string;
+}
+
+export type WorkflowWebhookMethod = 'POST' | 'PUT' | 'PATCH' | 'GET' | 'DELETE';
+
+/** Mirrors WorkflowStep in packages/shared/src/workflow-definition.ts. */
+export type WorkflowStep =
+  | { id: string; type: 'delay'; minutes: number }
+  | { id: string; type: 'condition'; conditions: WorkflowCondition[] }
+  | {
+      id: string;
+      type: 'webhook';
+      url: string;
+      method: WorkflowWebhookMethod;
+      headers: Array<{ key: string; value: string }>;
+      body: string;
+    }
+  | { id: string; type: 'email'; to: string; subject: string; body: string }
+  | { id: string; type: 'slack'; webhookUrl: string; message: string };
+
+export type WorkflowStepType = WorkflowStep['type'];
+
 export interface Workflow {
   id: string;
   websiteId: string;
   name: string;
+  description: string;
   triggerEvent: string;
   enabled: boolean;
-  actionType: 'record' | 'webhook' | 'email';
-  actionConfig: { note?: string; url?: string; email?: string };
+  filters: WorkflowCondition[];
+  steps: WorkflowStep[];
+  stepsValid: boolean;
+  signingSecretPreview: string | null;
+  signingSecretRotatedAt?: string | number | null;
+  /** Only in the create response. */
+  signingSecret?: string;
   createdAt?: string | number;
   updatedAt?: string | number;
   summary?: WorkflowSummary;
@@ -578,15 +965,70 @@ export interface WorkflowExecution {
   visitId: string | null;
   eventId: string | null;
   eventName: string | null;
+  distinctId: string | null;
   status: string;
   error: string | null;
+  currentStep: number | null;
+  attempts: number;
+  responseCode: number | null;
+  nextRetryAt: number | null;
   createdAt: number;
+  updatedAt: number | null;
+  completedAt: number | null;
+}
+
+export interface WorkflowExecutionAttempt {
+  id: string;
+  stepIndex: number;
+  stepType: string;
+  attempt: number;
+  status: string;
+  responseCode: number | null;
+  error: string | null;
+  responseBody: string | null;
+  durationMs: number | null;
+  nextRetryAt: number | null;
+  createdAt: number;
+}
+
+export interface WorkflowExecutionDetail {
+  execution: WorkflowExecution;
+  attempts: WorkflowExecutionAttempt[];
 }
 
 export interface WorkflowExecutionsResponse {
   workflow: Workflow;
   summary: WorkflowSummary;
   executions: WorkflowExecution[];
+}
+
+export type WorkflowTestRequest =
+  | { type: 'webhook' | 'slack'; method: string; url: string; headers: Array<{ key: string; value: string }>; body: string | null }
+  | { type: 'email'; to: string[]; subject: string; text: string };
+
+export interface WorkflowTestResult {
+  matched: boolean;
+  sent: boolean;
+  steps: Array<{
+    index: number;
+    type: WorkflowStepType;
+    status: 'skipped' | 'passed' | 'stopped' | 'rendered' | 'sent' | 'failed' | 'not_reached';
+    detail: string | null;
+    request: WorkflowTestRequest | null;
+    response: { statusCode: number | null; body: string | null; durationMs: number } | null;
+    error: string | null;
+  }>;
+}
+
+export interface WorkflowSampleEvent {
+  event: {
+    name: string;
+    hostname: string | null;
+    urlPath: string | null;
+    urlQuery: string | null;
+    distinctId: string | null;
+    properties: Record<string, unknown>;
+  } | null;
 }
 
 export interface WarehouseQueryResponse {
@@ -614,6 +1056,121 @@ export interface WarehouseQueryResponse {
 export interface WarehouseSchemaResponse {
   tables: Array<{ name: string; description: string; columns: string[] }>;
   examples: Array<{ name: string; category?: string; sql: string }>;
+  /** Server-side query limits (lib/warehouse.ts WAREHOUSE_QUERY_LIMITS). */
+  limits?: {
+    defaultLimit: number;
+    maxUserLimit: number;
+    maxRowsRead: number;
+    timeoutMs: number;
+    exportRowCap: number;
+  };
+  /** What each data source has imported (row counts, payload fields for HTTP sources). */
+  importedSources?: Array<{
+    id: string;
+    name: string;
+    type: string;
+    tables: Array<{ name: string; rowCount: number; columns: string[] }>;
+    exampleSql: string | null;
+  }>;
+}
+
+export interface RevenueReportResponse {
+  byDay: Array<{ date: string; currency: string; total: number; transactions: number }>;
+  byEvent: Array<{ eventName: string; source: 'event' | 'stripe'; currency: string; total: number; transactions: number }>;
+  totals: Array<{ currency: string; total: number; transactions: number }>;
+}
+
+export interface RevenueMrrPoint {
+  period: string;
+  at: number;
+  currency: string;
+  mrr: number;
+  arr: number;
+  subscribers: number;
+  newMrr: number;
+  expansionMrr: number;
+  contractionMrr: number;
+  churnedMrr: number;
+  newSubscribers: number;
+  churnedSubscribers: number;
+  churnRate: number | null;
+  arpu: number | null;
+}
+
+export interface RevenueSubscriptionsResponse {
+  currencies: string[];
+  latest: RevenueMrrPoint[];
+  series: RevenueMrrPoint[];
+}
+
+export type RevenueAttributionDimension = 'utm_source' | 'utm_medium' | 'utm_campaign' | 'referrer_domain';
+
+export interface RevenueAttributionResponse {
+  dimension: RevenueAttributionDimension;
+  rows: Array<{ value: string | null; currency: string; total: number; transactions: number; customers: number }>;
+}
+
+export type FeatureFlagJson =
+  | null
+  | boolean
+  | number
+  | string
+  | FeatureFlagJson[]
+  | { [key: string]: FeatureFlagJson };
+
+export type FeatureFlagConditionField =
+  | 'path'
+  | 'url'
+  | 'hostname'
+  | 'referrer'
+  | 'language'
+  | 'userAgent'
+  | 'distinctId'
+  | 'userId'
+  | 'environment'
+  | 'release'
+  | 'group'
+  | 'property'
+  | 'person'
+  | 'group_property'
+  | 'cohort';
+
+export type FeatureFlagConditionOperator =
+  | 'equals'
+  | 'contains'
+  | 'starts_with'
+  | 'ends_with'
+  | 'not_equals'
+  | 'not_contains'
+  | 'greater_than'
+  | 'greater_than_or_equal'
+  | 'less_than'
+  | 'less_than_or_equal'
+  | 'exists'
+  | 'not_exists'
+  | 'in_cohort'
+  | 'not_in_cohort';
+
+export interface FeatureFlagCondition {
+  field: FeatureFlagConditionField;
+  key?: string;
+  groupType?: string;
+  operator: FeatureFlagConditionOperator;
+  value: string;
+}
+
+export interface FeatureFlagConditionGroup {
+  conditions: FeatureFlagCondition[];
+  rollout: number;
+  variant?: string | null;
+  description?: string;
+}
+
+export interface FeatureFlagVariant {
+  key: string;
+  name: string;
+  weight: number;
+  payload?: FeatureFlagJson;
 }
 
 export interface FeatureFlag {
@@ -623,38 +1180,14 @@ export interface FeatureFlag {
   name: string;
   description: string;
   enabled: boolean;
+  /** First condition group's rollout (legacy mirror). */
   rollout: number;
-  variants: Array<{ key: string; name: string; weight: number }>;
-  targetingRules: Array<{
-    field:
-      | 'path'
-      | 'url'
-      | 'hostname'
-      | 'referrer'
-      | 'language'
-      | 'userAgent'
-      | 'distinctId'
-      | 'userId'
-      | 'environment'
-      | 'release'
-      | 'group'
-      | 'property';
-    key?: string;
-    operator:
-      | 'equals'
-      | 'contains'
-      | 'starts_with'
-      | 'ends_with'
-      | 'not_equals'
-      | 'not_contains'
-      | 'greater_than'
-      | 'greater_than_or_equal'
-      | 'less_than'
-      | 'less_than_or_equal'
-      | 'exists'
-      | 'not_exists';
-    value: string;
-  }>;
+  variants: FeatureFlagVariant[];
+  /** First condition group's conditions (legacy mirror). */
+  targetingRules: FeatureFlagCondition[];
+  conditionGroups: FeatureFlagConditionGroup[];
+  payload: FeatureFlagJson;
+  earlyAccess: { name: string; description: string } | null;
   summary?: {
     exposures: number;
     sessions: number;
@@ -683,6 +1216,15 @@ export interface FeatureFlag {
   updatedAt?: string | number;
 }
 
+export type ExperimentMetricType = 'conversion' | 'count' | 'property_sum' | 'property_mean';
+
+export interface ExperimentMetric {
+  type: ExperimentMetricType;
+  event: string;
+  property?: string;
+  name?: string;
+}
+
 export interface Experiment {
   id: string;
   websiteId: string;
@@ -692,70 +1234,106 @@ export interface Experiment {
   name: string;
   description: string;
   status: 'draft' | 'running' | 'paused' | 'completed';
+  /** Event of the primary metric. */
   goalEvent: string;
+  primaryMetric: ExperimentMetric;
+  secondaryMetrics: ExperimentMetric[];
+  /** Relative lift in percent the sample-size guidance plans for; null = default. */
+  minimumDetectableEffect: number | null;
   startedAt?: string | number | null;
   endedAt?: string | number | null;
   createdAt?: string | number;
   updatedAt?: string | number;
 }
 
+export type ExperimentInterval = [number, number];
+
+export interface ExperimentMetricVariantResult {
+  variant: string;
+  baseline: boolean;
+  /** Units contributing a value (for property_mean: units with the property). */
+  sampleSize: number;
+  /** Conversion rate (fraction) or mean per unit. */
+  value: number | null;
+  total: number;
+  standardDeviation: number | null;
+  confidenceInterval: ExperimentInterval | null;
+  credibleInterval: ExperimentInterval | null;
+  comparison: {
+    /** Relative lift as a fraction. */
+    lift: number | null;
+    difference: number;
+    frequentist: {
+      pValue: number | null;
+      significant: boolean;
+      liftInterval: ExperimentInterval | null;
+      differenceInterval: ExperimentInterval | null;
+    };
+    bayesian: { probabilityToBeatControl: number | null; liftInterval: ExperimentInterval | null };
+  } | null;
+}
+
+export type ExperimentDecision = 'no_data' | 'fix_setup' | 'keep_collecting' | 'ship_variant' | 'keep_control';
+
 export interface ExperimentResults {
   experiment: Experiment;
+  window: { startAt: number; endAt: number };
+  variants: Array<{
+    variant: string;
+    baseline: boolean;
+    units: number;
+    share: number;
+    expectedShare: number | null;
+  }>;
+  srm: {
+    status: 'ok' | 'mismatch' | 'insufficient_data' | 'not_applicable';
+    reason: 'unexpected_variant' | 'single_arm' | 'targeting_rules' | null;
+    pValue: number | null;
+    chiSquare: number | null;
+    degreesOfFreedom: number | null;
+    expectedShares: Record<string, number>;
+  } | null;
+  metrics: Array<{
+    role: 'primary' | 'secondary';
+    metric: ExperimentMetric;
+    variants: ExperimentMetricVariantResult[];
+  }>;
+  guidance: {
+    metricType: ExperimentMetricType;
+    baseline: number | null;
+    /** Fraction. */
+    minimumDetectableEffect: number;
+    requiredUnitsPerVariant: number | null;
+    currentUnitsPerVariant: number;
+    detectableEffect: number | null;
+    estimatedDaysRemaining: number | null;
+    alpha: number;
+    power: number;
+  } | null;
   summary: {
-    totalExposures: number;
-    totalConversions: number;
-    conversionRate: number;
-    truncated?: boolean;
-    exposureSampleLimit: number;
+    totalUnits: number;
+    excludedUnits: number;
     controlVariant: string | null;
-    controlConversionRate: number | null;
     leaderVariant: string | null;
-    leaderConversionRate: number | null;
     leaderLift: number | null;
     significantVariant: string | null;
-    maxConfidence: number | null;
-    trafficImbalanced: boolean;
-    sampleReady: boolean;
-    sampleSize: {
-      minimumExposuresPerVariant: number;
-      minimumConversions: number;
-      currentMinExposures: number;
-      remainingExposures: number;
-      remainingConversions: number;
-      ready: boolean;
-    };
-    decision: 'no_data' | 'fix_setup' | 'keep_collecting' | 'ship_variant' | 'keep_control';
-    recommendation: 'no_data' | 'collect_more_data' | 'variant_leading' | 'control_leading' | 'no_control';
-    conclusion: {
-      status: 'no_data' | 'setup_issue' | 'collecting' | 'winner' | 'keep_control';
-      variant: string | null;
-      action: 'no_data' | 'fix_setup' | 'keep_collecting' | 'ship_variant' | 'keep_control';
-      confidence: number | null;
-    };
+    bayesianLeader: string | null;
+    bayesianLeaderProbability: number | null;
+    minimumSampleReached: boolean;
+    plannedSampleReached: boolean;
+    decision: ExperimentDecision;
     diagnostics: Array<{
       code:
         | 'no_exposures'
         | 'missing_control'
+        | 'sample_ratio_mismatch'
         | 'low_sample'
-        | 'traffic_imbalanced'
         | 'significant_variant'
+        | 'variant_worse'
         | 'no_significant_winner';
-      level: 'info' | 'warning' | 'success';
+      level: 'info' | 'warning' | 'success' | 'error';
     }>;
   };
-  variants: Array<{
-    variant: string;
-    exposures: number;
-    conversions: number;
-    conversionRate: number;
-    lift: number | null;
-    baseline: boolean;
-    confidenceIntervalLow: number;
-    confidenceIntervalHigh: number;
-    pValue: number | null;
-    confidence: number | null;
-    significant: boolean;
-  }>;
   recent: Array<{
     id: string;
     sessionId: string;
@@ -768,9 +1346,10 @@ export interface ExperimentResults {
   trend: Array<{
     date: string;
     variant: string;
-    exposures: number;
-    conversions: number;
-    conversionRate: number;
+    /** Units first exposed that day. */
+    units: number;
+    /** Primary metric for that day's cohort. */
+    value: number | null;
   }>;
 }
 
@@ -811,14 +1390,24 @@ export interface Survey {
   id: string;
   websiteId: string;
   name: string;
+  /** Legacy mirror of the first question. */
   question: string;
   type: 'text' | 'rating' | 'choice';
   options: string[];
+  questions: SurveyQuestion[];
+  appearance: SurveyAppearance;
   enabled: boolean;
   triggerPath?: string | null;
   triggerEvent?: string | null;
   displayDelaySeconds: number;
   displayRules?: SurveyDisplayRule[];
+  sampleRate: number;
+  responseLimit: number | null;
+  startsAt: number | null;
+  endsAt: number | null;
+  repeatIntervalDays: number | null;
+  hostedEnabled: boolean;
+  slug: string | null;
   createdAt?: string | number;
   updatedAt?: string | number;
   summary?: SurveySummary;
@@ -828,14 +1417,55 @@ export interface SurveyResponse {
   id: string;
   sessionId: string | null;
   visitId: string | null;
+  distinctId: string | null;
   answer: string;
+  answers: SurveyAnswers;
+  completed: boolean;
+  source: string;
   urlPath: string | null;
   createdAt: number;
+}
+
+type SurveyCountRow = { value: string; count: number; percentage: number };
+type SurveySentimentName = 'positive' | 'negative' | 'neutral';
+
+export interface SurveyQuestionResult {
+  id: string;
+  type: SurveyQuestion['type'];
+  question: string;
+  answered: number;
+  droppedAfter: number;
+  rating?: {
+    min: number;
+    max: number;
+    average: number | null;
+    distribution: SurveyCountRow[];
+    nps: { score: number | null; promoters: number; passives: number; detractors: number } | null;
+  };
+  choices?: Array<SurveyCountRow & { other: boolean }>;
+  otherAnswers?: Array<{ value: string; count: number }>;
+  text?: {
+    sentiment: Array<{ sentiment: SurveySentimentName; responses: number; percentage: number }>;
+    themes: Array<{ theme: string; responses: number; percentage: number }>;
+    items: Array<{ responseId: string; value: string; sentiment: SurveySentimentName; createdAt: number }>;
+  };
+  link?: { clicks: number };
+}
+
+export interface SurveyResults {
+  total: number;
+  completed: number;
+  partial: number;
+  completionRate: number;
+  sampled: boolean;
+  trend: Array<{ date: string; responses: number; completed: number; partial: number }>;
+  questions: SurveyQuestionResult[];
 }
 
 export interface SurveyResponsesResponse {
   survey: Survey;
   summary: SurveySummary;
+  results: SurveyResults;
   responses: SurveyResponse[];
 }
 
@@ -898,6 +1528,27 @@ export interface Team {
   accessCode?: string;
   role?: string;
   createdAt?: string | number;
+  /** Members must have two-factor authentication on to reach the team's websites. */
+  requireTwoFactor?: boolean;
+}
+
+/** One row of `/api/me/audit-log` and `/api/teams/:teamId/audit-log`. */
+export interface AuditLogEntry {
+  id: string;
+  userId: string | null;
+  username: string | null;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string | number | null;
+}
+
+export interface AuditLogPage {
+  items: AuditLogEntry[];
+  page: number;
+  pageSize: number;
+  total: number;
 }
 
 export interface ShareLink {
@@ -905,6 +1556,9 @@ export interface ShareLink {
   name: string;
   slug: string;
   entityId: string;
+  /** 1 website, 4 board, 5 insight. */
+  shareType?: number;
+  expiresAt?: string | number | null;
   createdAt?: string | number;
 }
 
@@ -1060,7 +1714,8 @@ export interface WarehouseDataSource {
   id: string;
   websiteId: string;
   name: string;
-  type: 'http_json' | 'http_csv' | 'r2_json' | 'd1' | 'postgres' | 'mysql';
+  /** Supported connectors; sources of removed types (postgres, mysql, …) can still be listed and deleted. */
+  type: 'http_json' | 'http_csv' | 'stripe' | (string & {});
   enabled: boolean;
   config: Record<string, unknown>;
   lastSyncAt: number | null;
@@ -1074,28 +1729,54 @@ export interface LogTraceSummary {
   traceId: string;
   spans: number;
   services: number;
+  rootName: string | null;
+  rootService: string | null;
+  startedAt: number;
+  endedAt: number;
+  durationMs: number;
+  maxSpanDurationMs: number;
   hasError: boolean;
-  durationMs: number | null;
-  startedAt: number | null;
-  lastSeenAt: number | null;
+  sessionId: string | null;
 }
 
 export interface LogTraceSpan {
   id: string;
+  source: LogSource;
+  traceId: string;
   spanId: string;
   parentSpanId: string | null;
-  service: string;
-  operation: string | null;
-  level: string | null;
-  message: string | null;
-  durationMs: number | null;
-  status: string | null;
+  name: string;
+  kind: string;
+  service: string | null;
+  release: string | null;
+  environment: string | null;
   createdAt: number;
+  startUs: number;
+  durationUs: number;
+  durationMs: number;
+  status: 'unset' | 'ok' | 'error';
+  statusMessage: string | null;
+  sessionId: string | null;
+  attributes: Record<string, unknown> | null;
+  resource: Record<string, unknown> | null;
+  events: Array<{ name: string; timeUs: number; attributes: Record<string, unknown> }>;
+  links: Array<{ traceId: string; spanId: string; attributes: Record<string, unknown> }>;
 }
 
 export interface LogTraceDetail {
   traceId: string;
+  startedAt: number | null;
+  endedAt: number | null;
+  durationMs: number;
+  services: string[];
+  sessionId: string | null;
   spans: LogTraceSpan[];
+  logs: LogEvent[];
+}
+
+export interface LogAttributeFilter {
+  key: string;
+  value?: string;
 }
 
 export interface LogSavedFilter {
@@ -1109,6 +1790,9 @@ export interface LogSavedFilter {
     environment?: string;
     service?: string;
     traceId?: string;
+    sessionId?: string;
+    source?: LogSource;
+    attributes?: LogAttributeFilter[];
   };
   isDefault: boolean;
   createdAt?: number;
@@ -1127,6 +1811,8 @@ export interface LogAlertRule {
   search: string | null;
   release: string | null;
   environment: string | null;
+  attributeKey: string | null;
+  attributeValue: string | null;
   channel: 'record' | 'email' | 'webhook';
   target: string | null;
   createdAt?: number;
@@ -1154,6 +1840,8 @@ export interface ErrorAlertRule {
   environment: string | null;
   channel: 'record' | 'email' | 'webhook';
   target: string | null;
+  /** Also notify when a resolved issue occurs again. */
+  notifyRegressions: boolean;
   createdAt?: number;
   updatedAt?: number;
 }
@@ -1176,6 +1864,30 @@ export interface SurveyDisplayRule {
 export interface FeatureFlagEvaluateResult {
   key: string;
   enabled: boolean;
-  variant: string | null;
+  variant: string | boolean | null;
   reason: string;
+  conditionGroup?: number | null;
+  payload?: FeatureFlagJson;
+}
+
+export interface FeatureFlagHistoryEntry {
+  id: string;
+  userId: string;
+  username: string;
+  action: 'create' | 'update' | 'delete';
+  metadata: {
+    key?: string;
+    changes?: string[];
+    before?: Partial<FeatureFlag> | null;
+    after?: Partial<FeatureFlag> | null;
+    experimentId?: string;
+  } | null;
+  createdAt: string | number;
+}
+
+export interface FeatureFlagHistoryPage {
+  items: FeatureFlagHistoryEntry[];
+  page: number;
+  pageSize: number;
+  total: number;
 }

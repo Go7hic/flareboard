@@ -1,75 +1,135 @@
 import type { Context } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
-import { createSavedReplaySchema, updateSavedReplaySchema, uuid } from '@flareboard/shared';
+import {
+  createReplayShareSchema,
+  createSavedReplaySchema,
+  replayListQuerySchema,
+  updateSavedReplaySchema,
+  uuid,
+} from '@flareboard/shared';
 import type { Env } from '../env';
 import { parseStatsRange } from '../lib/parse-range';
 import { canMutateWebsite } from '../lib/access';
-import { getWebsiteReplays } from '../lib/queries';
-import { getSavedReplays } from '../lib/replays';
+import { getWebsiteById } from '../lib/queries';
+import { checkIpRateLimit, getTrustedClientIp } from '../lib/rate-limit';
+import { InsightQueryError } from '../lib/property-filters';
+import {
+  getReplayShareByToken,
+  getSavedReplays,
+  listReplays,
+  listReplayShares,
+  loadReplay,
+  newReplayShareToken,
+  replayExists,
+} from '../lib/replays';
 import { badRequest, json, notFound } from '../lib/response';
-import { requireWebsiteOr404 } from '../lib/website';
+import { requireMutateWebsiteOr404, requireWebsiteOr404 } from '../lib/website';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
 
-const REPLAY_LIST_LIMIT = 200;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export async function handleList(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
+  const query = replayListQuerySchema.safeParse(c.req.query());
+  if (!query.success) return badRequest(query.error.message);
   // Filter by the selected range on the server: the list used to be the newest 50
   // overall, so older ranges showed nothing and long ranges were silently truncated.
   const hasRange = c.req.query('startAt') != null && c.req.query('endAt') != null;
   const range = hasRange ? parseStatsRange(c, { clamp: true }) : undefined;
-  const replays = await getWebsiteReplays(c.env, website!.websiteId, REPLAY_LIST_LIMIT, range);
-  return json(replays);
+  try {
+    return json(await listReplays(c.env, website!.websiteId, { ...query.data, range }));
+  } catch (error) {
+    if (error instanceof InsightQueryError) return badRequest(error.message);
+    throw error;
+  }
 }
 
 export async function handleGet(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
-  // The route id may be a visit id or a replay chunk id; both are matched below.
+  // The route id may be a visit id or a replay chunk id; both are matched.
+  const replay = await loadReplay(c.env, website!.websiteId, c.req.param('replayId') ?? '');
+  if (!replay) return notFound();
+  return json({ visitId: replay.visitId, chunks: replay.chunks, events: replay.events });
+}
+
+function serializeShare(share: { id: string; visitId: string; token: string; expiresAt: number | null; createdAt: number }) {
+  return { id: share.id, visitId: share.visitId, token: share.token, expiresAt: share.expiresAt, createdAt: share.createdAt };
+}
+
+export async function handleShareList(c: Ctx) {
+  const { website, response } = await requireWebsiteOr404(c);
+  if (response) return response;
+  const shares = await listReplayShares(c.env, website!.websiteId, c.req.param('replayId') ?? '');
+  return json(shares.map(serializeShare));
+}
+
+export async function handleShareCreate(c: Ctx) {
+  const { website, response } = await requireMutateWebsiteOr404(c);
+  if (response) return response;
   const visitId = c.req.param('replayId') ?? '';
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = createReplayShareSchema.safeParse(body ?? {});
+  if (!parsed.success) return badRequest(parsed.error.message);
+  if (!(await replayExists(c.env, website!.websiteId, visitId))) return notFound();
 
-  const chunks = await c.env.DB.prepare(
-    `SELECT replay_id as id, visit_id as visitId, chunk_index as chunkIndex,
-            event_count as eventCount, started_at as startedAt, ended_at as endedAt
-     FROM session_replay
-     WHERE website_id = ?1 AND (visit_id = ?2 OR replay_id = ?2)
-     ORDER BY chunk_index ASC`,
-  )
-    .bind(website!.websiteId, visitId)
-    .all<{ id: string; visitId: string; chunkIndex: number }>();
-
-  if (!chunks.results?.length) return notFound();
-
-  const events: unknown[] = [];
-  if (c.env.REPLAY_BUCKET) {
-    const websiteId = website!.websiteId;
-    const vid = chunks.results[0].visitId ?? visitId;
-    const fetched = await Promise.all(
-      chunks.results.map(async (chunk) => {
-        const idx = (chunk as { chunkIndex: number }).chunkIndex;
-        const key = `${websiteId}/${vid}/${idx}`;
-        const obj = await c.env.REPLAY_BUCKET!.get(key);
-        if (!obj) return [] as unknown[];
-        const text = await obj.text();
-        try {
-          const parsed = JSON.parse(text);
-          return Array.isArray(parsed) ? parsed : [];
-        } catch {
-          return [] as unknown[];
-        }
-      }),
-    );
-    for (const part of fetched) events.push(...part);
-  }
-
-  return json({
+  const now = Date.now();
+  const share = {
+    id: uuid(),
     visitId,
-    chunks: chunks.results,
-    events,
+    token: newReplayShareToken(),
+    expiresAt: parsed.data.expiresInDays ? now + parsed.data.expiresInDays * DAY_MS : null,
+    createdAt: now,
+  };
+  await c.env.DB.prepare(
+    `INSERT INTO session_replay_share (share_id, website_id, visit_id, token, created_by, expires_at, created_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
+  )
+    .bind(share.id, website!.websiteId, visitId, share.token, c.get('user').userId, share.expiresAt, now)
+    .run();
+  return json(serializeShare(share), 201);
+}
+
+export async function handleShareDelete(c: Ctx) {
+  const { website, response } = await requireMutateWebsiteOr404(c);
+  if (response) return response;
+  const result = await c.env.DB.prepare('DELETE FROM session_replay_share WHERE share_id = ?1 AND website_id = ?2')
+    .bind(c.req.param('shareId') ?? '', website!.websiteId)
+    .run();
+  if (!result.meta?.changes) return notFound();
+  return json({ ok: true });
+}
+
+const PUBLIC_REPLAY_REQUESTS_PER_MINUTE = 30;
+
+/** GET /api/replay-shares/:token (no login): one shared recording and nothing else. */
+export async function handlePublicShare(c: Context<{ Bindings: Env }>) {
+  const rl = await checkIpRateLimit(
+    c.env,
+    'public-replay-share',
+    getTrustedClientIp(c.req.raw),
+    PUBLIC_REPLAY_REQUESTS_PER_MINUTE,
+    60,
+  );
+  if (!rl.allowed) return json({ message: 'Too many requests' }, 429);
+  const share = await getReplayShareByToken(c.env, c.req.param('token') ?? '');
+  if (!share) return notFound();
+  const website = await getWebsiteById(c.env, share.websiteId);
+  if (!website) return notFound();
+  const replay = await loadReplay(c.env, share.websiteId, share.visitId);
+  if (!replay) return notFound();
+  return json({
+    website: { name: website.name, domain: website.domain },
+    visitId: replay.visitId,
+    startedAt: replay.startedAt,
+    endedAt: replay.endedAt,
+    durationMs: Math.max(replay.endedAt - replay.startedAt, 0),
+    expiresAt: share.expiresAt,
+    events: replay.events,
   });
 }
 

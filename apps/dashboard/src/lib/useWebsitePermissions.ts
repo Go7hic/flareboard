@@ -16,7 +16,10 @@ export function useWebsitePermissions(websiteId: string | undefined, module?: We
 
   return {
     permissions,
+    /** False until permissions load, so edit controls stay disabled meanwhile. */
     canEdit,
+    /** Loaded and read-only: show the view-only hint (not while loading). */
+    viewOnly: permissions !== undefined && !canEdit,
     isLoading: query.isLoading,
   };
 }

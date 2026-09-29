@@ -3,6 +3,12 @@ export interface Env {
   CACHE: KVNamespace;
   RATE_LIMITER: DurableObjectNamespace;
   REPLAY_BUCKET?: R2Bucket;
+  /** Per-website analytics stores (see lib/site-db.ts). */
+  SITE_STORE?: DurableObjectNamespace<import('./store/event-store').EventStore>;
+  /** Analytics storage mode: 'd1' | 'dual' | 'do' (lib/site-db.ts). */
+  EVENT_STORE?: string;
+  /** Durable workflow executions (src/workflows/runner.ts). */
+  WORKFLOW_RUNNER?: Workflow<import('./lib/workflow-runtime').WorkflowRunParams>;
   /** Cloudflare Email Sending binding (optional). */
   EMAIL?: SendEmail;
   APP_SECRET: string;
@@ -30,6 +36,12 @@ export interface Env {
   GITHUB_CLIENT_SECRET?: string;
   /** Public dashboard URL for password reset links (optional). */
   DASHBOARD_URL?: string;
+  /** DeepSeek API key for the "Ask Flareboard" assistant (secret). Unset: the assistant is off. */
+  DEEPSEEK_API_KEY?: string;
+  /** Assistant model (default `deepseek-flash`). */
+  DEEPSEEK_MODEL?: string;
+  /** DeepSeek Anthropic-format base URL (default https://api.deepseek.com/anthropic). */
+  DEEPSEEK_BASE_URL?: string;
   /** Stripe (hosted billing) */
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;

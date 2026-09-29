@@ -141,15 +141,17 @@ describe('getWebsiteMetricsSeriesFromRollups', () => {
 });
 
 describe('getAggregateMetricsFromRollups', () => {
-  it('uses sequential D1 placeholders for multi-site hourly queries', async () => {
+  it('queries each site on its own (each site has its own store) with sequential placeholders', async () => {
     const { startAt, endAt } = rolling24hRange(Date.parse('2026-07-07T12:00:00.000Z'));
     const { env, queries } = captureEnv();
     await getAggregateMetricsFromRollups(env, ['site-a', 'site-b'], startAt, endAt, 'hour');
-    expect(queries).toHaveLength(2);
+    // pageview series + identity buckets, once per site
+    expect(queries).toHaveLength(4);
     for (const { sql, args } of queries) {
-      expect(sql).toContain('website_id IN (?1, ?2) AND unit = ?3 AND bucket >= ?4 AND bucket <= ?5');
-      expect(sql).not.toMatch(/IN \(\?\)[^?]*\?1/);
-      expect(args).toEqual(['site-a', 'site-b', 'hour', expect.any(String), expect.any(String)]);
+      expect(sql).toContain('website_id = ?1 AND unit = ?2 AND bucket >= ?3 AND bucket <= ?4');
+      expect(sql).not.toContain(' IN (');
+      expect(args).toEqual([expect.stringMatching(/^site-[ab]$/), 'hour', expect.any(String), expect.any(String)]);
     }
+    expect(new Set(queries.map((q) => q.args[0]))).toEqual(new Set(['site-a', 'site-b']));
   });
 });

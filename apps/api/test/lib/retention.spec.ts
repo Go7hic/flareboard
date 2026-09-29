@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { EVENT_TYPE } from '@flareboard/shared';
 import { runRetentionPurge } from '../../src/lib/retention';
 import { applyTestMigrations } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const SITE = 'retention-site';
 const KEEP_SITE = 'retention-keep-site';
@@ -11,18 +12,18 @@ const OLD = NOW - 40 * 24 * 60 * 60 * 1000;
 const RECENT = NOW - 2 * 24 * 60 * 60 * 1000;
 
 async function seedEvent(id: string, websiteId: string, createdAt: number) {
-  await env.DB.prepare(
+  await testSiteDb(websiteId).prepare(
     `INSERT OR IGNORE INTO session (session_id, website_id, created_at) VALUES (?1, ?2, ?3)`,
   )
     .bind(`sess-${id}`, websiteId, createdAt)
     .run();
-  await env.DB.prepare(
+  await testSiteDb(websiteId).prepare(
     `INSERT INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
      VALUES (?1, ?2, ?3, ?3, ?4, '/', ?5, null)`,
   )
     .bind(id, websiteId, `sess-${id}`, createdAt, EVENT_TYPE.pageView)
     .run();
-  await env.DB.prepare(
+  await testSiteDb(websiteId).prepare(
     `INSERT INTO event_data (event_data_id, website_id, website_event_id, data_key, string_value, data_type, created_at)
      VALUES (?1, ?2, ?3, 'k', 'v', 1, ?4)`,
   )
@@ -31,7 +32,7 @@ async function seedEvent(id: string, websiteId: string, createdAt: number) {
 }
 
 async function eventIds(websiteId: string) {
-  const rows = await env.DB.prepare(`SELECT event_id FROM website_event WHERE website_id = ?1 ORDER BY event_id`)
+  const rows = await testSiteDb(websiteId).prepare(`SELECT event_id FROM website_event WHERE website_id = ?1 ORDER BY event_id`)
     .bind(websiteId)
     .all<{ event_id: string }>();
   return (rows.results ?? []).map((r) => r.event_id);
@@ -55,13 +56,13 @@ describe('runRetentionPurge', () => {
     await seedEvent('recent-1', SITE, RECENT);
     await seedEvent('keep-old-1', KEEP_SITE, OLD);
     for (const [visit, at] of [['old-visit', OLD], ['recent-visit', RECENT]] as const) {
-      await env.DB.prepare(
+      await testSiteDb(SITE).prepare(
         `INSERT INTO session_replay (replay_id, website_id, session_id, visit_id, chunk_index, events, event_count, started_at, ended_at, created_at)
          VALUES (?1, ?2, 'sess-old-1', ?3, 0, x'', 1, ?4, ?4, ?4)`,
       )
         .bind(`replay-${visit}`, SITE, visit, at)
         .run();
-      await env.DB.prepare(
+      await testSiteDb(SITE).prepare(
         `INSERT INTO session_replay_summary (website_id, visit_id, session_id, started_at, ended_at, event_count, chunks)
          VALUES (?1, ?2, 'sess-old-1', ?3, ?3, 1, 1)`,
       )
@@ -87,7 +88,7 @@ describe('runRetentionPurge', () => {
   it('deletes expired session replay recordings from R2 along with their rows and summaries', async () => {
     const visits = async (table: string) =>
       (
-        await env.DB.prepare(`SELECT visit_id AS v FROM ${table} WHERE website_id = ?1 ORDER BY visit_id`)
+        await testSiteDb(SITE).prepare(`SELECT visit_id AS v FROM ${table} WHERE website_id = ?1 ORDER BY visit_id`)
           .bind(SITE)
           .all<{ v: string }>()
       ).results?.map((row) => row.v) ?? [];

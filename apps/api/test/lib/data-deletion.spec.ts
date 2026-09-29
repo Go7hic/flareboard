@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ENTITY_TYPE, ROLES } from '@flareboard/shared';
-import { DELETION_GRACE_DAYS, runDataDeletion, websiteScopedTables } from '../../src/lib/data-deletion';
+import { DELETION_GRACE_DAYS, runDataDeletion, SIGN_IN_RECORD_DAYS, websiteScopedTables } from '../../src/lib/data-deletion';
 import { applyTestMigrations } from '../helpers/migrations';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -60,6 +60,36 @@ async function seedWebsiteData(websiteId: string) {
     LONG_AGO,
   );
   await env.REPLAY_BUCKET!.put(`${websiteId}/visit-1/0`, '[]');
+  // Error tracking: a source map in R2 (metadata row in D1) and a merged issue + KV regression index.
+  await run(
+    `INSERT INTO error_source_map (source_map_id, website_id, release, file, content, object_key, size, created_at)
+     VALUES (?1, ?2, '1.0.0', 'app.js.map', '', ?3, 2, ?4)`,
+    `${websiteId}-map`,
+    websiteId,
+    `sourcemaps/${websiteId}/${websiteId}-map.map`,
+    LONG_AGO,
+  );
+  await env.REPLAY_BUCKET!.put(`sourcemaps/${websiteId}/${websiteId}-map.map`, '{}');
+  await run(
+    `INSERT INTO error_issue_merge (website_id, source_fingerprint, target_fingerprint, created_at) VALUES (?1, 'aaaa', 'bbbb', ?2)`,
+    websiteId,
+    LONG_AGO,
+  );
+  await env.CACHE.put(`error-resolved:${websiteId}:bbbb`, '{"issue":"bbbb","resolvedAt":1}');
+  // Warehouse connector secrets and cursors (Stripe) leave with the website.
+  await run(
+    `INSERT INTO warehouse_credential (data_source_id, website_id, kind, ciphertext, hint, created_at, updated_at)
+     VALUES (?1, ?2, 'stripe_api_key', 'sealed', 'rk_test_…abcd', ?3, ?3)`,
+    `${websiteId}-stripe`,
+    websiteId,
+    LONG_AGO,
+  );
+  await run(
+    `INSERT INTO warehouse_sync_state (data_source_id, website_id, state_json, updated_at) VALUES (?1, ?2, '{}', ?3)`,
+    `${websiteId}-stripe`,
+    websiteId,
+    LONG_AGO,
+  );
   await run(`INSERT INTO feature_flag (flag_id, website_id, key, name) VALUES (?1, ?2, 'beta', 'Beta')`, flag, websiteId);
   await run(
     `INSERT INTO experiment (experiment_id, website_id, feature_flag_id, name, goal_event) VALUES (?1, ?2, ?3, 'Exp', 'signup')`,
@@ -79,6 +109,42 @@ async function seedWebsiteData(websiteId: string) {
      VALUES (?1, '2026-08-01', 1, 1, 1, 0, 0)`,
     websiteId,
   );
+  // Dashboards: an insight with an alert (and its history), a subscription, a public share, a notebook.
+  const insight = `${websiteId}-insight`;
+  await run(
+    `INSERT INTO insight (insight_id, website_id, user_id, type, name, query) VALUES (?1, ?2, ?3, 'trend', 'I', '{}')`,
+    insight,
+    websiteId,
+    OWNER,
+  );
+  await run(
+    `INSERT INTO insight_alert (alert_id, website_id, insight_id, name, condition, threshold, target) VALUES (?1, ?2, ?3, 'A', 'value_above', 1, 'a@b.co')`,
+    `${websiteId}-alert`,
+    websiteId,
+    insight,
+  );
+  await run(
+    `INSERT INTO insight_alert_check (check_id, alert_id, website_id, interval_start, interval_end, state) VALUES (?1, ?2, ?3, 1, 2, 'ok')`,
+    `${websiteId}-check`,
+    `${websiteId}-alert`,
+    websiteId,
+  );
+  await run(
+    `INSERT INTO report_subscription (subscription_id, website_id, user_id, target_type, target_id, title, frequency, recipients, next_run_at)
+     VALUES (?1, ?2, ?3, 'insight', ?4, 'S', 'daily', '["r@example.com"]', 0)`,
+    `${websiteId}-sub`,
+    websiteId,
+    OWNER,
+    insight,
+  );
+  await run(
+    `INSERT INTO share (share_id, entity_id, name, share_type, slug, parameters) VALUES (?1, ?2, 'Insight', ?3, ?4, '{}')`,
+    `${websiteId}-insight-share`,
+    insight,
+    ENTITY_TYPE.insight,
+    `${websiteId}-insight-slug`,
+  );
+  await run(`INSERT INTO notebook (notebook_id, website_id, title, content) VALUES (?1, ?2, 'N', '{"blocks":[]}')`, `${websiteId}-nb`, websiteId);
   await run(
     `INSERT INTO share (share_id, entity_id, name, share_type, slug, parameters) VALUES (?1, ?2, 'Public', ?3, ?4, '{}')`,
     `${websiteId}-share`,
@@ -93,6 +159,20 @@ async function seedWebsiteData(websiteId: string) {
     websiteId,
     LONG_AGO,
   );
+  // Feature flag history outlives the flag and names its website in the metadata.
+  await run(
+    `INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, metadata, created_at)
+     VALUES (?1, ?2, 'delete', 'feature_flag', ?3, ?4, ?5)`,
+    `${websiteId}-flag-audit`,
+    OWNER,
+    `${websiteId}-deleted-flag`,
+    JSON.stringify({ websiteId, key: 'old', before: { key: 'old' }, after: null }),
+    LONG_AGO,
+  );
+}
+
+async function flagHistoryRows(websiteId: string) {
+  return count(`SELECT COUNT(*) AS n FROM audit_log WHERE entity_type = 'feature_flag' AND entity_id = ?1`, `${websiteId}-deleted-flag`);
 }
 
 async function websiteRows(websiteId: string) {
@@ -170,7 +250,39 @@ describe('scheduled data deletion', () => {
       TEAM_SITE,
       GONE_USER,
     );
+    // Dashboards content that hangs off the gone user's insight, created by a teammate.
+    await run(
+      `INSERT INTO insight_alert (alert_id, website_id, insight_id, name, condition, threshold, target, created_by)
+       VALUES ('dd-alert', ?1, 'dd-insight', 'A', 'value_above', 1, 'a@b.co', ?2)`,
+      TEAM_SITE,
+      TEAMMATE,
+    );
+    await run(
+      `INSERT INTO insight_alert_check (check_id, alert_id, website_id, interval_start, interval_end, state) VALUES ('dd-check', 'dd-alert', ?1, 1, 2, 'ok')`,
+      TEAM_SITE,
+    );
+    await run(
+      `INSERT INTO share (share_id, entity_id, name, share_type, slug, parameters) VALUES ('dd-insight-share', 'dd-insight', 'I', ?1, 'dd-insight-share', '{}')`,
+      ENTITY_TYPE.insight,
+    );
+    // The gone user's subscription to the team board, and a team notebook they wrote.
+    await run(
+      `INSERT INTO report_subscription (subscription_id, website_id, user_id, target_type, target_id, title, frequency, recipients, next_run_at)
+       VALUES ('dd-board-sub', NULL, ?1, 'board', 'dd-board-team', 'S', 'weekly', '["r@example.com"]', 0)`,
+      GONE_USER,
+    );
+    await run(
+      `INSERT INTO notebook (notebook_id, website_id, title, content, created_by, updated_by) VALUES ('dd-notebook', ?1, 'N', '{"blocks":[]}', ?2, ?2)`,
+      TEAM_SITE,
+      GONE_USER,
+    );
     await run(`INSERT INTO user_subscription (user_id, plan_id, status) VALUES (?1, 'cloud', 'canceled')`, GONE_USER);
+    await run(
+      `INSERT INTO personal_api_key (key_id, user_id, name, key_hash, key_prefix, scopes, created_at)
+       VALUES ('dd-api-key', ?1, 'CI', 'dd-key-hash', 'fb_sk_dd00', 'read', ?2)`,
+      GONE_USER,
+      LONG_AGO,
+    );
     await run(
       `INSERT INTO user_oauth_identity (provider, provider_user_id, user_id, created_at) VALUES ('github', 'dd-gh', ?1, ?2)`,
       GONE_USER,
@@ -180,6 +292,37 @@ describe('scheduled data deletion', () => {
       `INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, created_at) VALUES ('dd-audit-user', ?1, 'login', 'user', ?1, ?2)`,
       GONE_USER,
       LONG_AGO,
+    );
+
+    await run(
+      `INSERT INTO user_two_factor (user_id, secret_enc, enabled_at, created_at) VALUES (?1, 'sealed', ?2, ?2)`,
+      GONE_USER,
+      LONG_AGO,
+    );
+    await run(`INSERT INTO user_recovery_code (code_hash, user_id, created_at) VALUES ('dd-code-hash', ?1, ?2)`, GONE_USER, LONG_AGO);
+    await run(
+      `INSERT INTO user_session (session_id, user_id, device, method, created_at, last_seen_at, expires_at)
+       VALUES ('dd-session', ?1, 'Chrome on macOS', 'password', ?2, ?2, ?3)`,
+      GONE_USER,
+      LONG_AGO,
+      NOW + 86_400_000,
+    );
+    // Security records of a live user: an expired session and a sign-in older than the retention.
+    await run(
+      `INSERT INTO user_session (session_id, user_id, device, method, created_at, last_seen_at, expires_at)
+       VALUES ('dd-session-expired', ?1, NULL, 'password', ?2, ?2, ?2), ('dd-session-live', ?1, NULL, 'password', ?3, ?3, ?4)`,
+      TEAMMATE,
+      LONG_AGO,
+      RECENT,
+      NOW + 86_400_000,
+    );
+    await run(
+      `INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, created_at) VALUES
+       ('dd-signin-old', ?1, 'login_failed', 'user', ?1, ?2), ('dd-signin-new', ?1, 'login', 'user', ?1, ?3),
+       ('dd-other-old', ?1, 'enable', 'two_factor', ?1, ?2)`,
+      TEAMMATE,
+      NOW - (SIGN_IN_RECORD_DAYS + 1) * 86_400_000,
+      RECENT,
     );
 
     await run(
@@ -207,15 +350,26 @@ describe('scheduled data deletion', () => {
     expect(await count('SELECT COUNT(*) AS n FROM website WHERE website_id = ?1', PURGED_SITE)).toBe(0);
     expect(await websiteRows(PURGED_SITE)).toBe(0);
     expect(await count('SELECT COUNT(*) AS n FROM share WHERE entity_id = ?1', PURGED_SITE)).toBe(0);
+    expect(await count('SELECT COUNT(*) AS n FROM share WHERE entity_id = ?1', `${PURGED_SITE}-insight`)).toBe(0);
     expect(await count(`SELECT COUNT(*) AS n FROM audit_log WHERE entity_type = 'website' AND entity_id = ?1`, PURGED_SITE)).toBe(0);
+    expect(await flagHistoryRows(PURGED_SITE)).toBe(0);
     expect((await env.REPLAY_BUCKET!.list({ prefix: `${PURGED_SITE}/` })).objects).toHaveLength(0);
+    expect((await env.REPLAY_BUCKET!.list({ prefix: `sourcemaps/${PURGED_SITE}/` })).objects).toHaveLength(0);
+    expect(await count('SELECT COUNT(*) AS n FROM error_source_map WHERE website_id = ?1', PURGED_SITE)).toBe(0);
+    expect(await count('SELECT COUNT(*) AS n FROM warehouse_credential WHERE website_id = ?1', PURGED_SITE)).toBe(0);
+    expect(await count('SELECT COUNT(*) AS n FROM warehouse_sync_state WHERE website_id = ?1', PURGED_SITE)).toBe(0);
+    expect(await count('SELECT COUNT(*) AS n FROM error_issue_merge WHERE website_id = ?1', PURGED_SITE)).toBe(0);
+    expect((await env.CACHE.list({ prefix: `error-resolved:${PURGED_SITE}:` })).keys).toHaveLength(0);
   });
 
   it('keeps websites still inside the grace period and live websites untouched', async () => {
     for (const site of [GRACE_SITE, LIVE_SITE]) {
       expect(await count('SELECT COUNT(*) AS n FROM website WHERE website_id = ?1', site)).toBe(1);
       expect(await websiteRows(site)).toBeGreaterThan(5);
+      expect(await flagHistoryRows(site)).toBe(1);
       expect((await env.REPLAY_BUCKET!.list({ prefix: `${site}/` })).objects).toHaveLength(1);
+      expect((await env.REPLAY_BUCKET!.list({ prefix: `sourcemaps/${site}/` })).objects).toHaveLength(1);
+      expect((await env.CACHE.list({ prefix: `error-resolved:${site}:` })).keys).toHaveLength(1);
     }
   });
 
@@ -227,9 +381,34 @@ describe('scheduled data deletion', () => {
     expect(await count(`SELECT COUNT(*) AS n FROM link_pixel_hit WHERE source_id = 'dd-link'`)).toBe(0);
     expect(await count(`SELECT COUNT(*) AS n FROM board WHERE board_id = 'dd-board-own'`)).toBe(0);
     expect(await count(`SELECT COUNT(*) AS n FROM share WHERE share_id = 'dd-board-share'`)).toBe(0);
-    for (const table of ['insight', 'user_subscription', 'user_oauth_identity', 'audit_log', 'team_user']) {
+    // Alerts, history and shares of the user's insights go with the insights.
+    expect(await count(`SELECT COUNT(*) AS n FROM insight_alert WHERE alert_id = 'dd-alert'`)).toBe(0);
+    expect(await count(`SELECT COUNT(*) AS n FROM insight_alert_check WHERE check_id = 'dd-check'`)).toBe(0);
+    expect(await count(`SELECT COUNT(*) AS n FROM share WHERE share_id = 'dd-insight-share'`)).toBe(0);
+    for (const table of [
+      'insight',
+      'report_subscription',
+      'user_subscription',
+      'user_oauth_identity',
+      'audit_log',
+      'team_user',
+      'personal_api_key',
+      'user_two_factor',
+      'user_recovery_code',
+      'user_session',
+    ]) {
       expect(await count(`SELECT COUNT(*) AS n FROM ${table} WHERE user_id = ?1`, GONE_USER)).toBe(0);
     }
+  });
+
+  it('drops expired sessions and sign-in records past their retention, keeping other history', async () => {
+    const sessions = await env.DB.prepare(`SELECT session_id AS id FROM user_session WHERE user_id = ?1 ORDER BY session_id`)
+      .bind(TEAMMATE)
+      .all<{ id: string }>();
+    expect(sessions.results.map((row) => row.id)).toEqual(['dd-session-live']);
+    const audit = await env.DB.prepare(`SELECT id FROM audit_log WHERE id IN ('dd-signin-old', 'dd-signin-new', 'dd-other-old') ORDER BY id`)
+      .all<{ id: string }>();
+    expect(audit.results.map((row) => row.id)).toEqual(['dd-other-old', 'dd-signin-new']);
   });
 
   it('keeps shared team content with the deleted author cleared', async () => {
@@ -239,6 +418,8 @@ describe('scheduled data deletion', () => {
     expect(teamSite).toEqual({ userId: null, createdBy: null, deletedAt: null });
     const board = await env.DB.prepare(`SELECT user_id AS userId FROM board WHERE board_id = 'dd-board-team'`).first<{ userId: string | null }>();
     expect(board).toEqual({ userId: null });
+    const notebook = await env.DB.prepare(`SELECT created_by AS createdBy, updated_by AS updatedBy FROM notebook WHERE notebook_id = 'dd-notebook'`).first();
+    expect(notebook).toEqual({ createdBy: null, updatedBy: null });
     expect(await count(`SELECT COUNT(*) AS n FROM team_user WHERE user_id = ?1`, TEAMMATE)).toBe(1);
   });
 

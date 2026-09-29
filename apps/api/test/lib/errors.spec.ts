@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { EVENT_TYPE } from '@flareboard/shared';
+import { EVENT_TYPE, messageFingerprint } from '@flareboard/shared';
 import {
   addErrorIssueComment,
   createErrorAlertRule,
@@ -12,12 +12,13 @@ import {
   updateErrorIssueState,
 } from '../../src/lib/errors';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from '../helpers/migrations';
+import { testSiteDb } from '../helpers/site-db';
 
 const BASE = Date.UTC(2026, 0, 7, 12);
 const DAY = 24 * 60 * 60 * 1000;
 
 async function insertSession(id: string) {
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT OR IGNORE INTO session (session_id, website_id, created_at)
      VALUES (?1, ?2, ?3)`,
   )
@@ -35,14 +36,14 @@ async function insertError(
   release = '1.0.0',
   environment = 'production',
 ) {
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type, event_name)
      VALUES (?1, ?2, ?3, ?3, ?4, '/checkout', ?5, ?6)`,
   )
     .bind(id, TEST_WEBSITE_ID, sessionId, createdAt, EVENT_TYPE.error, message)
     .run();
 
-  await env.DB.prepare(
+  await testSiteDb(TEST_WEBSITE_ID).prepare(
     `INSERT INTO event_data (event_data_id, website_id, website_event_id, data_key, string_value, data_type, created_at)
      VALUES
        (?1, ?2, ?3, 'name', ?4, 1, ?8),
@@ -236,7 +237,7 @@ describe('errors query helpers', () => {
 
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatchObject({
-      fingerprint,
+      fingerprint: messageFingerprint('TypeError', 'Stateful issue'),
       status: 'resolved',
       note: 'Fixed in 2.1.0',
     });
@@ -276,7 +277,7 @@ describe('errors query helpers', () => {
 
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatchObject({
-      fingerprint,
+      fingerprint: messageFingerprint('TypeError', 'Assigned issue'),
       status: 'open',
       note: 'Needs owner',
       assigneeUserId: '00000000-0000-0000-0000-000000000001',
@@ -322,11 +323,11 @@ describe('errors query helpers', () => {
     ]);
 
     expect(openStats.errors).toBe(1);
-    expect(openIssues.map((issue) => issue.fingerprint)).toEqual(['TypeError|Still open issue']);
+    expect(openIssues.map((issue) => issue.fingerprint)).toEqual([messageFingerprint('TypeError', 'Still open issue')]);
     expect(openEvents.map((event) => event.id)).toEqual(['error-status-filter-1']);
 
     expect(resolvedStats.errors).toBe(1);
-    expect(resolvedIssues.map((issue) => issue.fingerprint)).toEqual(['TypeError|Already fixed issue']);
+    expect(resolvedIssues.map((issue) => issue.fingerprint)).toEqual([messageFingerprint('TypeError', 'Already fixed issue')]);
     expect(resolvedEvents.map((event) => event.id)).toEqual(['error-status-filter-2']);
   });
 

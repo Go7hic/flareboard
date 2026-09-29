@@ -6,6 +6,7 @@ import {
   type PersonProperties,
 } from '@flareboard/db';
 import type { Env } from '../env';
+import { siteDb } from '../lib/site-db';
 
 export type PeopleFilters = {
   search?: string;
@@ -25,7 +26,7 @@ function searchClause(filters: PeopleFilters = {}) {
 }
 
 export async function getStoredPerson(env: Env, websiteId: string, distinctId: string) {
-  const row = await env.DB.prepare(
+  const row = await siteDb(env, websiteId).prepare(
     `SELECT person_id as personId,
             distinct_id as distinctId,
             properties_json as propertiesJson,
@@ -61,7 +62,7 @@ export async function patchPerson(
   distinctId: string,
   properties: PersonProperties,
 ) {
-  return patchPersonProperties(env.DB, websiteId, distinctId, properties);
+  return patchPersonProperties(siteDb(env, websiteId), websiteId, distinctId, properties);
 }
 
 export async function listPeople(
@@ -73,7 +74,7 @@ export async function listPeople(
   filters: PeopleFilters = {},
 ) {
   const filter = searchClause(filters);
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `WITH latest_identity AS (
        SELECT sd.session_id as sessionId,
               MAX(sd.distinct_id) as distinctId
@@ -153,7 +154,7 @@ export async function listPeople(
 export async function getPersonDetail(env: Env, websiteId: string, personId: string) {
   const stored = await getStoredPerson(env, websiteId, personId);
 
-  const sessions = await env.DB.prepare(
+  const sessions = await siteDb(env, websiteId).prepare(
     `WITH latest_identity AS (
        SELECT sd.session_id as sessionId,
               MAX(sd.distinct_id) as distinctId
@@ -188,7 +189,7 @@ export async function getPersonDetail(env: Env, websiteId: string, personId: str
 
   if (!(sessions.results ?? []).length && !stored) return null;
 
-  const properties = await env.DB.prepare(
+  const properties = await siteDb(env, websiteId).prepare(
     `WITH latest_identity AS (
        SELECT sd.session_id as sessionId,
               MAX(sd.distinct_id) as distinctId
@@ -226,7 +227,7 @@ export async function getPersonDetail(env: Env, websiteId: string, personId: str
     }
   }
 
-  const events = await env.DB.prepare(
+  const events = await siteDb(env, websiteId).prepare(
     `WITH latest_identity AS (
        SELECT sd.session_id as sessionId,
               MAX(sd.distinct_id) as distinctId
@@ -256,7 +257,7 @@ export async function getPersonDetail(env: Env, websiteId: string, personId: str
     }>();
 
   const memberships = stored
-    ? await env.DB.prepare(
+    ? await siteDb(env, websiteId).prepare(
         `SELECT group_type as groupType, group_key as groupKey, created_at as createdAt
          FROM person_group_membership
          WHERE website_id = ?1 AND person_id = ?2

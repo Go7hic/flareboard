@@ -10,7 +10,6 @@ import {
   ResourceSearchField,
   useMasterDetailSelection,
 } from '../components/master-detail';
-import { ResourceEditDialog } from '../components/ResourceEditDialog';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
@@ -21,47 +20,15 @@ import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { formatDateOnly, formatDateTime, formatNumber, formatPercent } from '../lib/format';
 import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
+import {
+  FeatureFlagConditionSummary,
+  FeatureFlagEditorDialog,
+  FeatureFlagHistory,
+  type FeatureFlagBody,
+} from '../components/FeatureFlagEditor';
+import { SegmentTabs } from '../components/SegmentTabs';
 
-const DEFAULT_FLAG = {
-  key: '',
-  name: '',
-  description: '',
-  rollout: 100,
-  variantsText: '',
-  targetingRulesText: '',
-};
-
-const TARGETING_FIELDS = [
-  'path',
-  'url',
-  'hostname',
-  'referrer',
-  'language',
-  'userAgent',
-  'distinctId',
-  'userId',
-  'environment',
-  'release',
-  'group',
-  'property',
-] as const;
-const TARGETING_OPERATORS = [
-  'equals',
-  'contains',
-  'starts_with',
-  'ends_with',
-  'not_equals',
-  'not_contains',
-  'greater_than',
-  'greater_than_or_equal',
-  'less_than',
-  'less_than_or_equal',
-  'exists',
-  'not_exists',
-] as const;
-
-type TargetingField = (typeof TARGETING_FIELDS)[number];
-type TargetingOperator = (typeof TARGETING_OPERATORS)[number];
+type DetailTab = 'overview' | 'conditions' | 'history';
 
 function formatDate(value: string | number | undefined) {
   return formatDateOnly(value);
@@ -86,202 +53,6 @@ function featureFlagHealthClass(status: NonNullable<FeatureFlag['summary']>['hea
   if (status === 'healthy') return 'badge experiment-diagnostic-success';
   if (status === 'needs_attention') return 'badge experiment-diagnostic-warning';
   return 'badge experiment-diagnostic-info';
-}
-
-function parseVariants(value: string) {
-  return value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [key = '', name = '', weight = '0'] = line.split(',').map((part) => part.trim());
-      return {
-        key,
-        name: name || key,
-        weight: Number(weight),
-      };
-    })
-    .filter((variant) => variant.key && Number.isFinite(variant.weight));
-}
-
-function parseTargetingRules(value: string) {
-  return value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [rawField = '', operator = '', ...rest] = line.split(/\s+/);
-      const [field, key] = rawField.includes('.')
-        ? (rawField.split('.', 2) as [TargetingField, string])
-        : [rawField as TargetingField, undefined];
-      return {
-        field: field as TargetingField,
-        key,
-        operator: operator as TargetingOperator,
-        value: rest.join(' ').trim(),
-      };
-    })
-    .filter(
-      (rule) =>
-        TARGETING_FIELDS.includes(rule.field) &&
-        TARGETING_OPERATORS.includes(rule.operator) &&
-        (rule.operator === 'exists' || rule.operator === 'not_exists' || rule.value) &&
-        (rule.field === 'group' || rule.field === 'property' ? Boolean(rule.key) : true),
-    );
-}
-
-function countRuleLines(value: string) {
-  return value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean).length;
-}
-
-function stringifyVariants(flag: FeatureFlag) {
-  return flag.variants.map((variant) => `${variant.key}, ${variant.name}, ${variant.weight}`).join('\n');
-}
-
-function stringifyTargetingRules(flag: FeatureFlag) {
-  return flag.targetingRules
-    .map((rule) => `${rule.key ? `${rule.field}.${rule.key}` : rule.field} ${rule.operator} ${rule.value}`.trim())
-    .join('\n');
-}
-
-function FeatureFlagEditDialog({
-  flag,
-  saving,
-  error,
-  onClose,
-  onSave,
-}: {
-  flag: FeatureFlag;
-  saving: boolean;
-  error: Error | null;
-  onClose: () => void;
-  onSave: (flag: FeatureFlag, patch: Partial<FeatureFlag>) => void;
-}) {
-  const [draft, setDraft] = useState({
-    key: flag.key,
-    name: flag.name,
-    description: flag.description,
-    rollout: flag.rollout,
-    variantsText: stringifyVariants(flag),
-    targetingRulesText: stringifyTargetingRules(flag),
-  });
-
-  useEffect(() => {
-    setDraft({
-      key: flag.key,
-      name: flag.name,
-      description: flag.description,
-      rollout: flag.rollout,
-      variantsText: stringifyVariants(flag),
-      targetingRulesText: stringifyTargetingRules(flag),
-    });
-  }, [flag]);
-
-  const variants = parseVariants(draft.variantsText);
-  const variantWeight = variants.reduce((sum, variant) => sum + variant.weight, 0);
-  const targetingRules = parseTargetingRules(draft.targetingRulesText);
-  const ruleLineCount = countRuleLines(draft.targetingRulesText);
-  const canSave =
-    Boolean(draft.key.trim() && draft.name.trim()) &&
-    variantWeight <= 100 &&
-    ruleLineCount === targetingRules.length &&
-    !saving;
-
-  return (
-    <ResourceEditDialog
-      title={t('featureFlagEdit')}
-      ariaLabel={t('featureFlagEdit')}
-      panelClassName="feature-flag-dialog"
-      bodyClassName="feature-flag-dialog-body"
-      saving={saving}
-      error={error}
-      canSave={canSave}
-      onClose={onClose}
-      onSave={() =>
-        onSave(flag, {
-          key: draft.key.trim(),
-          name: draft.name.trim(),
-          description: draft.description.trim(),
-          rollout: Number(draft.rollout),
-          variants,
-          targetingRules,
-        })
-      }
-    >
-      <div className="field">
-        <Label htmlFor="flag-dialog-key">{t('featureFlagKey')}</Label>
-        <Input
-          id="flag-dialog-key"
-          value={draft.key}
-          onChange={(event) => setDraft((prev) => ({ ...prev, key: event.target.value }))}
-        />
-      </div>
-      <div className="field">
-        <Label htmlFor="flag-dialog-name">{t('name')}</Label>
-        <Input
-          id="flag-dialog-name"
-          value={draft.name}
-          onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
-        />
-      </div>
-      <div className="field">
-        <Label htmlFor="flag-dialog-rollout">{t('featureFlagRollout')}</Label>
-        <Input
-          id="flag-dialog-rollout"
-          type="number"
-          min={0}
-          max={100}
-          value={draft.rollout}
-          onChange={(event) =>
-            setDraft((prev) => ({ ...prev, rollout: Number(event.target.value) }))
-          }
-        />
-      </div>
-      <div className="field">
-        <Label htmlFor="flag-dialog-description">{t('description')}</Label>
-        <Input
-          id="flag-dialog-description"
-          value={draft.description}
-          onChange={(event) =>
-            setDraft((prev) => ({ ...prev, description: event.target.value }))
-          }
-        />
-      </div>
-      <div className="field">
-        <Label htmlFor="flag-dialog-variants">{t('featureFlagVariants')}</Label>
-        <textarea
-          id="flag-dialog-variants"
-          className="textarea"
-          value={draft.variantsText}
-          placeholder={t('featureFlagVariantsPlaceholder')}
-          onChange={(event) =>
-            setDraft((prev) => ({ ...prev, variantsText: event.target.value }))
-          }
-        />
-        <p className={variantWeight > 100 ? 'text-danger' : 'text-muted'}>
-          {t('featureFlagVariantsHint').replace('{weight}', String(variantWeight))}
-        </p>
-      </div>
-      <div className="field">
-        <Label htmlFor="flag-dialog-targeting">{t('featureFlagTargetingRules')}</Label>
-        <textarea
-          id="flag-dialog-targeting"
-          className="textarea"
-          value={draft.targetingRulesText}
-          placeholder={t('featureFlagTargetingPlaceholder')}
-          onChange={(event) =>
-            setDraft((prev) => ({ ...prev, targetingRulesText: event.target.value }))
-          }
-        />
-        <p className={ruleLineCount === targetingRules.length ? 'text-muted' : 'text-danger'}>
-          {t('featureFlagTargetingHint').replace('{count}', String(targetingRules.length))}
-        </p>
-      </div>
-    </ResourceEditDialog>
-  );
 }
 
 /**
@@ -331,12 +102,13 @@ function FeatureFlagRolloutInput({
 export default function WebsiteFeatureFlagsPage() {
   const confirm = useConfirm();
   const { websiteId } = useParams<{ websiteId: string }>();
-  const { canEdit } = useWebsitePermissions(websiteId, 'featureFlags');
+  const { canEdit, viewOnly } = useWebsitePermissions(websiteId, 'featureFlags');
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
-  const [draft, setDraft] = useState(DEFAULT_FLAG);
   const [search, setSearch] = useState('');
-  const [editingFlag, setEditingFlag] = useState<FeatureFlag | null>(null);
+  /** null = closed, 'new' = create dialog, otherwise the flag being edited. */
+  const [editor, setEditor] = useState<FeatureFlag | 'new' | null>(null);
+  const [detailTab, setDetailTab] = useState<DetailTab>('overview');
   const [evaluateDraft, setEvaluateDraft] = useState({
     key: '',
     distinctId: '',
@@ -397,21 +169,13 @@ export default function WebsiteFeatureFlagsPage() {
   }, [rows, searchParams, selectedFlagId, setSearchParams, setSelectedFlagId]);
 
   const createMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (body: FeatureFlagBody) =>
       api<FeatureFlag>(`/api/websites/${websiteId}/feature-flags`, {
         method: 'POST',
-        body: JSON.stringify({
-          key: draft.key.trim(),
-          name: draft.name.trim(),
-          description: draft.description.trim(),
-          rollout: Number(draft.rollout),
-          variants: parseVariants(draft.variantsText),
-          targetingRules: parseTargetingRules(draft.targetingRulesText),
-          enabled: true,
-        }),
+        body: JSON.stringify({ ...body, enabled: true }),
       }),
     onSuccess: (flag) => {
-      setDraft(DEFAULT_FLAG);
+      setEditor(null);
       setSelectedFlagId(flag.id);
       setSearchParams(
         (current) => {
@@ -426,14 +190,15 @@ export default function WebsiteFeatureFlagsPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Partial<FeatureFlag> }) =>
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<FeatureFlagBody> & { enabled?: boolean } }) =>
       api<FeatureFlag>(`/api/websites/${websiteId}/feature-flags/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(patch),
       }),
     onSuccess: () => {
-      setEditingFlag(null);
+      setEditor(null);
       queryClient.invalidateQueries({ queryKey: ['feature-flags', websiteId] });
+      queryClient.invalidateQueries({ queryKey: ['feature-flag-history', websiteId] });
     },
   });
 
@@ -461,23 +226,23 @@ export default function WebsiteFeatureFlagsPage() {
     },
   });
 
-  const draftVariants = parseVariants(draft.variantsText);
-  const draftTargetingRules = parseTargetingRules(draft.targetingRulesText);
-  const draftRuleLineCount = countRuleLines(draft.targetingRulesText);
-  const variantWeight = draftVariants.reduce((sum, variant) => sum + variant.weight, 0);
-  const canCreate =
-    Boolean(draft.key.trim() && draft.name.trim()) &&
-    variantWeight <= 100 &&
-    draftRuleLineCount === draftTargetingRules.length &&
-    !createMutation.isPending;
-
   return (
     <Page className="page-feature-flags">
-      <PageHeader title={t('featureFlags')} lead={t('featureFlagsLead')} />
+      <PageHeader
+        title={t('featureFlags')}
+        lead={t('featureFlagsLead')}
+        actions={
+          canEdit ? (
+            <Button type="button" variant="primary" onClick={() => setEditor('new')}>
+              {t('createFeatureFlag')}
+            </Button>
+          ) : null
+        }
+      />
 
       <PageBody>
 
-      {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
+      {viewOnly ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
       <section className="panel section-gap">
         <header className="panel-header">
@@ -556,104 +321,17 @@ export default function WebsiteFeatureFlagsPage() {
               {evaluateResult.enabled ? t('enabled') : t('disabled')}
             </div>
             <div className="text-muted">
-              {t('featureFlagEvaluateReason')}: {evaluateResult.reason}
+              {t('featureFlagEvaluateReason')}: {t(`featureFlagReason_${evaluateResult.reason}`)}
+              {typeof evaluateResult.conditionGroup === 'number'
+                ? ` · ${t('featureFlagGroupTitle').replace('{n}', String(evaluateResult.conditionGroup + 1))}`
+                : ''}
             </div>
+            {evaluateResult.payload !== undefined && evaluateResult.payload !== null ? (
+              <pre className="flag-json">{JSON.stringify(evaluateResult.payload, null, 2)}</pre>
+            ) : null}
           </div>
         ) : null}
       </section>
-
-      {canEdit ? (
-      <section className="panel section-gap">
-        <div className="panel-form">
-          <div className="field">
-            <Label htmlFor="flag-key">{t('featureFlagKey')}</Label>
-            <Input
-              id="flag-key"
-              value={draft.key}
-              placeholder="checkout.new_flow"
-              onChange={(event) => setDraft((prev) => ({ ...prev, key: event.target.value }))}
-            />
-          </div>
-          <div className="field">
-            <Label htmlFor="flag-name">{t('name')}</Label>
-            <Input
-              id="flag-name"
-              value={draft.name}
-              placeholder={t('featureFlagNamePlaceholder')}
-              onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
-            />
-          </div>
-          <div className="field">
-            <Label htmlFor="flag-rollout">{t('featureFlagRollout')}</Label>
-            <Input
-              id="flag-rollout"
-              type="number"
-              min={0}
-              max={100}
-              value={draft.rollout}
-              onChange={(event) =>
-                setDraft((prev) => ({ ...prev, rollout: Number(event.target.value) }))
-              }
-            />
-          </div>
-          <div className="field feature-flag-description-field">
-            <Label htmlFor="flag-description">{t('description')}</Label>
-            <Input
-              id="flag-description"
-              value={draft.description}
-              placeholder={t('featureFlagDescriptionPlaceholder')}
-              onChange={(event) =>
-                setDraft((prev) => ({ ...prev, description: event.target.value }))
-              }
-            />
-          </div>
-          <div className="field feature-flag-description-field">
-            <Label htmlFor="flag-variants">{t('featureFlagVariants')}</Label>
-            <textarea
-              id="flag-variants"
-              className="textarea"
-              value={draft.variantsText}
-              placeholder={t('featureFlagVariantsPlaceholder')}
-              onChange={(event) =>
-                setDraft((prev) => ({ ...prev, variantsText: event.target.value }))
-              }
-            />
-            <p className={variantWeight > 100 ? 'text-danger' : 'text-muted'}>
-              {t('featureFlagVariantsHint').replace('{weight}', String(variantWeight))}
-            </p>
-          </div>
-          <div className="field feature-flag-description-field">
-            <Label htmlFor="flag-targeting">{t('featureFlagTargetingRules')}</Label>
-            <textarea
-              id="flag-targeting"
-              className="textarea"
-              value={draft.targetingRulesText}
-              placeholder={t('featureFlagTargetingPlaceholder')}
-              onChange={(event) =>
-                setDraft((prev) => ({ ...prev, targetingRulesText: event.target.value }))
-              }
-            />
-            <p className={draftRuleLineCount === draftTargetingRules.length ? 'text-muted' : 'text-danger'}>
-              {t('featureFlagTargetingHint').replace('{count}', String(draftTargetingRules.length))}
-            </p>
-          </div>
-          <div className="form-actions">
-            <Button
-              type="button"
-              variant="primary"
-              disabled={!canCreate}
-              onClick={() => createMutation.mutate()}
-            >
-              {createMutation.isPending ? t('saving') : t('createFeatureFlag')}
-            </Button>
-          </div>
-        </div>
-
-        {createMutation.error ? (
-          <p className="text-danger">{(createMutation.error as Error).message}</p>
-        ) : null}
-      </section>
-      ) : null}
 
       <section className="section-gap">
         <header className="cohorts-panel-head">
@@ -715,15 +393,14 @@ export default function WebsiteFeatureFlagsPage() {
                           ))}
                         </div>
                       ) : null}
-                      {selectedFlag.targetingRules.length ? (
-                        <div className="feature-flag-variants">
-                          {selectedFlag.targetingRules.map((rule, index) => (
-                            <span key={`${rule.field}-${rule.operator}-${index}`} className="badge">
-                              {rule.field} {rule.operator} {rule.value}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
+                      <div className="feature-flag-variants">
+                        <span className="badge">
+                          {t('featureFlagGroupCount').replace('{count}', String(selectedFlag.conditionGroups.length))}
+                        </span>
+                        {selectedFlag.earlyAccess ? (
+                          <span className="badge">{t('featureFlagEarlyAccess')}</span>
+                        ) : null}
+                      </div>
                     </>
                   }
                   actions={
@@ -733,7 +410,7 @@ export default function WebsiteFeatureFlagsPage() {
                           type="button"
                           variant="ghost"
                           size="sm"
-                          onClick={() => setEditingFlag(selectedFlag)}
+                          onClick={() => setEditor(selectedFlag)}
                         >
                           {t('edit')}
                         </Button>
@@ -762,18 +439,52 @@ export default function WebsiteFeatureFlagsPage() {
                     ) : null
                   }
                 >
+                  {deleteMutation.error ? (
+                    <p className="text-danger">{(deleteMutation.error as Error).message}</p>
+                  ) : null}
+                  {updateMutation.error && !editor ? (
+                    <p className="text-danger">{(updateMutation.error as Error).message}</p>
+                  ) : null}
+                  <SegmentTabs
+                    className="flag-detail-tabs"
+                    aria-label={t('featureFlag')}
+                    value={detailTab}
+                    onChange={(id) => setDetailTab(id as DetailTab)}
+                    tabs={[
+                      { id: 'overview', label: t('featureFlagTabOverview') },
+                      { id: 'conditions', label: t('featureFlagReleaseConditions') },
+                      { id: 'history', label: t('featureFlagTabHistory') },
+                    ]}
+                  />
+                  {detailTab === 'conditions' ? (
+                    <FeatureFlagConditionSummary websiteId={websiteId!} flag={selectedFlag} />
+                  ) : null}
+                  {detailTab === 'history' ? (
+                    <FeatureFlagHistory websiteId={websiteId!} flagId={selectedFlag.id} />
+                  ) : null}
+                  {detailTab === 'overview' ? (
+                  <>
                   <div className="detail-stats">
                     <div>
                       <span className="stat-label">{t('featureFlagRollout')}</span>
-                      {canEdit ? (
+                      {canEdit && selectedFlag.conditionGroups.length === 1 ? (
                         <FeatureFlagRolloutInput
                           flag={selectedFlag}
                           onCommit={(rollout) =>
-                            updateMutation.mutate({ id: selectedFlag.id, patch: { rollout } })
+                            updateMutation.mutate({
+                              id: selectedFlag.id,
+                              patch: {
+                                conditionGroups: [{ ...selectedFlag.conditionGroups[0], rollout, variant: selectedFlag.conditionGroups[0].variant ?? null }],
+                              },
+                            })
                           }
                         />
                       ) : (
-                        <strong className="stat-value">{selectedFlag.rollout}%</strong>
+                        <strong className="stat-value">
+                          {selectedFlag.conditionGroups.length === 1
+                            ? `${selectedFlag.rollout}%`
+                            : t('featureFlagRolloutPerGroup')}
+                        </strong>
                       )}
                     </div>
                     <div>
@@ -934,6 +645,8 @@ export default function WebsiteFeatureFlagsPage() {
                       </div>
                     </div>
                   ) : null}
+                  </>
+                  ) : null}
                 </MasterDetailPane>
               ) : null
             }
@@ -943,13 +656,20 @@ export default function WebsiteFeatureFlagsPage() {
         )}
       </section>
 
-      {editingFlag ? (
-        <FeatureFlagEditDialog
-          flag={editingFlag}
-          saving={updateMutation.isPending}
-          error={updateMutation.error as Error | null}
-          onClose={() => setEditingFlag(null)}
-          onSave={(flag, patch) => updateMutation.mutate({ id: flag.id, patch })}
+      {editor ? (
+        <FeatureFlagEditorDialog
+          websiteId={websiteId!}
+          flag={editor === 'new' ? null : editor}
+          saving={editor === 'new' ? createMutation.isPending : updateMutation.isPending}
+          error={(editor === 'new' ? createMutation.error : updateMutation.error) as Error | null}
+          onClose={() => {
+            createMutation.reset();
+            updateMutation.reset();
+            setEditor(null);
+          }}
+          onSave={(body) =>
+            editor === 'new' ? createMutation.mutate(body) : updateMutation.mutate({ id: editor.id, patch: body })
+          }
         />
       ) : null}
       </PageBody>

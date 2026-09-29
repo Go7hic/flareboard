@@ -1,6 +1,7 @@
 import { EVENT_TYPE } from '@flareboard/shared';
 import { rollupDailyRangeEligible, rollupHourlySeriesEligible } from '@flareboard/shared';
 import type { Env } from '../env';
+import { siteDb } from './site-db';
 
 export type StatsBlock = {
   pageviews: { value: number; change: number };
@@ -104,7 +105,7 @@ function sqlInPlaceholders(count: number, startIndex = 1) {
 
 async function rollupDaysComplete(env: Env, websiteId: string, days: string[]) {
   if (!days.length) return false;
-  const row = await env.DB.prepare(
+  const row = await siteDb(env, websiteId).prepare(
     `SELECT COUNT(*) as count FROM rollup_stats_daily
      WHERE website_id = ?1 AND day >= ?2 AND day <= ?3`,
   )
@@ -135,7 +136,7 @@ export async function getWebsiteStatsFromRollups(
       return { pageviews: 0, visits: 0, bounces: 0, totaltime_sec: 0 };
     }
     return (
-      (await env.DB.prepare(
+      (await siteDb(env, websiteId).prepare(
         `SELECT
            COALESCE(SUM(pageviews), 0) as pageviews,
            COALESCE(SUM(visits), 0) as visits,
@@ -161,7 +162,7 @@ export async function getWebsiteStatsFromRollups(
 
   const countDistinctVisitors = async (targetDays: string[]) => {
     if (!targetDays.length) return 0;
-    const row = await env.DB.prepare(
+    const row = await siteDb(env, websiteId).prepare(
       `SELECT COUNT(DISTINCT session_id) as visitors
        FROM rollup_session_day
        WHERE website_id = ?1 AND day >= ?2 AND day <= ?3`,
@@ -215,7 +216,7 @@ export async function getPageviewsFromRollups(
     if (!(await rollupDaysComplete(env, websiteId, days))) return null;
   }
 
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT bucket, pageviews
      FROM rollup_pageview_series
      WHERE website_id = ?1 AND unit = ?2 AND bucket >= ?3 AND bucket <= ?4
@@ -263,7 +264,7 @@ export async function getMetricsFromRollups(
   const days = daysInRange(startAt, endAt);
   if (!(await rollupDaysComplete(env, websiteId, days))) return null;
 
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT value, SUM(count) as count
      FROM rollup_dimension_daily
      WHERE website_id = ?1 AND dimension = ?2 AND day >= ?3 AND day <= ?4
@@ -293,7 +294,7 @@ export async function getCustomEventsFromRollups(
   const days = daysInRange(startAt, endAt);
   if (!(await rollupDaysComplete(env, websiteId, days))) return null;
 
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT event_name as eventName, SUM(count) as count
      FROM rollup_event_daily
      WHERE website_id = ?1 AND day >= ?2 AND day <= ?3
@@ -320,7 +321,7 @@ async function loadSeriesIdentities(
   startBucket: string,
   endBucket: string,
 ): Promise<{ bucket: string; visitors: number; visits: number }[]> {
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT bucket,
             COUNT(DISTINCT session_id) as visitors,
             COUNT(DISTINCT visit_id) as visits
@@ -340,7 +341,7 @@ async function loadDailyVisitorsFromSessionDay(
   days: string[],
 ): Promise<{ x: string; y: number }[]> {
   if (!days.length) return [];
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT day as x, COUNT(DISTINCT session_id) as y
      FROM rollup_session_day
      WHERE website_id = ?1 AND day >= ?2 AND day <= ?3
@@ -368,7 +369,7 @@ export async function getWebsiteMetricsSeriesFromRollups(
 
   if (unitKey !== 'hour' && !(await rollupDaysComplete(env, websiteId, days))) return null;
 
-  const pageviewRows = await env.DB.prepare(
+  const pageviewRows = await siteDb(env, websiteId).prepare(
     `SELECT bucket, pageviews
      FROM rollup_pageview_series
      WHERE website_id = ?1 AND unit = ?2 AND bucket >= ?3 AND bucket <= ?4
@@ -418,33 +419,33 @@ export async function getDashboardMetricsFromRollups(
   );
   if (!completeChecks.every(Boolean)) return null;
 
-  // Rows are per site, so site chunks can be queried separately and concatenated.
-  const statsResults: { websiteId: string; pageviews: number; visits: number }[] = [];
-  const visitorResults: { websiteId: string; visitors: number }[] = [];
-  for (const ids of chunks(websiteIds)) {
-    const sitePlaceholders = sqlInPlaceholders(ids.length, 1);
-    const dayStart = ids.length + 1;
-    const statsRows = await env.DB.prepare(
-      `SELECT website_id as websiteId,
-              COALESCE(SUM(pageviews), 0) as pageviews,
-              COALESCE(SUM(visits), 0) as visits
-       FROM rollup_stats_daily
-       WHERE website_id IN (${sitePlaceholders}) AND day >= ?${dayStart} AND day <= ?${dayStart + 1}
-       GROUP BY website_id`,
-    )
-      .bind(...ids, ...dayBounds(days))
-      .all<{ websiteId: string; pageviews: number; visits: number }>();
-    const visitorRows = await env.DB.prepare(
-      `SELECT website_id as websiteId, COUNT(DISTINCT session_id) as visitors
-       FROM rollup_session_day
-       WHERE website_id IN (${sitePlaceholders}) AND day >= ?${dayStart} AND day <= ?${dayStart + 1}
-       GROUP BY website_id`,
-    )
-      .bind(...ids, ...dayBounds(days))
-      .all<{ websiteId: string; visitors: number }>();
-    statsResults.push(...(statsRows.results ?? []));
-    visitorResults.push(...(visitorRows.results ?? []));
-  }
+  // Every site has its own store, so query them in parallel and concatenate.
+  const perSite = await Promise.all(
+    websiteIds.map(async (websiteId) => {
+      const db = siteDb(env, websiteId);
+      const stats = await db
+        .prepare(
+          `SELECT COALESCE(SUM(pageviews), 0) as pageviews, COALESCE(SUM(visits), 0) as visits, COUNT(*) as dayRows
+           FROM rollup_stats_daily
+           WHERE website_id = ?1 AND day >= ?2 AND day <= ?3`,
+        )
+        .bind(websiteId, ...dayBounds(days))
+        .first<{ pageviews: number; visits: number; dayRows: number }>();
+      const visitors = await db
+        .prepare(
+          `SELECT COUNT(DISTINCT session_id) as visitors
+           FROM rollup_session_day
+           WHERE website_id = ?1 AND day >= ?2 AND day <= ?3`,
+        )
+        .bind(websiteId, ...dayBounds(days))
+        .first<{ visitors: number }>();
+      return { websiteId, stats, visitors: visitors?.visitors ?? 0 };
+    }),
+  );
+  const statsResults = perSite
+    .filter((site) => (site.stats?.dayRows ?? 0) > 0)
+    .map((site) => ({ websiteId: site.websiteId, pageviews: site.stats!.pageviews, visits: site.stats!.visits }));
+  const visitorResults = perSite.map((site) => ({ websiteId: site.websiteId, visitors: site.visitors }));
 
   if (!statsResults.length) return null;
 
@@ -484,34 +485,40 @@ export async function getAggregateMetricsFromRollups(
     if (!completeChecks.every(Boolean)) return null;
   }
 
-  // Sessions and visits belong to one site, so per-chunk bucket counts add up exactly.
+  // Sessions and visits belong to one site, so per-site bucket counts add up exactly.
   const pageviewByBucket = new Map<string, number>();
   const identityByBucket = new Map<string, { visitors: number; visits: number }>();
-  for (const ids of chunks(websiteIds)) {
-    const sitePlaceholders = sqlInPlaceholders(ids.length, 1);
-    const unitIndex = ids.length + 1;
-    const pageviewChunk = await env.DB.prepare(
-      `SELECT bucket as x, SUM(pageviews) as pageviews
-       FROM rollup_pageview_series
-       WHERE website_id IN (${sitePlaceholders}) AND unit = ?${unitIndex} AND bucket >= ?${unitIndex + 1} AND bucket <= ?${unitIndex + 2}
-       GROUP BY bucket`,
-    )
-      .bind(...ids, unitKey, startBucket, endBucket)
-      .all<{ x: string; pageviews: number }>();
-    for (const row of pageviewChunk.results ?? []) {
+  const perSite = await Promise.all(
+    websiteIds.map(async (websiteId) => {
+      const db = siteDb(env, websiteId);
+      const pageviews = await db
+        .prepare(
+          `SELECT bucket as x, SUM(pageviews) as pageviews
+           FROM rollup_pageview_series
+           WHERE website_id = ?1 AND unit = ?2 AND bucket >= ?3 AND bucket <= ?4
+           GROUP BY bucket`,
+        )
+        .bind(websiteId, unitKey, startBucket, endBucket)
+        .all<{ x: string; pageviews: number }>();
+      const identities = await db
+        .prepare(
+          `SELECT bucket as x,
+                  COUNT(DISTINCT session_id) as visitors,
+                  COUNT(DISTINCT visit_id) as visits
+           FROM rollup_series_bucket
+           WHERE website_id = ?1 AND unit = ?2 AND bucket >= ?3 AND bucket <= ?4
+           GROUP BY bucket`,
+        )
+        .bind(websiteId, unitKey, startBucket, endBucket)
+        .all<{ x: string; visitors: number; visits: number }>();
+      return { pageviews: pageviews.results ?? [], identities: identities.results ?? [] };
+    }),
+  );
+  for (const site of perSite) {
+    for (const row of site.pageviews) {
       pageviewByBucket.set(row.x, (pageviewByBucket.get(row.x) ?? 0) + row.pageviews);
     }
-    const identityChunk = await env.DB.prepare(
-      `SELECT bucket as x,
-              COUNT(DISTINCT session_id) as visitors,
-              COUNT(DISTINCT visit_id) as visits
-       FROM rollup_series_bucket
-       WHERE website_id IN (${sitePlaceholders}) AND unit = ?${unitIndex} AND bucket >= ?${unitIndex + 1} AND bucket <= ?${unitIndex + 2}
-       GROUP BY bucket`,
-    )
-      .bind(...ids, unitKey, startBucket, endBucket)
-      .all<{ x: string; visitors: number; visits: number }>();
-    for (const row of identityChunk.results ?? []) {
+    for (const row of site.identities) {
       const cur = identityByBucket.get(row.x) ?? { visitors: 0, visits: 0 };
       identityByBucket.set(row.x, { visitors: cur.visitors + row.visitors, visits: cur.visits + row.visits });
     }
@@ -558,16 +565,16 @@ async function invalidateDailyRollupChunk(env: Env, websiteId: string, days: str
     'rollup_dimension_daily',
   ];
   for (const table of dayTables) {
-    await env.DB.prepare(`DELETE FROM ${table} WHERE website_id = ?1 AND day IN (${dayPlaceholders})`)
+    await siteDb(env, websiteId).prepare(`DELETE FROM ${table} WHERE website_id = ?1 AND day IN (${dayPlaceholders})`)
       .bind(...binds)
       .run();
   }
-  await env.DB.prepare(
+  await siteDb(env, websiteId).prepare(
     `DELETE FROM rollup_pageview_series WHERE website_id = ?1 AND unit = 'day' AND bucket IN (${dayPlaceholders})`,
   )
     .bind(...binds)
     .run();
-  await env.DB.prepare(
+  await siteDb(env, websiteId).prepare(
     `DELETE FROM rollup_series_bucket WHERE website_id = ?1 AND unit = 'day' AND bucket IN (${dayPlaceholders})`,
   )
     .bind(...binds)
@@ -575,7 +582,7 @@ async function invalidateDailyRollupChunk(env: Env, websiteId: string, days: str
 }
 
 export async function refreshRollupStatsDaily(env: Env, websiteId: string, day: string) {
-  await env.DB.prepare(
+  await siteDb(env, websiteId).prepare(
     `INSERT INTO rollup_stats_daily (website_id, day, pageviews, visitors, visits, bounces, totaltime_sec)
      SELECT
        ?1,

@@ -47,6 +47,7 @@ export const ENTITY_TYPE = {
   link: 2,
   pixel: 3,
   board: 4,
+  insight: 5,
 } as const;
 
 /** Seeded Demo Store website (`pnpm seed:demo`) and public `/demo` fallback. */

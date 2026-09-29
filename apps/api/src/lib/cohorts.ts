@@ -1,9 +1,12 @@
-import { EVENT_TYPE } from '@flareboard/shared';
-import type { CohortDefinition } from '@flareboard/shared';
-import { createDb, schema } from '@flareboard/db';
+import { parseCohortDefinition, type CohortDefinition } from '@flareboard/shared';
+import { cohortConditionWhere, createDb, schema } from '@flareboard/db';
 import { eq } from 'drizzle-orm';
 import type { Env } from '../env';
+import { InsightQueryError, SqlParams } from './property-filters';
 import { clampReportRange } from './report-range';
+import { siteDb } from './site-db';
+
+export { legacyToDefinition, parseCohortDefinition } from '@flareboard/shared';
 
 export type CohortRecord = {
   cohortId: string;
@@ -12,59 +15,19 @@ export type CohortRecord = {
   definition: CohortDefinition;
 };
 
-export function legacyToDefinition(type: string, value: string): CohortDefinition {
-  if (type === 'event') {
-    return { conditions: [{ field: 'event_name', operator: 'equals', value }] };
-  }
-  return { conditions: [{ field: 'url_path', operator: 'equals', value }] };
-}
-
-export function parseCohortDefinition(
-  definition: CohortDefinition | null | undefined,
-  type: string,
-  value: string,
-): CohortDefinition {
-  if (definition?.conditions?.length) return definition;
-  return legacyToDefinition(type, value);
-}
-
+/** Sessions matching one cohort condition. Binds follow text order. */
 function conditionSql(
   cond: CohortDefinition['conditions'][number],
+  websiteId: string,
   windowStart?: number,
   windowEnd?: number,
 ) {
-  const binds: (string | number)[] = ['WEBSITE_ID'];
-  let windowClause = '';
-  if (windowStart != null && windowEnd != null) {
-    windowClause = ' AND created_at >= ? AND created_at <= ?';
-  }
-
-  if (cond.field === 'event_name') {
-    const nameClause =
-      cond.operator === 'equals'
-        ? `event_type = ${EVENT_TYPE.customEvent} AND event_name = ?`
-        : `event_type = ${EVENT_TYPE.customEvent} AND event_name LIKE '%' || ? || '%'`;
-    binds.push(cond.value);
-    if (windowStart != null && windowEnd != null) {
-      binds.push(windowStart, windowEnd);
-    }
-    return {
-      sql: `SELECT session_id FROM website_event WHERE website_id = ? AND ${nameClause}${windowClause} GROUP BY session_id`,
-      binds,
-    };
-  }
-
-  const pathClause =
-    cond.operator === 'equals'
-      ? `event_type = ${EVENT_TYPE.pageView} AND url_path = ?`
-      : `event_type = ${EVENT_TYPE.pageView} AND url_path LIKE '%' || ? || '%'`;
-  binds.push(cond.value);
-  if (windowStart != null && windowEnd != null) {
-    binds.push(windowStart, windowEnd);
-  }
+  const params = new SqlParams('positional');
+  const where = cohortConditionWhere(cond, params, websiteId, windowStart, windowEnd);
+  const join = where.needsSession ? ' LEFT JOIN session s ON s.session_id = e.session_id' : '';
   return {
-    sql: `SELECT session_id FROM website_event WHERE website_id = ? AND ${pathClause}${windowClause} GROUP BY session_id`,
-    binds,
+    sql: `SELECT e.session_id AS session_id FROM website_event e${join} WHERE ${where.sql} GROUP BY e.session_id`,
+    binds: params.values,
   };
 }
 
@@ -74,6 +37,25 @@ export type CohortMemberJoin = {
   totalMembers: number;
 };
 
+/**
+ * Cohort members join is embedded in report queries that add their own parameters, so the
+ * cohort itself may use at most this many (D1 allows 100 per statement).
+ */
+export const MAX_COHORT_BOUND_PARAMETERS = 60;
+
+export function cohortMemberSql(definition: CohortDefinition, websiteId: string) {
+  const { conditions, windowStart, windowEnd } = definition;
+  const parts = conditions.map((c) => conditionSql(c, websiteId, windowStart, windowEnd));
+  // SQLite rejects parenthesized compound members, so wrap each condition as a subquery.
+  const intersectSql = parts.map((p) => `SELECT session_id FROM (${p.sql})`).join(' INTERSECT ');
+  const binds: (string | number)[] = [];
+  for (const p of parts) binds.push(...p.binds);
+  if (binds.length > MAX_COHORT_BOUND_PARAMETERS) {
+    throw new InsightQueryError('This cohort has too many conditions or filter values. Remove some and try again.');
+  }
+  return { intersectSql, binds };
+}
+
 export async function cohortMemberSubquery(
   env: Env,
   cohort: CohortRecord,
@@ -81,16 +63,10 @@ export async function cohortMemberSubquery(
   const { conditions, windowStart, windowEnd } = cohort.definition;
   if (!conditions.length) return null;
 
-  const parts = conditions.map((c) => conditionSql(c, windowStart, windowEnd));
-  const intersectSql = parts.map((p) => `(${p.sql})`).join(' INTERSECT ');
-  const flatBinds: (string | number)[] = [];
-  for (const p of parts) {
-    for (const b of p.binds) {
-      flatBinds.push(b === 'WEBSITE_ID' ? cohort.websiteId : b);
-    }
-  }
+  const { intersectSql, binds: flatBinds } = cohortMemberSql(cohort.definition, cohort.websiteId);
 
-  const countRow = await env.DB.prepare(`SELECT COUNT(*) as c FROM (${intersectSql})`)
+  const countRow = await siteDb(env, cohort.websiteId)
+    .prepare(`SELECT COUNT(*) as c FROM (${intersectSql})`)
     .bind(...flatBinds)
     .first<{ c: number }>();
 
@@ -150,7 +126,7 @@ export async function getCohortSizeOverTime(
       ? `date(e.created_at / 1000, 'unixepoch', 'weekday 0')`
       : `date(e.created_at / 1000, 'unixepoch')`;
 
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, cohort.websiteId).prepare(
     `SELECT ${dateExpr} as bucket, COUNT(DISTINCT e.session_id) as users
      FROM website_event e
      INNER JOIN (${memberQuery.intersectSql}) m ON m.session_id = e.session_id

@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
  * (new fields, retention, subprocessors, cookies), update the matching section in BOTH
  * languages and bump both dates together. English is the binding version.
  */
-export const UPDATED = { en: 'September 28, 2026', 'zh-CN': '2026 年 9 月 28 日' } as const;
+export const UPDATED = { en: 'September 29, 2026', 'zh-CN': '2026 年 9 月 29 日' } as const;
 export const CONTACT = 'support@flareboard.dev';
 
 export function Mail() {

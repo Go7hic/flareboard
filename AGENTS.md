@@ -89,8 +89,12 @@ Header chrome: `--shell-bg` + `backdrop-filter` on `.shell-nav` / `.landing-nav`
 
 - **Deletion:** deleting a website or account only sets `deleted_at`. `apps/api/src/lib/data-deletion.ts` (hourly cron) erases everything after `DELETION_GRACE_DAYS` (30, promised in both policies). It discovers website-scoped tables from the schema, so new tables with a `website_id` column are covered automatically; user references need a line in `USER_OWNED_TABLES` / `USER_REFERENCES`.
 - **Replay:** R2 objects (`<websiteId>/<visitId>/<chunk>`) must be deleted before their `session_replay` rows (see `lib/retention.ts`). Privacy settings reach `recorder.js` through `/api/tracker-config` → `replay`; inputs are masked unless a site opts out.
-- **Visitor IDs:** a monthly-salted hash of IP + user agent (`getSalt`, default `'month'`). IPs are never stored. Keep landing copy and the Privacy Policy consistent with this.
+- **Visitor IDs:** a monthly-salted hash of IP + user agent (`getSalt`, default `'month'`). IPs are never stored. Opt-in exception: a website with "Remember visitors across sessions" (`website.persist_visitors`) gets a random `localStorage` id from `script.js`, which ingest uses instead (`resolveDistinctId` in `apps/ingest/src/lib/tracker-settings.ts`; anonymous ids are dropped on other websites). Keep landing copy and the Privacy Policy consistent with this.
+- **Tracker:** the source is `apps/ingest/src/tracker/script.ts` (tests in `apps/ingest/test-node`, run in a fake browser). Autocapture must never send field values; update the Privacy Policy when it collects anything new.
 - **Logs:** never log one-time links or email bodies in production (`logUndeliveredLink` in `lib/email.ts`).
+- **Security records:** sign-in audit records are pruned after 180 days (`SIGN_IN_RECORD_DAYS` in `data-deletion.ts`) and 2FA secrets, recovery codes and sessions are user-owned tables erased with the account. Both policies promise this.
+- **AI assistant:** "Ask Flareboard" calls DeepSeek (`DEEPSEEK_API_KEY`, `apps/api/src/lib/assistant.ts`, Anthropic-format endpoint). Data sent to it is stored in China and may be used by DeepSeek to improve its models; the Privacy Policy (`#assistant`, subprocessors, transfers) says so. Changing the provider or what is sent means updating those sections.
+- **Warehouse credentials:** Stripe keys are restricted keys only, stored encrypted (`warehouse_credential`) and removed with the data source; never return or log them.
 
 ## Blog
 

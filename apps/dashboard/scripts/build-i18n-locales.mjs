@@ -11,7 +11,8 @@ const i18nPath = path.join(__dirname, '../src/lib/i18n.ts');
 const src = fs.readFileSync(i18nPath, 'utf8');
 const enMatch = src.match(/const enUS: Record<string, string> = \{([\s\S]*?)\};/);
 if (!enMatch) throw new Error('enUS block not found');
-const enKeys = [...enMatch[1].matchAll(/^\s+(\w+):/gm)].map((m) => m[1]);
+// Keys are bare identifiers or quoted when they contain `-` (e.g. 'boardTemplate_web-analytics').
+const enKeys = [...enMatch[1].matchAll(/^\s+(?:'([\w-]+)'|(\w+)):/gm)].map((m) => m[1] ?? m[2]);
 
 /** @type {Record<string, Record<string, string>>} */
 const locales = JSON.parse(
@@ -31,7 +32,7 @@ for (const [locale, map] of Object.entries(locales)) {
   const varName = locale.replace('-', '').replace('JP', 'JP').replace('DE', 'DE').replace('FR', 'FR');
   const exportName =
     locale === 'ja-JP' ? 'jaJPLocale' : locale === 'de-DE' ? 'deDELocale' : 'frFRLocale';
-  const lines = enKeys.map((k) => `  ${k}: ${JSON.stringify(map[k])},`);
+  const lines = enKeys.map((k) => `  ${/^\w+$/.test(k) ? k : `'${k}'`}: ${JSON.stringify(map[k])},`);
   const out = `/** Auto-generated — do not edit by hand. Run build-i18n-locales.mjs */\nexport const ${exportName}: Record<string, string> = {\n${lines.join('\n')}\n};\n`;
   const outFile = path.join(__dirname, `../src/lib/locales/${locale}.ts`);
   fs.mkdirSync(path.dirname(outFile), { recursive: true });

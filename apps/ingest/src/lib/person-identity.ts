@@ -1,5 +1,6 @@
 import { patchPersonProperties, upsertPerson } from '@flareboard/db';
 import type { Env } from '../env';
+import { writeSiteTables } from './site-db';
 
 /**
  * Links `alias` to the canonical distinct id: the canonical person records the alias, and the
@@ -11,12 +12,14 @@ export async function recordAlias(
   input: { websiteId: string; alias: string; canonicalDistinctId: string; seenAt: number },
 ): Promise<void> {
   const { websiteId, alias, canonicalDistinctId, seenAt } = input;
-  await upsertPerson(env.DB, { websiteId, distinctId: canonicalDistinctId, seenAt });
-  await patchPersonProperties(env.DB, websiteId, canonicalDistinctId, { $alias: alias }, seenAt);
-  await upsertPerson(env.DB, {
-    websiteId,
-    distinctId: alias,
-    properties: { $alias: alias, $canonical_distinct_id: canonicalDistinctId },
-    seenAt,
+  await writeSiteTables(env, websiteId, async (db) => {
+    await upsertPerson(db, { websiteId, distinctId: canonicalDistinctId, seenAt });
+    await patchPersonProperties(db, websiteId, canonicalDistinctId, { $alias: alias }, seenAt);
+    await upsertPerson(db, {
+      websiteId,
+      distinctId: alias,
+      properties: { $alias: alias, $canonical_distinct_id: canonicalDistinctId },
+      seenAt,
+    });
   });
 }

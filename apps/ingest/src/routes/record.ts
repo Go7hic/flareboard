@@ -9,6 +9,7 @@ import { resolveWebsiteRef } from '../lib/project-keys';
 import { badRequest, json } from '../lib/response';
 import { getWebsiteById } from '../lib/queries';
 import { replayAllowedByPlan } from '../lib/hosted-limits';
+import { siteDb, writeSiteTables } from '../lib/site-db';
 
 type Ctx = Context<{ Bindings: Env }>;
 
@@ -68,8 +69,7 @@ export async function handleRecord(c: Ctx) {
   const chunkBytes = new TextEncoder().encode(JSON.stringify(events));
   const r2Key = `${website}/${visitId}/${chunkIndex}`;
 
-  const db = createDb(c.env.DB);
-  const [existingChunk] = await db
+  const [existingChunk] = await createDb(siteDb(c.env, website))
     .select({ replayId: schema.sessionReplay.replayId })
     .from(schema.sessionReplay)
     .where(
@@ -92,21 +92,24 @@ export async function handleRecord(c: Ctx) {
     });
   }
 
-  await db.insert(schema.sessionReplay).values({
-    replayId,
-    websiteId: website,
-    sessionId,
-    visitId,
-    chunkIndex,
-    events: new Uint8Array(0),
-    eventCount: events.length,
-    startedAt: new Date(startedAt),
-    endedAt: new Date(endedAt),
-    createdAt: new Date(),
-  });
-
-  await c.env.DB.prepare(
-    `INSERT INTO session_replay_summary (website_id, visit_id, session_id, started_at, ended_at, event_count, chunks)
+  await writeSiteTables(c.env, website, async (db) => {
+    await createDb(db)
+      .insert(schema.sessionReplay)
+      .values({
+        replayId,
+        websiteId: website,
+        sessionId,
+        visitId,
+        chunkIndex,
+        events: new Uint8Array(0),
+        eventCount: events.length,
+        startedAt: new Date(startedAt),
+        endedAt: new Date(endedAt),
+        createdAt: new Date(),
+      });
+    await db
+      .prepare(
+        `INSERT INTO session_replay_summary (website_id, visit_id, session_id, started_at, ended_at, event_count, chunks)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1)
      ON CONFLICT(website_id, visit_id) DO UPDATE SET
        session_id = excluded.session_id,
@@ -114,9 +117,10 @@ export async function handleRecord(c: Ctx) {
        ended_at = MAX(ended_at, excluded.ended_at),
        event_count = event_count + excluded.event_count,
        chunks = chunks + 1`,
-  )
-    .bind(website, visitId, sessionId, startedAt, endedAt, events.length)
-    .run();
+      )
+      .bind(website, visitId, sessionId, startedAt, endedAt, events.length)
+      .run();
+  });
 
   return json({ ok: true, replayId, r2Key: c.env.REPLAY_BUCKET ? r2Key : null });
 }

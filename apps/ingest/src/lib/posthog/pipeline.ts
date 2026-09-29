@@ -5,6 +5,7 @@ import { isBot, recordWorkflowExecutions } from '../../routes/collect';
 import { loadWebsiteActionDefinitions, tagMatchedActions } from '../actions';
 import { recordEventUsageKv } from '../hosted-limits';
 import { recordAlias } from '../person-identity';
+import { writeSiteTables } from '../site-db';
 import { eventMessage, emptyPageContext, pageContext, sessionDataMessage, sessionMessage } from '../queue-messages';
 import { getTrustedClientIp } from '../rate-limit';
 import { bumpRealtimeVisitor } from '../realtime-kv';
@@ -286,17 +287,19 @@ export async function capturePostHogEvents(input: CaptureInput): Promise<{ accep
     (async () => {
       const tasks: Array<() => Promise<unknown>> = [
         ...[...persons].map(([distinctId, update]) => () =>
-          upsertPerson(env.DB, {
-            websiteId,
-            distinctId,
-            properties: update.set,
-            propertiesOnce: update.setOnce,
-            seenAt: update.seenAt,
-          }),
+          writeSiteTables(env, websiteId, (db) =>
+            upsertPerson(db, {
+              websiteId,
+              distinctId,
+              properties: update.set,
+              propertiesOnce: update.setOnce,
+              seenAt: update.seenAt,
+            }),
+          ),
         ),
         ...[...aliases.values()].map((alias) => () => recordAlias(env, { websiteId, ...alias })),
         ...[...memberships.values()].map((membership) => () =>
-          upsertPersonGroupMembership(env.DB, { websiteId, ...membership }),
+          writeSiteTables(env, websiteId, (db) => upsertPersonGroupMembership(db, { websiteId, ...membership })),
         ),
         ...[...sessions].map(([sessionId, session]) => () => bumpRealtimeVisitor(env, websiteId, sessionId, session.realtime)),
       ];

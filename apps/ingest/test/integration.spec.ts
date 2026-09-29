@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from './helpers/migrations';
 import { fetchWorker, fetchWorkerJson } from './helpers/fetch-worker';
+import { testSiteDb } from './helpers/site-db';
 
 describe('ingest integration', () => {
   it('GET / returns service metadata', async () => {
@@ -197,7 +198,7 @@ describe('POST /api/send', () => {
     );
 
     expect(response.status).toBe(200);
-    const row = await env.DB.prepare(
+    const row = await testSiteDb(TEST_WEBSITE_ID).prepare(
       `SELECT distinct_id as distinctId, properties_json as propertiesJson
        FROM person
        WHERE website_id = ?1 AND distinct_id = 'identify-user-1'

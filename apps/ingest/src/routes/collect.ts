@@ -42,6 +42,7 @@ import { resolveDistinctId } from '../lib/tracker-settings';
 import { TRACKER_SCRIPT } from '../tracker/script';
 import { eventMessage, pageContext, parsePageUrl, sessionDataMessage, sessionMessage } from '../lib/queue-messages';
 import { recordAlias } from '../lib/person-identity';
+import { writeSiteTables } from '../lib/site-db';
 import { resolveWebsiteRef } from '../lib/project-keys';
 
 const SEND_BODY_MAX_BYTES = 65_536;
@@ -836,12 +837,14 @@ async function processSend(
       if (identifyData) messages.push(identifyData);
       if (id) {
         defer(() =>
-          upsertPerson(env.DB, {
-            websiteId: sourceId,
-            distinctId: id,
-            properties: data as Record<string, unknown>,
-            seenAt: createdAt.getTime(),
-          }).then(() => undefined),
+          writeSiteTables(env, sourceId, (db) =>
+            upsertPerson(db, {
+              websiteId: sourceId,
+              distinctId: id,
+              properties: data as Record<string, unknown>,
+              seenAt: createdAt.getTime(),
+            }),
+          ).then(() => undefined),
         );
       }
     } else if (type === COLLECTION_TYPE.group && groupType && groupKey) {
@@ -863,13 +866,15 @@ async function processSend(
       if (groupMessage) messages.push(groupMessage);
       if (id) {
         defer(() =>
-          upsertPersonGroupMembership(env.DB, {
-            websiteId: sourceId,
-            distinctId: id,
-            groupType,
-            groupKey,
-            seenAt: createdAt.getTime(),
-          }).then(() => undefined),
+          writeSiteTables(env, sourceId, (db) =>
+            upsertPersonGroupMembership(db, {
+              websiteId: sourceId,
+              distinctId: id,
+              groupType,
+              groupKey,
+              seenAt: createdAt.getTime(),
+            }),
+          ).then(() => undefined),
         );
       }
     } else if (type === COLLECTION_TYPE.performance) {

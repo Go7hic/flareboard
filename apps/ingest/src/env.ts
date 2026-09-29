@@ -13,4 +13,8 @@ export interface Env {
   API_URL?: string;
   /** Requests per minute allowed per project key (default 30000). */
   PROJECT_KEY_RATE_LIMIT?: string;
+  /** Per-website analytics stores (EventStore in the API worker). */
+  SITE_STORE?: DurableObjectNamespace;
+  /** Analytics storage mode, see @flareboard/db/site-store: d1 | dual | do. */
+  EVENT_STORE?: string;
 }

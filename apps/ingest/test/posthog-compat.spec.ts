@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { currentMonthKey, EVENT_TYPE, uuid } from '@flareboard/shared';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from './helpers/migrations';
 import { fetchWorkerWithEnv, recordingQueue, seedProjectKey } from './helpers/queue';
+import { testSiteDb } from './helpers/site-db';
 
 const KEY = `fb_pk_${'PostHogCompatKey'.padEnd(24, '0')}`;
 const OTHER_SITE = '00000000-0000-0000-0000-0000000000b2';
@@ -230,7 +231,7 @@ describe('PostHog-compatible capture', () => {
   });
 
   it('applies $identify through the identify path: $set, $set_once and the anonymous alias', async () => {
-    await env.DB.prepare(
+    await testSiteDb(TEST_WEBSITE_ID).prepare(
       `INSERT OR REPLACE INTO person (person_id, website_id, distinct_id, properties_json, first_seen_at, last_seen_at, created_at, updated_at)
        VALUES ('ph-person-1', ?1, 'ph-user-1', '{"plan":"free","signup_source":"ads"}', 1, 1, 1, 1)`,
     )
@@ -258,7 +259,7 @@ describe('PostHog-compatible capture', () => {
     ]);
     expect(rows[0]!.sessionId).toBe(uuid(TEST_WEBSITE_ID, 'ph-user-1'));
 
-    const person = await env.DB.prepare(`SELECT properties_json AS p FROM person WHERE website_id = ?1 AND distinct_id = 'ph-user-1'`)
+    const person = await testSiteDb(TEST_WEBSITE_ID).prepare(`SELECT properties_json AS p FROM person WHERE website_id = ?1 AND distinct_id = 'ph-user-1'`)
       .bind(TEST_WEBSITE_ID)
       .first<{ p: string }>();
     expect(JSON.parse(person!.p)).toEqual({
@@ -269,7 +270,7 @@ describe('PostHog-compatible capture', () => {
       first_plan: 'pro',
       $alias: 'ph-anon-1',
     });
-    const anon = await env.DB.prepare(`SELECT properties_json AS p FROM person WHERE website_id = ?1 AND distinct_id = 'ph-anon-1'`)
+    const anon = await testSiteDb(TEST_WEBSITE_ID).prepare(`SELECT properties_json AS p FROM person WHERE website_id = ?1 AND distinct_id = 'ph-anon-1'`)
       .bind(TEST_WEBSITE_ID)
       .first<{ p: string }>();
     expect(JSON.parse(anon!.p)).toMatchObject({ $canonical_distinct_id: 'ph-user-1' });
@@ -301,7 +302,7 @@ describe('PostHog-compatible capture', () => {
       ]),
     );
 
-    const people = await env.DB.prepare(
+    const people = await testSiteDb(TEST_WEBSITE_ID).prepare(
       `SELECT distinct_id AS id, properties_json AS p FROM person WHERE website_id = ?1 AND distinct_id IN ('ph-user-2', 'legacy-7', '$company_globex')`,
     )
       .bind(TEST_WEBSITE_ID)
@@ -311,7 +312,7 @@ describe('PostHog-compatible capture', () => {
     expect(byId['legacy-7']).toMatchObject({ $canonical_distinct_id: 'ph-user-2' });
     expect(byId['$company_globex']).toBeUndefined();
 
-    const membership = await env.DB.prepare(
+    const membership = await testSiteDb(TEST_WEBSITE_ID).prepare(
       `SELECT m.group_key AS k FROM person_group_membership m JOIN person p ON p.person_id = m.person_id
        WHERE p.website_id = ?1 AND p.distinct_id = 'ph-user-2' AND m.group_type = 'company'`,
     )
@@ -325,7 +326,7 @@ describe('PostHog-compatible capture', () => {
       pageview({ distinct_id: 'ph-anon-noprofile', $process_person_profile: false, $set: { a: 1 } }),
     ]);
     expect(sessions()[0]!.data.distinctId).toBeNull();
-    const person = await env.DB.prepare(`SELECT 1 FROM person WHERE website_id = ?1 AND distinct_id = 'ph-anon-noprofile'`)
+    const person = await testSiteDb(TEST_WEBSITE_ID).prepare(`SELECT 1 FROM person WHERE website_id = ?1 AND distinct_id = 'ph-anon-noprofile'`)
       .bind(TEST_WEBSITE_ID)
       .first();
     expect(person).toBeNull();

@@ -27,7 +27,6 @@ import { InsightQueryError } from '../lib/property-filters';
 import {
   getGoalReport,
   getReportById,
-  getRevenueReport,
   getSegmentById,
   getUtmReport,
   getUserReports,
@@ -35,6 +34,7 @@ import {
 } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
 import { REPORT_TEMPLATES, readReportParams, summarizeReport } from '../lib/report-templates';
+import { getRevenueReport } from '../lib/revenue-analytics';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;

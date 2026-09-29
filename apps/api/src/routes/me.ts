@@ -4,11 +4,14 @@ import { createDb, schema } from '@flareboard/db';
 import { checkPassword, hashPassword, ROLES, updatePasswordSchema, updateProfileSchema } from '@flareboard/shared';
 import type { Env } from '../env';
 import { logAdminAction } from '../lib/audit';
-import { bumpTokenVersion, issueAuthToken } from '../lib/auth-token';
+import { twoFactorBlockedTeams } from '../lib/access';
+import { bumpTokenVersion, issueAuthToken, startSession } from '../lib/auth-token';
 import { stripeRequest } from '../lib/billing';
 import { DELETION_GRACE_DAYS } from '../lib/data-deletion';
 import { badRequest, json, unauthorized } from '../lib/response';
-import { clearSessionCookie } from '../lib/session-cookie';
+import { clearSessionCookie, setSessionCookie } from '../lib/session-cookie';
+import { hasTwoFactor } from '../lib/two-factor';
+import { extendUserSession, revokeOtherUserSessions } from '../lib/user-sessions';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
@@ -29,10 +32,13 @@ export async function handleMe(c: Ctx) {
     createdAt: user.createdAt,
     // Accounts created through Google/GitHub have no password the user knows.
     passwordRequired: !(await hasOauthIdentity(c.env, user.userId)),
+    twoFactorEnabled: await hasTwoFactor(c.env, user.userId),
+    // Teams that stay locked until this user enables two-factor authentication.
+    twoFactorRequiredBy: await twoFactorBlockedTeams(c.env, user.userId),
   });
 }
 
-async function hasOauthIdentity(env: Env, userId: string) {
+export async function hasOauthIdentity(env: Env, userId: string) {
   const db = createDb(env.DB);
   const [identity] = await db
     .select({ provider: schema.userOauthIdentity.provider })
@@ -149,6 +155,7 @@ export async function handleDeleteAccount(c: Ctx) {
   await db.update(schema.user).set({ deletedAt: now, updatedAt: now }).where(eq(schema.user.userId, user.userId));
 
   await bumpTokenVersion(c.env, user.userId);
+  await revokeOtherUserSessions(c.env, user.userId, null);
   await logAdminAction(c.env, user.userId, 'delete', 'user', user.userId, { self: true });
   clearSessionCookie(c);
   return json({ ok: true, erasedWithinDays: DELETION_GRACE_DAYS });
@@ -175,8 +182,15 @@ export async function handleUpdatePassword(c: Ctx) {
     .where(eq(schema.user.userId, user.userId));
 
   // Invalidate other sessions, then hand this device a fresh token so it stays signed in.
+  const current = c.get('sessionId');
+  const revoked = await revokeOtherUserSessions(c.env, user.userId, current);
   await bumpTokenVersion(c.env, user.userId);
-  const token = await issueAuthToken(c, { userId: user.userId, role: user.role });
+  let sessionId = current;
+  if (sessionId) await extendUserSession(c.env, sessionId);
+  else sessionId = (await startSession(c, { userId: user.userId, role: user.role }, 'password')).sessionId;
+  const token = await issueAuthToken(c, { userId: user.userId, role: user.role }, sessionId);
+  setSessionCookie(c, token);
+  await logAdminAction(c.env, user.userId, 'password_change', 'user', user.userId, { sessionsRevoked: revoked });
   return json({ ok: true, token });
 }
 

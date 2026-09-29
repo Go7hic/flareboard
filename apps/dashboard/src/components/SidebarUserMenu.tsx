@@ -316,6 +316,18 @@ export function SidebarUserMenu({
           >
             <span className="sidebar-user-menu-item-label">{t('apiKeys')}</span>
           </Link>
+          <Link
+            to="/account/security"
+            role="menuitem"
+            className="sidebar-user-menu-item"
+            onClick={() => {
+              setOpen(false);
+              setActiveFlyout(null);
+              onNavigate?.();
+            }}
+          >
+            <span className="sidebar-user-menu-item-label">{t('accountSecurity')}</span>
+          </Link>
           {onDeleteAccount ? (
             <button type="button" role="menuitem" className="sidebar-user-menu-item" onClick={handleDeleteAccount}>
               <span className="sidebar-user-menu-item-label">{t('deleteAccountMenu')}</span>

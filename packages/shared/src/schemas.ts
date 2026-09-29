@@ -778,7 +778,8 @@ export const updateWarehouseScheduledQuerySchema = z.object({
   nextRunAt: z.coerce.number().int().optional(),
 });
 
-const warehouseDataSourceTypeSchema = z.enum(['http_json', 'http_csv', 'r2_json', 'd1', 'postgres', 'mysql']);
+/** Connectors that really import data (lib/warehouse.ts WAREHOUSE_DATA_SOURCE_TYPES). */
+const warehouseDataSourceTypeSchema = z.enum(['http_json', 'http_csv', 'stripe']);
 const warehouseDataSourceStatusSchema = z.enum(['connected', 'failed', 'syncing']).nullable();
 
 export const createWarehouseDataSourceSchema = z.object({
@@ -887,6 +888,8 @@ export const createTeamSchema = z.object({
 
 export const updateTeamSchema = z.object({
   name: z.string().max(100).optional(),
+  /** Owners only: members without two-factor authentication lose access until they enroll. */
+  requireTwoFactor: z.boolean().optional(),
 });
 
 export const joinTeamSchema = z.object({

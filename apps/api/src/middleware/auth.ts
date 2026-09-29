@@ -1,8 +1,8 @@
 import type { Context, Next } from 'hono';
 import { createMiddleware } from 'hono/factory';
-import { PERSONAL_KEY_PREFIX, ROLES, isPersonalApiKey, parseSecureToken, type AuthUser } from '@flareboard/shared';
+import { PERSONAL_KEY_PREFIX, ROLES, isPersonalApiKey, type AuthUser } from '@flareboard/shared';
 import type { Env } from '../env';
-import { getTokenVersion } from '../lib/auth-token';
+import { verifySessionToken } from '../lib/auth-token';
 import { readAuthToken, readBearerToken } from '../lib/auth-credentials';
 import { csrfOriginAllowed } from '../lib/csrf';
 import { authenticatePersonalApiKey, touchPersonalApiKey } from '../lib/personal-api-keys';
@@ -10,6 +10,8 @@ import { forbidden, getAppSecret, unauthorized } from '../lib/response';
 
 export type ApiVariables = {
   user: AuthUser;
+  /** The signed-in session (null for personal API keys and pre-session tokens). */
+  sessionId: string | null;
 };
 
 type AuthContext = Context<{ Bindings: Env; Variables: ApiVariables }>;
@@ -21,16 +23,23 @@ function isPasswordUpdate(path: string, method: string) {
   return method === 'PATCH' && path === '/api/me/password';
 }
 
+/** Account security a read-only user must still manage for themselves. */
+function isOwnSecurityPath(path: string) {
+  return path.startsWith('/api/me/2fa') || path.startsWith('/api/me/sessions');
+}
+
 /**
  * Credential and account management needs a signed-in session: a leaked personal API key must
- * not be able to mint more keys, change the password or delete the account.
+ * not be able to mint more keys, change the password, turn off two-factor authentication,
+ * revoke sessions or delete the account.
  */
 function sessionOnlyPath(path: string) {
   return (
     path === '/api/me/api-keys' ||
     path.startsWith('/api/me/api-keys/') ||
     path === '/api/me/password' ||
-    path === '/api/me/delete'
+    path === '/api/me/delete' ||
+    isOwnSecurityPath(path)
   );
 }
 
@@ -41,7 +50,7 @@ async function personalApiKeyAuth(c: AuthContext, next: Next, secret: string) {
   if (!key) return unauthorized({ message: 'Invalid API key' });
 
   if (sessionOnlyPath(c.req.path)) {
-    return forbidden('Personal API keys cannot manage API keys, the password or the account');
+    return forbidden('Personal API keys cannot manage API keys, the password, account security or the account');
   }
   const needed = READ_METHODS.has(c.req.method) ? 'read' : 'write';
   if (!key.scopes.includes(needed)) {
@@ -49,6 +58,7 @@ async function personalApiKeyAuth(c: AuthContext, next: Next, secret: string) {
   }
 
   c.set('user', { userId: key.userId, role: key.role });
+  c.set('sessionId', null);
   if (MUTATING_METHODS.has(c.req.method) && (key.role === ROLES.viewOnly || key.role === ROLES.teamViewOnly)) {
     return forbidden('Read-only access');
   }
@@ -76,19 +86,14 @@ export const jwtAuth = createMiddleware<{ Bindings: Env; Variables: ApiVariables
     return unauthorized();
   }
 
-  const payload = await parseSecureToken(token, getAppSecret(c));
-  if (!payload?.userId || !payload?.role) {
+  const session = await verifySessionToken(c.env, token, getAppSecret(c));
+  if (!session) {
     return unauthorized();
   }
 
-  const userId = String(payload.userId);
-  const tokenVersion = typeof payload.tv === 'number' ? payload.tv : 0;
-  if ((await getTokenVersion(c.env, userId)) !== tokenVersion) {
-    return unauthorized();
-  }
-
-  const role = String(payload.role);
+  const { userId, role } = session;
   c.set('user', { userId, role });
+  c.set('sessionId', session.sessionId);
 
   if (!csrfOriginAllowed(c)) {
     return forbidden('Invalid origin');
@@ -97,7 +102,8 @@ export const jwtAuth = createMiddleware<{ Bindings: Env; Variables: ApiVariables
   if (
     MUTATING_METHODS.has(c.req.method) &&
     (role === ROLES.viewOnly || role === ROLES.teamViewOnly) &&
-    !isPasswordUpdate(c.req.path, c.req.method)
+    !isPasswordUpdate(c.req.path, c.req.method) &&
+    !isOwnSecurityPath(c.req.path)
   ) {
     return forbidden('Read-only access');
   }

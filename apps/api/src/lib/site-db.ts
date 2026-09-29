@@ -27,6 +27,12 @@ export const SITE_TABLES = [
   'person',
   'person_group_membership',
   'warehouse_import',
+  'stripe_customer',
+  'stripe_charge',
+  'stripe_refund',
+  'stripe_invoice',
+  'stripe_invoice_line',
+  'stripe_subscription',
 ] as const;
 
 export { eventStoreMode, type EventStoreMode } from '@flareboard/db/site-store';

@@ -4,6 +4,7 @@ import { getPlan, type PlanDefinition } from '@flareboard/shared';
 import type { Env } from './env';
 import { resolveCorsOrigin } from './lib/cors';
 import { jwtAuth, type ApiVariables } from './middleware/auth';
+import * as accountSecurity from './routes/account-security';
 import * as actions from './routes/actions';
 import * as annotations from './routes/annotations';
 import * as apiKeys from './routes/api-keys';
@@ -86,6 +87,8 @@ app.use('*', (c, next) => {
   return cors({
     origin: (origin) => resolveCorsOrigin(c.env, origin),
     allowHeaders: ['Content-Type', 'Authorization'],
+    // CSV exports report their row cap and truncation to the dashboard.
+    exposeHeaders: ['X-Row-Cap', 'X-Row-Count', 'X-Truncated'],
     credentials: true,
   })(c, next);
 });
@@ -132,6 +135,15 @@ app.post('/api/me/delete', me.handleDeleteAccount);
 app.get('/api/me/api-keys', apiKeys.handleListPersonalKeys);
 app.post('/api/me/api-keys', apiKeys.handleCreatePersonalKey);
 app.delete('/api/me/api-keys/:keyId', apiKeys.handleRevokePersonalKey);
+app.get('/api/me/2fa', accountSecurity.handleTwoFactorStatus);
+app.post('/api/me/2fa/setup', accountSecurity.handleTwoFactorSetup);
+app.post('/api/me/2fa/enable', accountSecurity.handleTwoFactorEnable);
+app.post('/api/me/2fa/disable', accountSecurity.handleTwoFactorDisable);
+app.post('/api/me/2fa/recovery-codes', accountSecurity.handleRegenerateRecoveryCodes);
+app.get('/api/me/sessions', accountSecurity.handleListSessions);
+app.post('/api/me/sessions/revoke-others', accountSecurity.handleRevokeOtherSessions);
+app.delete('/api/me/sessions/:sessionId', accountSecurity.handleRevokeSession);
+app.get('/api/me/audit-log', accountSecurity.handleAccountAuditLog);
 
 app.use('/api/dashboard', jwtAuth);
 app.get('/api/dashboard', dashboardOverview.handleDashboard);
@@ -143,6 +155,7 @@ app.post('/api/teams', teams.handleCreate);
 app.post('/api/teams/join', teams.handleJoin);
 app.get('/api/teams/:teamId', teams.handleGet);
 app.get('/api/teams/:teamId/status', teams.handleStatus);
+app.get('/api/teams/:teamId/audit-log', teams.handleAuditLog);
 app.patch('/api/teams/:teamId', teams.handleUpdate);
 app.delete('/api/teams/:teamId', teams.handleDelete);
 app.get('/api/teams/:teamId/users', teams.handleListUsers);
@@ -240,6 +253,7 @@ app.patch('/api/websites/:websiteId/email-report', emailReports.handleUpdate);
 app.post('/api/websites/:websiteId/import', dataImport.handleImport);
 app.get('/api/websites/:websiteId/warehouse/schema', warehouse.handleSchema);
 app.post('/api/websites/:websiteId/warehouse/query', warehouse.handleQuery);
+app.post('/api/websites/:websiteId/warehouse/query/export', warehouse.handleQueryExport);
 app.get('/api/websites/:websiteId/warehouse/history', warehouse.handleHistoryList);
 app.get('/api/websites/:websiteId/warehouse/schedules', warehouse.handleScheduleList);
 app.post('/api/websites/:websiteId/warehouse/schedules', warehouse.handleScheduleCreate);
@@ -370,6 +384,9 @@ app.patch('/api/websites/:websiteId/segments/:segmentId', segments.handleUpdate)
 app.delete('/api/websites/:websiteId/segments/:segmentId', segments.handleDelete);
 
 app.get('/api/websites/:websiteId/revenue/sessions', revenue.handleSessions);
+app.get('/api/websites/:websiteId/revenue/subscriptions', revenue.handleSubscriptions);
+app.get('/api/websites/:websiteId/revenue/attribution', revenue.handleAttribution);
+app.get('/api/websites/:websiteId/revenue/export', revenue.handleExport);
 
 app.get('/api/websites/:websiteId/replays', replays.handleList);
 app.get('/api/websites/:websiteId/replays/saved', replays.handleSavedList);

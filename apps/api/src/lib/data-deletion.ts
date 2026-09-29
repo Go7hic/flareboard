@@ -156,10 +156,16 @@ const USER_OWNED_TABLES = [
   'report',
   'usage_monthly',
   'user_oauth_identity',
+  'user_recovery_code',
+  'user_session',
   'user_subscription',
+  'user_two_factor',
   'team_user',
   'audit_log',
 ] as const;
+
+/** Sign-in records (successful and failed) are kept this long; the Privacy Policy states it. */
+export const SIGN_IN_RECORD_DAYS = 180;
 
 /** Shared team content that survives with the author cleared (nullable references). */
 const USER_REFERENCES: ReadonlyArray<[table: string, column: string]> = [
@@ -259,7 +265,25 @@ export async function runDataDeletion(env: Env, now = Date.now()) {
 
   const deadEventsDone = budget.left > 0 && (await drain(env, budget, 'dead_event', 'created_at < ?1', cutoff));
 
-  const summary = { websites, users, deadEventsDone, budgetLeft: Math.max(0, budget.left) };
+  // Expired sign-in sessions and old sign-in records.
+  const sessionsDone = budget.left > 0 && (await drain(env, budget, 'user_session', 'expires_at < ?1', now));
+  const signInsDone =
+    budget.left > 0 &&
+    (await drain(
+      env,
+      budget,
+      'audit_log',
+      "entity_type = 'user' AND action IN ('login', 'login_failed') AND created_at < ?1",
+      now - SIGN_IN_RECORD_DAYS * DAY_MS,
+    ));
+
+  const summary = {
+    websites,
+    users,
+    deadEventsDone,
+    securityRecordsDone: sessionsDone && signInsDone,
+    budgetLeft: Math.max(0, budget.left),
+  };
   console.log(JSON.stringify({ event: 'data_deletion_complete', ...summary }));
   return summary;
 }

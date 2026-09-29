@@ -48,6 +48,12 @@ export async function getUserWebsites(env: Env, userId: string) {
     .orderBy(schema.website.createdAt);
 }
 
+/** A team requiring two-factor authentication counts only once the member has enabled it. */
+const twoFactorSatisfied = or(
+  eq(schema.team.requireTwoFactor, false),
+  sql`EXISTS (SELECT 1 FROM user_two_factor tf WHERE tf.user_id = ${schema.teamUser.userId} AND tf.enabled_at IS NOT NULL)`,
+);
+
 export async function getAccessibleWebsites(env: Env, userId: string) {
   const db = createDb(env.DB);
   // Only live teams count; see canAccessWebsite for the matching per-site rule.
@@ -55,7 +61,7 @@ export async function getAccessibleWebsites(env: Env, userId: string) {
     .select({ teamId: schema.teamUser.teamId })
     .from(schema.teamUser)
     .innerJoin(schema.team, eq(schema.team.teamId, schema.teamUser.teamId))
-    .where(and(eq(schema.teamUser.userId, userId), isNull(schema.team.deletedAt)));
+    .where(and(eq(schema.teamUser.userId, userId), isNull(schema.team.deletedAt), twoFactorSatisfied));
   const teamIds = new Set(memberships.map((m) => m.teamId));
   // Sites the user created stay theirs unless they sit in a live team they are no longer in.
   const created = await getUserWebsites(env, userId);
@@ -590,6 +596,7 @@ export async function getUserTeams(env: Env, userId: string) {
       name: schema.team.name,
       accessCode: schema.team.accessCode,
       role: schema.teamUser.role,
+      requireTwoFactor: schema.team.requireTwoFactor,
       createdAt: schema.team.createdAt,
     })
     .from(schema.teamUser)
@@ -878,7 +885,8 @@ async function dbTeamIds(env: Env, userId: string) {
   const memberships = await db
     .select({ teamId: schema.teamUser.teamId })
     .from(schema.teamUser)
-    .where(eq(schema.teamUser.userId, userId));
+    .innerJoin(schema.team, eq(schema.team.teamId, schema.teamUser.teamId))
+    .where(and(eq(schema.teamUser.userId, userId), twoFactorSatisfied));
   return memberships.map((m) => m.teamId);
 }
 
@@ -1272,35 +1280,6 @@ export async function getSessionDataValues(
   sql += ` ORDER BY value LIMIT 100`;
   const rows = await env.DB.prepare(sql).bind(...binds).all<{ value: string }>();
   return (rows.results ?? []).map((r) => r.value).filter(Boolean);
-}
-
-export async function getRevenueReport(env: Env, websiteId: string, startAt: number, endAt: number) {
-  const byDay = await siteDb(env, websiteId).prepare(
-    `SELECT date(created_at / 1000, 'unixepoch') as date, currency,
-            SUM(revenue) as total, COUNT(*) as transactions
-     FROM revenue
-     WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3
-     GROUP BY date, currency
-     ORDER BY date DESC`,
-  )
-    .bind(websiteId, startAt, endAt)
-    .all<{ date: string; currency: string; total: number; transactions: number }>();
-
-  const byEvent = await siteDb(env, websiteId).prepare(
-    `SELECT event_name as eventName, currency,
-            SUM(revenue) as total, COUNT(*) as transactions
-     FROM revenue
-     WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3
-     GROUP BY event_name, currency
-     ORDER BY total DESC LIMIT 50`,
-  )
-    .bind(websiteId, startAt, endAt)
-    .all<{ eventName: string; currency: string; total: number; transactions: number }>();
-
-  return {
-    byDay: byDay.results ?? [],
-    byEvent: byEvent.results ?? [],
-  };
 }
 
 export async function getAllUsers(env: Env) {

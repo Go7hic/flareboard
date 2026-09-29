@@ -6,7 +6,6 @@ import {
   forgotPasswordSchema,
   hashPassword,
   loginSchema,
-  parseSecureToken,
   registerSchema,
   resetPasswordSchema,
   ROLES,
@@ -16,12 +15,22 @@ import {
   verifySsoToken,
 } from '@flareboard/shared';
 import type { Env } from '../env';
+import { logAdminAction } from '../lib/audit';
 import { readAuthToken } from '../lib/auth-credentials';
 import { csrfOriginAllowed } from '../lib/csrf';
-import { bumpTokenVersion, getTokenVersion, issueAuthToken } from '../lib/auth-token';
+import { bumpTokenVersion, startSession, verifySessionToken } from '../lib/auth-token';
+import { createLoginChallenge, markLoginChallengeUsed, readLoginChallenge } from '../lib/login-challenge';
+import {
+  clearPasswordFailures,
+  clearSecondFactorFailures,
+  passwordLockStatus,
+  recordPasswordFailure,
+  recordSecondFactorFailure,
+  secondFactorLockStatus,
+  type LockStatus,
+} from '../lib/login-guard';
 import {
   buildOAuthAuthorizeUrl,
-  consumeOAuthState,
   getEnabledOAuthProviders,
   handleOAuthCallbackFlow,
   isProvider,
@@ -33,20 +42,34 @@ import { getUserByEmail, getUserById, getUserByUsername } from '../lib/queries';
 import { checkIpRateLimit, getTrustedClientIp } from '../lib/rate-limit';
 import { badRequest, forbidden, getAppSecret, json, unauthorized } from '../lib/response';
 import { clearSessionCookie, setSessionCookie } from '../lib/session-cookie';
+import { countRecoveryCodes, hasTwoFactor, verifySecondFactor } from '../lib/two-factor';
+import {
+  revokeOtherUserSessions,
+  revokeUserSession,
+  summarizeUserAgent,
+  type SessionMethod,
+} from '../lib/user-sessions';
 
 type Ctx = Context<{ Bindings: Env }>;
 
 const LOGIN_LIMIT = 10;
 const LOGIN_WINDOW_SEC = 60;
-const LOGIN_ACCOUNT_LIMIT = 20;
-const LOGIN_ACCOUNT_WINDOW_SEC = 15 * 60;
 const RESET_TTL = 3600;
 const VERIFY_TTL = 86400;
+/** Generic on purpose: never reveal whether the account exists or which part was wrong. */
+const INVALID_CREDENTIALS = 'Invalid username or password';
+const CHALLENGE_EXPIRED = { code: 'challenge_expired', message: 'Your sign-in expired. Please sign in again.' };
 
 /** Returns a 429 response when the caller is over the limit, else null. */
 async function rateLimited(c: Ctx, prefix: string, limit: number, windowSec: number) {
   const rl = await checkIpRateLimit(c.env, prefix, getTrustedClientIp(c.req.raw), limit, windowSec);
   return rl.allowed ? null : json({ message: 'Too many attempts' }, 429);
+}
+
+function lockedResponse(lock: LockStatus) {
+  const response = json({ message: 'Too many login attempts. Try again later.', retryAfter: lock.retryAfterSec }, 429);
+  if (lock.retryAfterSec) response.headers.set('Retry-After', String(lock.retryAfterSec));
+  return response;
 }
 
 /** Production hosted SaaS only — local/dev skips email verification for seeded admins. */
@@ -63,17 +86,54 @@ async function resolveLoginUser(env: Env, identifier: string) {
   return null;
 }
 
+/** Compared against when the account does not exist, so both paths cost one bcrypt check. */
+let dummyPasswordHash: string | null = null;
+function checkPasswordAgainstNothing(password: string) {
+  dummyPasswordHash ??= hashPassword(crypto.randomUUID());
+  checkPassword(password, dummyPasswordHash);
+  return false;
+}
+
+/** Starts a session and records the sign-in in the account's audit log (no IP address). */
+async function signIn(c: Ctx, user: { userId: string; role: string }, method: SessionMethod, twoFactor: boolean) {
+  const session = await startSession(c, user, method);
+  await logAdminAction(c.env, user.userId, 'login', 'user', user.userId, {
+    method,
+    twoFactor,
+    device: summarizeUserAgent(c.req.header('User-Agent')),
+  });
+  return session;
+}
+
 async function respondWithSession(
   c: Ctx,
   user: { userId: string; role: string; username: string },
-  options?: { includeToken?: boolean },
+  method: SessionMethod,
+  options?: { includeToken?: boolean; twoFactor?: boolean; extra?: Record<string, unknown> },
 ) {
-  const jwt = await issueAuthToken(c, { userId: user.userId, role: user.role });
-  setSessionCookie(c, jwt);
+  const { token } = await signIn(c, user, method, Boolean(options?.twoFactor));
+  setSessionCookie(c, token);
   return json({
-    ...(options?.includeToken ? { token: jwt } : {}),
+    ...(options?.includeToken ? { token } : {}),
+    ...options?.extra,
     user: { id: user.userId, username: user.username, role: user.role },
   });
+}
+
+/**
+ * After the first factor: accounts with two-factor authentication get a short-lived challenge
+ * for POST /login/2fa instead of a session.
+ */
+async function completeFirstFactor(
+  c: Ctx,
+  user: { userId: string; role: string; username: string },
+  method: SessionMethod,
+) {
+  if (await hasTwoFactor(c.env, user.userId)) {
+    const challenge = await createLoginChallenge(c.env, getAppSecret(c), user.userId, method);
+    return json({ twoFactorRequired: true, challenge });
+  }
+  return respondWithSession(c, user, method);
 }
 
 export async function handleRegister(c: Ctx) {
@@ -138,7 +198,7 @@ export async function handleVerifyEmail(c: Ctx) {
   const user = await getUserById(c.env, userId);
   if (!user) return badRequest('User not found');
 
-  return respondWithSession(c, { userId: user.userId, role: user.role, username: user.username });
+  return completeFirstFactor(c, { userId: user.userId, role: user.role, username: user.username }, 'email');
 }
 
 export async function handleLogin(c: Ctx) {
@@ -154,38 +214,80 @@ export async function handleLogin(c: Ctx) {
     return badRequest('Invalid credentials');
   }
 
-  // Per-account cap on top of the per-IP one, so rotating IPs cannot guess one password.
-  const accountKey = parsed.data.username.trim().toLowerCase();
-  const accountRl = await checkIpRateLimit(c.env, 'login-account', accountKey, LOGIN_ACCOUNT_LIMIT, LOGIN_ACCOUNT_WINDOW_SEC);
-  if (!accountRl.allowed) {
-    return json({ message: 'Too many login attempts' }, 429);
-  }
+  // Failure lockout with backoff per account (rotating IPs cannot guess one password) and per
+  // IP (one client cannot spray many accounts). Neither key is stored in D1.
+  const secret = getAppSecret(c);
+  const identifier = parsed.data.username;
+  const lock = await passwordLockStatus(c.env, secret, identifier, ip);
+  if (lock.locked) return lockedResponse(lock);
 
-  const user = await resolveLoginUser(c.env, parsed.data.username);
-  if (!user || !checkPassword(parsed.data.password, user.password)) {
-    return unauthorized({ message: 'Invalid username or password' });
+  const user = await resolveLoginUser(c.env, identifier);
+  const valid = user ? checkPassword(parsed.data.password, user.password) : checkPasswordAgainstNothing(parsed.data.password);
+  if (!user || !valid) {
+    const after = await recordPasswordFailure(c.env, secret, identifier, ip);
+    if (user) await logAdminAction(c.env, user.userId, 'login_failed', 'user', user.userId, { reason: 'password' });
+    return after.locked ? lockedResponse(after) : unauthorized({ message: INVALID_CREDENTIALS });
   }
+  await clearPasswordFailures(c.env, secret, identifier);
 
   if (requiresEmailVerification(c.env) && user.email && !user.emailVerifiedAt) {
     return json({ message: 'Please verify your email before signing in.' }, 403);
   }
 
-  return respondWithSession(c, { userId: user.userId, role: user.role, username: user.username });
+  return completeFirstFactor(c, { userId: user.userId, role: user.role, username: user.username }, 'password');
+}
+
+/** Second step of sign-in for accounts with two-factor authentication. */
+export async function handleLoginSecondFactor(c: Ctx) {
+  const limited = await rateLimited(c, 'login-2fa', LOGIN_LIMIT, LOGIN_WINDOW_SEC);
+  if (limited) return limited;
+
+  const body = (await c.req.json().catch(() => null)) as { challenge?: unknown; code?: unknown } | null;
+  const secret = getAppSecret(c);
+  const challenge = await readLoginChallenge(c.env, secret, body?.challenge);
+  if (!challenge) return unauthorized(CHALLENGE_EXPIRED);
+  const code = typeof body?.code === 'string' ? body.code.slice(0, 64) : '';
+
+  const lock = await secondFactorLockStatus(c.env, secret, challenge.userId);
+  if (lock.locked) return lockedResponse(lock);
+
+  const factor = code ? await verifySecondFactor(c.env, secret, challenge.userId, code) : null;
+  if (!factor) {
+    const after = await recordSecondFactorFailure(c.env, secret, challenge.userId);
+    await logAdminAction(c.env, challenge.userId, 'login_failed', 'user', challenge.userId, {
+      reason: 'two_factor',
+      method: challenge.method,
+    });
+    return after.locked ? lockedResponse(after) : unauthorized({ code: 'invalid_code', message: 'Invalid code' });
+  }
+
+  await markLoginChallengeUsed(c.env, challenge.jti);
+  await clearSecondFactorFailures(c.env, secret, challenge.userId);
+  const user = await getUserById(c.env, challenge.userId);
+  if (!user) return unauthorized(CHALLENGE_EXPIRED);
+
+  let extra: Record<string, unknown> | undefined;
+  if (factor === 'recovery_code') {
+    const remaining = await countRecoveryCodes(c.env, user.userId);
+    await logAdminAction(c.env, user.userId, 'recovery_code_used', 'two_factor', user.userId, { remaining });
+    extra = { recoveryCodesRemaining: remaining };
+  }
+  return respondWithSession(c, { userId: user.userId, role: user.role, username: user.username }, challenge.method, {
+    twoFactor: true,
+    extra,
+  });
 }
 
 export async function handleLogout(c: Ctx) {
   // Cookie-authenticated POST outside jwtAuth: without this any site could sign users out.
   if (!csrfOriginAllowed(c)) return forbidden('Invalid origin');
   const token = readAuthToken(c);
-  if (token) {
-    const payload = await parseSecureToken(token, getAppSecret(c));
-    if (payload?.userId) {
-      const userId = String(payload.userId);
-      const tokenVersion = typeof payload.tv === 'number' ? payload.tv : 0;
-      if ((await getTokenVersion(c.env, userId)) === tokenVersion) {
-        await bumpTokenVersion(c.env, userId);
-      }
-    }
+  const session = token ? await verifySessionToken(c.env, token, getAppSecret(c)) : null;
+  if (session?.sessionId) {
+    await revokeUserSession(c.env, session.userId, session.sessionId);
+  } else if (session) {
+    // Tokens from before per-session revocation can only be voided all at once.
+    await bumpTokenVersion(c.env, session.userId);
   }
   clearSessionCookie(c);
   return json({ ok: true });
@@ -217,20 +319,18 @@ export async function handleSso(c: Ctx) {
   const user = await getUserById(c.env, payload.userId);
   if (!user) return unauthorized({ message: 'User not found' });
 
-  const role = user.role;
-  return respondWithSession(c, { userId: user.userId, role, username: user.username }, { includeToken: true });
+  // The SSO token is minted by a trusted system holding SSO_SECRET, which owns authentication
+  // for these users, so it is not stepped up with this account's second factor.
+  return respondWithSession(c, { userId: user.userId, role: user.role, username: user.username }, 'sso', {
+    includeToken: true,
+  });
 }
 
-/** The signed-in user for public routes (same revocation rule as jwtAuth), or null. */
+/** The signed-in user for public routes (same revocation rules as jwtAuth), or null. */
 async function currentSessionUser(c: Ctx) {
   const token = readAuthToken(c);
   if (!token) return null;
-  const payload = await parseSecureToken(token, getAppSecret(c));
-  if (!payload?.userId || !payload?.role) return null;
-  const userId = String(payload.userId);
-  const tokenVersion = typeof payload.tv === 'number' ? payload.tv : 0;
-  if ((await getTokenVersion(c.env, userId)) !== tokenVersion) return null;
-  return { userId, role: String(payload.role) };
+  return verifySessionToken(c.env, token, getAppSecret(c));
 }
 
 export async function handleVerify(c: Ctx) {
@@ -256,7 +356,8 @@ export async function handleOAuthRedirect(c: Ctx) {
   }
 
   // `?link=1` from a signed-in session attaches this provider to the current account;
-  // otherwise the callback only signs in identities that are already linked.
+  // otherwise the callback only signs in identities that are already linked (or, once,
+  // the local account with the same verified email).
   let linkUserId: string | undefined;
   if (c.req.query('link') === '1') {
     const session = await currentSessionUser(c);
@@ -292,12 +393,25 @@ export async function handleOAuthCallback(c: Ctx) {
     return c.redirect(`${dashboardBase(c)}/login?error=oauth_failed`, 302);
   }
 
-  const jwt = await issueAuthToken(c, { userId: result.user.userId, role: result.user.role });
+  const method = result.provider;
+  const user = { userId: result.user.userId, role: result.user.role };
+  if (result.linked) {
+    await logAdminAction(c.env, user.userId, 'link', 'oauth_identity', user.userId, {
+      provider: method,
+      viaVerifiedEmail: result.linked === 'email',
+    });
+  }
+  // Linking from a signed-in session already passed the second factor; sign-ins are stepped up.
+  const exchange =
+    result.linked !== 'session' && (await hasTwoFactor(c.env, user.userId))
+      ? { challenge: await createLoginChallenge(c.env, getAppSecret(c), user.userId, method) }
+      : { token: (await signIn(c, user, method, false)).token };
+
   const dest = result.returnTo ?? '/dashboard';
   // Hand the browser a short-lived one-time code, not the token itself, so the
   // JWT never lands in browser history, Referer headers, or intermediary logs.
   const exchangeCode = crypto.randomUUID().replace(/-/g, '');
-  await c.env.CACHE.put(`oauth-code:${exchangeCode}`, jwt, { expirationTtl: 60 });
+  await c.env.CACHE.put(`oauth-code:${exchangeCode}`, JSON.stringify(exchange), { expirationTtl: 60 });
   return c.redirect(
     `${dashboardBase(c)}/login?code=${encodeURIComponent(exchangeCode)}&next=${encodeURIComponent(dest)}`,
     302,
@@ -313,22 +427,31 @@ export async function handleOAuthExchange(c: Ctx) {
   if (!code) return badRequest('Missing code');
 
   const key = `oauth-code:${code}`;
-  const token = await c.env.CACHE.get(key);
-  if (!token) return unauthorized({ message: 'Invalid or expired code' });
+  const stored = await c.env.CACHE.get(key);
+  if (!stored) return unauthorized({ message: 'Invalid or expired code' });
   await c.env.CACHE.delete(key);
 
-  const payload = await parseSecureToken(token, getAppSecret(c));
-  if (!payload?.userId || !payload?.role) {
+  let exchange: { token?: unknown; challenge?: unknown };
+  try {
+    exchange = JSON.parse(stored) as typeof exchange;
+  } catch {
     return unauthorized({ message: 'Invalid or expired code' });
   }
+  if (typeof exchange.challenge === 'string') {
+    return json({ twoFactorRequired: true, challenge: exchange.challenge });
+  }
+
+  const token = typeof exchange.token === 'string' ? exchange.token : '';
+  const session = token ? await verifySessionToken(c.env, token, getAppSecret(c)) : null;
+  if (!session) return unauthorized({ message: 'Invalid or expired code' });
 
   setSessionCookie(c, token);
-  const user = await getUserById(c.env, String(payload.userId));
+  const user = await getUserById(c.env, session.userId);
   return json({
     user: {
-      id: String(payload.userId),
-      username: user?.username ?? String(payload.userId),
-      role: String(payload.role),
+      id: session.userId,
+      username: user?.username ?? session.userId,
+      role: session.role,
     },
   });
 }
@@ -374,8 +497,12 @@ export async function handleResetPassword(c: Ctx) {
     .set({ password: hashPassword(parsed.data.password), updatedAt: new Date() })
     .where(eq(schema.user.userId, userId));
 
+  // A reset signs out every device. Two-factor authentication stays on: the next sign-in
+  // still asks for the second factor.
   await bumpTokenVersion(c.env, userId);
+  await revokeOtherUserSessions(c.env, userId, null);
   await c.env.CACHE.delete(`reset:${parsed.data.token}`);
+  await logAdminAction(c.env, userId, 'password_reset', 'user', userId);
   return json({ ok: true });
 }
 
@@ -384,6 +511,7 @@ export function getAuth() {
   auth.post('/register', handleRegister);
   auth.post('/verify-email', handleVerifyEmail);
   auth.post('/login', handleLogin);
+  auth.post('/login/2fa', handleLoginSecondFactor);
   auth.post('/sso', handleSso);
   auth.post('/logout', handleLogout);
   auth.get('/verify', handleVerify);

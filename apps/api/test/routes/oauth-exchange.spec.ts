@@ -20,7 +20,7 @@ describe('oauth code exchange', () => {
 
   it('swaps a one-time code for a session cookie exactly once', async () => {
     const jwt = await createSecureToken({ userId: USER_ID, role: 'admin', tv: 0 }, env.APP_SECRET);
-    await env.CACHE.put('oauth-code:sample-code', jwt, { expirationTtl: 60 });
+    await env.CACHE.put('oauth-code:sample-code', JSON.stringify({ token: jwt }), { expirationTtl: 60 });
 
     const first = await fetchWorkerJson<{ user: { id: string; username: string } }>('/api/auth/oauth/exchange', {
       method: 'POST',

@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from 'drizzle-orm';
+import { and, count, desc, eq, or, sql, type SQL } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
 import { uuid } from '@flareboard/shared';
 import type { Env } from '../env';
@@ -64,9 +64,41 @@ export async function listAuditLog(env: Env, page: number, pageSize: number) {
 }
 
 export async function listEntityAuditLog(env: Env, entityType: string, entityId: string, page: number, pageSize: number) {
+  return listAuditLogWhere(
+    env,
+    and(eq(schema.auditLog.entityType, entityType), eq(schema.auditLog.entityId, entityId)),
+    page,
+    pageSize,
+  );
+}
+
+/**
+ * Account activity: everything recorded against the user's own account, including sign-ins
+ * and failed sign-in attempts (which are filed under the account they targeted).
+ */
+export async function listUserAuditLog(env: Env, userId: string, page: number, pageSize: number) {
+  return listAuditLogWhere(env, eq(schema.auditLog.userId, userId), page, pageSize);
+}
+
+/** Team activity: membership and settings changes, plus changes to the team's websites. */
+export async function listTeamAuditLog(env: Env, teamId: string, page: number, pageSize: number) {
+  return listAuditLogWhere(
+    env,
+    or(
+      and(eq(schema.auditLog.entityType, 'team'), eq(schema.auditLog.entityId, teamId)),
+      and(
+        eq(schema.auditLog.entityType, 'website'),
+        sql`${schema.auditLog.entityId} IN (SELECT website_id FROM website WHERE team_id = ${teamId})`,
+      ),
+    ),
+    page,
+    pageSize,
+  );
+}
+
+async function listAuditLogWhere(env: Env, where: SQL | undefined, page: number, pageSize: number) {
   const offset = (page - 1) * pageSize;
   const db = createDb(env.DB);
-  const where = and(eq(schema.auditLog.entityType, entityType), eq(schema.auditLog.entityId, entityId));
 
   const rows = await db
     .select({

@@ -17,6 +17,8 @@ export const WORKFLOW_MAX_STEPS = 20;
 export const WORKFLOW_MAX_ACTION_STEPS = 10;
 /** Longest single delay step: 7 days. */
 export const WORKFLOW_MAX_DELAY_MINUTES = 7 * 24 * 60;
+/** All delay steps of a flow together (keeps every run well inside the 90-day log retention). */
+export const WORKFLOW_MAX_TOTAL_DELAY_MINUTES = 30 * 24 * 60;
 export const WORKFLOW_MAX_HEADERS = 20;
 export const WORKFLOW_MAX_TEMPLATE_LENGTH = 10_000;
 export const WORKFLOW_MAX_EMAIL_RECIPIENTS = 5;
@@ -738,6 +740,10 @@ export const workflowStepsSchema = z
     if (actions > WORKFLOW_MAX_ACTION_STEPS) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: `At most ${WORKFLOW_MAX_ACTION_STEPS} action steps` });
     }
+    const delayMinutes = steps.reduce((sum, step) => sum + (step.type === 'delay' ? step.minutes : 0), 0);
+    if (delayMinutes > WORKFLOW_MAX_TOTAL_DELAY_MINUTES) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Delays may add up to at most 30 days' });
+    }
     const ids = new Set<string>();
     steps.forEach((step, index) => {
       if (ids.has(step.id)) {
@@ -776,6 +782,23 @@ export const createWorkflowSchema = z.object({
 export const updateWorkflowSchema = createWorkflowSchema.partial().extend({
   name: z.string().trim().min(1).max(120).optional(),
   enabled: z.boolean().optional(),
+});
+
+/** Body of POST /workflows/:id/test. `filters` / `steps` test unsaved editor state. */
+export const workflowTestRequestSchema = z.object({
+  event: z
+    .object({
+      name: z.string().trim().max(200).optional(),
+      properties: z.record(z.unknown()).optional(),
+      url: z.string().max(2000).optional(),
+      distinctId: z.string().max(200).optional(),
+    })
+    .optional(),
+  personProperties: z.record(z.unknown()).optional(),
+  filters: workflowTriggerFiltersSchema.optional(),
+  steps: workflowStepsSchema.optional(),
+  /** False renders the actions without delivering them. */
+  send: z.boolean().optional().default(false),
 });
 
 export type CreateWorkflowInput = z.infer<typeof createWorkflowSchema>;

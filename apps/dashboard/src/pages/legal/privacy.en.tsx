@@ -407,7 +407,10 @@ const sections: LegalSection[] = [
           <li>
             <strong>At your direction</strong>, for example to webhook URLs, email addresses or data sources you
             configure, or through public share links you create. Anyone with a share link can see the aggregate
-            statistics it exposes.
+            statistics it exposes. Workflows send what their templates include to the webhook, email and Slack
+            destinations the customer configures: by default the triggering event with its properties, page URL and
+            distinct ID, and the stored properties of that person. Webhook deliveries are signed so the receiver can
+            verify they came from Flareboard.
           </li>
           <li>
             <strong>For legal reasons</strong>, if required by law or a valid legal request, or to protect the
@@ -457,6 +460,11 @@ const sections: LegalSection[] = [
           <li>
             <strong>Deleting a website</strong> in the dashboard removes it from your account immediately, and all
             of its stored data, including session replay recordings, is permanently erased within 30 days.
+          </li>
+          <li>
+            <strong>Workflow execution logs</strong> (which event triggered a run, each delivery attempt, the
+            destination&apos;s response code and the first 1,000 characters of its response) are deleted after 90
+            days.
           </li>
           <li>
             <strong>Technical logs</strong> kept by our hosting provider are deleted automatically, typically within

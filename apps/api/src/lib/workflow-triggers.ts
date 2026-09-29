@@ -113,8 +113,11 @@ export async function startWorkflowExecutions(env: Env, message: WorkflowTrigger
         status === 'queued' ? null : now,
       )
       .run();
-    started += inserted.meta?.changes ? 1 : 0;
+    const fresh = Boolean(inserted.meta?.changes);
+    started += fresh ? 1 : 0;
     if (!steps?.length) continue;
+    // Redelivered message: only start the run if the first delivery did not get that far.
+    if (!fresh && env.WORKFLOW_RUNNER && (await instanceExists(env.WORKFLOW_RUNNER, executionId))) continue;
 
     if (!env.WORKFLOW_RUNNER) {
       await env.DB.prepare(
@@ -138,7 +141,7 @@ export async function startWorkflowExecutions(env: Env, message: WorkflowTrigger
     try {
       await env.WORKFLOW_RUNNER.create({ id: executionId, params });
     } catch (createError) {
-      // Redelivered message: the instance was created on the first try.
+      // Created concurrently by another delivery of the same message.
       if (await instanceExists(env.WORKFLOW_RUNNER, executionId)) continue;
       throw createError;
     }

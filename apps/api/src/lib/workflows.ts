@@ -258,28 +258,26 @@ const PURGE_BATCH = 500;
 const PURGE_ROUNDS = 10;
 
 /**
- * Hourly cron: drop executions (and their attempt logs, which hold truncated destination
- * responses) older than WORKFLOW_LOG_RETENTION_DAYS. The longest flow (20 delays of 7 days is
- * refused by the step limits long before) finishes well inside that window.
+ * Hourly cron: drop finished executions (and their attempt logs, which hold truncated
+ * destination responses) older than WORKFLOW_LOG_RETENTION_DAYS. Flows wait at most 30 days in
+ * total, so in-flight executions are skipped; one stuck in progress goes after twice the window.
  */
 export async function purgeWorkflowLogs(env: Env, now = Date.now()) {
-  const cutoff = now - WORKFLOW_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const retentionMs = WORKFLOW_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const cutoff = now - retentionMs;
   let deleted = 0;
+  // One batch is a transaction: attempts first (foreign key), then the same executions.
+  const oldest = `SELECT execution_id FROM workflow_execution
+    WHERE created_at < ?1 AND (status NOT IN ${IN_PROGRESS_STATUSES} OR created_at < ?2)
+    ORDER BY created_at, execution_id LIMIT ${PURGE_BATCH}`;
   for (let round = 0; round < PURGE_ROUNDS; round++) {
-    const ids = await env.DB.prepare(
-      `SELECT execution_id as id FROM workflow_execution WHERE created_at < ?1 ORDER BY created_at LIMIT ${PURGE_BATCH}`,
-    )
-      .bind(cutoff)
-      .all<{ id: string }>();
-    const batch = (ids.results ?? []).map((item) => item.id);
-    if (!batch.length) break;
-    const placeholders = batch.map((_, index) => `?${index + 1}`).join(', ');
     const results = await env.DB.batch([
-      env.DB.prepare(`DELETE FROM workflow_execution_attempt WHERE execution_id IN (${placeholders})`).bind(...batch),
-      env.DB.prepare(`DELETE FROM workflow_execution WHERE execution_id IN (${placeholders})`).bind(...batch),
+      env.DB.prepare(`DELETE FROM workflow_execution_attempt WHERE execution_id IN (${oldest})`).bind(cutoff, cutoff - retentionMs),
+      env.DB.prepare(`DELETE FROM workflow_execution WHERE execution_id IN (${oldest})`).bind(cutoff, cutoff - retentionMs),
     ]);
-    deleted += results[1]?.meta?.changes ?? 0;
-    if (batch.length < PURGE_BATCH) break;
+    const changes = results[1]?.meta?.changes ?? 0;
+    deleted += changes;
+    if (changes < PURGE_BATCH) break;
   }
   return deleted;
 }

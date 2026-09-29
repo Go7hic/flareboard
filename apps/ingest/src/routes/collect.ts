@@ -10,7 +10,6 @@ import {
   getSalt,
   getSecret,
   parseToken,
-  postWebhook,
   sendSchema,
   uuid,
   geoFromCf,
@@ -36,7 +35,7 @@ import { bumpRealtimeVisitor } from '../lib/realtime-kv';
 import { appendMatchedActionTags } from '../lib/actions';
 import { assertEventAllowed, recordEventUsageKv } from '../lib/hosted-limits';
 import { checkIpRateLimit, checkProjectKeyRateLimit, checkRateLimit, getTrustedClientIp } from '../lib/rate-limit';
-import { fetchApi } from '../lib/api-client';
+import { enqueueWorkflowTriggers } from '../lib/workflows';
 import { buildErrorEventDataPayload, reportPossibleRegression } from '../lib/error-tracking';
 import { resolveDistinctId } from '../lib/tracker-settings';
 import { TRACKER_SCRIPT } from '../tracker/script';
@@ -45,9 +44,6 @@ import { recordAlias } from '../lib/person-identity';
 import { resolveWebsiteRef } from '../lib/project-keys';
 
 const SEND_BODY_MAX_BYTES = 65_536;
-const WORKFLOW_DELIVERIES_PER_HOUR = 60;
-const WORKFLOW_TRIGGER_PER_IP_MIN = 30;
-const WORKFLOW_TRIGGER_PER_IP_SITE_HOUR = 10;
 
 type LogEventDataInput = {
   data?: Record<string, unknown>;
@@ -128,203 +124,6 @@ type ProcessSendOpts = {
 
 function deferWrite(waitUntil: ProcessSendOpts['waitUntil'], fn: () => Promise<void>) {
   waitUntil(fn().catch((e) => console.error('waitUntil task failed', e)));
-}
-
-export async function recordWorkflowExecutions(
-  env: Env,
-  args: {
-    websiteId: string;
-    sessionId: string;
-    visitId: string;
-    eventId: string;
-    eventName: string;
-    createdAt: number;
-    trustedIp: string;
-  },
-) {
-  const globalTrigger = await checkIpRateLimit(
-    env,
-    'workflow-trigger',
-    args.trustedIp,
-    WORKFLOW_TRIGGER_PER_IP_MIN,
-    60,
-  );
-  if (!globalTrigger.allowed) return;
-
-  const perSiteTrigger = await checkIpRateLimit(
-    env,
-    `workflow-trigger:${args.websiteId}`,
-    args.trustedIp,
-    WORKFLOW_TRIGGER_PER_IP_SITE_HOUR,
-    3600,
-  );
-  if (!perSiteTrigger.allowed) return;
-
-  const workflows = await env.DB.prepare(
-    `SELECT workflow_id as workflowId,
-            name,
-            action_type as actionType,
-            action_config as actionConfig
-     FROM workflow
-     WHERE website_id = ?1 AND enabled = 1 AND trigger_event = ?2
-     LIMIT 20`,
-  )
-    .bind(args.websiteId, args.eventName)
-    .all<{ workflowId: string; name: string; actionType: string; actionConfig: string | null }>();
-
-  for (const workflow of workflows.results ?? []) {
-    const executionId = crypto.randomUUID();
-    const actionConfig = parseWorkflowActionConfig(workflow.actionConfig);
-    let actionState: { status: 'recorded' | 'queued' | 'failed' | 'throttled'; error: string | null } =
-      getWorkflowActionState(workflow.actionType, actionConfig);
-
-    // Public event injection can trigger victim-configured webhooks/emails, so
-    // outbound deliveries are throttled per website. The execution row is
-    // still recorded (with a throttled status) for visibility.
-    if (actionState.status === 'queued') {
-      const throttle = await checkIpRateLimit(
-        env,
-        'workflow-delivery',
-        args.websiteId,
-        WORKFLOW_DELIVERIES_PER_HOUR,
-        3600,
-      );
-      if (!throttle.allowed) {
-        actionState = { status: 'throttled', error: 'Delivery throttled: website exceeded hourly workflow delivery limit' };
-      }
-    }
-
-    await env.DB.prepare(
-      `INSERT INTO workflow_execution
-       (execution_id, workflow_id, website_id, session_id, visit_id, event_id, event_name, status, error, created_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
-    )
-      .bind(
-        executionId,
-        workflow.workflowId,
-        args.websiteId,
-        args.sessionId,
-        args.visitId,
-        args.eventId,
-        args.eventName,
-        actionState.status,
-        actionState.error,
-        args.createdAt,
-      )
-      .run();
-
-    if (actionState.status !== 'queued') continue;
-
-    const delivery = await deliverWorkflowAction(env, {
-      workflowId: workflow.workflowId,
-      workflowName: workflow.name,
-      actionType: workflow.actionType,
-      actionConfig,
-      websiteId: args.websiteId,
-      sessionId: args.sessionId,
-      visitId: args.visitId,
-      eventId: args.eventId,
-      eventName: args.eventName,
-      createdAt: args.createdAt,
-    });
-
-    await env.DB.prepare(
-      `UPDATE workflow_execution
-       SET status = ?2, error = ?3
-       WHERE execution_id = ?1`,
-    )
-      .bind(executionId, delivery.status, delivery.error)
-      .run();
-  }
-}
-
-async function deliverWorkflowAction(
-  env: Env,
-  input: {
-    workflowId: string;
-    workflowName: string;
-    actionType: string;
-    actionConfig: { url?: string; email?: string };
-    websiteId: string;
-    sessionId: string;
-    visitId: string;
-    eventId: string;
-    eventName: string;
-    createdAt: number;
-  },
-): Promise<{ status: 'success' | 'failed'; error: string | null }> {
-  const payload = {
-    type: 'workflow',
-    workflowId: input.workflowId,
-    workflowName: input.workflowName,
-    websiteId: input.websiteId,
-    sessionId: input.sessionId,
-    visitId: input.visitId,
-    eventId: input.eventId,
-    eventName: input.eventName,
-    createdAt: input.createdAt,
-  };
-
-  if (input.actionType === 'webhook') {
-    const result = await postWebhook(input.actionConfig.url ?? '', payload);
-    return result.ok
-      ? { status: 'success', error: null }
-      : { status: 'failed', error: result.error ?? 'Webhook failed' };
-  }
-
-  if (input.actionType === 'email') {
-    const to = input.actionConfig.email?.trim();
-    if (!to) return { status: 'failed', error: 'Missing email recipient' };
-    const subject = `Flareboard workflow: ${input.workflowName}`;
-    const text = `Workflow ${input.workflowName} fired for event ${input.eventName} on website ${input.websiteId}.`;
-    const request = fetchApi(env, '/api/internal/deliver-email', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${env.APP_SECRET}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ to, subject, text, websiteId: input.websiteId }),
-    });
-    if (!request) return { status: 'failed', error: 'API binding / API_URL not configured' };
-    const response = await request;
-    if (!response.ok) {
-      return { status: 'failed', error: `Email delivery failed (${response.status})` };
-    }
-    return { status: 'success', error: null };
-  }
-
-  return { status: 'success', error: null };
-}
-
-function parseWorkflowActionConfig(value: string | null): { url?: string; email?: string } {
-  if (!value) return {};
-  try {
-    const parsed = JSON.parse(value);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-    return {
-      url: typeof parsed.url === 'string' ? parsed.url.trim() : '',
-      email: typeof parsed.email === 'string' ? parsed.email.trim() : '',
-    };
-  } catch {
-    return {};
-  }
-}
-
-function getWorkflowActionState(
-  actionType: string,
-  actionConfig: { url?: string; email?: string },
-): { status: 'recorded' | 'queued' | 'failed'; error: string | null } {
-  if (actionType === 'webhook') {
-    return actionConfig.url
-      ? { status: 'queued', error: null }
-      : { status: 'failed', error: 'Missing webhook URL' };
-  }
-  if (actionType === 'email') {
-    return actionConfig.email
-      ? { status: 'queued', error: null }
-      : { status: 'failed', error: 'Missing email recipient' };
-  }
-  return { status: 'recorded', error: null };
 }
 
 /**
@@ -787,15 +586,24 @@ async function processSend(
 
       if (websiteId && name) {
         defer(() =>
-          recordWorkflowExecutions(env, {
+          enqueueWorkflowTriggers(env, {
             websiteId,
-            sessionId,
-            visitId,
-            eventId,
-            eventName: name,
-            createdAt: createdAt.getTime(),
             trustedIp,
-          }),
+            events: [
+              {
+                eventId,
+                eventName: name,
+                sessionId,
+                visitId,
+                createdAt: createdAt.getTime(),
+                distinctId: id ?? null,
+                hostname: hostname || page.urlDomain,
+                urlPath: page.urlPath,
+                urlQuery: page.urlQuery,
+                properties: eventDataPayload,
+              },
+            ],
+          }).then(() => undefined),
         );
       }
 

@@ -1,7 +1,8 @@
 import { upsertPerson, upsertPersonGroupMembership } from '@flareboard/db';
 import { EVENT_TYPE, geoFromCf, uuid, visitSalt, type QueueMessage } from '@flareboard/shared';
 import type { Env } from '../../env';
-import { isBot, recordWorkflowExecutions } from '../../routes/collect';
+import { isBot } from '../../routes/collect';
+import { enqueueWorkflowTriggers, type WorkflowTriggerEvent } from '../workflows';
 import { loadWebsiteActionDefinitions, tagMatchedActions } from '../actions';
 import { recordEventUsageKv } from '../hosted-limits';
 import { recordAlias } from '../person-identity';
@@ -109,7 +110,7 @@ export async function capturePostHogEvents(input: CaptureInput): Promise<{ accep
   const aliases = new Map<string, { alias: string; canonicalDistinctId: string; seenAt: number }>();
   const memberships = new Map<string, { distinctId: string; groupType: string; groupKey: string; seenAt: number }>();
   const groupRows = new Map<string, { distinctId: string | null; createdAt: number; data: Json }>();
-  const workflowEvents: Array<{ sessionId: string; visitId: string; eventId: string; eventName: string; createdAt: number }> = [];
+  const workflowEvents: WorkflowTriggerEvent[] = [];
   let accepted = 0;
 
   const updatePerson = (distinctId: string, set: Json | undefined, setOnce: Json | undefined, seenAt: number) => {
@@ -255,7 +256,18 @@ export async function capturePostHogEvents(input: CaptureInput): Promise<{ accep
       };
     }
     if (eventType === EVENT_TYPE.customEvent && eventName) {
-      workflowEvents.push({ sessionId, visitId, eventId, eventName, createdAt: ms });
+      workflowEvents.push({
+        sessionId,
+        visitId,
+        eventId,
+        eventName,
+        createdAt: ms,
+        distinctId,
+        hostname: page.hostname || context.urlDomain || null,
+        urlPath: context.urlPath,
+        urlQuery: context.urlQuery,
+        properties: data,
+      });
     }
   }
 
@@ -301,17 +313,7 @@ export async function capturePostHogEvents(input: CaptureInput): Promise<{ accep
         ...[...sessions].map(([sessionId, session]) => () => bumpRealtimeVisitor(env, websiteId, sessionId, session.realtime)),
       ];
       if (workflowEvents.length) {
-        tasks.push(async () => {
-          const triggers = await env.DB.prepare(
-            `SELECT DISTINCT trigger_event AS name FROM workflow WHERE website_id = ?1 AND enabled = 1`,
-          )
-            .bind(websiteId)
-            .all<{ name: string }>();
-          const names = new Set((triggers.results ?? []).map((row) => row.name));
-          for (const event of workflowEvents) {
-            if (names.has(event.eventName)) await recordWorkflowExecutions(env, { websiteId, trustedIp, ...event });
-          }
-        });
+        tasks.push(() => enqueueWorkflowTriggers(env, { websiteId, trustedIp, events: workflowEvents }));
       }
       if (input.billingUserId) tasks.push(() => recordEventUsageKv(env, input.billingUserId, billable));
       for (const task of tasks) {

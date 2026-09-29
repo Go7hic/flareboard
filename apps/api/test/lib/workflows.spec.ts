@@ -77,6 +77,7 @@ describe('workflow query helpers', () => {
       lastExecutionAt: BASE + 3000,
       failures: 1,
       successes: 2,
+      inProgress: 0,
       successRate: 66.67,
       statuses: [
         { status: 'success', executions: 2, percentage: 66.67 },
@@ -174,7 +175,7 @@ describe('workflow query helpers', () => {
     expect(searchExecutions.map((execution) => execution.id)).toEqual(['workflow-filter-2']);
   });
 
-  it('counts queued workflow actions as successful executions', async () => {
+  it('counts queued executions as in progress, not as successes or in the success rate', async () => {
     await env.DB.prepare(
       `INSERT INTO workflow (workflow_id, website_id, name, trigger_event, enabled, action_type, action_config, created_at, updated_at)
        VALUES ('workflow-actions', ?1, 'Route action', 'signup', 1, 'webhook', ?2, ?3, ?3)`,
@@ -205,9 +206,10 @@ describe('workflow query helpers', () => {
 
     expect(summary).toMatchObject({
       executions: 2,
-      successes: 1,
+      successes: 0,
       failures: 1,
-      successRate: 50,
+      inProgress: 1,
+      successRate: 0,
       statuses: [
         { status: 'failed', executions: 1, percentage: 50 },
         { status: 'queued', executions: 1, percentage: 50 },

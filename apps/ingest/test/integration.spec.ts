@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from './helpers/migrations';
 import { fetchWorker, fetchWorkerJson } from './helpers/fetch-worker';
+import { fetchWorkerWithEnv, recordingQueue } from './helpers/queue';
 
 describe('ingest integration', () => {
   it('GET / returns service metadata', async () => {
@@ -133,7 +134,7 @@ describe('POST /api/send', () => {
     expect(body.cache).toBeTruthy();
   });
 
-  it('records workflow executions when an event matches an enabled workflow', async () => {
+  it('queues a workflow trigger when an event matches an enabled workflow', async () => {
     await seedTestWebsite(env.DB);
     const now = Date.now();
     await env.DB.prepare(
@@ -143,7 +144,8 @@ describe('POST /api/send', () => {
       .bind(TEST_WEBSITE_ID, now)
       .run();
 
-    const { response } = await fetchWorkerJson<{ cache?: string; sessionId?: string }>(
+    const recorder = recordingQueue();
+    const response = await fetchWorkerWithEnv(
       '/api/send',
       {
         method: 'POST',
@@ -158,23 +160,19 @@ describe('POST /api/send', () => {
           },
         }),
       },
+      { WORKFLOW_QUEUE: recorder.queue },
     );
 
     expect(response.status).toBe(200);
-    const row = await env.DB.prepare(
-      `SELECT workflow_id as workflowId, status, event_name as eventName
-       FROM workflow_execution
-       WHERE website_id = ?1 AND workflow_id = 'workflow-send-email'
-       LIMIT 1`,
-    )
-      .bind(TEST_WEBSITE_ID)
-      .first<{ workflowId: string; status: string; eventName: string }>();
-
-    expect(row).toEqual({
-      workflowId: 'workflow-send-email',
-      status: 'recorded',
-      eventName: 'checkout_completed',
-    });
+    // Executions are recorded by the API worker, which consumes this queue.
+    expect(recorder.messages).toEqual([
+      expect.objectContaining({
+        type: 'workflow_trigger',
+        websiteId: TEST_WEBSITE_ID,
+        workflowIds: ['workflow-send-email'],
+        event: expect.objectContaining({ name: 'checkout_completed', urlPath: '/checkout' }),
+      }),
+    ]);
   });
 
   it('stores identify payloads in the person table', async () => {

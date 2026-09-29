@@ -625,6 +625,7 @@ export interface WorkflowSummary {
   lastExecutionAt: number | null;
   failures: number;
   successes: number;
+  inProgress: number;
   successRate: number;
   statuses: Array<{ status: string; executions: number; percentage: number }>;
   events: Array<{ eventName: string; executions: number; lastExecutionAt: number | null }>;
@@ -637,14 +638,61 @@ export interface WorkflowSummary {
   }>;
 }
 
+export type WorkflowConditionField = 'property' | 'person' | 'path' | 'url' | 'hostname';
+export type WorkflowConditionOperator =
+  | 'equals'
+  | 'not_equals'
+  | 'contains'
+  | 'not_contains'
+  | 'starts_with'
+  | 'ends_with'
+  | 'exists'
+  | 'not_exists'
+  | 'greater_than'
+  | 'greater_than_or_equal'
+  | 'less_than'
+  | 'less_than_or_equal';
+
+export interface WorkflowCondition {
+  field: WorkflowConditionField;
+  key: string;
+  operator: WorkflowConditionOperator;
+  value: string;
+}
+
+export type WorkflowWebhookMethod = 'POST' | 'PUT' | 'PATCH' | 'GET' | 'DELETE';
+
+/** Mirrors WorkflowStep in packages/shared/src/workflow-definition.ts. */
+export type WorkflowStep =
+  | { id: string; type: 'delay'; minutes: number }
+  | { id: string; type: 'condition'; conditions: WorkflowCondition[] }
+  | {
+      id: string;
+      type: 'webhook';
+      url: string;
+      method: WorkflowWebhookMethod;
+      headers: Array<{ key: string; value: string }>;
+      body: string;
+    }
+  | { id: string; type: 'email'; to: string; subject: string; body: string }
+  | { id: string; type: 'slack'; webhookUrl: string; message: string };
+
+export type WorkflowStepType = WorkflowStep['type'];
+
 export interface Workflow {
   id: string;
   websiteId: string;
   name: string;
+  description: string;
   triggerEvent: string;
   enabled: boolean;
-  actionType: 'record' | 'webhook' | 'email';
-  actionConfig: { note?: string; url?: string; email?: string };
+  filters: WorkflowCondition[];
+  steps: WorkflowStep[];
+  stepsValid: boolean;
+  signingSecretPreview: string | null;
+  signingSecretRotatedAt?: string | number | null;
+  /** Only in the create response. */
+  signingSecret?: string;
   createdAt?: string | number;
   updatedAt?: string | number;
   summary?: WorkflowSummary;
@@ -657,15 +705,70 @@ export interface WorkflowExecution {
   visitId: string | null;
   eventId: string | null;
   eventName: string | null;
+  distinctId: string | null;
   status: string;
   error: string | null;
+  currentStep: number | null;
+  attempts: number;
+  responseCode: number | null;
+  nextRetryAt: number | null;
   createdAt: number;
+  updatedAt: number | null;
+  completedAt: number | null;
+}
+
+export interface WorkflowExecutionAttempt {
+  id: string;
+  stepIndex: number;
+  stepType: string;
+  attempt: number;
+  status: string;
+  responseCode: number | null;
+  error: string | null;
+  responseBody: string | null;
+  durationMs: number | null;
+  nextRetryAt: number | null;
+  createdAt: number;
+}
+
+export interface WorkflowExecutionDetail {
+  execution: WorkflowExecution;
+  attempts: WorkflowExecutionAttempt[];
 }
 
 export interface WorkflowExecutionsResponse {
   workflow: Workflow;
   summary: WorkflowSummary;
   executions: WorkflowExecution[];
+}
+
+export type WorkflowTestRequest =
+  | { type: 'webhook' | 'slack'; method: string; url: string; headers: Array<{ key: string; value: string }>; body: string | null }
+  | { type: 'email'; to: string[]; subject: string; text: string };
+
+export interface WorkflowTestResult {
+  matched: boolean;
+  sent: boolean;
+  steps: Array<{
+    index: number;
+    type: WorkflowStepType;
+    status: 'skipped' | 'passed' | 'stopped' | 'rendered' | 'sent' | 'failed' | 'not_reached';
+    detail: string | null;
+    request: WorkflowTestRequest | null;
+    response: { statusCode: number | null; body: string | null; durationMs: number } | null;
+    error: string | null;
+  }>;
+}
+
+export interface WorkflowSampleEvent {
+  event: {
+    name: string;
+    hostname: string | null;
+    urlPath: string | null;
+    urlQuery: string | null;
+    distinctId: string | null;
+    properties: Record<string, unknown>;
+  } | null;
 }
 
 export interface WarehouseQueryResponse {

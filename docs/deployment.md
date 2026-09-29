@@ -27,6 +27,8 @@ wrangler r2 bucket create flareboard-replays
 # Queues
 wrangler queues create flareboard-events
 wrangler queues create flareboard-events-dlq
+wrangler queues create flareboard-workflow-triggers
+wrangler queues create flareboard-workflow-triggers-dlq
 ```
 
 The DLQ is declared in `workers/aggregator/wrangler.jsonc`. Create it once before deploying the aggregator.
@@ -63,7 +65,9 @@ cd ../ingest && wrangler secret put APP_SECRET --env production
 
 Use the same `APP_SECRET` on API and ingest. Set `CORS_ORIGINS` to your dashboard origin(s), comma-separated.
 
-**Email** workflow actions go from ingest to the API's `POST /api/internal/deliver-email` over the `API` service binding in `apps/ingest/wrangler.jsonc` (`env.production.services` → `flareboard-api-production`), authenticated with the shared `APP_SECRET`. The call stays inside Cloudflare, so bot/WAF challenges on the public API host never block it. Deploy the API worker before ingest; if you rename it, update the binding. Local dev has no binding and falls back to the `API_URL` var (`http://localhost:8788`).
+**Workflows** run in the API worker. Ingest checks each named event against the enabled workflows of its website (event and URL conditions, per-IP trigger limits) and puts matches on the `flareboard-workflow-triggers` queue. The API worker consumes that queue (`queue` handler), re-checks the workflow including person-property conditions, records the execution and starts one [Cloudflare Workflows](https://developers.cloudflare.com/workflows/) instance per execution (`WORKFLOW_RUNNER` binding, class `WorkflowRunner`, workflow name `flareboard-workflow-runner-production`). The instance runs delays, condition steps and webhook / email / Slack deliveries, retrying failed deliveries up to 5 times. `wrangler deploy` creates the workflow; the two queues above must exist first. Deploy the API worker before ingest.
+
+The ingest worker still has an `API` service binding (`fetchApi`, used for error regression reports), authenticated with the shared `APP_SECRET`; local dev falls back to the `API_URL` var (`http://localhost:8788`).
 
 ## 3. Deploy workers
 
@@ -213,7 +217,7 @@ Flareboard uses Cloudflare **Email Sending** for transactional and scheduled mai
 | Register verify | `POST /api/auth/register` | Verification link emailed |
 | Forgot password | `POST /api/auth/forgot-password` | Reset link emailed |
 | Scheduled reports | Cron `0 * * * *` on API worker | Sends when each site's `timezone` local hour is 08:00 |
-| Workflow email action | Ingest → `POST /api/internal/deliver-email` | Via the ingest `API` service binding |
+| Workflow email step | `WorkflowRunner` in the API worker | Up to 5 recipients per step; counts toward the 60 deliveries/hour per website |
 
 ### Email reports checklist
 

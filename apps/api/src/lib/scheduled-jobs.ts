@@ -5,6 +5,7 @@ import { evaluateErrorAlertRules } from './errors';
 import { runScheduledEmailReports } from './email-reports';
 import { evaluateLogAlertRules } from './logs';
 import { runRetentionPurge } from './retention';
+import { purgeWorkflowLogs } from './workflows';
 import { runDueWarehouseScheduledQueries, runDueWarehouseDataSourceSyncs } from './warehouse';
 import { runDataDeletion } from './data-deletion';
 import { eventStoreMode } from './site-db';
@@ -129,8 +130,9 @@ export async function runScheduledMaintenance(env: Env, cron: string) {
   const warehouse = await runScheduledWarehouseQueries(env);
   const dataSources = await runDueWarehouseDataSourceSyncs(env);
   const retention = await runRetentionPurge(env);
+  const workflowLogs = await purgeWorkflowLogs(env);
   const deletion = await runDataDeletion(env);
   // Storage migration: while in `dual`, copy history into the website stores a few sites per tick.
   const storeBackfill = eventStoreMode(env) === 'dual' ? await runStoreBackfill(env) : null;
-  return { alerts, errorTracking, warehouse, dataSources, retention, deletion, storeBackfill };
+  return { alerts, errorTracking, warehouse, dataSources, retention, workflowLogs, deletion, storeBackfill };
 }

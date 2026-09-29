@@ -3,8 +3,6 @@ import { errorRegressionReportSchema } from '@flareboard/shared';
 import type { Env } from '../env';
 import { backfillActionTags } from '../lib/action-backfill';
 import { recordErrorIssueRegression } from '../lib/error-regressions';
-import { sendEmail } from '../lib/email';
-import { checkIpRateLimit, getTrustedClientIp } from '../lib/rate-limit';
 import { getWebsiteById } from '../lib/queries';
 import { getAppSecret, json } from '../lib/response';
 
@@ -31,41 +29,6 @@ function isAuthorized(c: { env: Env; req: { url: string } }, header: string | un
   if (!secret) return false;
   return timingSafeEqualString(header.slice('Bearer '.length), secret);
 }
-
-app.post('/deliver-email', async (c) => {
-  if (!isAuthorized(c, c.req.header('Authorization'))) {
-    return json({ error: 'Unauthorized' }, 401);
-  }
-
-  const body = await c.req.json<{ to?: string; subject?: string; text?: string; html?: string; websiteId?: string }>();
-  const to = body.to?.trim();
-  const subject = body.subject?.trim();
-  const text = body.text?.trim();
-  if (!to || !subject || !text) {
-    return json({ error: 'to, subject, and text are required' }, 400);
-  }
-
-  const websiteId = body.websiteId?.trim();
-  const rl = await checkIpRateLimit(
-    c.env,
-    'internal-email',
-    websiteId || getTrustedClientIp(c.req.raw),
-    60,
-    3600,
-  );
-  if (!rl.allowed) {
-    return json({ error: 'Rate limit exceeded' }, 429);
-  }
-
-  const ok = await sendEmail(c.env, {
-    to,
-    subject,
-    text,
-    html: body.html?.trim() || `<p>${text}</p>`,
-  });
-
-  return json({ ok });
-});
 
 app.post('/backfill-action-tags', async (c) => {
   if (!isAuthorized(c, c.req.header('Authorization'))) {

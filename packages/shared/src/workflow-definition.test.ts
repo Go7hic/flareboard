@@ -295,6 +295,13 @@ describe('workflow step validation', () => {
     expect(parsed.error?.issues.some((issue) => issue.path.includes(field))).toBe(true);
   });
 
+  it('caps the total delay of a flow at 30 days', () => {
+    const week = { type: 'delay', minutes: 7 * 24 * 60 };
+    const fourWeeks = [1, 2, 3, 4].map((n) => ({ ...week, id: `d${n}` }));
+    expect(workflowStepsSchema.safeParse(fourWeeks).success).toBe(true);
+    expect(workflowStepsSchema.safeParse([...fourWeeks, { ...week, id: 'd5' }]).success).toBe(false);
+  });
+
   it('limits steps and rejects duplicate ids', () => {
     const many = Array.from({ length: 11 }, (_, i) => ({ id: `e${i}`, type: 'email', to: 'a@example.com' }));
     expect(workflowStepsSchema.safeParse(many).success).toBe(false);

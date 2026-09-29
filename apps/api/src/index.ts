@@ -6,6 +6,7 @@ import { resolveCorsOrigin } from './lib/cors';
 import { jwtAuth, type ApiVariables } from './middleware/auth';
 import * as actions from './routes/actions';
 import * as annotations from './routes/annotations';
+import * as assistant from './routes/assistant';
 import * as apiKeys from './routes/api-keys';
 import * as billing from './routes/billing';
 import * as aiObservability from './routes/ai-observability';
@@ -21,6 +22,7 @@ import * as featureFlags from './routes/feature-flags';
 import * as groups from './routes/groups';
 import * as insights from './routes/insights';
 import * as logs from './routes/logs';
+import * as mcp from './routes/mcp';
 import * as events from './routes/events';
 import * as people from './routes/people';
 import * as sessionData from './routes/session-data';
@@ -84,7 +86,7 @@ function requirePaidFeature(field: PaidFeatureFlag, message: string) {
 app.use('*', (c, next) => {
   return cors({
     origin: (origin) => resolveCorsOrigin(c.env, origin),
-    allowHeaders: ['Content-Type', 'Authorization'],
+    allowHeaders: ['Content-Type', 'Authorization', 'MCP-Protocol-Version', 'Mcp-Session-Id'],
     credentials: true,
   })(c, next);
 });
@@ -103,6 +105,11 @@ app.get('/', (c) => json({ name: 'flareboard-api', version: '0.0.1' }));
 app.get('/api/heartbeat', (c) => json({ ok: true, service: 'flareboard-api', environment: c.env.ENVIRONMENT }));
 
 app.route('/api/internal', internalRoutes);
+
+// Model Context Protocol (Streamable HTTP). Authenticates with personal API keys itself.
+app.post('/mcp', mcp.handlePost);
+app.get('/mcp', mcp.handleMethodNotAllowed);
+app.delete('/mcp', mcp.handleMethodNotAllowed);
 
 app.get('/api/config', config.handleConfig);
 
@@ -305,6 +312,11 @@ app.get('/api/websites/:websiteId/annotations', annotations.handleList);
 app.post('/api/websites/:websiteId/annotations', annotations.handleCreate);
 app.patch('/api/websites/:websiteId/annotations/:annotationId', annotations.handleUpdate);
 app.delete('/api/websites/:websiteId/annotations/:annotationId', annotations.handleDelete);
+app.get('/api/websites/:websiteId/assistant', assistant.handleStatus);
+app.get('/api/websites/:websiteId/assistant/conversations', assistant.handleListConversations);
+app.get('/api/websites/:websiteId/assistant/conversations/:conversationId', assistant.handleGetConversation);
+app.delete('/api/websites/:websiteId/assistant/conversations/:conversationId', assistant.handleDeleteConversation);
+app.post('/api/websites/:websiteId/assistant/messages', assistant.handleAsk);
 app.get('/api/websites/:websiteId/actions', actions.handleList);
 app.post('/api/websites/:websiteId/actions', actions.handleCreate);
 app.get('/api/websites/:websiteId/actions/:actionId', actions.handleGet);

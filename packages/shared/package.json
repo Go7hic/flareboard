@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./ai": "./src/ai.ts",
     "./client": "./src/client.ts",
     "./csv": "./src/csv.ts",
     "./date-range": "./src/date-range.ts",

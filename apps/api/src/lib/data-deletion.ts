@@ -150,6 +150,10 @@ const OWNED_BY_USER = `user_id = ?1 AND (team_id IS NULL OR team_id IN (SELECT t
 
 /** Rows that cannot exist without the user (NOT NULL user_id). */
 const USER_OWNED_TABLES = [
+  // Messages reference their conversation: erase them first.
+  'ai_message',
+  'ai_conversation',
+  'ai_usage_daily',
   'annotation',
   'insight',
   'personal_api_key',

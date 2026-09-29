@@ -489,6 +489,64 @@ export const insight = sqliteTable(
   ],
 );
 
+/** "Ask Flareboard" conversations (apps/api/src/lib/assistant.ts). One owner per conversation. */
+export const aiConversation = sqliteTable(
+  'ai_conversation',
+  {
+    conversationId: text('conversation_id').primaryKey(),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.userId),
+    title: text('title').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [
+    index('ai_conversation_owner_idx').on(t.userId, t.websiteId, t.updatedAt),
+    index('ai_conversation_updated_idx').on(t.updatedAt),
+  ],
+);
+
+export const aiMessage = sqliteTable(
+  'ai_message',
+  {
+    messageId: text('message_id').primaryKey(),
+    conversationId: text('conversation_id')
+      .notNull()
+      .references(() => aiConversation.conversationId),
+    websiteId: text('website_id')
+      .notNull()
+      .references(() => website.websiteId),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.userId),
+    /** `user` | `assistant` */
+    role: text('role').notNull(),
+    /** JSON: user text, or the assistant answer with its tool calls and rendered results. */
+    content: text('content').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [index('ai_message_conversation_idx').on(t.conversationId, t.createdAt)],
+);
+
+/** Per-account daily assistant usage (hosted-mode cap). Counts only. */
+export const aiUsageDaily = sqliteTable(
+  'ai_usage_daily',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.userId),
+    day: text('day').notNull(),
+    requests: integer('requests').notNull().default(0),
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.day] })],
+);
+
 export const share = sqliteTable(
   'share',
   {

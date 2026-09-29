@@ -251,6 +251,25 @@ const sections: LegalSection[] = [
     ),
   },
   {
+    id: 'ai-features',
+    title: 'AI features',
+    body: (
+      <>
+        <p>
+          The “Ask Flareboard” assistant, where offered, sends your questions and limited query results to our AI
+          provider, as described in our <Link to="/privacy#assistant">Privacy Policy</Link>. Its answers are
+          generated automatically and may be incomplete or wrong: check important figures against your reports
+          before relying on them. Hosted plans include a daily number of assistant questions, which we may change.
+        </p>
+        <p>
+          The MCP endpoint lets AI tools you connect act with your personal API key. You are responsible for the
+          tools you connect and for the scopes you give the key; a key with the write scope lets the tool create
+          annotations and turn feature flags on or off.
+        </p>
+      </>
+    ),
+  },
+  {
     id: 'availability',
     title: 'Availability and changes',
     body: (

@@ -36,6 +36,8 @@ export interface Env {
   GITHUB_CLIENT_SECRET?: string;
   /** Public dashboard URL for password reset links (optional). */
   DASHBOARD_URL?: string;
+  /** Claude API key for the "Ask Flareboard" assistant (secret). Unset: the assistant is off. */
+  ANTHROPIC_API_KEY?: string;
   /** Stripe (hosted billing) */
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;

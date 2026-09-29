@@ -24,7 +24,7 @@ import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
 
-type ExperimentRow = {
+export type ExperimentRow = {
   experimentId: string;
   websiteId: string;
   featureFlagId: string;
@@ -48,7 +48,7 @@ type ExperimentRow = {
   flagTargetingRules?: string | null;
 };
 
-const EXPERIMENT_COLUMNS = `
+export const EXPERIMENT_COLUMNS = `
        e.experiment_id as experimentId,
        e.website_id as websiteId,
        e.feature_flag_id as featureFlagId,
@@ -128,7 +128,7 @@ function parseAllocation(value: unknown): ExperimentAllocation | null {
   });
 }
 
-function serialize(row: ExperimentRow) {
+export function serialize(row: ExperimentRow) {
   const primaryMetric = primaryMetricOf(row);
   return {
     id: row.experimentId,
@@ -216,7 +216,7 @@ function experimentWindow(row: ExperimentRow, now: number) {
   return { startAt, endAt };
 }
 
-async function computeResults(env: Env, websiteId: string, row: ExperimentRow) {
+export async function computeResults(env: Env, websiteId: string, row: ExperimentRow) {
   const now = Date.now();
   const { startAt, endAt } = experimentWindow(row, now);
   const allocation =

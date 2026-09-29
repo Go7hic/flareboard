@@ -235,6 +235,43 @@ const sections: LegalSection[] = [
     ),
   },
   {
+    id: 'assistant',
+    title: 'AI 助手与 MCP 访问',
+    body: (
+      <>
+        <p>
+          在运营方启用该功能时，控制台会提供“问问 Flareboard”，一个回答网站分析数据相关问题的助手。除非你使用，否则它不会运行；只有在你发送问题时才会工作。
+        </p>
+        <ul>
+          <li>
+            <strong>发送给 Anthropic 的内容。</strong>为了作答，我们会向 Anthropic PBC（Claude
+            模型的提供方）发送：你的问题、同一对话中最多最近 12
+            条消息、网站的名称、域名和时区，以及助手为你运行的查询结果。这些结果有大小上限（每次查询最多 100
+            行，字符数也有上限），可能包含事件名称、页面 URL、属性值等分析数据；在问题需要时，还可能包含网站记录的用户标识、邮箱地址或姓名。助手只运行只读查询，无法修改你的数据。
+          </li>
+          <li>
+            <strong>Anthropic 如何使用这些数据。</strong>Anthropic
+            作为我们的次级处理者处理这些数据以生成回答，受其商业条款约束，该条款不允许其使用 API 数据训练模型。Anthropic
+            可能会出于信任与安全目的，在有限期限内保留 API 的输入和输出。
+          </li>
+          <li>
+            <strong>我们存储的内容。</strong>你的问题和助手的回答（及其展示的图表和表格）会按网站保存在你的账户中，仅你本人可见。我们还会统计每个账户每天的提问次数和使用的 token
+            数量，用于执行用量限制。我们不会将问题或回答写入日志。
+          </li>
+          <li>
+            <strong>保留期限。</strong>你可以随时在助手面板中删除对话。连续 90
+            天无活动的对话会被自动删除，所有对话都会随网站或你的账户一并清除。
+          </li>
+          <li>
+            <strong>MCP 访问。</strong>你可以使用个人 API 密钥，通过我们的 Model Context Protocol 端点将 AI
+            工具（例如 Claude Desktop、Claude Code 或 Cursor）连接到 Flareboard。这些工具读取的数据会发送给你所选择的工具和 AI
+            提供方，受其条款而非我们的条款约束。通过 MCP 进行的更改（注释、功能开关切换）会记录在审计日志中。
+          </li>
+        </ul>
+      </>
+    ),
+  },
+  {
     id: 'legal-bases',
     title: '法律依据（欧洲经济区和英国）',
     body: (
@@ -351,6 +388,13 @@ const sections: LegalSection[] = [
                 <td>请求中包含的你的 IP 地址和浏览器信息</td>
               </tr>
               <tr>
+                <td>Anthropic PBC</td>
+                <td>
+                  “问问 Flareboard”助手的回答，仅在你使用时（见<a href="#assistant">AI 助手</a>）
+                </td>
+                <td>你的问题、近期对话消息，以及有大小上限的网站查询结果</td>
+              </tr>
+              <tr>
                 <td>favicon.so</td>
                 <td>在控制台中显示每个网站的图标</td>
                 <td>你添加的网站域名，以及请求中包含的你的 IP 地址</td>
@@ -415,6 +459,9 @@ const sections: LegalSection[] = [
           </li>
           <li>
             <strong>工作流执行日志</strong>（触发运行的事件、每次投递尝试、目标返回的状态码及其响应的前 1,000 个字符）在 90 天后删除。
+          </li>
+          <li>
+            <strong>助手对话</strong>保留至你将其删除；连续 90 天无活动时，或随网站或你的账户一并，会被自动删除。
           </li>
           <li>
             <strong>技术日志</strong>由我们的托管服务商自动删除，通常在 7 天内。

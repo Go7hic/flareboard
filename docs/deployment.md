@@ -60,6 +60,7 @@ cd apps/api && wrangler secret put GITHUB_CLIENT_ID --env production
 cd apps/api && wrangler secret put GITHUB_CLIENT_SECRET --env production
 cd apps/api && wrangler secret put DASHBOARD_URL --env production
 cd apps/api && wrangler secret put CORS_ORIGINS --env production   # e.g. https://dashboard.your-domain.com
+cd apps/api && wrangler secret put ANTHROPIC_API_KEY --env production   # optional, enables the Ask Flareboard assistant (docs/mcp.md)
 cd ../ingest && wrangler secret put APP_SECRET --env production
 ```
 

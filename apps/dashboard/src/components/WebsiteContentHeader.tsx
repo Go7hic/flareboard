@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { t } from '../lib/i18n';
@@ -6,7 +7,7 @@ import { WebsiteSwitcher } from './WebsiteSwitcher';
 
 const OVERVIEW_PATH = '/dashboard';
 
-export function WebsiteContentHeader() {
+export function WebsiteContentHeader({ actions }: { actions?: ReactNode }) {
   const navigate = useNavigate();
 
   function goBack() {
@@ -40,6 +41,7 @@ export function WebsiteContentHeader() {
         </button>
       </div>
       <WebsiteSwitcher />
+      {actions ? <div className="website-content-actions">{actions}</div> : null}
     </div>
   );
 }

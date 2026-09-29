@@ -29,6 +29,14 @@ function isOwnSecurityPath(path: string) {
 }
 
 /**
+ * The assistant only reads analytics; asking and deleting one's own conversations is not a
+ * change to the website, so view-only accounts may use it.
+ */
+function isOwnAssistantWrite(path: string) {
+  return /^\/api\/websites\/[^/]+\/assistant\/(messages|conversations\/[^/]+)$/.test(path);
+}
+
+/**
  * Credential and account management needs a signed-in session: a leaked personal API key must
  * not be able to mint more keys, change the password, turn off two-factor authentication,
  * revoke sessions or delete the account.
@@ -103,7 +111,8 @@ export const jwtAuth = createMiddleware<{ Bindings: Env; Variables: ApiVariables
     MUTATING_METHODS.has(c.req.method) &&
     (role === ROLES.viewOnly || role === ROLES.teamViewOnly) &&
     !isPasswordUpdate(c.req.path, c.req.method) &&
-    !isOwnSecurityPath(c.req.path)
+    !isOwnSecurityPath(c.req.path) &&
+    !isOwnAssistantWrite(c.req.path)
   ) {
     return forbidden('Read-only access');
   }

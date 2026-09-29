@@ -8,6 +8,7 @@ import { runRetentionPurge } from './retention';
 import { purgeWorkflowLogs } from './workflows';
 import { runDueWarehouseScheduledQueries, runDueWarehouseDataSourceSyncs } from './warehouse';
 import { runDataDeletion } from './data-deletion';
+import { pruneIdleConversations } from './assistant';
 import { eventStoreMode } from './site-db';
 import { runStoreBackfill } from './store-backfill';
 import { migrateInlineSourceMapsToR2 } from './source-maps';
@@ -132,7 +133,11 @@ export async function runScheduledMaintenance(env: Env, cron: string) {
   const retention = await runRetentionPurge(env);
   const workflowLogs = await purgeWorkflowLogs(env);
   const deletion = await runDataDeletion(env);
+  const assistantPruned = await pruneIdleConversations(env).catch((error: unknown) => {
+    console.error(JSON.stringify({ event: 'assistant_prune_failed', error: error instanceof Error ? error.name : 'unknown' }));
+    return 0;
+  });
   // Storage migration: while in `dual`, copy history into the website stores a few sites per tick.
   const storeBackfill = eventStoreMode(env) === 'dual' ? await runStoreBackfill(env) : null;
-  return { alerts, errorTracking, warehouse, dataSources, retention, workflowLogs, deletion, storeBackfill };
+  return { alerts, errorTracking, warehouse, dataSources, retention, workflowLogs, deletion, assistantPruned, storeBackfill };
 }

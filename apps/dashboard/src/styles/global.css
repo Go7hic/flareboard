@@ -8862,16 +8862,18 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 }
 
 /* Replay player (components/ReplayPlayer.tsx) */
+/* Wraps by the panel's width, not the viewport's: the timeline drops below a narrow player. */
 .replay-player {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+  display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
-  align-items: start;
+  align-items: flex-start;
 }
 
 .replay-player-main {
   display: grid;
   gap: 0.5rem;
+  flex: 999 1 360px;
   min-width: 0;
 }
 
@@ -9009,6 +9011,7 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 .replay-timeline {
   display: grid;
   gap: 0.5rem;
+  flex: 1 1 240px;
   min-width: 0;
 }
 
@@ -9129,12 +9132,6 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 1.5rem;
-}
-
-@media (max-width: 960px) {
-  .replay-player {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 /* Boards grid */

@@ -266,6 +266,13 @@ const sections: LegalSection[] = [
             messages with the data customers attach.
           </li>
           <li>
+            <strong>OpenTelemetry logs and traces</strong> that customers send from their own servers and apps:
+            timestamps, severity, the log message, service name, version and environment, trace and span ids, span
+            names and durations, and the attributes the customer&apos;s software attaches, which can include
+            identifiers such as a session or user id. A session id links a log line or trace to that session and its
+            replay. Flareboard does not add IP addresses to these records; attribute counts and sizes are capped.
+          </li>
+          <li>
             <strong>Survey responses</strong>, including free-text answers visitors choose to submit. If a visitor
             closes a multi-question survey part-way, the answers already given are kept as a partial response.
             Customers can also share a hosted survey link that works without the tracking script. Answers sent there
@@ -584,6 +591,10 @@ const sections: LegalSection[] = [
             the data source or the website; the per-website retention period does not apply to it. Deleting a data
             source erases what it imported and its stored API key right away. Replacing a Stripe API key erases the
             data imported with the old key.
+          </li>
+          <li>
+            <strong>OpenTelemetry logs and traces</strong> are deleted automatically after 30 days, or sooner when the
+            website&apos;s retention period is shorter. Records older than 30 days are not accepted.
           </li>
           <li>
             <strong>Deleting a website</strong> in the dashboard removes it from your account immediately, and all

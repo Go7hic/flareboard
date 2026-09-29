@@ -76,7 +76,7 @@ function contextDisplay(item: SessionContextItem) {
   return { title: builtin, properties: selector };
 }
 
-function sourcePath(websiteId: string | undefined, source: SessionContextItem['source']) {
+function sourcePath(websiteId: string | undefined, source: SessionContextItem['source'], sessionId?: string) {
   if (!websiteId || !source) return null;
   if (source.module === 'feature_flags') {
     return `/websites/${websiteId}/feature-flags${
@@ -84,7 +84,9 @@ function sourcePath(websiteId: string | undefined, source: SessionContextItem['s
     }`;
   }
   if (source.module === 'errors') return `/websites/${websiteId}/errors`;
-  if (source.module === 'logs') return `/websites/${websiteId}/logs`;
+  if (source.module === 'logs') {
+    return `/websites/${websiteId}/logs${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''}`;
+  }
   if (source.module === 'ai_observability') return `/websites/${websiteId}/ai-observability`;
   if (source.module === 'surveys') {
     return `/websites/${websiteId}/surveys${source.id ? `?survey=${encodeURIComponent(source.id)}` : ''}`;
@@ -182,8 +184,8 @@ export default function SessionDetailPage() {
                     <span>{formatDateTime(item.createdAt)}</span>
                   </div>
                 </div>
-                {sourcePath(websiteId, item.source) ? (
-                  <Link to={sourcePath(websiteId, item.source)!} className="inline-link session-context-source">
+                {sourcePath(websiteId, item.source, sessionId) ? (
+                  <Link to={sourcePath(websiteId, item.source, sessionId)!} className="inline-link session-context-source">
                     {t('viewSource')}
                     <ExternalLink size={12} strokeWidth={2} aria-hidden />
                   </Link>

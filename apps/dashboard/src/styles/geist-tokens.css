@@ -146,6 +146,13 @@
   --chart-4: var(--geist-purple-700);
   --chart-5: var(--geist-pink-700);
   --chart-6: var(--geist-teal-700);
+  /* Log severities (logs explorer histogram and legend). */
+  --chart-severity-trace: var(--chart-6);
+  --chart-severity-debug: var(--chart-4);
+  --chart-severity-info: var(--chart-1);
+  --chart-severity-warn: var(--geist-amber-700);
+  --chart-severity-error: var(--geist-red-700);
+  --chart-severity-fatal: var(--chart-5);
   --chart-pageviews: var(--chart-1);
   --chart-visitors: var(--chart-2);
   --chart-visits: var(--chart-3);
@@ -312,6 +319,13 @@
   --chart-4: var(--geist-purple-700);
   --chart-5: var(--geist-pink-700);
   --chart-6: var(--geist-teal-700);
+  /* Log severities (logs explorer histogram and legend). */
+  --chart-severity-trace: var(--chart-6);
+  --chart-severity-debug: var(--chart-4);
+  --chart-severity-info: var(--chart-1);
+  --chart-severity-warn: var(--geist-amber-700);
+  --chart-severity-error: var(--geist-red-700);
+  --chart-severity-fatal: var(--chart-5);
   --chart-pageviews: var(--chart-1);
   --chart-visitors: var(--chart-2);
   --chart-visits: var(--chart-3);

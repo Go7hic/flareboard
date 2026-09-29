@@ -14,6 +14,7 @@ import {
   handleRemoteConfig as handlePostHogRemoteConfig,
   handleRemoteConfigJs as handlePostHogRemoteConfigJs,
 } from './routes/posthog';
+import { handleOtlpLogs, handleOtlpTraces } from './routes/otlp';
 import { json } from './lib/response';
 
 export { RateLimiter } from '@flareboard/rate-limiter';
@@ -24,7 +25,7 @@ app.use(
   '*',
   cors({
     origin: '*',
-    allowHeaders: ['Content-Type', 'Authorization', 'x-flareboard-cache'],
+    allowHeaders: ['Content-Type', 'Content-Encoding', 'Authorization', 'x-flareboard-cache', 'x-flareboard-key'],
     maxAge: 86400,
   }),
 );
@@ -59,6 +60,9 @@ for (const path of ['/decide', '/flags']) {
   app.post(path, (c) => handlePostHogFlags(c));
   app.post(`${path}/`, (c) => handlePostHogFlags(c));
 }
+// OpenTelemetry (OTLP/HTTP) logs and traces, docs/logs-otlp.md.
+app.post('/v1/logs', (c) => handleOtlpLogs(c));
+app.post('/v1/traces', (c) => handleOtlpTraces(c));
 app.get('/array/:token/config', (c) => handlePostHogRemoteConfig(c));
 app.get('/array/:token/config.js', (c) => handlePostHogRemoteConfigJs(c));
 app.get('/api/tracker-config', (c) => handleTrackerConfig(c));

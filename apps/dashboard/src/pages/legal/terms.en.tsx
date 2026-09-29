@@ -131,7 +131,7 @@ const sections: LegalSection[] = [
             electronic communications and consumer protection laws.
           </li>
           <li>
-            Not sending us sensitive data through custom events, user properties, logs, errors or session replay,
+            Not sending us sensitive data through custom events, user properties, logs, traces, errors or session replay,
             including passwords, payment card numbers, government identification numbers, health data, other
             special categories of personal data, or data about children under 16.
           </li>

@@ -7,10 +7,11 @@ import type { Env } from '../env';
  * website's `EventStore` Durable Object (hosted by the API worker, bound via `script_name`).
  */
 export function siteDb(env: Env, websiteId: string): D1Database {
-  return eventStoreMode(env) === 'do' ? siteStore(env, websiteId) : env.DB;
+  return eventStoreMode(env) === 'do' ? siteStoreDb(env, websiteId) : env.DB;
 }
 
-function siteStore(env: Env, websiteId: string): D1Database {
+/** The website's store regardless of mode (tables that exist only there, such as OTLP logs). */
+export function siteStoreDb(env: Env, websiteId: string): D1Database {
   if (!env.SITE_STORE) throw new Error('SITE_STORE binding is missing');
   const stub = env.SITE_STORE.get(env.SITE_STORE.idFromName(siteStoreName(websiteId)));
   return createSiteDatabase(stub as unknown as SiteStoreRpc, websiteId);
@@ -22,11 +23,11 @@ function siteStore(env: Env, websiteId: string): D1Database {
  */
 export async function writeSiteTables<T>(env: Env, websiteId: string, write: (db: D1Database) => Promise<T>): Promise<T> {
   const mode = eventStoreMode(env);
-  if (mode === 'do') return write(siteStore(env, websiteId));
+  if (mode === 'do') return write(siteStoreDb(env, websiteId));
   const result = await write(env.DB);
   if (mode === 'dual') {
     try {
-      await write(siteStore(env, websiteId));
+      await write(siteStoreDb(env, websiteId));
     } catch (error) {
       console.error(
         JSON.stringify({

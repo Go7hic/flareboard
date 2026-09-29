@@ -9,6 +9,7 @@ export * from './feature-flag-evaluator';
 export * from './feature-flag-config';
 export * from './flag-hash';
 export * from './action-evaluator';
+export * from './workflow-definition';
 export * from './geoip';
 export * from './crypto';
 export * from './jwt';

@@ -12,7 +12,7 @@
   },
   "vars": {
     "ENVIRONMENT": "development",
-    // Local fallback for email workflow actions; production uses the `API` service binding.
+    // Local fallback for fetchApi (src/lib/api-client.ts); production uses the `API` service binding.
     "API_URL": "http://localhost:8788"
   },
   "dev": {
@@ -37,6 +37,11 @@
       {
         "binding": "EVENT_QUEUE",
         "queue": "flareboard-events"
+      },
+      {
+        // Workflow triggers, consumed and executed by the API worker.
+        "binding": "WORKFLOW_QUEUE",
+        "queue": "flareboard-workflow-triggers"
       }
     ]
   },
@@ -74,7 +79,7 @@
         "ENVIRONMENT": "production",
         "HOSTED_MODE": "true"
       },
-      // Workflow email actions call the API worker in-network (no public hop, no WAF challenge).
+      // fetchApi calls the API worker in-network (no public hop, no WAF challenge).
       "services": [
         {
           "binding": "API",
@@ -100,6 +105,10 @@
           {
             "binding": "EVENT_QUEUE",
             "queue": "flareboard-events"
+          },
+          {
+            "binding": "WORKFLOW_QUEUE",
+            "queue": "flareboard-workflow-triggers"
           }
         ]
       },

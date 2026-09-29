@@ -18,3 +18,4 @@ export * from './jwt';
 export * from './password';
 export * from './schemas';
 export * from './sso';
+export * from './surveys';

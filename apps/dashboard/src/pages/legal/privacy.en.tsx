@@ -225,7 +225,11 @@ const sections: LegalSection[] = [
             messages with the data customers attach.
           </li>
           <li>
-            <strong>Survey responses</strong>, including free-text answers visitors choose to submit.
+            <strong>Survey responses</strong>, including free-text answers visitors choose to submit. If a visitor
+            closes a multi-question survey part-way, the answers already given are kept as a partial response.
+            Customers can also share a hosted survey link that works without the tracking script. Answers sent there
+            are stored the same way, together with any identifier the customer adds to the link, and the page
+            remembers in the browser&apos;s <code>localStorage</code> that the survey was answered.
           </li>
           <li>
             <strong>AI usage data</strong>: model, token counts, cost and latency. Prompts and responses are only

@@ -165,11 +165,16 @@ Saved insights are the PostHog-style analysis layer used by the dashboard and bo
 | GET | `/api/websites/:websiteId/surveys/feedback` | Bearer |
 | PATCH/DELETE | `/api/websites/:websiteId/surveys/:surveyId` | Bearer |
 | GET | `/api/websites/:websiteId/surveys/:surveyId/responses` | Bearer |
+| GET | `/api/websites/:websiteId/surveys/:surveyId/export` | Bearer |
 | GET/POST | `/api/websites/:websiteId/workflows` | Bearer |
 | PATCH/DELETE | `/api/websites/:websiteId/workflows/:workflowId` | Bearer |
 | GET | `/api/websites/:websiteId/workflows/:workflowId/executions` | Bearer |
 
-Public survey responses are collected by the ingest worker at `POST /api/surveys/response`.
+Surveys hold up to 10 `questions` with branching, plus targeting (`sampleRate`, `responseLimit`, `startsAt`, `endsAt`, `repeatIntervalDays`), hosting (`hostedEnabled`, `slug`) and `appearance`; see `packages/shared/src/survey-flow.ts`. The single-question fields (`question`, `type`, `options`) are still accepted and mirror the first question.
+
+`…/responses` and `…/export` accept `startAt` / `endAt` (ms), `status` (`complete` | `partial`), `q` and `path`. `…/responses` returns `results` (per-question distributions, NPS, choice counts, text answers with sentiment, drop-off and a daily trend) and the latest 100 responses; `…/export` returns CSV with one column per question.
+
+Public survey responses are collected by the ingest worker at `POST /api/surveys/response` (see [ingest.md](./ingest.md#surveys)).
 
 ## Quality and observability
 

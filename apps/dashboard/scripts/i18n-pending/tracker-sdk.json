@@ -1,0 +1,14 @@
+{
+  "ja-JP": {
+    "homeFactScriptValue": "約 12 KB",
+    "homeFaqA2": "トラッカーは gzip 圧縮で約 12 KB。defer で読み込み、keepalive リクエストでイベントを送信するため、クリティカルレンダリングパスを妨げません。"
+  },
+  "de-DE": {
+    "homeFactScriptValue": "~12 KB",
+    "homeFaqA2": "Der Tracker ist gzip-komprimiert etwa 12 KB groß, lädt mit defer und sendet Events per keepalive-Request, sodass er deinen kritischen Rendering-Pfad nicht blockiert."
+  },
+  "fr-FR": {
+    "homeFactScriptValue": "~12 Ko",
+    "homeFaqA2": "Le tracker pèse environ 12 Ko compressé en gzip, se charge avec defer et envoie les événements via des requêtes keepalive : il reste hors de votre chemin de rendu critique."
+  }
+}

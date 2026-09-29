@@ -49,11 +49,26 @@ export class FakeText extends FakeNode {
   }
 }
 
+/** The element that last received focus (document.activeElement). */
+let focusedElement: FakeElement | null = null;
+
 export class FakeElement extends FakeNode {
   readonly tagName: string;
   attributes: Array<{ name: string; value: string }> = [];
   style: Record<string, string> = {};
   onclick: (() => void) | null = null;
+  oninput: (() => void) | null = null;
+  onkeydown: ((event: { key: string }) => void) | null = null;
+  checked = false;
+  value = '';
+  type = '';
+  focus() {
+    focusedElement = this;
+  }
+  contains(node: unknown): boolean {
+    for (let n = node as FakeNode | null; n; n = n.parentElement) if (n === this) return true;
+    return false;
+  }
   constructor(tag: string) {
     super(1);
     this.tagName = tag.toUpperCase();
@@ -156,6 +171,8 @@ export type BrowserOptions = {
   config?: TrackerConfig | Promise<TrackerConfig | null> | null;
   /** Results for /api/feature-flags/evaluate. */
   evaluate?: Record<string, string | boolean>;
+  /** prefers-color-scheme: dark. */
+  prefersDark?: boolean;
   /** Pre-existing window.flareboard (e.g. the @flareboard/js stub with a _q queue). */
   preload?: Record<string, unknown>;
   beacon?: boolean;
@@ -182,6 +199,8 @@ export function defaultConfig(overrides: TrackerConfig = {}): TrackerConfig {
 }
 
 export function createBrowser(options: BrowserOptions = {}) {
+  focusedElement = null;
+  const opened: Array<[string, string, string]> = [];
   const url = new URL(options.url ?? 'https://shop.example.test/pricing');
   const location = {
     get href() {
@@ -227,6 +246,7 @@ export function createBrowser(options: BrowserOptions = {}) {
   const documentHeight = options.documentHeight ?? 2000;
   const document = Object.assign(new Emitter(), {
     currentScript: script as FakeElement | null,
+    activeElement: null as FakeElement | null,
     title: options.title ?? 'Pricing',
     referrer: '',
     visibilityState: 'visible' as 'visible' | 'hidden',
@@ -246,6 +266,7 @@ export function createBrowser(options: BrowserOptions = {}) {
     },
     querySelector: () => script,
   });
+  Object.defineProperty(document, 'activeElement', { get: () => focusedElement });
 
   const windowEmitter = new Emitter();
   const window = Object.assign(windowEmitter, {
@@ -261,6 +282,12 @@ export function createBrowser(options: BrowserOptions = {}) {
     localStorage,
     sessionStorage,
     crypto: globalThis.crypto,
+    opened,
+    open(target: string, name: string, features: string) {
+      opened.push([target, name, features]);
+      return null;
+    },
+    matchMedia: (query: string) => ({ matches: query.includes('dark') && options.prefersDark === true }),
     flareboard: options.preload as unknown,
     Flareboard: undefined as unknown,
   });
@@ -321,7 +348,8 @@ export function createBrowser(options: BrowserOptions = {}) {
       sendCount++;
       return response(200, { cache: `cache-${sendCount}`, sessionId: 'session-1', visitId: 'visit-1' });
     }
-    requests.push({ url: target });
+    requests.push({ url: target, body: init?.body ? JSON.parse(init.body) : undefined });
+    if (target.endsWith('/api/surveys/response')) return response(200, { ok: true });
     return response(404, {});
   };
 

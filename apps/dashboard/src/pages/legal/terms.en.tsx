@@ -56,6 +56,12 @@ const sections: LegalSection[] = [
           account and for the actions of any team members you invite.
         </li>
         <li>
+          If you turn on two-factor authentication, keep your recovery codes somewhere safe. If you lose both your
+          authenticator and your recovery codes we may be unable to restore access, and we may ask for proof that
+          the account is yours before we try. Team owners can require two-factor authentication for their team;
+          members who have not turned it on cannot use the team’s resources until they do.
+        </li>
+        <li>
           Tell us promptly at <Mail /> if you believe your account has been compromised.
         </li>
       </ul>

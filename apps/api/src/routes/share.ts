@@ -22,6 +22,7 @@ import {
   getWebsiteById,
   getWebsiteStats,
 } from '../lib/queries';
+import { logAdminAction } from '../lib/audit';
 import { badRequest, json, notFound } from '../lib/response';
 import { runInsightQuery } from '../lib/insights';
 import { InsightQueryError } from '../lib/property-filters';
@@ -104,6 +105,12 @@ export async function handleCreate(c: Ctx) {
   });
 
   const rows = await db.select().from(schema.share).where(eq(schema.share.shareId, shareId)).limit(1);
+  // metadata.websiteId lets the website purge erase this entry with the website.
+  await logAdminAction(c.env, c.get('user').userId, 'create', 'share', shareId, {
+    websiteId: website.websiteId,
+    name: rows[0]!.name,
+    expiresAt: rows[0]!.expiresAt ?? null,
+  });
   return json(serializeShare(rows[0]!), 201);
 }
 

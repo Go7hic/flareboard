@@ -49,6 +49,8 @@ export const team = sqliteTable(
     name: text('name').notNull(),
     accessCode: text('access_code').unique(),
     logoUrl: text('logo_url'),
+    /** Members without two-factor authentication lose access to the team until they enroll. */
+    requireTwoFactor: integer('require_two_factor', { mode: 'boolean' }).notNull().default(false),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
     deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
@@ -365,6 +367,50 @@ export const userOauthIdentity = sqliteTable(
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   },
   (t) => [primaryKey({ columns: [t.provider, t.providerUserId] }), index('user_oauth_identity_user_idx').on(t.userId)],
+);
+
+/** TOTP second factor. The secret is AES-GCM encrypted; `enabledAt` is null while enrollment is pending. */
+export const userTwoFactor = sqliteTable('user_two_factor', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => user.userId),
+  secretEnc: text('secret_enc').notNull(),
+  enabledAt: integer('enabled_at', { mode: 'timestamp_ms' }),
+  /** Last accepted TOTP time step, so a code cannot be replayed within its window. */
+  lastUsedStep: integer('last_used_step'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+/** One-time recovery codes, stored only as HMAC-SHA256 hashes and deleted when used. */
+export const userRecoveryCode = sqliteTable(
+  'user_recovery_code',
+  {
+    codeHash: text('code_hash').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.userId),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [index('user_recovery_code_user_idx').on(t.userId)],
+);
+
+/** Dashboard sign-in session (`sid` in the session token). No IP address or full user agent. */
+export const userSession = sqliteTable(
+  'user_session',
+  {
+    sessionId: text('session_id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.userId),
+    /** Coarse summary such as "Chrome on macOS". */
+    device: text('device'),
+    /** How the session was started: password, google, github, sso, email. */
+    method: text('method').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [index('user_session_user_idx').on(t.userId), index('user_session_expires_idx').on(t.expiresAt)],
 );
 
 /** Personal API key (`fb_sk_…`): stored as a SHA-256 hash plus a display prefix, never in full. */

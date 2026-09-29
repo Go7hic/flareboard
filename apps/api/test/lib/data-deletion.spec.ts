@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ENTITY_TYPE, ROLES } from '@flareboard/shared';
-import { DELETION_GRACE_DAYS, runDataDeletion, websiteScopedTables } from '../../src/lib/data-deletion';
+import { DELETION_GRACE_DAYS, runDataDeletion, SIGN_IN_RECORD_DAYS, websiteScopedTables } from '../../src/lib/data-deletion';
 import { applyTestMigrations } from '../helpers/migrations';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -219,6 +219,37 @@ describe('scheduled data deletion', () => {
     );
 
     await run(
+      `INSERT INTO user_two_factor (user_id, secret_enc, enabled_at, created_at) VALUES (?1, 'sealed', ?2, ?2)`,
+      GONE_USER,
+      LONG_AGO,
+    );
+    await run(`INSERT INTO user_recovery_code (code_hash, user_id, created_at) VALUES ('dd-code-hash', ?1, ?2)`, GONE_USER, LONG_AGO);
+    await run(
+      `INSERT INTO user_session (session_id, user_id, device, method, created_at, last_seen_at, expires_at)
+       VALUES ('dd-session', ?1, 'Chrome on macOS', 'password', ?2, ?2, ?3)`,
+      GONE_USER,
+      LONG_AGO,
+      NOW + 86_400_000,
+    );
+    // Security records of a live user: an expired session and a sign-in older than the retention.
+    await run(
+      `INSERT INTO user_session (session_id, user_id, device, method, created_at, last_seen_at, expires_at)
+       VALUES ('dd-session-expired', ?1, NULL, 'password', ?2, ?2, ?2), ('dd-session-live', ?1, NULL, 'password', ?3, ?3, ?4)`,
+      TEAMMATE,
+      LONG_AGO,
+      RECENT,
+      NOW + 86_400_000,
+    );
+    await run(
+      `INSERT INTO audit_log (id, user_id, action, entity_type, entity_id, created_at) VALUES
+       ('dd-signin-old', ?1, 'login_failed', 'user', ?1, ?2), ('dd-signin-new', ?1, 'login', 'user', ?1, ?3),
+       ('dd-other-old', ?1, 'enable', 'two_factor', ?1, ?2)`,
+      TEAMMATE,
+      NOW - (SIGN_IN_RECORD_DAYS + 1) * 86_400_000,
+      RECENT,
+    );
+
+    await run(
       `INSERT INTO dead_event (dead_event_id, queue, payload_json, created_at) VALUES ('dd-dead-old', 'q', '{}', ?1), ('dd-dead-new', 'q', '{}', ?2)`,
       LONG_AGO,
       RECENT,
@@ -271,9 +302,29 @@ describe('scheduled data deletion', () => {
     expect(await count(`SELECT COUNT(*) AS n FROM link_pixel_hit WHERE source_id = 'dd-link'`)).toBe(0);
     expect(await count(`SELECT COUNT(*) AS n FROM board WHERE board_id = 'dd-board-own'`)).toBe(0);
     expect(await count(`SELECT COUNT(*) AS n FROM share WHERE share_id = 'dd-board-share'`)).toBe(0);
-    for (const table of ['insight', 'user_subscription', 'user_oauth_identity', 'audit_log', 'team_user', 'personal_api_key']) {
+    for (const table of [
+      'insight',
+      'user_subscription',
+      'user_oauth_identity',
+      'audit_log',
+      'team_user',
+      'personal_api_key',
+      'user_two_factor',
+      'user_recovery_code',
+      'user_session',
+    ]) {
       expect(await count(`SELECT COUNT(*) AS n FROM ${table} WHERE user_id = ?1`, GONE_USER)).toBe(0);
     }
+  });
+
+  it('drops expired sessions and sign-in records past their retention, keeping other history', async () => {
+    const sessions = await env.DB.prepare(`SELECT session_id AS id FROM user_session WHERE user_id = ?1 ORDER BY session_id`)
+      .bind(TEAMMATE)
+      .all<{ id: string }>();
+    expect(sessions.results.map((row) => row.id)).toEqual(['dd-session-live']);
+    const audit = await env.DB.prepare(`SELECT id FROM audit_log WHERE id IN ('dd-signin-old', 'dd-signin-new', 'dd-other-old') ORDER BY id`)
+      .all<{ id: string }>();
+    expect(audit.results.map((row) => row.id)).toEqual(['dd-other-old', 'dd-signin-new']);
   });
 
   it('keeps shared team content with the deleted author cleared', async () => {

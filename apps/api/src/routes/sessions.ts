@@ -15,6 +15,7 @@ import {
   listSessions,
 } from '../lib/sessions';
 import { getSessionContext } from '../lib/session-context';
+import { logAdminAction } from '../lib/audit';
 import { badRequest, json, notFound } from '../lib/response';
 import { requireWebsiteOr404 } from '../lib/website';
 import type { ApiVariables } from '../middleware/auth';
@@ -128,6 +129,12 @@ export async function handleExport(c: Ctx) {
     cohortJoinFromQuery(c, website!.websiteId),
   ]);
   const csv = await exportEventsCsv(c.env, website!.websiteId, startAt, endAt, type, segment, cohort);
+  await logAdminAction(c.env, c.get('user').userId, 'export', 'website', website!.websiteId, {
+    type,
+    format: 'csv',
+    startAt,
+    endAt,
+  });
   return new Response(csv, {
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',

@@ -887,6 +887,8 @@ export const createTeamSchema = z.object({
 
 export const updateTeamSchema = z.object({
   name: z.string().max(100).optional(),
+  /** Owners only: members without two-factor authentication lose access until they enroll. */
+  requireTwoFactor: z.boolean().optional(),
 });
 
 export const joinTeamSchema = z.object({

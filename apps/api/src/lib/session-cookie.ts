@@ -16,7 +16,7 @@ function sessionCookieOptions(env: Env) {
   };
 }
 
-export function setSessionCookie(c: Context<{ Bindings: Env }>, token: string) {
+export function setSessionCookie<E extends { Bindings: Env }>(c: Context<E>, token: string) {
   setCookie(c, SESSION_COOKIE, token, sessionCookieOptions(c.env));
 }
 

@@ -9,6 +9,7 @@ import {
   validateBoardWidgetsForUser,
 } from '../lib/board-widgets';
 import { getAccessibleBoards, getUserTeams } from '../lib/queries';
+import { logAdminAction } from '../lib/audit';
 import { badRequest, json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
 
@@ -146,5 +147,10 @@ export async function handleShareCreate(c: Ctx) {
     updatedAt: now,
   });
 
+  await logAdminAction(c.env, c.get('user').userId, 'create', 'share', shareId, {
+    boardId,
+    teamId: board.teamId ?? null,
+    name: body?.name ?? board.name,
+  });
   return json({ id: shareId, slug, entityId: boardId }, 201);
 }

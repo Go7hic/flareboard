@@ -13,6 +13,8 @@ import {
 } from '@flareboard/shared';
 import type { Env } from '../env';
 import { canMutateTeam, userHasTeamAccess } from '../lib/access';
+import { listTeamAuditLog, logAdminAction } from '../lib/audit';
+import { hasTwoFactor } from '../lib/two-factor';
 import { getUserSubscription, isHostedMode } from '../lib/billing';
 import { getTeamByAccessCode, getTeamById, getTeamWebsites, getUserTeams } from '../lib/queries';
 import { badRequest, json, notFound } from '../lib/response';
@@ -40,7 +42,13 @@ function canSeeTeamAccessCode(teamRole: string | undefined, globalRole: string) 
 }
 
 function serializeTeam(
-  team: { teamId: string; name: string; accessCode: string | null; createdAt?: Date | null },
+  team: {
+    teamId: string;
+    name: string;
+    accessCode: string | null;
+    requireTwoFactor?: boolean | null;
+    createdAt?: Date | null;
+  },
   role?: string,
   globalRole = '',
 ) {
@@ -49,8 +57,22 @@ function serializeTeam(
     name: team.name,
     accessCode: canSeeTeamAccessCode(role, globalRole) ? (team.accessCode ?? undefined) : undefined,
     role,
+    requireTwoFactor: Boolean(team.requireTwoFactor),
     createdAt: team.createdAt,
   };
+}
+
+function auditTeam(c: Ctx, teamId: string, action: string, metadata?: Record<string, unknown>) {
+  return logAdminAction(c.env, c.get('user').userId, action, 'team', teamId, metadata);
+}
+
+async function usernameOf(c: Ctx, userId: string) {
+  const [row] = await createDb(c.env.DB)
+    .select({ username: schema.user.username })
+    .from(schema.user)
+    .where(eq(schema.user.userId, userId))
+    .limit(1);
+  return row?.username ?? null;
 }
 
 export async function handleList(c: Ctx) {
@@ -59,7 +81,13 @@ export async function handleList(c: Ctx) {
   return json(
     teams.map((t) =>
       serializeTeam(
-        { teamId: t.id, name: t.name, accessCode: t.accessCode, createdAt: t.createdAt },
+        {
+          teamId: t.id,
+          name: t.name,
+          accessCode: t.accessCode,
+          requireTwoFactor: t.requireTwoFactor,
+          createdAt: t.createdAt,
+        },
         t.role,
         user.role,
       ),
@@ -99,6 +127,7 @@ export async function handleCreate(c: Ctx) {
   });
 
   const team = await getTeamById(c.env, teamId);
+  await auditTeam(c, teamId, 'create', { name: parsed.data.name });
   return json(serializeTeam(team!, ROLES.teamOwner, user.role), 201);
 }
 
@@ -143,9 +172,11 @@ export async function handleStatus(c: Ctx) {
       username: schema.user.username,
       role: schema.teamUser.role,
       createdAt: schema.teamUser.createdAt,
+      twoFactorEnabledAt: schema.userTwoFactor.enabledAt,
     })
     .from(schema.teamUser)
     .innerJoin(schema.user, eq(schema.teamUser.userId, schema.user.userId))
+    .leftJoin(schema.userTwoFactor, eq(schema.userTwoFactor.userId, schema.teamUser.userId))
     .where(eq(schema.teamUser.teamId, teamId));
   const websites = await getTeamWebsites(c.env, teamId);
   const roles = members.reduce<Record<string, number>>((acc, member) => {
@@ -159,6 +190,8 @@ export async function handleStatus(c: Ctx) {
     teamName: team.name,
     currentUserRole: membership?.role ?? ROLES.admin,
     canManageMembers: canManageMembers(membership?.role, isAdmin),
+    canManageSecurity: isAdmin || membership?.role === ROLES.teamOwner,
+    requireTwoFactor: team.requireTwoFactor,
     memberCount: members.length,
     editableMemberCount: members.length - readonlyMemberCount,
     readonlyMemberCount,
@@ -168,9 +201,25 @@ export async function handleStatus(c: Ctx) {
       userId: member.userId,
       username: member.username,
       role: member.role,
+      twoFactorEnabled: Boolean(member.twoFactorEnabledAt),
       createdAt: member.createdAt,
     })),
   });
+}
+
+/** Team activity for owners, managers and global admins. */
+export async function handleAuditLog(c: Ctx) {
+  const teamId = c.req.param('teamId');
+  if (!teamId) return notFound();
+  const team = await getTeamById(c.env, teamId);
+  if (!team) return notFound();
+  const isAdmin = c.get('user').role === ROLES.admin;
+  const membership = await userHasTeamAccess(c.env, c.get('user').userId, teamId);
+  if (!canManageMembers(membership?.role, isAdmin)) return notFound();
+
+  const page = Math.max(1, Number(c.req.query('page') ?? 1) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(c.req.query('pageSize') ?? 50) || 50));
+  return json(await listTeamAuditLog(c.env, teamId, page, pageSize));
 }
 
 export async function handleUpdate(c: Ctx) {
@@ -196,14 +245,41 @@ export async function handleUpdate(c: Ctx) {
   const parsed = updateTeamSchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
 
+  const { requireTwoFactor } = parsed.data;
+  const changesTwoFactor = requireTwoFactor !== undefined && requireTwoFactor !== team.requireTwoFactor;
+  if (changesTwoFactor) {
+    if (!isAdmin && membership?.role !== ROLES.teamOwner) {
+      return json({ code: 'owner_required', message: 'Only team owners can change the two-factor requirement.' }, 403);
+    }
+    // An owner without 2FA would lock themselves out of the team they just secured.
+    if (requireTwoFactor && membership && !(await hasTwoFactor(c.env, c.get('user').userId))) {
+      return json(
+        {
+          code: 'owner_two_factor_required',
+          message: 'Turn on two-factor authentication for your own account first.',
+        },
+        409,
+      );
+    }
+  }
+
   const db = createDb(c.env.DB);
   await db
     .update(schema.team)
-    .set({ name: parsed.data.name ?? team.name, updatedAt: new Date() })
+    .set({
+      name: parsed.data.name ?? team.name,
+      requireTwoFactor: requireTwoFactor ?? team.requireTwoFactor,
+      updatedAt: new Date(),
+    })
     .where(eq(schema.team.teamId, teamId));
 
+  const changes: Record<string, unknown> = {};
+  if (parsed.data.name !== undefined && parsed.data.name !== team.name) changes.name = parsed.data.name;
+  if (changesTwoFactor) changes.requireTwoFactor = requireTwoFactor;
+  if (Object.keys(changes).length) await auditTeam(c, teamId, 'update', changes);
+
   const updated = await getTeamById(c.env, teamId);
-  return json(serializeTeam(updated!, membership.role, c.get('user').role));
+  return json(serializeTeam(updated!, membership?.role, c.get('user').role));
 }
 
 export async function handleDelete(c: Ctx) {
@@ -223,6 +299,7 @@ export async function handleDelete(c: Ctx) {
     .set({ deletedAt: new Date(), updatedAt: new Date() })
     .where(eq(schema.team.teamId, teamId));
 
+  await auditTeam(c, teamId, 'delete', { name: team.name });
   return json({ ok: true });
 }
 
@@ -260,6 +337,7 @@ export async function handleJoin(c: Ctx) {
     updatedAt: now,
   });
 
+  await auditTeam(c, team.teamId, 'member_join', { userId: user.userId, role: ROLES.teamViewOnly });
   return json(serializeTeam(team, ROLES.teamViewOnly, user.role), 201);
 }
 
@@ -405,6 +483,14 @@ export async function handleUpdateUser(c: Ctx) {
     .set({ role: parsed.data.role, updatedAt: new Date() })
     .where(eq(schema.teamUser.teamUserId, row.teamUserId));
 
+  if (row.role !== parsed.data.role) {
+    await auditTeam(c, teamId, 'member_role_change', {
+      userId: targetUserId,
+      username: await usernameOf(c, targetUserId),
+      previousRole: row.role,
+      role: parsed.data.role,
+    });
+  }
   return json({ userId: targetUserId, role: parsed.data.role });
 }
 
@@ -444,5 +530,11 @@ export async function handleDeleteUser(c: Ctx) {
   }
 
   await db.delete(schema.teamUser).where(eq(schema.teamUser.teamUserId, row.teamUserId));
+  await auditTeam(c, teamId, 'member_remove', {
+    userId: targetUserId,
+    username: await usernameOf(c, targetUserId),
+    role: row.role,
+    self,
+  });
   return json({ ok: true });
 }

@@ -1,8 +1,9 @@
 import { eq, sql } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
-import { createSecureToken } from '@flareboard/shared';
+import { createSecureToken, parseSecureToken } from '@flareboard/shared';
 import type { Env } from '../env';
 import { getAppSecret } from './response';
+import { createUserSession, isSessionActive, type SessionMethod } from './user-sessions';
 
 const versionKey = (userId: string) => `token-version:${userId}`;
 
@@ -25,7 +26,7 @@ export async function getTokenVersion(env: Env, userId: string): Promise<number>
   return version;
 }
 
-/** Invalidates every outstanding token for a user (password change, logout). */
+/** Invalidates every outstanding token for a user (password change, sign out everywhere). */
 export async function bumpTokenVersion(env: Env, userId: string): Promise<void> {
   const db = createDb(env.DB);
   await db
@@ -40,8 +41,40 @@ export async function bumpTokenVersion(env: Env, userId: string): Promise<void> 
   await env.CACHE.put(versionKey(userId), String(row?.version ?? 0));
 }
 
-/** Single source of truth for minting session tokens, stamping the current version. */
-export async function issueAuthToken(c: { env: Env; req: { url: string } }, user: { userId: string; role: string }): Promise<string> {
+/** Mints a session token for an existing session id, stamping the current token version. */
+export async function issueAuthToken(
+  c: { env: Env; req: { url: string } },
+  user: { userId: string; role: string },
+  sessionId: string,
+): Promise<string> {
   const tv = await getTokenVersion(c.env, user.userId);
-  return createSecureToken({ userId: user.userId, role: user.role, tv }, getAppSecret(c));
+  return createSecureToken({ userId: user.userId, role: user.role, tv, sid: sessionId }, getAppSecret(c));
+}
+
+/** Records a new signed-in session (listed under account security) and returns its token. */
+export async function startSession(
+  c: { env: Env; req: { url: string; header(name: string): string | undefined } },
+  user: { userId: string; role: string },
+  method: SessionMethod,
+) {
+  const sessionId = await createUserSession(c.env, user.userId, { method, userAgent: c.req.header('User-Agent') });
+  return { token: await issueAuthToken(c, user, sessionId), sessionId };
+}
+
+export type VerifiedSession = { userId: string; role: string; sessionId: string | null; tokenVersion: number };
+
+/**
+ * Decrypts and checks a session token: signature and expiry, token version (password change,
+ * sign out everywhere) and, for tokens that carry a session id, that the session was not
+ * revoked. Tokens minted before session ids existed have no `sid` and are checked by version only.
+ */
+export async function verifySessionToken(env: Env, token: string, secret: string): Promise<VerifiedSession | null> {
+  const payload = await parseSecureToken(token, secret);
+  if (!payload?.userId || !payload?.role) return null;
+  const userId = String(payload.userId);
+  const tokenVersion = typeof payload.tv === 'number' ? payload.tv : 0;
+  if ((await getTokenVersion(env, userId)) !== tokenVersion) return null;
+  const sessionId = typeof payload.sid === 'string' ? payload.sid : null;
+  if (sessionId && !(await isSessionActive(env, sessionId, userId))) return null;
+  return { userId, role: String(payload.role), sessionId, tokenVersion };
 }

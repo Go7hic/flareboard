@@ -14,13 +14,22 @@ export function isTeamReadOnly(teamRole: string) {
   return teamRole === ROLES.teamViewOnly;
 }
 
-/** The caller's membership in a team that still exists (deleted teams grant nothing). */
+/**
+ * The caller's membership in a team that still exists (deleted teams grant nothing). A team
+ * that requires two-factor authentication grants nothing to members who have not enabled it;
+ * they are asked to enroll (see `twoFactorBlockedTeams`).
+ */
 export async function userHasTeamAccess(env: Env, userId: string, teamId: string) {
   const db = createDb(env.DB);
   const rows = await db
-    .select({ membership: schema.teamUser })
+    .select({
+      membership: schema.teamUser,
+      requireTwoFactor: schema.team.requireTwoFactor,
+      twoFactorEnabledAt: schema.userTwoFactor.enabledAt,
+    })
     .from(schema.teamUser)
     .innerJoin(schema.team, eq(schema.team.teamId, schema.teamUser.teamId))
+    .leftJoin(schema.userTwoFactor, eq(schema.userTwoFactor.userId, schema.teamUser.userId))
     .where(
       and(
         eq(schema.teamUser.teamId, teamId),
@@ -29,7 +38,23 @@ export async function userHasTeamAccess(env: Env, userId: string, teamId: string
       ),
     )
     .limit(1);
-  return rows[0]?.membership ?? null;
+  const row = rows[0];
+  if (!row || (row.requireTwoFactor && !row.twoFactorEnabledAt)) return null;
+  return row.membership;
+}
+
+/** Live teams the user belongs to that require two-factor authentication they do not have. */
+export async function twoFactorBlockedTeams(env: Env, userId: string) {
+  const rows = await env.DB.prepare(
+    `SELECT t.team_id AS id, t.name AS name
+     FROM team_user tu JOIN team t ON t.team_id = tu.team_id
+     WHERE tu.user_id = ?1 AND t.deleted_at IS NULL AND t.require_two_factor = 1
+       AND NOT EXISTS (SELECT 1 FROM user_two_factor tf WHERE tf.user_id = tu.user_id AND tf.enabled_at IS NOT NULL)
+     ORDER BY t.name`,
+  )
+    .bind(userId)
+    .all<{ id: string; name: string }>();
+  return rows.results ?? [];
 }
 
 async function isTeamLive(env: Env, teamId: string) {

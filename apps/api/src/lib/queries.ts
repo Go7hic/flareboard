@@ -48,6 +48,12 @@ export async function getUserWebsites(env: Env, userId: string) {
     .orderBy(schema.website.createdAt);
 }
 
+/** A team requiring two-factor authentication counts only once the member has enabled it. */
+const twoFactorSatisfied = or(
+  eq(schema.team.requireTwoFactor, false),
+  sql`EXISTS (SELECT 1 FROM user_two_factor tf WHERE tf.user_id = ${schema.teamUser.userId} AND tf.enabled_at IS NOT NULL)`,
+);
+
 export async function getAccessibleWebsites(env: Env, userId: string) {
   const db = createDb(env.DB);
   // Only live teams count; see canAccessWebsite for the matching per-site rule.
@@ -55,7 +61,7 @@ export async function getAccessibleWebsites(env: Env, userId: string) {
     .select({ teamId: schema.teamUser.teamId })
     .from(schema.teamUser)
     .innerJoin(schema.team, eq(schema.team.teamId, schema.teamUser.teamId))
-    .where(and(eq(schema.teamUser.userId, userId), isNull(schema.team.deletedAt)));
+    .where(and(eq(schema.teamUser.userId, userId), isNull(schema.team.deletedAt), twoFactorSatisfied));
   const teamIds = new Set(memberships.map((m) => m.teamId));
   // Sites the user created stay theirs unless they sit in a live team they are no longer in.
   const created = await getUserWebsites(env, userId);
@@ -590,6 +596,7 @@ export async function getUserTeams(env: Env, userId: string) {
       name: schema.team.name,
       accessCode: schema.team.accessCode,
       role: schema.teamUser.role,
+      requireTwoFactor: schema.team.requireTwoFactor,
       createdAt: schema.team.createdAt,
     })
     .from(schema.teamUser)
@@ -878,7 +885,8 @@ async function dbTeamIds(env: Env, userId: string) {
   const memberships = await db
     .select({ teamId: schema.teamUser.teamId })
     .from(schema.teamUser)
-    .where(eq(schema.teamUser.userId, userId));
+    .innerJoin(schema.team, eq(schema.team.teamId, schema.teamUser.teamId))
+    .where(and(eq(schema.teamUser.userId, userId), twoFactorSatisfied));
   return memberships.map((m) => m.teamId);
 }
 

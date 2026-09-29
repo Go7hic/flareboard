@@ -13,6 +13,7 @@ import {
 } from '@flareboard/shared';
 import type { Env } from '../env';
 import { canMutateWebsite } from '../lib/access';
+import { deleteInsightDependents } from '../lib/dashboard-cleanup';
 import { parseStatsRange } from '../lib/parse-range';
 import { requireWebsiteById } from '../lib/website';
 import {
@@ -189,6 +190,7 @@ export async function handleDelete(c: Ctx) {
   if (!(await canMutateWebsite(c.env, found.website, c.get('user')))) {
     return json({ message: 'Read-only access' }, 403);
   }
+  await deleteInsightDependents(c.env, found.row.insightId);
   const db = createDb(c.env.DB);
   await db.delete(schema.insight).where(eq(schema.insight.insightId, found.row.insightId));
   return json({ ok: true });

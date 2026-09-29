@@ -47,7 +47,7 @@ export async function hasRecentAlertEvent(
   return Boolean(row);
 }
 
-function escapeHtml(value: string) {
+export function escapeHtml(value: string) {
   return value
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -98,6 +98,68 @@ export async function deliverAlertNotification(env: Env, input: AlertDeliveryInp
       count: input.count,
       threshold: input.threshold,
       windowMinutes: input.windowMinutes,
+    },
+  });
+}
+
+export type InsightAlertDeliveryInput = {
+  websiteId: string;
+  alertName: string;
+  insightName: string;
+  channel: string;
+  target: string | null;
+  condition: string;
+  threshold: number;
+  value: number;
+  previousValue: number | null;
+  seriesLabel: string;
+  intervalStart: number;
+  intervalEnd: number;
+  insightUrl: string | null;
+};
+
+const CONDITION_TEXT: Record<string, string> = {
+  value_above: 'is above',
+  value_below: 'is below',
+  increase_above: 'increased by more than',
+  decrease_above: 'decreased by more than',
+};
+
+function formatAlertNumber(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+/** An insight alert fired for one interval. Sent once per interval through the alert's channel. */
+export async function deliverInsightAlertNotification(env: Env, input: InsightAlertDeliveryInput) {
+  const relative = input.condition === 'increase_above' || input.condition === 'decrease_above';
+  const rule = `${input.seriesLabel} ${CONDITION_TEXT[input.condition] ?? input.condition} ${formatAlertNumber(input.threshold)}${relative ? '%' : ''}`;
+  const period = `${new Date(input.intervalStart).toISOString()} – ${new Date(input.intervalEnd + 1).toISOString()}`;
+  const lines = [
+    `Alert "${input.alertName}" fired on insight "${input.insightName}".`,
+    `Condition: ${rule}`,
+    `Value: ${formatAlertNumber(input.value)}`,
+    input.previousValue === null ? null : `Previous interval: ${formatAlertNumber(input.previousValue)}`,
+    `Interval: ${period}`,
+    input.insightUrl ? `Insight: ${input.insightUrl}` : null,
+  ].filter((line): line is string => Boolean(line));
+  const link = input.insightUrl ? `<p><a href="${escapeHtml(input.insightUrl)}">Open insight</a></p>` : '';
+  return deliver(env, input.channel, input.target, {
+    subject: `Flareboard alert: ${input.alertName.slice(0, 120)}`,
+    text: lines.join('\n'),
+    html: `<p>Alert <strong>${escapeHtml(input.alertName)}</strong> fired on insight <strong>${escapeHtml(input.insightName)}</strong>.</p><p>Condition: ${escapeHtml(rule)}<br/>Value: <strong>${escapeHtml(formatAlertNumber(input.value))}</strong>${input.previousValue === null ? '' : `<br/>Previous interval: ${escapeHtml(formatAlertNumber(input.previousValue))}`}<br/>Interval: ${escapeHtml(period)}</p>${link}`,
+    payload: {
+      type: 'insight_alert',
+      websiteId: input.websiteId,
+      alertName: input.alertName,
+      insightName: input.insightName,
+      condition: input.condition,
+      threshold: input.threshold,
+      value: input.value,
+      previousValue: input.previousValue,
+      series: input.seriesLabel,
+      intervalStart: input.intervalStart,
+      intervalEnd: input.intervalEnd,
+      insightUrl: input.insightUrl,
     },
   });
 }

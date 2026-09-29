@@ -638,9 +638,22 @@ export async function getUserShares(env: Env, userId: string) {
   const websiteIds = websites.map((w) => w.websiteId);
   const boards = await getAccessibleBoards(env, userId);
   const boardIds = boards.map((b) => b.boardId);
-  const entityIds = [...websiteIds, ...boardIds];
+  const insightIds = websiteIds.length
+    ? (
+        await db
+          .select({ insightId: schema.insight.insightId })
+          .from(schema.insight)
+          .where(inArray(schema.insight.websiteId, websiteIds))
+      ).map((row) => row.insightId)
+    : [];
+  const entityIds = [...websiteIds, ...boardIds, ...insightIds];
   if (!entityIds.length) return [];
-  return db.select().from(schema.share).where(inArray(schema.share.entityId, entityIds));
+  // Chunked: D1 caps bound parameters per statement.
+  const rows: Array<typeof schema.share.$inferSelect> = [];
+  for (let i = 0; i < entityIds.length; i += 90) {
+    rows.push(...(await db.select().from(schema.share).where(inArray(schema.share.entityId, entityIds.slice(i, i + 90)))));
+  }
+  return rows;
 }
 
 export async function getShareBySlug(env: Env, slug: string) {

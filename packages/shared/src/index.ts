@@ -14,6 +14,7 @@ export * from './action-evaluator';
 export * from './geoip';
 export * from './insight-query';
 export * from './crypto';
+export * from './dashboards';
 export * from './jwt';
 export * from './password';
 export * from './schemas';

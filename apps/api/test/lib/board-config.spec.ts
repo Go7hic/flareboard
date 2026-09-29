@@ -10,16 +10,17 @@ describe('board config helpers', () => {
     const parameters = createBoardParameters(
       [
         { type: 'stats', websiteId: 'site_1', label: 'Traffic', width: 'full' },
-        { type: 'insight', insightId: 'insight_1', label: 'Activation', width: 'half' },
+        { type: 'insight', insightId: 'insight_1', label: 'Activation', width: 'medium' },
       ],
       '30d',
     );
 
     expect(parameters).toEqual({
       rangePreset: '30d',
+      filters: [],
       widgets: [
         { type: 'stats', websiteId: 'site_1', label: 'Traffic', width: 'full' },
-        { type: 'insight', insightId: 'insight_1', label: 'Activation', width: 'half' },
+        { type: 'insight', insightId: 'insight_1', label: 'Activation', width: 'medium' },
       ],
     });
   });
@@ -35,13 +36,15 @@ describe('board config helpers', () => {
     });
 
     expect(config.rangePreset).toBe('7d');
+    // Unknown and missing widths fall back to medium (legacy `half`).
     expect(config.widgets).toEqual([
-      { type: 'stats', websiteId: 'site_1', width: 'half' },
-      { type: 'insight', insightId: 'insight_1', width: 'half' },
+      { type: 'stats', websiteId: 'site_1', width: 'medium' },
+      { type: 'insight', insightId: 'insight_1', width: 'medium' },
     ]);
+    expect(config.filters).toEqual([]);
     expect(boardConfigToDrafts(config)).toEqual([
-      { type: 'stats', websiteId: 'site_1', label: '', width: 'half' },
-      { type: 'insight', insightId: 'insight_1', label: '', width: 'half' },
+      { type: 'stats', websiteId: 'site_1', label: '', width: 'medium' },
+      { type: 'insight', insightId: 'insight_1', label: '', width: 'medium' },
     ]);
   });
 });

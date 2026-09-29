@@ -1,5 +1,8 @@
 import { FormEvent, useState } from 'react';
+import type { PropertyFilter } from '@flareboard/shared/insight-query';
+import { boardWidgetSizeLabel } from './BoardWidgets';
 import {
+  BOARD_WIDGET_SIZES,
   createBoardParameters,
   emptyInsightWidgetDraft,
   emptyStatsWidgetDraft,
@@ -22,6 +25,8 @@ type BoardEditorFormProps = {
   initialName: string;
   initialWidgets: BoardWidgetDraft[];
   initialRangePreset?: BoardRangePreset;
+  /** Board filters are edited on the board itself; the form keeps them unchanged. */
+  initialFilters?: PropertyFilter[];
   submitLabel: string;
   onSubmit: (payload: { name: string; parameters: Record<string, unknown> }) => void;
   onCancel?: () => void;
@@ -38,6 +43,7 @@ export function BoardEditorForm({
   initialName,
   initialWidgets,
   initialRangePreset = '7d',
+  initialFilters = [],
   submitLabel,
   onSubmit,
   onCancel,
@@ -67,7 +73,7 @@ export function BoardEditorForm({
       return null;
     }
     setValidationError(null);
-    return { name: trimmedName, parameters: createBoardParameters(widgetDrafts, rangePreset) };
+    return { name: trimmedName, parameters: createBoardParameters(widgetDrafts, rangePreset, initialFilters) };
   }
 
   function onFormSubmit(e: FormEvent) {
@@ -291,9 +297,11 @@ export function BoardEditorForm({
                       })
                     }
                   >
-                    <option value="third">{t('boardWidgetWidthThird')}</option>
-                    <option value="half">{t('boardWidgetWidthHalf')}</option>
-                    <option value="full">{t('boardWidgetWidthFull')}</option>
+                    {BOARD_WIDGET_SIZES.map((size) => (
+                      <option key={size} value={size}>
+                        {boardWidgetSizeLabel(size)}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="board-widget-row-actions">

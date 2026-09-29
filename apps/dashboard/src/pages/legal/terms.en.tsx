@@ -226,8 +226,9 @@ const sections: LegalSection[] = [
     body: (
       <>
         <p>
-          Public share links let anyone with the link see the dashboards and statistics you choose to share. You are
-          responsible for what you share and with whom; revoke a link when it is no longer needed.
+          Public share links let anyone with the link see the dashboards, insights and statistics you choose to share.
+          You are responsible for what you share and with whom; revoke a link when it is no longer needed. Only send
+          alert and subscription emails to recipients who expect them.
         </p>
         <p>
           When you connect webhooks, email destinations, data sources or other third-party services, you instruct

@@ -4,11 +4,12 @@ import { useParams } from 'react-router-dom';
 import { Line, LineChart } from 'recharts';
 import { AnalyticsChart } from '../components/AnalyticsChart';
 import { BoardWidgets } from '../components/BoardWidgets';
+import { InsightResultView } from '../components/InsightResultView';
 import { BrandLogo } from '../components/BrandLogo';
 import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { StatCard } from '../components/ui/stat-card';
 import { formatChartTimeLabel, isHourlyChartRange } from '../lib/chartTimeseries';
-import { API_URL, type WebsiteStats } from '../lib/api';
+import { API_URL, type InsightResult, type WebsiteStats } from '../lib/api';
 import { parseBoardConfig, type BoardRangePreset } from '../lib/board-config';
 import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/dateRange';
 import { formatNumber } from '../lib/format';
@@ -31,6 +32,15 @@ type PublicBoardShare = {
   };
   share: { name: string; slug: string };
 };
+
+type PublicInsightShare = {
+  insight: { id: string; name: string; description: string; type: string };
+  website: { name: string; domain?: string | null; timezone?: string };
+  result: InsightResult | null;
+  share: { name: string; slug: string };
+};
+
+type PublicShare = PublicWebsiteShare | PublicBoardShare | PublicInsightShare;
 
 const SHARE_PRESETS = ['24h', '7d', '30d', '90d'] as const;
 const PRESET_LABEL_KEYS: Record<(typeof SHARE_PRESETS)[number], string> = {
@@ -60,7 +70,7 @@ export default function SharePublic() {
     queryFn: async () => {
       const res = await fetch(`${API_URL}/api/share/${slug}${rangeQs ? `?${rangeQs}` : ''}`);
       if (!res.ok) throw new Error(t('shareNotFound'));
-      return res.json() as Promise<PublicWebsiteShare | PublicBoardShare>;
+      return res.json() as Promise<PublicShare>;
     },
   });
 
@@ -71,8 +81,9 @@ export default function SharePublic() {
   }, [data]);
 
   const isBoard = data && 'board' in data;
+  const isInsight = data && 'insight' in data;
   const boardConfig = isBoard ? parseBoardConfig(data.board.parameters) : null;
-  const activePreset = preset === 'default' ? (boardConfig?.rangePreset ?? '24h') : preset;
+  const activePreset = preset === 'default' ? (boardConfig?.rangePreset ?? (isInsight ? '30d' : '24h')) : preset;
   const chartTimezone = !isBoard && data && 'website' in data ? data.website.timezone ?? 'UTC' : siteTimezone;
   const chartData = useMemo(() => {
     if (!data || !('timeseries' in data)) return [];
@@ -104,7 +115,7 @@ export default function SharePublic() {
     );
   }
 
-  const title = isBoard ? data.board.name : data.website.name;
+  const title = isBoard ? data.board.name : isInsight ? data.insight.name : data.website.name;
 
   return (
     <div className="page">
@@ -113,7 +124,7 @@ export default function SharePublic() {
           <BrandLogo />
         </div>
         <h1 className="page-title">
-          {isBoard ? (
+          {isBoard || isInsight ? (
             title
           ) : (
             <WebsiteNameLabel
@@ -124,8 +135,10 @@ export default function SharePublic() {
           )}
         </h1>
         <p className="page-subtitle">
+          {isInsight ? `${data.website.name} · ` : ''}
           {t('shared')}: {data.share.name}
         </p>
+        {isInsight && data.insight.description ? <p className="text-muted">{data.insight.description}</p> : null}
         <SegmentTabs
           className="share-range-tabs"
           aria-label={t('dateRange')}
@@ -141,6 +154,14 @@ export default function SharePublic() {
           rangePreset={(preset === 'default' || preset === 'custom' ? boardConfig?.rangePreset : preset) as BoardRangePreset}
           publicMode
         />
+      ) : isInsight ? (
+        <section className="panel section-gap-lg share-insight-panel">
+          {data.result ? (
+            <InsightResultView result={data.result} />
+          ) : (
+            <EmptyState title={t('boardWidgetError')} />
+          )}
+        </section>
       ) : (
         <>
           <div className="stat-grid">

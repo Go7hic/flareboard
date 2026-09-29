@@ -1,29 +1,114 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { BoardEditorForm } from '../components/BoardEditorForm';
-import { BoardWidgets } from '../components/BoardWidgets';
 import { CollapsibleSection } from '../components/CollapsibleSection';
+import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
+import { EmptyState } from '../components/EmptyState';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { ProductLineCrossLinks } from '../components/ProductLineCrossLinks';
 import { Button } from '../components/ui/button';
-import { boardConfigToDrafts, emptyStatsWidgetDraft, parseBoardConfig } from '../lib/board-config';
-import { api, type Insight, type Website } from '../lib/api';
+import { Label } from '../components/ui/label';
+import { emptyStatsWidgetDraft, parseBoardConfig } from '../lib/board-config';
+import { api, type Board, type BoardTemplateSummary, type Insight, type Website } from '../lib/api';
+import { formatDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
-import { ConfirmDialog } from '../components/ConfirmDialog';
-import { EmptyState } from '../components/EmptyState';
 
-interface Board {
-  id: string;
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
+/** Localized template text, falling back to the API's English copy. */
+function templateText(key: string, fallback: string) {
+  const value = t(key);
+  return value === key ? fallback : value;
+}
+
+function TemplateGallery({ websites }: { websites: Website[] }) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [websiteId, setWebsiteId] = useState('');
+
+  useEffect(() => {
+    if (!websiteId && websites.length) setWebsiteId(websites[0]!.id);
+  }, [websiteId, websites]);
+
+  const templatesQuery = useQuery({
+    queryKey: ['board-templates'],
+    queryFn: () => api<BoardTemplateSummary[]>('/api/boards/templates'),
+    staleTime: Infinity,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (template: BoardTemplateSummary) =>
+      api<Board>(`/api/boards/templates/${template.id}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          websiteId,
+          name: templateText(`boardTemplate_${template.id}`, template.name),
+          names: Object.fromEntries(
+            template.widgets.map((widget) => [widget.key, templateText(`boardTemplateWidget_${widget.key}`, widget.name)]),
+          ),
+        }),
+      }),
+    onSuccess: (board) => {
+      queryClient.invalidateQueries({ queryKey: ['boards'] });
+      queryClient.invalidateQueries({ queryKey: ['insights-all'] });
+      navigate(`/boards/${board.id}`);
+    },
+  });
+
+  if (!websites.length) return null;
+
+  return (
+    <section className="panel board-templates">
+      <div className="panel-header compact-panel-header">
+        <div>
+          <h2 className="section-title">{t('boardTemplatesTitle')}</h2>
+          <p className="section-lead">{t('boardTemplatesLead')}</p>
+        </div>
+        <div className="field board-templates-website">
+          <Label htmlFor="board-template-website">{t('website')}</Label>
+          <select
+            id="board-template-website"
+            className="select"
+            value={websiteId}
+            onChange={(event) => setWebsiteId(event.target.value)}
+          >
+            {websites.map((website) => (
+              <option key={website.id} value={website.id}>
+                {website.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <ul className="list-plain board-template-grid">
+        {(templatesQuery.data ?? []).map((template) => (
+          <li key={template.id} className="board-template-card">
+            <h3 className="board-card-title">{templateText(`boardTemplate_${template.id}`, template.name)}</h3>
+            <p className="text-muted">{templateText(`boardTemplateLead_${template.id}`, template.description)}</p>
+            <p className="text-muted board-template-widgets">
+              {template.widgets.map((widget) => templateText(`boardTemplateWidget_${widget.key}`, widget.name)).join(' · ')}
+            </p>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={!websiteId || createMutation.isPending}
+              onClick={() => createMutation.mutate(template)}
+            >
+              {t('boardTemplateUse')}
+            </Button>
+          </li>
+        ))}
+      </ul>
+      {createMutation.error ? <p className="text-danger">{(createMutation.error as Error).message}</p> : null}
+    </section>
+  );
 }
 
 export default function BoardsPage() {
-    const queryClient = useQueryClient();
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const confirm = useConfirm();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [createFormKey, setCreateFormKey] = useState(0);
 
   const websitesQuery = useQuery({
@@ -52,74 +137,39 @@ export default function BoardsPage() {
           parameters: payload.parameters,
         }),
       }),
-    onSuccess: () => {
+    onSuccess: (board) => {
       setCreateFormKey((k) => k + 1);
       queryClient.invalidateQueries({ queryKey: ['boards'] });
+      navigate(`/boards/${board.id}`);
     },
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({
-      id,
-      ...payload
-    }: {
-      id: string;
-      name: string;
-      parameters: Record<string, unknown>;
-    }) =>
-      api<Board>(`/api/boards/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          name: payload.name,
-          parameters: payload.parameters,
-        }),
-      }),
-    onSuccess: () => {
-      setEditingId(null);
-      queryClient.invalidateQueries({ queryKey: ['boards'] });
-    },
-  });
-
-  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api(`/api/boards/${id}`, { method: 'DELETE' }),
-    onSuccess: () => {
-      setPendingDelete(null);
-      if (editingId) setEditingId(null);
-      queryClient.invalidateQueries({ queryKey: ['boards'] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['boards'] }),
   });
-
-  const [shareUrls, setShareUrls] = useState<Record<string, string>>({});
-  const [shareCopiedId, setShareCopiedId] = useState<string | null>(null);
-
-  const shareMutation = useMutation({
-    mutationFn: (boardId: string) =>
-      api<{ slug: string }>(`/api/boards/${boardId}/share`, {
-        method: 'POST',
-        body: JSON.stringify({}),
-      }),
-    onSuccess: (share, boardId) => {
-      const url = `${window.location.origin}/share/${share.slug}`;
-      setShareUrls((prev) => ({ ...prev, [boardId]: url }));
-    },
-  });
-
-  async function copyShareLink(boardId: string) {
-    const url = shareUrls[boardId];
-    if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
-      setShareCopiedId(boardId);
-    } catch {
-      setShareCopiedId(null);
-    }
-  }
 
   const websites = websitesQuery.data ?? [];
   const boards = boardsQuery.data ?? [];
   const insights = insightsQuery.data ?? [];
   const hasBoards = boards.length > 0;
+
+  const editor = (
+    <>
+      <BoardEditorForm
+        key={`create-board-${createFormKey}`}
+        websites={websites}
+        insights={insights}
+        initialName=""
+        initialWidgets={[emptyStatsWidgetDraft()]}
+        initialRangePreset="7d"
+        submitLabel={t('createBoard')}
+        isPending={createMutation.isPending}
+        onSubmit={(payload) => createMutation.mutate(payload)}
+      />
+      {createMutation.error ? <p className="text-danger">{(createMutation.error as Error).message}</p> : null}
+    </>
+  );
 
   return (
     <Page className="page-boards">
@@ -132,144 +182,61 @@ export default function BoardsPage() {
       />
 
       <PageBody>
-      {hasBoards ? (
-        <CollapsibleSection title={t('collapseNewBoard')} summary={t('newBoardLead')}>
-          <BoardEditorForm
-            key={`create-board-${createFormKey}`}
-            websites={websites}
-            insights={insights}
-            initialName=""
-            initialWidgets={[emptyStatsWidgetDraft()]}
-            initialRangePreset="7d"
-            submitLabel={t('createBoard')}
-            isPending={createMutation.isPending}
-            onSubmit={(payload) => createMutation.mutate(payload)}
-          />
-          {createMutation.error ? (
-            <p className="text-danger">{(createMutation.error as Error).message}</p>
-          ) : null}
-        </CollapsibleSection>
-      ) : (
-        <section className="panel">
-          <h2 className="section-title">{t('newBoard')}</h2>
-          <p className="section-lead">{t('newBoardLead')}</p>
-          <BoardEditorForm
-            key={`create-board-${createFormKey}`}
-            websites={websites}
-            insights={insights}
-            initialName=""
-            initialWidgets={[emptyStatsWidgetDraft()]}
-            initialRangePreset="7d"
-            submitLabel={t('createBoard')}
-            isPending={createMutation.isPending}
-            onSubmit={(payload) => createMutation.mutate(payload)}
-          />
-          {createMutation.error ? (
-            <p className="text-danger">{(createMutation.error as Error).message}</p>
-          ) : null}
-        </section>
-      )}
+        <TemplateGallery websites={websites} />
 
-      <ul className="board-grid section-gap-lg">
-        {boards.map((b) => {
-          const isEditing = editingId === b.id;
-          const config = parseBoardConfig(b.parameters);
+        {hasBoards ? (
+          <CollapsibleSection title={t('collapseNewBoard')} summary={t('newBoardLead')}>
+            {editor}
+          </CollapsibleSection>
+        ) : (
+          <section className="panel section-gap">
+            <h2 className="section-title">{t('newBoard')}</h2>
+            <p className="section-lead">{t('newBoardLead')}</p>
+            {editor}
+          </section>
+        )}
 
-          return (
-            <li
-              key={b.id}
-              className={`panel board-card${isEditing ? ' board-card--editing' : ''}`}
-            >
-              {isEditing ? (
-                <>
-                  <h3 className="section-title">{t('editBoard')}</h3>
-                  <BoardEditorForm
-                    key={`edit-${b.id}`}
-                    websites={websites}
-                    insights={insights}
-                    initialName={b.name}
-                    initialWidgets={boardConfigToDrafts(config)}
-                    initialRangePreset={config.rangePreset}
-                    submitLabel={t('saveBoard')}
-                    isPending={updateMutation.isPending}
-                    onCancel={() => setEditingId(null)}
-                    onSubmit={(payload) => updateMutation.mutate({ id: b.id, ...payload })}
-                  />
-                  {updateMutation.error ? (
-                    <p className="text-danger">{(updateMutation.error as Error).message}</p>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  <div className="board-card-header">
-                    <h3 className="board-card-title">{b.name}</h3>
-                    <div className="board-card-actions">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        disabled={shareMutation.isPending}
-                        onClick={() => shareMutation.mutate(b.id)}
-                      >
-                        {t('shareBoard')}
-                      </Button>
-                      {shareUrls[b.id] ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => copyShareLink(b.id)}
-                        >
-                          {shareCopiedId === b.id ? t('shareCopied') : t('copyShareLink')}
-                        </Button>
-                      ) : null}
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setEditingId(b.id)}
-                      >
-                        {t('edit')}
-                      </Button>
+        <ul className="board-grid section-gap-lg">
+          {boards.map((board) => {
+            const config = parseBoardConfig(board.parameters);
+            return (
+              <li key={board.id} className="panel board-card">
+                <div className="board-card-header">
+                  <h3 className="board-card-title">
+                    <Link to={`/boards/${board.id}`}>{board.name}</Link>
+                  </h3>
+                  <div className="board-card-actions">
+                    <Button variant="secondary" size="sm" render={<Link to={`/boards/${board.id}`} />}>
+                      {t('boardOpen')}
+                    </Button>
+                    {board.canEdit ? (
                       <Button
                         type="button"
                         variant="destructive-ghost"
                         size="sm"
-                        onClick={() => setPendingDelete({ id: b.id, name: b.name })}
+                        onClick={() => confirm({ title: deleteTitle(board.name), onConfirm: () => deleteMutation.mutate(board.id) })}
                       >
                         {t('delete')}
                       </Button>
-                    </div>
+                    ) : null}
                   </div>
-                  <BoardWidgets widgets={config.widgets} rangePreset={config.rangePreset} />
-                  {shareUrls[b.id] ? (
-                    <p className="text-muted board-share-url">
-                      <a href={shareUrls[b.id]} target="_blank" rel="noreferrer">
-                        {shareUrls[b.id]}
-                      </a>
-                    </p>
-                  ) : null}
-                  {shareMutation.isError && shareMutation.variables === b.id ? (
-                    <p className="text-danger">{(shareMutation.error as Error).message}</p>
-                  ) : null}
-                </>
-              )}
-            </li>
-          );
-        })}
-        {!boardsQuery.isLoading && !hasBoards ? (
-          <EmptyState as="li" variant="rich" title={t('noBoards')} description={t('noBoardsHint')} />
-        ) : null}
-      </ul>
+                </div>
+                {board.description ? <p className="text-muted board-card-description">{board.description}</p> : null}
+                <p className="text-muted board-card-meta">
+                  {t('boardWidgetCount').replace('{count}', String(config.widgets.length))}
+                  {' · '}
+                  {t(`boardWidgetPeriod${config.rangePreset}`)}
+                  {config.filters.length ? ` · ${t('boardFilterCount').replace('{count}', String(config.filters.length))}` : ''}
+                  {board.updatedAt ? ` · ${formatDateTime(board.updatedAt)}` : ''}
+                </p>
+              </li>
+            );
+          })}
+          {!boardsQuery.isLoading && !hasBoards ? (
+            <EmptyState as="li" variant="rich" title={t('noBoards')} description={t('noBoardsHint')} />
+          ) : null}
+        </ul>
       </PageBody>
-      <ConfirmDialog
-        open={pendingDelete !== null}
-        onOpenChange={(open) => !open && setPendingDelete(null)}
-        title={t('confirmDeleteTitle').replace('{name}', pendingDelete?.name ?? '')}
-        description={t('confirmDeleteBody')}
-        pending={deleteMutation.isPending}
-        onConfirm={() => pendingDelete && deleteMutation.mutate(pendingDelete.id)}
-      />
     </Page>
   );
 }

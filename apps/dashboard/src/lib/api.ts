@@ -392,6 +392,95 @@ export interface Insight {
   updatedAt: number | null;
 }
 
+export interface Board {
+  id: string;
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  userId: string | null;
+  teamId: string | null;
+  canEdit?: boolean;
+  createdAt: number | string | null;
+  updatedAt: number | string | null;
+}
+
+export type BoardTemplateSummary = {
+  id: 'product-analytics' | 'web-analytics' | 'revenue';
+  name: string;
+  description: string;
+  rangePreset: string;
+  widgets: Array<{ key: string; name: string; type: InsightTypeV2; size: string }>;
+};
+
+export type ReportSubscription = {
+  id: string;
+  targetType: 'board' | 'insight';
+  targetId: string;
+  title: string;
+  frequency: 'daily' | 'weekly';
+  weekday: number;
+  hour: number;
+  timezone: string;
+  recipients: string[];
+  enabled: boolean;
+  nextRunAt: number;
+  lastSentAt: number | null;
+  lastError: string | null;
+};
+
+export type InsightAlertCondition = 'value_above' | 'value_below' | 'increase_above' | 'decrease_above';
+
+export type InsightAlert = {
+  id: string;
+  insightId: string;
+  name: string;
+  condition: InsightAlertCondition;
+  threshold: number;
+  seriesKey: string;
+  checkInterval: 'hour' | 'day' | 'week';
+  channel: 'email' | 'webhook';
+  target: string | null;
+  enabled: boolean;
+  snoozedUntil: number | null;
+  lastCheckedAt: number | null;
+  lastState: 'firing' | 'ok' | 'error' | null;
+};
+
+export type InsightAlertCheck = {
+  id: string;
+  intervalStart: number;
+  intervalEnd: number;
+  value: number | null;
+  previousValue: number | null;
+  state: 'firing' | 'ok' | 'error';
+  delivered: boolean;
+  error: string | null;
+};
+
+export type NotebookBlock =
+  | { id: string; type: 'text'; text: string }
+  | { id: string; type: 'insight'; insightId: string; rangePreset?: '24h' | '7d' | '30d' | '90d' }
+  | { id: string; type: 'replay'; sessionId: string; label?: string };
+
+export type NotebookSummary = {
+  id: string;
+  websiteId: string;
+  title: string;
+  blockCount: number;
+  updatedAt: number | null;
+};
+
+export type Notebook = {
+  id: string;
+  websiteId: string;
+  title: string;
+  content: { blocks: NotebookBlock[] };
+  createdBy: string | null;
+  updatedBy: string | null;
+  createdAt: number | null;
+  updatedAt: number | null;
+};
+
 export type PropertyKeyRow = { key: string; count: number; numeric: boolean };
 export type PropertyValueRow = { value: string; count: number };
 
@@ -1069,6 +1158,9 @@ export interface ShareLink {
   name: string;
   slug: string;
   entityId: string;
+  /** 1 website, 4 board, 5 insight. */
+  shareType?: number;
+  expiresAt?: string | number | null;
   createdAt?: string | number;
 }
 

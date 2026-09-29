@@ -260,8 +260,11 @@ export class EventStore extends DurableObject<Env> {
          GROUP BY ${DAY}, event_name`,
       );
       this.sql.exec(
-        `INSERT INTO session_replay_summary (website_id, visit_id, session_id, started_at, ended_at, event_count, chunks)
-         SELECT website_id, visit_id, MIN(session_id), MIN(started_at), MAX(ended_at), SUM(event_count), COUNT(*)
+        `INSERT INTO session_replay_summary (website_id, visit_id, session_id, started_at, ended_at, event_count, chunks,
+           click_count, input_count, console_log_count, console_warn_count, console_error_count, network_error_count)
+         SELECT website_id, visit_id, MIN(session_id), MIN(started_at), MAX(ended_at), SUM(event_count), COUNT(*),
+                SUM(click_count), SUM(input_count), SUM(console_log_count), SUM(console_warn_count),
+                SUM(console_error_count), SUM(network_error_count)
          FROM session_replay GROUP BY visit_id`,
       );
       const pageviews = this.sql

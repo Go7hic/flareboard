@@ -279,6 +279,24 @@ export const STORE_MIGRATIONS: ReadonlyArray<{ version: number; statements: stri
       `CREATE INDEX warehouse_import_website_idx ON warehouse_import (website_id, imported_at)`,
     ],
   },
+  {
+    // Replay activity counters (D1 migration 0051), per chunk and summed per visit.
+    version: 3,
+    statements: [
+      `ALTER TABLE session_replay ADD COLUMN click_count INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE session_replay ADD COLUMN input_count INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE session_replay ADD COLUMN console_log_count INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE session_replay ADD COLUMN console_warn_count INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE session_replay ADD COLUMN console_error_count INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE session_replay ADD COLUMN network_error_count INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE session_replay_summary ADD COLUMN click_count INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE session_replay_summary ADD COLUMN input_count INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE session_replay_summary ADD COLUMN console_log_count INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE session_replay_summary ADD COLUMN console_warn_count INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE session_replay_summary ADD COLUMN console_error_count INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE session_replay_summary ADD COLUMN network_error_count INTEGER NOT NULL DEFAULT 0`,
+    ],
+  },
 ];
 
 export const STORE_SCHEMA_VERSION = STORE_MIGRATIONS[STORE_MIGRATIONS.length - 1]!.version;

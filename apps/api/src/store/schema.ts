@@ -399,8 +399,9 @@ export const STORE_MIGRATIONS: ReadonlyArray<{ version: number; statements: stri
     ],
   },
   {
-    // Replay activity counters (D1 migration 0051), per chunk and summed per visit.
-    version: 4,
+    // Replay activity counters (D1 migration 0051), per chunk and summed per visit. Version 6 was
+    // allocated to the replay stream (4 = logs-otlp, 5 = llm-observability).
+    version: 6,
     statements: [
       `ALTER TABLE session_replay ADD COLUMN click_count INTEGER NOT NULL DEFAULT 0`,
       `ALTER TABLE session_replay ADD COLUMN input_count INTEGER NOT NULL DEFAULT 0`,

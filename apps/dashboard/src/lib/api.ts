@@ -537,21 +537,29 @@ export interface ErrorIssueDetail {
 
 export type ErrorIssueDetailResponse = { issue: ErrorIssueDetail } | { mergedInto: string };
 
+export type LogSeverity = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+export type LogSource = 'otlp' | 'browser';
+
+/** One log line: OpenTelemetry (`otlp`) or the tracker's flareboard.log() (`browser`). */
 export interface LogEvent {
   id: string;
-  sessionId: string;
-  visitId: string;
-  urlPath: string;
-  eventName: string | null;
+  source: LogSource;
   createdAt: number;
-  browser: string | null;
-  os: string | null;
-  device: string | null;
-  country: string | null;
+  timeUs: number;
+  level: LogSeverity;
+  severityText: string | null;
   message: string | null;
-  level: string | null;
+  service: string | null;
   release: string | null;
   environment: string | null;
+  scope: string | null;
+  traceId: string | null;
+  spanId: string | null;
+  sessionId: string | null;
+  visitId: string | null;
+  urlPath: string | null;
+  attributes: Record<string, unknown> | null;
+  resource: Record<string, unknown> | null;
 }
 
 export interface LogEventsResponse {
@@ -559,11 +567,27 @@ export interface LogEventsResponse {
     logs: number;
     sessions: number;
     lastSeenAt: number | null;
-    levels: Array<{ level: string; logs: number }>;
+    levels: Array<{ level: LogSeverity; logs: number }>;
     trend: Array<{ date: string; logs: number; sessions: number }>;
     releases: Array<{ release: string; logs: number }>;
     environments: Array<{ environment: string; logs: number }>;
+    services: Array<{ service: string; logs: number }>;
   };
+  logs: LogEvent[];
+  /** Pass as `before` for the next page; null on the last page. */
+  nextBefore: string | null;
+  /** False when OpenTelemetry ingestion is unavailable (legacy D1 storage). */
+  otlpEnabled: boolean;
+}
+
+export interface LogHistogramResponse {
+  bucketMs: number;
+  buckets: Array<{ t: number; total: number } & Record<LogSeverity, number>>;
+}
+
+export interface LogTailResponse {
+  cursor: number;
+  seq: string;
   logs: LogEvent[];
 }
 
@@ -1290,28 +1314,54 @@ export interface LogTraceSummary {
   traceId: string;
   spans: number;
   services: number;
+  rootName: string | null;
+  rootService: string | null;
+  startedAt: number;
+  endedAt: number;
+  durationMs: number;
+  maxSpanDurationMs: number;
   hasError: boolean;
-  durationMs: number | null;
-  startedAt: number | null;
-  lastSeenAt: number | null;
+  sessionId: string | null;
 }
 
 export interface LogTraceSpan {
   id: string;
+  source: LogSource;
+  traceId: string;
   spanId: string;
   parentSpanId: string | null;
-  service: string;
-  operation: string | null;
-  level: string | null;
-  message: string | null;
-  durationMs: number | null;
-  status: string | null;
+  name: string;
+  kind: string;
+  service: string | null;
+  release: string | null;
+  environment: string | null;
   createdAt: number;
+  startUs: number;
+  durationUs: number;
+  durationMs: number;
+  status: 'unset' | 'ok' | 'error';
+  statusMessage: string | null;
+  sessionId: string | null;
+  attributes: Record<string, unknown> | null;
+  resource: Record<string, unknown> | null;
+  events: Array<{ name: string; timeUs: number; attributes: Record<string, unknown> }>;
+  links: Array<{ traceId: string; spanId: string; attributes: Record<string, unknown> }>;
 }
 
 export interface LogTraceDetail {
   traceId: string;
+  startedAt: number | null;
+  endedAt: number | null;
+  durationMs: number;
+  services: string[];
+  sessionId: string | null;
   spans: LogTraceSpan[];
+  logs: LogEvent[];
+}
+
+export interface LogAttributeFilter {
+  key: string;
+  value?: string;
 }
 
 export interface LogSavedFilter {
@@ -1325,6 +1375,9 @@ export interface LogSavedFilter {
     environment?: string;
     service?: string;
     traceId?: string;
+    sessionId?: string;
+    source?: LogSource;
+    attributes?: LogAttributeFilter[];
   };
   isDefault: boolean;
   createdAt?: number;
@@ -1343,6 +1396,8 @@ export interface LogAlertRule {
   search: string | null;
   release: string | null;
   environment: string | null;
+  attributeKey: string | null;
+  attributeValue: string | null;
   channel: 'record' | 'email' | 'webhook';
   target: string | null;
   createdAt?: number;

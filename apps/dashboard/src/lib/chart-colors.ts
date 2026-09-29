@@ -65,3 +65,26 @@ export function getMetricSeriesColors(): MetricSeriesColors {
 export function getChartSeriesPrimary(): string {
   return cssVarValue('--chart-1') || cssVarValue('--chart-line') || '#006bff';
 }
+
+export const LOG_SEVERITIES = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const;
+export type LogSeverity = (typeof LOG_SEVERITIES)[number];
+
+/** Log severity series (histogram bars and their legend swatches). */
+export const SEVERITY_CHART_VARS: Record<LogSeverity, string> = {
+  trace: '--chart-severity-trace',
+  debug: '--chart-severity-debug',
+  info: '--chart-severity-info',
+  warn: '--chart-severity-warn',
+  error: '--chart-severity-error',
+  fatal: '--chart-severity-fatal',
+};
+
+/** Resolved severity colors for Recharts; falls back to the indexed palette. */
+export function getSeverityColors(): Record<LogSeverity, string> {
+  return Object.fromEntries(
+    LOG_SEVERITIES.map((severity, index) => [
+      severity,
+      cssVarValue(SEVERITY_CHART_VARS[severity]) || cssVarValue(`--chart-${index + 1}`),
+    ]),
+  ) as Record<LogSeverity, string>;
+}

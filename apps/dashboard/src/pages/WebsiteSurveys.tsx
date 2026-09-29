@@ -315,7 +315,7 @@ function SurveyEditDialog({
 export default function WebsiteSurveysPage() {
   const confirm = useConfirm();
   const { websiteId } = useParams<{ websiteId: string }>();
-  const { canEdit } = useWebsitePermissions(websiteId, 'surveys');
+  const { canEdit, viewOnly } = useWebsitePermissions(websiteId, 'surveys');
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState(DEFAULT_SURVEY);
@@ -447,7 +447,7 @@ export default function WebsiteSurveysPage() {
 
       <PageBody>
 
-      {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
+      {viewOnly ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
       {canEdit ? (
       <section className="panel section-gap">

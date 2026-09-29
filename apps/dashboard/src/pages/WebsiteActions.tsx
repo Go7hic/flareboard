@@ -44,7 +44,7 @@ function ruleLabel(rule: ActionRule) {
 
 export default function WebsiteActionsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
-  const { canEdit } = useWebsitePermissions(websiteId, 'analytics');
+  const { canEdit, viewOnly } = useWebsitePermissions(websiteId, 'analytics');
   const queryClient = useQueryClient();
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
   const [draft, setDraft] = useState(EMPTY_DRAFT);
@@ -149,7 +149,7 @@ export default function WebsiteActionsPage() {
 
       <PageBody>
 
-      {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
+      {viewOnly ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
       <section className="panel section-gap">
         <header className="panel-header">

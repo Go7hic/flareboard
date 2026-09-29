@@ -52,7 +52,7 @@ function categoryLabel(category: AnnotationCategory) {
 
 export default function WebsiteAnnotationsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
-  const { canEdit } = useWebsitePermissions(websiteId);
+  const { canEdit, viewOnly } = useWebsitePermissions(websiteId);
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState(emptyDraft);
@@ -133,7 +133,7 @@ export default function WebsiteAnnotationsPage() {
 
       <PageBody>
 
-      {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
+      {viewOnly ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
       {canEdit ? (
         <section className="panel section-gap">

@@ -596,7 +596,7 @@ const EMPTY_DRAFT = { name: '', description: '', featureFlagId: '', status: 'dra
 export default function WebsiteExperimentsPage() {
   const confirm = useConfirm();
   const { websiteId } = useParams<{ websiteId: string }>();
-  const { canEdit } = useWebsitePermissions(websiteId, 'experiments');
+  const { canEdit, viewOnly } = useWebsitePermissions(websiteId, 'experiments');
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState(EMPTY_DRAFT);
@@ -694,7 +694,7 @@ export default function WebsiteExperimentsPage() {
       <PageHeader title={t('experiments')} lead={t('experimentsLead')} />
 
       <PageBody>
-        {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
+        {viewOnly ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
         {canEdit ? (
           <section className="panel section-gap">

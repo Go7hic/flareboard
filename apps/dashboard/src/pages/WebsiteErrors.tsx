@@ -52,7 +52,7 @@ export default function WebsiteErrorsPage() {
   const confirm = useConfirm();
   const { websiteId } = useParams<{ websiteId: string }>();
   const queryClient = useQueryClient();
-  const { canEdit } = useWebsitePermissions(websiteId, 'errors');
+  const { canEdit, viewOnly } = useWebsitePermissions(websiteId, 'errors');
   const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
   const [expandedIssue, setExpandedIssue] = useState<string | null>(null);
   const [selectedIssues, setSelectedIssues] = useState<string[]>([]);
@@ -296,7 +296,7 @@ export default function WebsiteErrorsPage() {
       />
 
       <PageBody>
-      {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
+      {viewOnly ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
       <DataViewState
         loading={errorsQuery.isLoading && !errorsQuery.data}

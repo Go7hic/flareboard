@@ -210,7 +210,7 @@ function WorkflowEditDialog({
 export default function WebsiteWorkflowsPage() {
   const confirm = useConfirm();
   const { websiteId } = useParams<{ websiteId: string }>();
-  const { canEdit } = useWebsitePermissions(websiteId);
+  const { canEdit, viewOnly } = useWebsitePermissions(websiteId);
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState(DEFAULT_WORKFLOW);
@@ -332,7 +332,7 @@ export default function WebsiteWorkflowsPage() {
 
       <PageBody>
 
-      {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
+      {viewOnly ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
       {canEdit ? (
       <section className="panel section-gap">

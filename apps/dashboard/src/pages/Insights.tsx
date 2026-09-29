@@ -157,7 +157,7 @@ export default function InsightsPage() {
   const timezone = websites.find((w) => w.id === websiteId)?.timezone ?? 'UTC';
   const range = useMemo(() => presetToRange(preset, undefined, undefined, timezone), [preset, timezone]);
   const rangeQs = rangeQueryString(range.startAt, range.endAt);
-  const { canEdit } = useWebsitePermissions(websiteId, 'analytics');
+  const { canEdit, viewOnly } = useWebsitePermissions(websiteId, 'analytics');
   const problem = insightQueryProblem(type, query);
 
   useEffect(() => {
@@ -248,7 +248,7 @@ export default function InsightsPage() {
       />
 
       <PageBody>
-      {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
+      {viewOnly ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
       <section className="section-gap">
         <MasterDetailLayout

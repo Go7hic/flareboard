@@ -102,7 +102,7 @@ function FeatureFlagRolloutInput({
 export default function WebsiteFeatureFlagsPage() {
   const confirm = useConfirm();
   const { websiteId } = useParams<{ websiteId: string }>();
-  const { canEdit } = useWebsitePermissions(websiteId, 'featureFlags');
+  const { canEdit, viewOnly } = useWebsitePermissions(websiteId, 'featureFlags');
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
@@ -242,7 +242,7 @@ export default function WebsiteFeatureFlagsPage() {
 
       <PageBody>
 
-      {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
+      {viewOnly ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
       <section className="panel section-gap">
         <header className="panel-header">

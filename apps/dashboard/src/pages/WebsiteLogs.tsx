@@ -53,7 +53,7 @@ export default function WebsiteLogsPage() {
   const confirm = useConfirm();
   const { websiteId } = useParams<{ websiteId: string }>();
   const queryClient = useQueryClient();
-  const { canEdit } = useWebsitePermissions(websiteId, 'logs');
+  const { canEdit, viewOnly } = useWebsitePermissions(websiteId, 'logs');
   const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
   const [secondaryTab, setSecondaryTab] = useState<LogsSecondaryTab | ''>('');
   const [level, setLevel] = useState('');
@@ -213,7 +213,7 @@ export default function WebsiteLogsPage() {
       />
 
       <PageBody>
-      {!canEdit ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
+      {viewOnly ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
 
       <DataViewState
         loading={logsQuery.isLoading && !logsQuery.data}

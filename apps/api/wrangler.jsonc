@@ -102,7 +102,7 @@
       "vars": {
         "ENVIRONMENT": "production",
         // Switch to "dual", backfill, verify, then "do" (docs/parity/storage-migration.md).
-        "EVENT_STORE": "d1",
+        "EVENT_STORE": "dual",
         "HOSTED_MODE": "true",
         "EMAIL_FROM": "noreply@flareboard.dev",
         "EMAIL_FROM_NAME": "Flareboard",

@@ -57,7 +57,7 @@
       "vars": {
         "HOSTED_MODE": "true",
         // Switch to "dual", backfill, verify, then "do" (docs/parity/storage-migration.md).
-        "EVENT_STORE": "d1"
+        "EVENT_STORE": "dual"
       },
       "durable_objects": {
         "bindings": [

@@ -214,11 +214,26 @@ const sections: LegalSection[] = [
           </li>
           <li>
             <strong>Session replay</strong> (off by default; paid plans only). When a customer turns it on, the
-            script records the structure of the page and the visitor’s interactions (clicks, scrolling, mouse
-            movement and page changes) so the session can be replayed. By default, everything typed into form
-            fields is masked, and password fields are always masked. Customers can exclude further parts of the
-            page from recordings and record only a sample of visits. Other text shown on the page is recorded, so
-            customers must configure replay not to capture sensitive information.
+            recorder script records the structure of the page and the visitor’s interactions (clicks, scrolling,
+            mouse movement and page changes) so the session can be replayed. By default, everything typed into form
+            fields is masked. Password, payment-card and one-time-code fields and fields that look sensitive stay
+            masked even if a customer turns input masking off. Customers can mask all text on the page, mask or
+            block further parts of the page (blocked elements are replaced by an empty box of the same size, and
+            elements marked <code>data-fb-no-capture</code> or <code>ph-no-capture</code> are never recorded),
+            record only a sample of visits and skip visits shorter than a minimum duration. Text shown on the page
+            is recorded unless masked, so customers must configure replay not to capture sensitive information.
+            Nothing is recorded for visitors who opted out, or who send Do Not Track or Global Privacy Control
+            where the website honors those signals.
+          </li>
+          <li>
+            <strong>Console and network activity in replays</strong> (off by default; each is a separate customer
+            setting). With console capture, the level and text (up to 1,000 characters) of messages the page
+            writes to the browser console, and of uncaught errors, are stored with the recording. Email addresses,
+            card-like numbers, access tokens, values labeled as passwords or secrets and the query part of URLs
+            are removed in the browser first. With network capture, each request the page makes with fetch or
+            XMLHttpRequest is stored as its method, address without the query string, status code, duration and
+            size. Request and response headers and bodies are never recorded, and our servers discard any other
+            field before storing a recording.
           </li>
           <li>
             <strong>Errors and logs</strong>: error messages, stack traces, release and environment names, and log
@@ -236,7 +251,7 @@ const sections: LegalSection[] = [
           The tracking script ignores most automated traffic (bots and crawlers). Customers can set a website to
           honor Do Not Track and Global Privacy Control browser signals, in which case the script sends nothing from
           browsers that send either signal. Websites can also offer visitors an opt-out; the choice is remembered in
-          the browser and the script then sends nothing.
+          the browser and neither the tracking script nor the session recorder then sends anything.
         </p>
         <p>
           We do not use analytics data for our own purposes, do not combine it across customers, and never sell it
@@ -407,7 +422,8 @@ const sections: LegalSection[] = [
           <li>
             <strong>At your direction</strong>, for example to webhook URLs, email addresses or data sources you
             configure, or through public share links you create. Anyone with a share link can see the aggregate
-            statistics it exposes.
+            statistics it exposes. Anyone with a replay link can watch that one session recording, including any
+            console and network activity it holds, until the link expires or you revoke it.
           </li>
           <li>
             <strong>For legal reasons</strong>, if required by law or a valid legal request, or to protect the

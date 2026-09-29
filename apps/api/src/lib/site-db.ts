@@ -27,6 +27,10 @@ export const SITE_TABLES = [
   'person',
   'person_group_membership',
   'warehouse_import',
+  // OpenTelemetry logs and spans (ingest /v1/logs, /v1/traces). Store-only in every mode: they
+  // have no D1 history, so they are not in BACKFILL_TABLES; see lib/log-sources.ts.
+  'log_record',
+  'trace_span',
 ] as const;
 
 export { eventStoreMode, type EventStoreMode } from '@flareboard/db/site-store';

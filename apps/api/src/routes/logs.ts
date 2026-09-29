@@ -9,49 +9,109 @@ import type { Env } from '../env';
 import { canMutateWebsite } from '../lib/access';
 import { parseStatsRange } from '../lib/parse-range';
 import { requireWebsite } from '../lib/website';
+import { logSources, SEVERITIES } from '../lib/log-sources';
 import {
   createLogAlertRule,
   createLogSavedFilter,
+  decodeTailCursor,
   deleteLogAlertRule,
   deleteLogSavedFilter,
   getLogAlertRule,
-  getLogSavedFilter,
   getLogEvents,
+  getLogHistogram,
+  getLogSavedFilter,
   getLogStats,
-  getLogTail,
   getServiceSummaries,
   getTraceDetail,
   getTraceSummaries,
   listLogAlertRules,
   listLogSavedFilters,
+  tailLogs,
   updateLogAlertRule,
   updateLogSavedFilter,
+  type AttributeFilter,
+  type LogFilters,
+  type LogPageCursor,
+  type Severity,
 } from '../lib/logs';
 import { badRequest, json, notFound } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
 
-function normalizeOptionalParam(value: string | undefined) {
+function normalizeOptionalParam(value: string | undefined, max = 200) {
   const trimmed = value?.trim();
-  return trimmed ? trimmed.slice(0, 120) : undefined;
+  return trimmed ? trimmed.slice(0, max) : undefined;
+}
+
+/**
+ * Filters shared by the log endpoints: `level` (one or more, comma-separated), `q` (body
+ * substring), `release`, `environment`, `service`, `traceId`, `sessionId`, `source`
+ * (`otlp` | `browser`) and repeatable `attr=key=value` (or `attr=key` for "is set").
+ */
+export function parseLogFilters(c: Ctx): LogFilters {
+  const levels = (c.req.query('level') ?? '')
+    .split(',')
+    .map((level) => level.trim().toLowerCase())
+    .filter((level): level is Severity => (SEVERITIES as readonly string[]).includes(level));
+  const source = c.req.query('source');
+  const attributes: AttributeFilter[] = (c.req.queries('attr') ?? [])
+    .slice(0, 10)
+    .map((raw) => {
+      const separator = raw.indexOf('=');
+      const key = (separator === -1 ? raw : raw.slice(0, separator)).trim().slice(0, 256);
+      return separator === -1 ? { key } : { key, value: raw.slice(separator + 1).slice(0, 500) };
+    })
+    .filter((attribute) => attribute.key);
+  return {
+    levels: levels.length ? levels : undefined,
+    search: normalizeOptionalParam(c.req.query('q')),
+    release: normalizeOptionalParam(c.req.query('release')),
+    environment: normalizeOptionalParam(c.req.query('environment')),
+    service: normalizeOptionalParam(c.req.query('service')),
+    traceId: normalizeOptionalParam(c.req.query('traceId')),
+    sessionId: normalizeOptionalParam(c.req.query('sessionId')),
+    source: source === 'otlp' || source === 'browser' ? source : undefined,
+    attributes: attributes.length ? attributes : undefined,
+  };
+}
+
+function parseLimit(value: string | undefined, fallback = 100) {
+  const limit = Number(value ?? fallback);
+  return Number.isFinite(limit) ? limit : fallback;
+}
+
+/** `before=<timeUs>:<id>`: continue the newest-first list after that line. */
+function parseBefore(value: string | undefined): LogPageCursor | undefined {
+  const match = /^(\d+):(.+)$/.exec(value ?? '');
+  return match ? { timeUs: Number(match[1]), id: match[2]!.slice(0, 200) } : undefined;
 }
 
 export async function handleList(c: Ctx) {
   const website = await requireWebsite(c);
   if (!website) return notFound();
   const { startAt, endAt } = parseStatsRange(c);
-  const filters = {
-    level: normalizeOptionalParam(c.req.query('level')),
-    search: normalizeOptionalParam(c.req.query('q')),
-    release: normalizeOptionalParam(c.req.query('release')),
-    environment: normalizeOptionalParam(c.req.query('environment')),
-  };
+  const filters = parseLogFilters(c);
+  const limit = Math.min(Math.max(parseLimit(c.req.query('limit')), 1), 500);
+  const before = parseBefore(c.req.query('before'));
   const [stats, logs] = await Promise.all([
     getLogStats(c.env, website.websiteId, startAt, endAt, filters),
-    getLogEvents(c.env, website.websiteId, startAt, endAt, filters),
+    getLogEvents(c.env, website.websiteId, startAt, endAt, filters, limit, before),
   ]);
-  return json({ stats, logs });
+  const last = logs[logs.length - 1];
+  return json({
+    stats,
+    logs,
+    nextBefore: logs.length === limit && last ? `${last.timeUs}:${last.id}` : null,
+    otlpEnabled: logSources(c.env, website.websiteId).otlp,
+  });
+}
+
+export async function handleHistogram(c: Ctx) {
+  const website = await requireWebsite(c);
+  if (!website) return notFound();
+  const { startAt, endAt } = parseStatsRange(c);
+  return json(await getLogHistogram(c.env, website.websiteId, startAt, endAt, parseLogFilters(c)));
 }
 
 export async function handleTail(c: Ctx) {
@@ -59,29 +119,39 @@ export async function handleTail(c: Ctx) {
   if (!website) return notFound();
 
   const sinceAt = Number(c.req.query('sinceAt') ?? 0);
-  const limit = Number(c.req.query('limit') ?? 100);
-  const filters = {
-    level: normalizeOptionalParam(c.req.query('level')),
-    search: normalizeOptionalParam(c.req.query('q')),
-    release: normalizeOptionalParam(c.req.query('release')),
-    environment: normalizeOptionalParam(c.req.query('environment')),
-  };
-  const logs = await getLogTail(c.env, website.websiteId, Number.isFinite(sinceAt) ? sinceAt : 0, filters, limit);
-  const cursor = logs.reduce((latest, row) => Math.max(latest, row.createdAt), Number.isFinite(sinceAt) ? sinceAt : 0);
-  return json({ cursor, logs });
+  const result = await tailLogs(
+    c.env,
+    website.websiteId,
+    Number.isFinite(sinceAt) ? sinceAt : 0,
+    parseLogFilters(c),
+    parseLimit(c.req.query('limit')),
+    decodeTailCursor(c.req.query('seq')),
+  );
+  return json(result);
 }
 
 export async function handleTraceList(c: Ctx) {
   const website = await requireWebsite(c);
   if (!website) return notFound();
   const { startAt, endAt } = parseStatsRange(c);
-  const filters = {
-    level: normalizeOptionalParam(c.req.query('level')),
-    search: normalizeOptionalParam(c.req.query('q')),
-    release: normalizeOptionalParam(c.req.query('release')),
-    environment: normalizeOptionalParam(c.req.query('environment')),
-  };
-  const traces = await getTraceSummaries(c.env, website.websiteId, startAt, endAt, filters);
+  const filters = parseLogFilters(c);
+  const traces = await getTraceSummaries(
+    c.env,
+    website.websiteId,
+    startAt,
+    endAt,
+    {
+      service: filters.service,
+      environment: filters.environment,
+      release: filters.release,
+      search: filters.search,
+      sessionId: filters.sessionId,
+      traceId: filters.traceId,
+      source: filters.source,
+      errorsOnly: c.req.query('status') === 'error',
+    },
+    parseLimit(c.req.query('limit')),
+  );
   return json({ traces });
 }
 
@@ -90,7 +160,7 @@ export async function handleTraceDetail(c: Ctx) {
   if (!website) return notFound();
   const traceId = c.req.param('traceId')?.trim();
   if (!traceId) return notFound();
-  const trace = await getTraceDetail(c.env, website.websiteId, traceId);
+  const trace = await getTraceDetail(c.env, website.websiteId, traceId.slice(0, 200));
   if (!trace) return notFound();
   return json(trace);
 }
@@ -99,13 +169,7 @@ export async function handleServiceList(c: Ctx) {
   const website = await requireWebsite(c);
   if (!website) return notFound();
   const { startAt, endAt } = parseStatsRange(c);
-  const filters = {
-    level: normalizeOptionalParam(c.req.query('level')),
-    search: normalizeOptionalParam(c.req.query('q')),
-    release: normalizeOptionalParam(c.req.query('release')),
-    environment: normalizeOptionalParam(c.req.query('environment')),
-  };
-  const services = await getServiceSummaries(c.env, website.websiteId, startAt, endAt, filters);
+  const services = await getServiceSummaries(c.env, website.websiteId, startAt, endAt, parseLogFilters(c));
   return json({ services });
 }
 

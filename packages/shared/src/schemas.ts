@@ -740,6 +740,12 @@ export const logSavedFilterValueSchema = z.object({
   environment: z.string().trim().max(100).optional(),
   service: z.string().trim().max(120).optional(),
   traceId: z.string().trim().max(200).optional(),
+  sessionId: z.string().trim().max(200).optional(),
+  source: z.enum(['otlp', 'browser']).optional(),
+  attributes: z
+    .array(z.object({ key: z.string().trim().min(1).max(256), value: z.string().max(500).optional() }))
+    .max(10)
+    .optional(),
 });
 
 export const createLogSavedFilterSchema = z.object({
@@ -764,6 +770,8 @@ export const createLogAlertRuleSchema = z.object({
   search: z.string().trim().max(200).optional().nullable(),
   release: z.string().trim().max(200).optional().nullable(),
   environment: z.string().trim().max(100).optional().nullable(),
+  attributeKey: z.string().trim().max(256).optional().nullable(),
+  attributeValue: z.string().max(500).optional().nullable(),
   channel: errorAlertChannelSchema.optional().default('record'),
   target: z.string().trim().max(500).optional().nullable(),
 });

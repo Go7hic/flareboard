@@ -285,7 +285,7 @@ export const STORE_MIGRATIONS: ReadonlyArray<{ version: number; statements: stri
     // history to migrate. `created_at` is the record's own time in ms (retention and time
     // filters), `*_us` keep microseconds for ordering and span waterfalls. `attributes` and
     // `resource` are JSON objects, capped by ingest.
-    version: 3,
+    version: 4,
     statements: [
       `CREATE TABLE log_record (
         log_id TEXT PRIMARY KEY NOT NULL,

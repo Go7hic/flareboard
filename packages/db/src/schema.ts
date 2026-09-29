@@ -1064,6 +1064,8 @@ export const logAlertRule = sqliteTable(
     search: text('search'),
     release: text('release'),
     environment: text('environment'),
+    attributeKey: text('attribute_key'),
+    attributeValue: text('attribute_value'),
     channel: text('channel').notNull().default('record'),
     target: text('target'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }),

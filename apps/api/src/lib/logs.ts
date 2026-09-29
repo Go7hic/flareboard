@@ -1,45 +1,81 @@
-import { EVENT_TYPE } from '@flareboard/shared';
 import type { Env } from '../env';
 import { deliverAlertNotification, hasRecentAlertEvent } from './alert-delivery';
-import { siteDb } from '../lib/site-db';
+import {
+  fromArms,
+  logConditions,
+  logParams,
+  logSources,
+  SEVERITIES,
+  whereClause,
+  type LogFilters,
+  type LogSourceName,
+  type LogSources,
+  type Severity,
+  type SqlParams,
+} from './log-sources';
 
+export type { AttributeFilter, LogFilters, LogSourceName, Severity } from './log-sources';
+
+/** One log line, from OpenTelemetry (`otlp`) or the tracker's `flareboard.log()` (`browser`). */
 export type LogEventRow = {
   id: string;
-  sessionId: string;
-  visitId: string;
-  urlPath: string;
-  eventName: string | null;
+  source: LogSourceName;
   createdAt: number;
-  browser: string | null;
-  os: string | null;
-  device: string | null;
-  country: string | null;
+  /** Microseconds, for ordering lines within a millisecond. */
+  timeUs: number;
+  level: Severity;
+  severityText: string | null;
   message: string | null;
-  level: string | null;
+  service: string | null;
   release: string | null;
   environment: string | null;
+  scope: string | null;
   traceId: string | null;
   spanId: string | null;
-  parentSpanId: string | null;
-  service: string | null;
-  operation: string | null;
-  durationMs: number | null;
-  status: string | null;
+  sessionId: string | null;
+  visitId: string | null;
+  urlPath: string | null;
+  attributes: Record<string, unknown> | null;
+  resource: Record<string, unknown> | null;
 };
 
 export type TraceSummaryRow = {
   traceId: string;
   spans: number;
   services: number;
+  rootName: string | null;
+  rootService: string | null;
   startedAt: number;
   endedAt: number;
   durationMs: number;
   maxSpanDurationMs: number;
   hasError: boolean;
+  sessionId: string | null;
 };
 
-export type TraceSpanRow = LogEventRow & {
+export type TraceSpanRow = {
+  id: string;
+  source: LogSourceName;
   traceId: string;
+  spanId: string;
+  parentSpanId: string | null;
+  name: string;
+  kind: string;
+  service: string | null;
+  release: string | null;
+  environment: string | null;
+  createdAt: number;
+  startUs: number;
+  durationUs: number;
+  /** Milliseconds, rounded (kept for older clients). */
+  durationMs: number;
+  status: 'unset' | 'ok' | 'error';
+  statusMessage: string | null;
+  sessionId: string | null;
+  attributes: Record<string, unknown> | null;
+  resource: Record<string, unknown> | null;
+  events: Array<{ name: string; timeUs: number; attributes: Record<string, unknown> }>;
+  links: Array<{ traceId: string; spanId: string; attributes: Record<string, unknown> }>;
 };
 
 export type TraceDetailRow = {
@@ -48,7 +84,9 @@ export type TraceDetailRow = {
   endedAt: number | null;
   durationMs: number;
   services: string[];
+  sessionId: string | null;
   spans: TraceSpanRow[];
+  logs: LogEventRow[];
 };
 
 export type ServiceSummaryRow = {
@@ -61,6 +99,11 @@ export type ServiceSummaryRow = {
   lastSeenAt: number;
 };
 
+export type LogHistogram = {
+  bucketMs: number;
+  buckets: Array<{ t: number; total: number } & Record<Severity, number>>;
+};
+
 export type LogSavedFilterValue = {
   level?: string;
   search?: string;
@@ -68,6 +111,9 @@ export type LogSavedFilterValue = {
   environment?: string;
   service?: string;
   traceId?: string;
+  sessionId?: string;
+  source?: LogSourceName;
+  attributes?: Array<{ key: string; value?: string }>;
 };
 
 export type LogSavedFilterInput = {
@@ -99,6 +145,8 @@ export type LogAlertRuleInput = {
   search?: string | null;
   release?: string | null;
   environment?: string | null;
+  attributeKey?: string | null;
+  attributeValue?: string | null;
   channel: string;
   target?: string | null;
 };
@@ -117,6 +165,8 @@ export type LogAlertRuleRow = {
   search: string | null;
   release: string | null;
   environment: string | null;
+  attributeKey: string | null;
+  attributeValue: string | null;
   channel: string;
   target: string | null;
   createdAt: number | null;
@@ -133,53 +183,6 @@ export type TriggeredLogAlertRow = {
   windowEndAt: number;
   createdAt: number;
 };
-
-export type LogFilters = {
-  level?: string;
-  search?: string;
-  release?: string;
-  environment?: string;
-};
-
-const LOG_PROP_SELECT = `
-    MAX(CASE WHEN d.data_key = 'message' THEN d.string_value END) as message,
-    MAX(CASE WHEN d.data_key = 'level' THEN d.string_value END) as level,
-    MAX(CASE WHEN d.data_key = 'release' THEN d.string_value END) as release,
-    MAX(CASE WHEN d.data_key = 'environment' THEN d.string_value END) as environment,
-    MAX(CASE WHEN d.data_key = 'traceId' THEN d.string_value END) as traceId,
-    MAX(CASE WHEN d.data_key = 'spanId' THEN d.string_value END) as spanId,
-    MAX(CASE WHEN d.data_key = 'parentSpanId' THEN d.string_value END) as parentSpanId,
-    MAX(CASE WHEN d.data_key = 'service' THEN d.string_value END) as service,
-    MAX(CASE WHEN d.data_key = 'operation' THEN d.string_value END) as operation,
-    MAX(CASE WHEN d.data_key = 'durationMs' THEN d.number_value END) as durationMs,
-    MAX(CASE WHEN d.data_key = 'status' THEN d.string_value END) as status`;
-
-const LOG_PROP_KEYS = `('message', 'level', 'release', 'environment', 'traceId', 'spanId', 'parentSpanId', 'service', 'operation', 'durationMs', 'status')`;
-
-// The props CTE joins website_event with the caller's filter condition so it
-// only aggregates properties for matching log events instead of scanning the
-// website's entire event_data set.
-function logPropsCteWith(eventCondition: string) {
-  return `WITH props AS (
-  SELECT
-    d.website_event_id,${LOG_PROP_SELECT}
-  FROM event_data d
-  JOIN website_event ev
-    ON ev.event_id = d.website_event_id
-   AND ev.website_id = ?1
-   AND ${eventCondition}
-  WHERE d.website_id = ?1
-    AND d.data_key IN ${LOG_PROP_KEYS}
-  GROUP BY d.website_event_id
-)`;
-}
-
-// Binds: ?1 websiteId, ?2 startAt, ?3 endAt, ?4 event type.
-const logPropsCte = logPropsCteWith('ev.event_type = ?4 AND ev.created_at >= ?2 AND ev.created_at <= ?3');
-// Binds: ?1 websiteId, ?2 sinceAt, ?3 event type.
-const logTailPropsCte = logPropsCteWith('ev.event_type = ?3 AND ev.created_at > ?2');
-// Binds: ?1 websiteId, ?2 event type.
-const logTracePropsCte = logPropsCteWith('ev.event_type = ?2');
 
 function normalizeSavedFilter(row: Omit<LogSavedFilterRow, 'filters' | 'isDefault'> & { filters: string; isDefault: number }) {
   let filters: LogSavedFilterValue;
@@ -207,186 +210,6 @@ function normalizeLogAlertRule(row: Omit<LogAlertRuleRow, 'enabled'> & { enabled
   };
 }
 
-export async function getLogEvents(
-  env: Env,
-  websiteId: string,
-  startAt: number,
-  endAt: number,
-  filters: LogFilters = {},
-  limit = 100,
-) {
-  const searchPattern = filters.search?.trim() ? `%${filters.search.trim().toLowerCase()}%` : null;
-  const rows = await siteDb(env, websiteId).prepare(
-    `${logPropsCte}
-     SELECT
-       e.event_id as id,
-       e.session_id as sessionId,
-       e.visit_id as visitId,
-       e.url_path as urlPath,
-       e.event_name as eventName,
-       e.created_at as createdAt,
-       s.browser,
-       s.os,
-       s.device,
-       s.country,
-       props.message,
-       props.level,
-       props.release,
-       props.environment,
-       props.traceId,
-       props.spanId,
-       props.parentSpanId,
-       props.service,
-       props.operation,
-       props.durationMs,
-       props.status
-     FROM website_event e
-     LEFT JOIN props ON props.website_event_id = e.event_id
-     LEFT JOIN session s ON s.session_id = e.session_id
-     WHERE e.website_id = ?1
-       AND e.created_at >= ?2
-       AND e.created_at <= ?3
-       AND e.event_type = ?4
-       AND (?5 IS NULL OR props.level = ?5)
-       AND (?6 IS NULL OR lower(COALESCE(props.message, e.event_name, '')) LIKE ?6)
-       AND (?7 IS NULL OR props.release = ?7)
-       AND (?8 IS NULL OR props.environment = ?8)
-     ORDER BY e.created_at DESC
-     LIMIT ?9`,
-  )
-    .bind(
-      websiteId,
-      startAt,
-      endAt,
-      EVENT_TYPE.log,
-      filters.level || null,
-      searchPattern,
-      filters.release || null,
-      filters.environment || null,
-      Math.min(Math.max(limit, 1), 500),
-    )
-    .all<LogEventRow>();
-
-  return rows.results ?? [];
-}
-
-export async function getLogTail(
-  env: Env,
-  websiteId: string,
-  sinceAt: number,
-  filters: LogFilters = {},
-  limit = 100,
-) {
-  const searchPattern = filters.search?.trim() ? `%${filters.search.trim().toLowerCase()}%` : null;
-  // First load (no cursor): the newest lines, shown oldest-first. Follow-up polls keep
-  // ascending order from the cursor so no line between polls is skipped.
-  const initial = sinceAt <= 0;
-  const rows = await siteDb(env, websiteId).prepare(
-    `${logTailPropsCte}
-     SELECT * FROM (
-     SELECT
-       e.event_id as id,
-       e.session_id as sessionId,
-       e.visit_id as visitId,
-       e.url_path as urlPath,
-       e.event_name as eventName,
-       e.created_at as createdAt,
-       s.browser,
-       s.os,
-       s.device,
-       s.country,
-       props.message,
-       props.level,
-       props.release,
-       props.environment,
-       props.traceId,
-       props.spanId,
-       props.parentSpanId,
-       props.service,
-       props.operation,
-       props.durationMs,
-       props.status
-     FROM website_event e
-     LEFT JOIN props ON props.website_event_id = e.event_id
-     LEFT JOIN session s ON s.session_id = e.session_id
-     WHERE e.website_id = ?1
-       AND e.created_at > ?2
-       AND e.event_type = ?3
-       AND (?4 IS NULL OR props.level = ?4)
-       AND (?5 IS NULL OR lower(COALESCE(props.message, e.event_name, '')) LIKE ?5)
-       AND (?6 IS NULL OR props.release = ?6)
-       AND (?7 IS NULL OR props.environment = ?7)
-     ORDER BY e.created_at ${initial ? 'DESC' : 'ASC'}
-     LIMIT ?8
-     ) ORDER BY createdAt ASC`,
-  )
-    .bind(
-      websiteId,
-      sinceAt,
-      EVENT_TYPE.log,
-      filters.level || null,
-      searchPattern,
-      filters.release || null,
-      filters.environment || null,
-      Math.min(Math.max(limit, 1), 500),
-    )
-    .all<LogEventRow>();
-
-  return rows.results ?? [];
-}
-
-export async function getServiceSummaries(
-  env: Env,
-  websiteId: string,
-  startAt: number,
-  endAt: number,
-  filters: LogFilters = {},
-  limit = 100,
-) {
-  const searchPattern = filters.search?.trim() ? `%${filters.search.trim().toLowerCase()}%` : null;
-  const rows = await siteDb(env, websiteId).prepare(
-    `${logPropsCte}
-     SELECT
-       props.service as service,
-       COUNT(*) as logs,
-       SUM(CASE WHEN props.status = 'error' OR props.level IN ('error', 'fatal') THEN 1 ELSE 0 END) as errors,
-       COUNT(DISTINCT props.traceId) as traces,
-       COALESCE(AVG(props.durationMs), 0) as avgDurationMs,
-       COALESCE(MAX(props.durationMs), 0) as maxDurationMs,
-       MAX(e.created_at) as lastSeenAt
-     FROM website_event e
-     LEFT JOIN props ON props.website_event_id = e.event_id
-     WHERE e.website_id = ?1
-       AND e.created_at >= ?2
-       AND e.created_at <= ?3
-       AND e.event_type = ?4
-       AND props.service IS NOT NULL
-       AND (?5 IS NULL OR props.level = ?5)
-       AND (?6 IS NULL OR lower(COALESCE(props.message, e.event_name, '')) LIKE ?6)
-       AND (?7 IS NULL OR props.release = ?7)
-       AND (?8 IS NULL OR props.environment = ?8)
-     GROUP BY props.service
-     ORDER BY errors DESC, logs DESC, lastSeenAt DESC
-     LIMIT ?9`,
-  )
-    .bind(
-      websiteId,
-      startAt,
-      endAt,
-      EVENT_TYPE.log,
-      filters.level || null,
-      searchPattern,
-      filters.release || null,
-      filters.environment || null,
-      Math.min(Math.max(limit, 1), 500),
-    )
-    .all<ServiceSummaryRow>();
-
-  return (rows.results ?? []).map((row) => ({
-    ...row,
-    avgDurationMs: Math.round(row.avgDurationMs),
-  }));
-}
 
 export async function listLogSavedFilters(env: Env, websiteId: string) {
   const rows = await env.DB.prepare(
@@ -499,6 +322,8 @@ export async function listLogAlertRules(env: Env, websiteId: string) {
             search,
             release,
             environment,
+            attribute_key as attributeKey,
+            attribute_value as attributeValue,
             channel,
             target,
             created_at as createdAt,
@@ -525,6 +350,8 @@ export async function getLogAlertRule(env: Env, websiteId: string, alertRuleId: 
             search,
             release,
             environment,
+            attribute_key as attributeKey,
+            attribute_value as attributeValue,
             channel,
             target,
             created_at as createdAt,
@@ -543,8 +370,8 @@ export async function createLogAlertRule(env: Env, websiteId: string, input: Log
   const id = crypto.randomUUID();
   await env.DB.prepare(
     `INSERT INTO log_alert_rule
-       (alert_rule_id, website_id, name, enabled, threshold, window_minutes, level, service, search, release, environment, channel, target, created_at, updated_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?14)`,
+       (alert_rule_id, website_id, name, enabled, threshold, window_minutes, level, service, search, release, environment, channel, target, created_at, updated_at, attribute_key, attribute_value)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?14, ?15, ?16)`,
   )
     .bind(
       id,
@@ -561,6 +388,8 @@ export async function createLogAlertRule(env: Env, websiteId: string, input: Log
       input.channel,
       normalizeNullableText(input.target),
       now,
+      normalizeNullableText(input.attributeKey),
+      normalizeNullableText(input.attributeValue),
     )
     .run();
   const rule = await getLogAlertRule(env, websiteId, id);
@@ -590,7 +419,9 @@ export async function updateLogAlertRule(
          environment = ?11,
          channel = ?12,
          target = ?13,
-         updated_at = ?14
+         updated_at = ?14,
+         attribute_key = ?15,
+         attribute_value = ?16
      WHERE website_id = ?1 AND alert_rule_id = ?2`,
   )
     .bind(
@@ -608,6 +439,8 @@ export async function updateLogAlertRule(
       patch.channel ?? existing.channel,
       patch.target === undefined ? existing.target : normalizeNullableText(patch.target),
       now,
+      patch.attributeKey === undefined ? existing.attributeKey : normalizeNullableText(patch.attributeKey),
+      patch.attributeValue === undefined ? existing.attributeValue : normalizeNullableText(patch.attributeValue),
     )
     .run();
   return getLogAlertRule(env, websiteId, alertRuleId);
@@ -622,51 +455,577 @@ export async function deleteLogAlertRule(env: Env, websiteId: string, alertRuleI
   return true;
 }
 
+// Query functions. Every query reads the sources described in log-sources.ts; list queries run
+// one statement per source (each walks its own time index and stops at the limit) and merge in
+// code, aggregates run over the UNION ALL of the sources.
+
+const LOG_COLUMNS = `l.id AS id, l.source AS source, l.seq AS seq, l.created_at AS createdAt, l.time_us AS timeUs,
+  l.severity AS level, l.severity_text AS severityText, l.body AS message, l.service AS service,
+  l.release AS release, l.environment AS environment, l.scope AS scope, l.trace_id AS traceId,
+  l.span_id AS spanId, l.session_id AS sessionId, l.visit_id AS visitId, l.url_path AS urlPath,
+  l.attributes AS attributes, l.resource AS resource`;
+
+type RawLogRow = Omit<LogEventRow, 'attributes' | 'resource'> & {
+  seq: number;
+  attributes: string | null;
+  resource: string | null;
+};
+
+const MAX_LIMIT = 500;
+
+function clampLimit(limit: number, max = MAX_LIMIT) {
+  return Math.min(Math.max(Number.isFinite(limit) ? Math.trunc(limit) : 100, 1), max);
+}
+
+function parseJsonObject(value: string | null): Record<string, unknown> | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseJsonArray<T>(value: string | null): T[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function toLogRow({ seq: _seq, ...row }: RawLogRow): LogEventRow {
+  return {
+    ...row,
+    createdAt: Number(row.createdAt),
+    timeUs: Number(row.timeUs),
+    attributes: parseJsonObject(row.attributes),
+    resource: parseJsonObject(row.resource),
+  };
+}
+
+function newestFirst(a: { timeUs: number; id: string }, b: { timeUs: number; id: string }) {
+  return b.timeUs - a.timeUs || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+}
+
+/** Runs one statement per source arm in a single round trip and returns the rows per arm. */
+async function perArm<T>(
+  sources: LogSources,
+  arms: Partial<Record<LogSourceName, string>>,
+  only: LogSourceName | undefined,
+  build: (from: string, params: SqlParams, source: LogSourceName) => string,
+  websiteId: string,
+): Promise<Array<{ source: LogSourceName; rows: T[] }>> {
+  const names = (Object.keys(arms) as LogSourceName[]).filter((name) => !only || name === only);
+  if (!names.length) return [];
+  const statements = names.map((name) => {
+    const params = logParams(websiteId);
+    const sql = build(`(${arms[name]}) l`, params, name);
+    return sources.db.prepare(sql).bind(...params.values);
+  });
+  const results = await sources.db.batch<T>(statements);
+  return names.map((source, i) => ({ source, rows: results[i]?.results ?? [] }));
+}
+
+/** A position in the newest-first list: the last row shown. */
+export type LogPageCursor = { timeUs: number; id: string };
+
+function beforeCondition(params: SqlParams, before: LogPageCursor) {
+  const ms = params.add(Math.floor(before.timeUs / 1000));
+  const us = params.add(before.timeUs);
+  const id = params.add(before.id);
+  return `(l.created_at < ${ms} OR (l.created_at = ${ms} AND (l.time_us < ${us} OR (l.time_us = ${us} AND l.id < ${id}))))`;
+}
+
+/** Newest log lines in the range, newest first. */
+export async function getLogEvents(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  filters: LogFilters = {},
+  limit = 100,
+  before?: LogPageCursor,
+) {
+  const sources = logSources(env, websiteId);
+  const take = clampLimit(limit);
+  const perSource = await perArm<RawLogRow>(sources, sources.logArms, filters.source, (from, params) => {
+    const conditions = [
+      `l.created_at >= ${params.add(startAt)}`,
+      `l.created_at <= ${params.add(endAt)}`,
+      ...(before ? [beforeCondition(params, before)] : []),
+      ...logConditions(params, filters),
+    ];
+    return `SELECT ${LOG_COLUMNS} FROM ${from} ${whereClause(conditions)}
+      ORDER BY l.created_at DESC, l.time_us DESC, l.id DESC LIMIT ${take}`;
+  }, websiteId);
+  return perSource
+    .flatMap(({ rows }) => rows.map(toLogRow))
+    .sort(newestFirst)
+    .slice(0, take);
+}
+
+/** Every line of one trace, oldest first (the trace view's log panel). */
+export async function getTraceLogs(env: Env, websiteId: string, traceId: string, limit = 200) {
+  const sources = logSources(env, websiteId);
+  const take = clampLimit(limit);
+  const perSource = await perArm<RawLogRow>(sources, sources.logArms, undefined, (from, params) => {
+    return `SELECT ${LOG_COLUMNS} FROM ${from} ${whereClause(logConditions(params, { traceId }))}
+      ORDER BY l.time_us ASC LIMIT ${take}`;
+  }, websiteId);
+  return perSource
+    .flatMap(({ rows }) => rows.map(toLogRow))
+    .sort((a, b) => -newestFirst(a, b))
+    .slice(0, take);
+}
+
+/** Tail position: the last row seen per source, in insertion order (`seq`). */
+export type LogTailCursor = Partial<Record<LogSourceName, number>>;
+
+export function encodeTailCursor(cursor: LogTailCursor) {
+  return `${cursor.otlp ?? 0}.${cursor.browser ?? 0}`;
+}
+
+export function decodeTailCursor(value: string | undefined): LogTailCursor | null {
+  const match = /^(\d+)\.(\d+)$/.exec(value ?? '');
+  return match ? { otlp: Number(match[1]), browser: Number(match[2]) } : null;
+}
+
+async function currentTailCursor(sources: LogSources): Promise<LogTailCursor> {
+  const tables: Array<[LogSourceName, string]> = [['browser', 'website_event']];
+  if (sources.otlp) tables.push(['otlp', 'log_record']);
+  const results = await sources.db.batch<{ seq: number | null }>(
+    tables.map(([, table]) => sources.db.prepare(`SELECT MAX(rowid) AS seq FROM ${table}`)),
+  );
+  return Object.fromEntries(tables.map(([name], i) => [name, Number(results[i]?.results?.[0]?.seq ?? 0)]));
+}
+
+export type LogTailResult = {
+  /** Newest `createdAt` returned (or the `sinceAt` passed), for time-based polling. */
+  cursor: number;
+  /** Insertion-order cursor: pass back as `seq` to get exactly the lines stored since. */
+  seq: string;
+  logs: LogEventRow[];
+};
+
+/**
+ * Live tail, oldest first.
+ * - With a `seq` cursor: lines stored since, in insertion order per source. Late records (an
+ *   exporter's batch stamped seconds ago) still show up, and nothing is skipped or repeated.
+ * - Without one: `sinceAt <= 0` opens on the newest lines; a time pages forward from it.
+ */
+export async function getLogTail(
+  env: Env,
+  websiteId: string,
+  sinceAt: number,
+  filters: LogFilters = {},
+  limit = 100,
+  seq?: LogTailCursor | null,
+): Promise<LogEventRow[]> {
+  return (await tailLogs(env, websiteId, sinceAt, filters, limit, seq)).logs;
+}
+
+export async function tailLogs(
+  env: Env,
+  websiteId: string,
+  sinceAt: number,
+  filters: LogFilters = {},
+  limit = 100,
+  seq?: LogTailCursor | null,
+): Promise<LogTailResult> {
+  const sources = logSources(env, websiteId);
+  const take = clampLimit(limit);
+  let rows: RawLogRow[];
+  let next: LogTailCursor;
+
+  if (seq) {
+    const perSource = await perArm<RawLogRow>(sources, sources.logArms, filters.source, (from, params, source) => {
+      const conditions = [`l.seq > ${params.add(seq[source] ?? 0)}`, ...logConditions(params, filters)];
+      return `SELECT ${LOG_COLUMNS} FROM ${from} ${whereClause(conditions)} ORDER BY l.seq ASC LIMIT ${take}`;
+    }, websiteId);
+    next = { ...seq };
+    for (const { source, rows: sourceRows } of perSource) {
+      for (const row of sourceRows) next[source] = Math.max(next[source] ?? 0, Number(row.seq));
+    }
+    rows = perSource.flatMap((entry) => entry.rows);
+  } else {
+    const initial = sinceAt <= 0;
+    const [perSource, current] = await Promise.all([
+      perArm<RawLogRow>(sources, sources.logArms, filters.source, (from, params) => {
+        const conditions = [`l.created_at > ${params.add(sinceAt)}`, ...logConditions(params, filters)];
+        const order = initial ? 'DESC' : 'ASC';
+        return `SELECT ${LOG_COLUMNS} FROM ${from} ${whereClause(conditions)}
+          ORDER BY l.created_at ${order}, l.time_us ${order}, l.id ${order} LIMIT ${take}`;
+      }, websiteId),
+      currentTailCursor(sources),
+    ]);
+    rows = perSource.flatMap((entry) => entry.rows);
+    next = current;
+  }
+
+  const ordered = rows.map(toLogRow).sort((a, b) => -newestFirst(a, b));
+  // First load keeps the newest lines; later pages keep the oldest (the rest follows next poll).
+  const logs = !seq && sinceAt <= 0 ? ordered.slice(-take) : ordered.slice(0, take);
+  const cursor = logs.reduce((latest, row) => Math.max(latest, row.createdAt), Math.max(sinceAt, 0));
+  return { cursor, seq: encodeTailCursor(next), logs };
+}
+
+const HISTOGRAM_STEPS_MS = [
+  1_000, 5_000, 10_000, 30_000, 60_000, 5 * 60_000, 10 * 60_000, 30 * 60_000, 3_600_000, 3 * 3_600_000,
+  6 * 3_600_000, 12 * 3_600_000, 86_400_000, 7 * 86_400_000,
+];
+
+/** Bucket size giving at most ~`target` bars over the range. */
+export function histogramBucketMs(startAt: number, endAt: number, target = 60) {
+  const span = Math.max(endAt - startAt, 1);
+  return HISTOGRAM_STEPS_MS.find((step) => span / step <= target) ?? HISTOGRAM_STEPS_MS[HISTOGRAM_STEPS_MS.length - 1]!;
+}
+
+/** Log counts per time bucket and severity (bars aligned to UTC bucket boundaries). */
+export async function getLogHistogram(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  filters: LogFilters = {},
+): Promise<LogHistogram> {
+  const sources = logSources(env, websiteId);
+  const bucketMs = histogramBucketMs(startAt, endAt);
+  const params = logParams(websiteId);
+  const bucket = params.add(bucketMs);
+  const conditions = [
+    `l.created_at >= ${params.add(startAt)}`,
+    `l.created_at <= ${params.add(endAt)}`,
+    ...logConditions(params, filters),
+  ];
+  const rows = await sources.db
+    .prepare(
+      `SELECT (l.created_at / ${bucket}) * ${bucket} AS t, l.severity AS severity, COUNT(*) AS n
+       FROM ${fromArms(sources.logArms, filters.source)} ${whereClause(conditions)}
+       GROUP BY t, l.severity`,
+    )
+    .bind(...params.values)
+    .all<{ t: number; severity: Severity; n: number }>();
+
+  const empty = () => Object.fromEntries(SEVERITIES.map((severity) => [severity, 0])) as Record<Severity, number>;
+  const byBucket = new Map<number, { t: number; total: number } & Record<Severity, number>>();
+  const first = Math.floor(startAt / bucketMs) * bucketMs;
+  for (let t = first; t <= endAt; t += bucketMs) byBucket.set(t, { t, total: 0, ...empty() });
+  for (const row of rows.results ?? []) {
+    const entry = byBucket.get(Number(row.t)) ?? { t: Number(row.t), total: 0, ...empty() };
+    const severity = (SEVERITIES as readonly string[]).includes(row.severity) ? row.severity : 'info';
+    entry[severity] += Number(row.n);
+    entry.total += Number(row.n);
+    byBucket.set(entry.t, entry);
+  }
+  return { bucketMs, buckets: [...byBucket.values()].sort((a, b) => a.t - b.t) };
+}
+
+/** Totals and facets for the range (the explorer's header and filter options). */
+export async function getLogStats(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  filters: LogFilters = {},
+) {
+  const sources = logSources(env, websiteId);
+  const params = logParams(websiteId);
+  const conditions = [
+    `l.created_at >= ${params.add(startAt)}`,
+    `l.created_at <= ${params.add(endAt)}`,
+    ...logConditions(params, filters),
+  ];
+  const from = `${fromArms(sources.logArms, filters.source)} ${whereClause(conditions)}`;
+  const facet = (column: string, alias: string) =>
+    `SELECT l.${column} AS ${alias}, COUNT(*) AS logs FROM ${from} AND l.${column} IS NOT NULL
+     GROUP BY l.${column} ORDER BY logs DESC, ${alias} ASC LIMIT 10`;
+  const statements = [
+    `SELECT COUNT(*) AS logs, COUNT(DISTINCT l.session_id) AS sessions, MAX(l.created_at) AS lastSeenAt FROM ${from}`,
+    `SELECT l.severity AS level, COUNT(*) AS logs FROM ${from} GROUP BY l.severity ORDER BY logs DESC, level ASC`,
+    `SELECT date(l.created_at / 1000, 'unixepoch') AS date, COUNT(*) AS logs, COUNT(DISTINCT l.session_id) AS sessions
+     FROM ${from} GROUP BY date ORDER BY date ASC LIMIT 90`,
+    facet('release', 'release'),
+    facet('environment', 'environment'),
+    facet('service', 'service'),
+  ].map((sql) => sources.db.prepare(sql).bind(...params.values));
+  // `from` always has a WHERE (the time range), so facets can append with AND.
+  const [totals, levels, trend, releases, environments, services] = await sources.db.batch<Record<string, unknown>>(statements);
+  const total = totals?.results?.[0] as { logs: number; sessions: number; lastSeenAt: number | null } | undefined;
+  return {
+    logs: total?.logs ?? 0,
+    sessions: total?.sessions ?? 0,
+    levels: (levels?.results ?? []) as Array<{ level: Severity; logs: number }>,
+    trend: (trend?.results ?? []) as Array<{ date: string; logs: number; sessions: number }>,
+    releases: (releases?.results ?? []) as Array<{ release: string; logs: number }>,
+    environments: (environments?.results ?? []) as Array<{ environment: string; logs: number }>,
+    services: (services?.results ?? []) as Array<{ service: string; logs: number }>,
+    lastSeenAt: total?.lastSeenAt ?? null,
+  };
+}
+
+/** Number of lines matching the filters in the range (log alerts). */
+export async function countLogs(env: Env, websiteId: string, startAt: number, endAt: number, filters: LogFilters = {}) {
+  const sources = logSources(env, websiteId);
+  const params = logParams(websiteId);
+  const conditions = [
+    `l.created_at >= ${params.add(startAt)}`,
+    `l.created_at <= ${params.add(endAt)}`,
+    ...logConditions(params, filters),
+  ];
+  const row = await sources.db
+    .prepare(`SELECT COUNT(*) AS count FROM ${fromArms(sources.logArms, filters.source)} ${whereClause(conditions)}`)
+    .bind(...params.values)
+    .first<{ count: number }>();
+  return row?.count ?? 0;
+}
+
+export async function getServiceSummaries(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  filters: LogFilters = {},
+  limit = 100,
+) {
+  const sources = logSources(env, websiteId);
+  const params = logParams(websiteId);
+  const range = [`l.created_at >= ${params.add(startAt)}`, `l.created_at <= ${params.add(endAt)}`];
+  const logWhere = whereClause([...range, 'l.service IS NOT NULL', ...logConditions(params, filters)]);
+  const spanWhere = whereClause([...range, 'l.service IS NOT NULL']);
+  const [logs, spans] = await sources.db.batch<Record<string, unknown>>([
+    sources.db
+      .prepare(
+        `SELECT l.service AS service, COUNT(*) AS logs,
+           SUM(CASE WHEN l.severity IN ('error', 'fatal') THEN 1 ELSE 0 END) AS errors,
+           COUNT(DISTINCT l.trace_id) AS traces, MAX(l.created_at) AS lastSeenAt
+         FROM ${fromArms(sources.logArms, filters.source)} ${logWhere}
+         GROUP BY l.service`,
+      )
+      .bind(...params.values),
+    sources.db
+      .prepare(
+        `SELECT l.service AS service, COUNT(*) AS spans, AVG(l.duration_us) AS avgUs, MAX(l.duration_us) AS maxUs,
+           SUM(CASE WHEN l.status = 'error' THEN 1 ELSE 0 END) AS errors,
+           COUNT(DISTINCT l.trace_id) AS traces, MAX(l.created_at) AS lastSeenAt
+         FROM ${fromArms(sources.spanArms, filters.source)} ${spanWhere}
+         GROUP BY l.service`,
+      )
+      .bind(...params.values),
+  ]);
+
+  const byService = new Map<string, ServiceSummaryRow>();
+  for (const row of (logs?.results ?? []) as Array<Record<string, number | string>>) {
+    byService.set(String(row.service), {
+      service: String(row.service),
+      logs: Number(row.logs),
+      errors: Number(row.errors),
+      traces: Number(row.traces),
+      avgDurationMs: 0,
+      maxDurationMs: 0,
+      lastSeenAt: Number(row.lastSeenAt),
+    });
+  }
+  // Durations come from spans. A service seen only in spans is listed when no log filter is set.
+  const logFiltered = Object.values(filters).some((value) => value !== undefined && value !== '');
+  for (const row of (spans?.results ?? []) as Array<Record<string, number | string>>) {
+    const service = String(row.service);
+    const existing = byService.get(service);
+    if (!existing && logFiltered) continue;
+    const entry = existing ?? {
+      service,
+      logs: 0,
+      errors: Number(row.errors),
+      traces: Number(row.traces),
+      avgDurationMs: 0,
+      maxDurationMs: 0,
+      lastSeenAt: Number(row.lastSeenAt),
+    };
+    entry.avgDurationMs = Math.round(Number(row.avgUs) / 1000);
+    entry.maxDurationMs = Math.round(Number(row.maxUs) / 1000);
+    entry.traces = Math.max(entry.traces, Number(row.traces));
+    entry.lastSeenAt = Math.max(entry.lastSeenAt, Number(row.lastSeenAt));
+    byService.set(service, entry);
+  }
+  return [...byService.values()]
+    .sort((a, b) => b.errors - a.errors || b.logs - a.logs || b.lastSeenAt - a.lastSeenAt)
+    .slice(0, clampLimit(limit));
+}
+
+export type TraceFilters = {
+  service?: string;
+  environment?: string;
+  release?: string;
+  /** Substring of any span name. */
+  search?: string;
+  sessionId?: string;
+  traceId?: string;
+  errorsOnly?: boolean;
+  source?: LogSourceName;
+};
+
+export async function getTraceSummaries(
+  env: Env,
+  websiteId: string,
+  startAt: number,
+  endAt: number,
+  filters: TraceFilters = {},
+  limit = 100,
+): Promise<TraceSummaryRow[]> {
+  const sources = logSources(env, websiteId);
+  const params = logParams(websiteId);
+  const range = [`l.created_at >= ${params.add(startAt)}`, `l.created_at <= ${params.add(endAt)}`];
+  // A trace matches when any of its spans does; its totals still count all of its spans.
+  const match = logConditions(
+    params,
+    {
+      service: filters.service,
+      environment: filters.environment,
+      release: filters.release,
+      search: filters.search,
+      sessionId: filters.sessionId,
+      traceId: filters.traceId,
+    },
+    'l.name',
+  );
+  const having = [
+    ...(match.length ? [`MAX(CASE WHEN ${match.join(' AND ')} THEN 1 ELSE 0 END) = 1`] : []),
+    ...(filters.errorsOnly ? ['hasError = 1'] : []),
+  ];
+  const rows = await sources.db
+    .prepare(
+      `SELECT l.trace_id AS traceId, COUNT(*) AS spans, COUNT(DISTINCT COALESCE(l.service, '')) AS services,
+         MAX(CASE WHEN l.parent_span_id IS NULL THEN l.name END) AS rootName,
+         MAX(CASE WHEN l.parent_span_id IS NULL THEN l.service END) AS rootService,
+         MIN(l.start_us) AS startUs, MAX(l.start_us + l.duration_us) AS endUs,
+         MAX(l.duration_us) AS maxSpanDurationUs,
+         MAX(CASE WHEN l.status = 'error' THEN 1 ELSE 0 END) AS hasError,
+         MAX(l.session_id) AS sessionId
+       FROM ${fromArms(sources.spanArms, filters.source)} ${whereClause([...range, 'l.trace_id IS NOT NULL'])}
+       GROUP BY l.trace_id
+       ${having.length ? `HAVING ${having.join(' AND ')}` : ''}
+       ORDER BY startUs DESC
+       LIMIT ${clampLimit(limit)}`,
+    )
+    .bind(...params.values)
+    .all<Record<string, number | string | null>>();
+
+  return (rows.results ?? []).map((row) => {
+    const startedAt = Math.floor(Number(row.startUs) / 1000);
+    const endedAt = Math.floor(Number(row.endUs) / 1000);
+    return {
+      traceId: String(row.traceId),
+      spans: Number(row.spans),
+      services: Number(row.services),
+      rootName: (row.rootName as string | null) ?? null,
+      rootService: (row.rootService as string | null) ?? null,
+      startedAt,
+      endedAt,
+      durationMs: Math.max(0, Math.round((Number(row.endUs) - Number(row.startUs)) / 1000)),
+      maxSpanDurationMs: Math.round(Number(row.maxSpanDurationUs) / 1000),
+      hasError: Boolean(row.hasError),
+      sessionId: (row.sessionId as string | null) ?? null,
+    };
+  });
+}
+
+type RawSpanRow = Record<string, unknown>;
+
+function toSpanRow(row: RawSpanRow): TraceSpanRow {
+  const durationUs = Number(row.durationUs) || 0;
+  return {
+    id: String(row.id),
+    source: row.source as LogSourceName,
+    traceId: String(row.traceId),
+    spanId: String(row.spanId),
+    parentSpanId: (row.parentSpanId as string | null) ?? null,
+    name: String(row.name ?? ''),
+    kind: String(row.kind ?? 'unspecified'),
+    service: (row.service as string | null) ?? null,
+    release: (row.release as string | null) ?? null,
+    environment: (row.environment as string | null) ?? null,
+    createdAt: Number(row.createdAt),
+    startUs: Number(row.startUs),
+    durationUs,
+    durationMs: Math.round(durationUs / 1000),
+    status: (row.status as TraceSpanRow['status']) ?? 'unset',
+    statusMessage: (row.statusMessage as string | null) ?? null,
+    sessionId: (row.sessionId as string | null) ?? null,
+    attributes: parseJsonObject(row.attributes as string | null),
+    resource: parseJsonObject(row.resource as string | null),
+    events: parseJsonArray(row.events as string | null),
+    links: parseJsonArray(row.links as string | null),
+  };
+}
+
+/** All spans of a trace (waterfall order) and the log lines that carry its id. */
+export async function getTraceDetail(env: Env, websiteId: string, traceId: string): Promise<TraceDetailRow | null> {
+  const sources = logSources(env, websiteId);
+  const params = logParams(websiteId);
+  const where = whereClause(logConditions(params, { traceId }));
+  const [spanRows, logs] = await Promise.all([
+    sources.db
+      .prepare(
+        `SELECT l.id AS id, l.source AS source, l.trace_id AS traceId, l.span_id AS spanId,
+           l.parent_span_id AS parentSpanId, l.name AS name, l.kind AS kind, l.service AS service,
+           l.release AS release, l.environment AS environment, l.created_at AS createdAt,
+           l.start_us AS startUs, l.duration_us AS durationUs, l.status AS status,
+           l.status_message AS statusMessage, l.session_id AS sessionId, l.attributes AS attributes,
+           l.resource AS resource, l.events AS events, l.links AS links
+         FROM ${fromArms(sources.spanArms)} ${where}
+         ORDER BY l.start_us ASC, l.id ASC
+         LIMIT 2000`,
+      )
+      .bind(...params.values)
+      .all<RawSpanRow>(),
+    getTraceLogs(env, websiteId, traceId),
+  ]);
+  const spans = (spanRows.results ?? []).map(toSpanRow);
+  if (!spans.length && !logs.length) return null;
+
+  const starts = [...spans.map((span) => span.startUs / 1000), ...logs.map((log) => log.createdAt)];
+  const ends = [...spans.map((span) => (span.startUs + span.durationUs) / 1000), ...logs.map((log) => log.createdAt)];
+  const startedAt = Math.floor(Math.min(...starts));
+  const endedAt = Math.ceil(Math.max(...ends));
+  const services = Array.from(
+    new Set([...spans, ...logs].map((item) => item.service).filter((value): value is string => Boolean(value))),
+  );
+  const sessionId = [...spans, ...logs].find((item) => item.sessionId)?.sessionId ?? null;
+  return {
+    traceId: spans[0]?.traceId ?? traceId,
+    startedAt,
+    endedAt,
+    durationMs: Math.max(0, endedAt - startedAt),
+    services,
+    sessionId,
+    spans,
+    logs,
+  };
+}
+
+/** Evaluates enabled log alert rules: a count of matching lines over the window at or above the threshold. */
 export async function evaluateLogAlertRules(env: Env, websiteId: string, now = Date.now()) {
   const rules = (await listLogAlertRules(env, websiteId)).filter((rule) => rule.enabled);
   const triggered: TriggeredLogAlertRow[] = [];
 
   for (const rule of rules) {
     const windowStartAt = now - rule.windowMinutes * 60 * 1000;
-    const recentlyTriggered = await hasRecentAlertEvent(
-      env,
-      'log_alert_event',
-      rule.id,
-      websiteId,
-      windowStartAt,
-    );
+    const recentlyTriggered = await hasRecentAlertEvent(env, 'log_alert_event', rule.id, websiteId, windowStartAt);
     if (recentlyTriggered) continue;
 
-    const searchPattern = rule.search ? `%${rule.search.toLowerCase()}%` : null;
-    const row = await siteDb(env, websiteId).prepare(
-      `${logPropsCte}
-       SELECT COUNT(*) as count
-       FROM website_event e
-       LEFT JOIN props ON props.website_event_id = e.event_id
-       WHERE e.website_id = ?1
-         AND e.created_at >= ?2
-         AND e.created_at <= ?3
-         AND e.event_type = ?4
-         AND (?5 IS NULL OR props.level = ?5)
-         AND (?6 IS NULL OR props.service = ?6)
-         AND (?7 IS NULL OR lower(COALESCE(props.message, e.event_name, '')) LIKE ?7)
-         AND (?8 IS NULL OR props.release = ?8)
-         AND (?9 IS NULL OR props.environment = ?9)`,
-    )
-      .bind(
-        websiteId,
-        windowStartAt,
-        now,
-        EVENT_TYPE.log,
-        rule.level,
-        rule.service,
-        searchPattern,
-        rule.release,
-        rule.environment,
-      )
-      .first<{ count: number }>();
-
-    const count = row?.count ?? 0;
+    const count = await countLogs(env, websiteId, windowStartAt, now, {
+      levels: rule.level && (SEVERITIES as readonly string[]).includes(rule.level) ? [rule.level as Severity] : undefined,
+      service: rule.service ?? undefined,
+      search: rule.search ?? undefined,
+      release: rule.release ?? undefined,
+      environment: rule.environment ?? undefined,
+      attributes: rule.attributeKey
+        ? [{ key: rule.attributeKey, value: rule.attributeValue ?? undefined }]
+        : undefined,
+    });
     if (count < rule.threshold) continue;
 
     const id = crypto.randomUUID();
@@ -702,276 +1061,4 @@ export async function evaluateLogAlertRules(env: Env, websiteId: string, now = D
   }
 
   return triggered;
-}
-
-export async function getTraceSummaries(
-  env: Env,
-  websiteId: string,
-  startAt: number,
-  endAt: number,
-  filters: LogFilters = {},
-  limit = 100,
-) {
-  const searchPattern = filters.search?.trim() ? `%${filters.search.trim().toLowerCase()}%` : null;
-  const rows = await siteDb(env, websiteId).prepare(
-    `${logPropsCte}
-     SELECT
-       props.traceId as traceId,
-       COUNT(*) as spans,
-       COUNT(DISTINCT COALESCE(props.service, 'unknown')) as services,
-       MIN(e.created_at) as startedAt,
-       MAX(e.created_at) as endedAt,
-       MAX(e.created_at) - MIN(e.created_at) as durationMs,
-       COALESCE(MAX(props.durationMs), 0) as maxSpanDurationMs,
-       MAX(CASE WHEN props.status = 'error' OR props.level IN ('error', 'fatal') THEN 1 ELSE 0 END) as hasError
-     FROM website_event e
-     LEFT JOIN props ON props.website_event_id = e.event_id
-     WHERE e.website_id = ?1
-       AND e.created_at >= ?2
-       AND e.created_at <= ?3
-       AND e.event_type = ?4
-       AND props.traceId IS NOT NULL
-       AND (?5 IS NULL OR props.level = ?5)
-       AND (?6 IS NULL OR lower(COALESCE(props.message, e.event_name, '')) LIKE ?6)
-       AND (?7 IS NULL OR props.release = ?7)
-       AND (?8 IS NULL OR props.environment = ?8)
-     GROUP BY props.traceId
-     ORDER BY endedAt DESC
-     LIMIT ?9`,
-  )
-    .bind(
-      websiteId,
-      startAt,
-      endAt,
-      EVENT_TYPE.log,
-      filters.level || null,
-      searchPattern,
-      filters.release || null,
-      filters.environment || null,
-      Math.min(Math.max(limit, 1), 500),
-    )
-    .all<Omit<TraceSummaryRow, 'hasError'> & { hasError: number }>();
-
-  return (rows.results ?? []).map((row) => ({ ...row, hasError: Boolean(row.hasError) }));
-}
-
-export async function getTraceDetail(env: Env, websiteId: string, traceId: string) {
-  const rows = await siteDb(env, websiteId).prepare(
-    `${logTracePropsCte}
-     SELECT
-       e.event_id as id,
-       e.session_id as sessionId,
-       e.visit_id as visitId,
-       e.url_path as urlPath,
-       e.event_name as eventName,
-       e.created_at as createdAt,
-       s.browser,
-       s.os,
-       s.device,
-       s.country,
-       props.message,
-       props.level,
-       props.release,
-       props.environment,
-       props.traceId,
-       props.spanId,
-       props.parentSpanId,
-       props.service,
-       props.operation,
-       props.durationMs,
-       props.status
-     FROM website_event e
-     LEFT JOIN props ON props.website_event_id = e.event_id
-     LEFT JOIN session s ON s.session_id = e.session_id
-     WHERE e.website_id = ?1
-       AND e.event_type = ?2
-       AND props.traceId = ?3
-     ORDER BY e.created_at ASC
-     LIMIT 500`,
-  )
-    .bind(websiteId, EVENT_TYPE.log, traceId)
-    .all<TraceSpanRow>();
-
-  const spans = rows.results ?? [];
-  if (!spans.length) return null;
-  const startedAt = spans[0]?.createdAt ?? null;
-  const endedAt = spans[spans.length - 1]?.createdAt ?? null;
-  const services = Array.from(new Set(spans.map((span) => span.service).filter((value): value is string => Boolean(value))));
-
-  return {
-    traceId,
-    startedAt,
-    endedAt,
-    durationMs: startedAt != null && endedAt != null ? endedAt - startedAt : 0,
-    services,
-    spans,
-  } satisfies TraceDetailRow;
-}
-
-export async function getLogStats(
-  env: Env,
-  websiteId: string,
-  startAt: number,
-  endAt: number,
-  filters: LogFilters = {},
-) {
-  const searchPattern = filters.search?.trim() ? `%${filters.search.trim().toLowerCase()}%` : null;
-  const row = await siteDb(env, websiteId).prepare(
-    `${logPropsCte}
-     SELECT
-       COUNT(*) as logs,
-       COUNT(DISTINCT session_id) as sessions,
-       MAX(created_at) as lastSeenAt
-     FROM website_event e
-     LEFT JOIN props ON props.website_event_id = e.event_id
-     WHERE e.website_id = ?1
-       AND e.created_at >= ?2
-       AND e.created_at <= ?3
-       AND e.event_type = ?4
-       AND (?5 IS NULL OR props.level = ?5)
-       AND (?6 IS NULL OR lower(COALESCE(props.message, e.event_name, '')) LIKE ?6)
-       AND (?7 IS NULL OR props.release = ?7)
-       AND (?8 IS NULL OR props.environment = ?8)`,
-  )
-    .bind(
-      websiteId,
-      startAt,
-      endAt,
-      EVENT_TYPE.log,
-      filters.level || null,
-      searchPattern,
-      filters.release || null,
-      filters.environment || null,
-    )
-    .first<{ logs: number; sessions: number; lastSeenAt: number | null }>();
-
-  const levels = await siteDb(env, websiteId).prepare(
-    `${logPropsCte}
-     SELECT COALESCE(props.level, 'info') as level, COUNT(*) as logs
-     FROM website_event e
-     LEFT JOIN props ON props.website_event_id = e.event_id
-     WHERE e.website_id = ?1
-       AND e.created_at >= ?2
-       AND e.created_at <= ?3
-       AND e.event_type = ?4
-       AND (?5 IS NULL OR props.level = ?5)
-       AND (?6 IS NULL OR lower(COALESCE(props.message, e.event_name, '')) LIKE ?6)
-       AND (?7 IS NULL OR props.release = ?7)
-       AND (?8 IS NULL OR props.environment = ?8)
-     GROUP BY COALESCE(props.level, 'info')
-     ORDER BY logs DESC, level ASC`,
-  )
-    .bind(
-      websiteId,
-      startAt,
-      endAt,
-      EVENT_TYPE.log,
-      filters.level || null,
-      searchPattern,
-      filters.release || null,
-      filters.environment || null,
-    )
-    .all<{ level: string; logs: number }>();
-
-  const trend = await siteDb(env, websiteId).prepare(
-    `${logPropsCte}
-     SELECT
-       date(e.created_at / 1000, 'unixepoch') as date,
-       COUNT(*) as logs,
-       COUNT(DISTINCT e.session_id) as sessions
-     FROM website_event e
-     LEFT JOIN props ON props.website_event_id = e.event_id
-     WHERE e.website_id = ?1
-       AND e.created_at >= ?2
-       AND e.created_at <= ?3
-       AND e.event_type = ?4
-       AND (?5 IS NULL OR props.level = ?5)
-       AND (?6 IS NULL OR lower(COALESCE(props.message, e.event_name, '')) LIKE ?6)
-       AND (?7 IS NULL OR props.release = ?7)
-       AND (?8 IS NULL OR props.environment = ?8)
-     GROUP BY date(e.created_at / 1000, 'unixepoch')
-     ORDER BY date ASC
-     LIMIT 90`,
-  )
-    .bind(
-      websiteId,
-      startAt,
-      endAt,
-      EVENT_TYPE.log,
-      filters.level || null,
-      searchPattern,
-      filters.release || null,
-      filters.environment || null,
-    )
-    .all<{ date: string; logs: number; sessions: number }>();
-
-  const releases = await siteDb(env, websiteId).prepare(
-    `${logPropsCte}
-     SELECT props.release as release, COUNT(*) as logs
-     FROM website_event e
-     LEFT JOIN props ON props.website_event_id = e.event_id
-     WHERE e.website_id = ?1
-       AND e.created_at >= ?2
-       AND e.created_at <= ?3
-       AND e.event_type = ?4
-       AND props.release IS NOT NULL
-       AND (?5 IS NULL OR props.level = ?5)
-       AND (?6 IS NULL OR lower(COALESCE(props.message, e.event_name, '')) LIKE ?6)
-       AND (?7 IS NULL OR props.release = ?7)
-       AND (?8 IS NULL OR props.environment = ?8)
-     GROUP BY props.release
-     ORDER BY logs DESC
-     LIMIT 10`,
-  )
-    .bind(
-      websiteId,
-      startAt,
-      endAt,
-      EVENT_TYPE.log,
-      filters.level || null,
-      searchPattern,
-      filters.release || null,
-      filters.environment || null,
-    )
-    .all<{ release: string; logs: number }>();
-
-  const environments = await siteDb(env, websiteId).prepare(
-    `${logPropsCte}
-     SELECT props.environment as environment, COUNT(*) as logs
-     FROM website_event e
-     LEFT JOIN props ON props.website_event_id = e.event_id
-     WHERE e.website_id = ?1
-       AND e.created_at >= ?2
-       AND e.created_at <= ?3
-       AND e.event_type = ?4
-       AND props.environment IS NOT NULL
-       AND (?5 IS NULL OR props.level = ?5)
-       AND (?6 IS NULL OR lower(COALESCE(props.message, e.event_name, '')) LIKE ?6)
-       AND (?7 IS NULL OR props.release = ?7)
-       AND (?8 IS NULL OR props.environment = ?8)
-     GROUP BY props.environment
-     ORDER BY logs DESC
-     LIMIT 10`,
-  )
-    .bind(
-      websiteId,
-      startAt,
-      endAt,
-      EVENT_TYPE.log,
-      filters.level || null,
-      searchPattern,
-      filters.release || null,
-      filters.environment || null,
-    )
-    .all<{ environment: string; logs: number }>();
-
-  return {
-    logs: row?.logs ?? 0,
-    sessions: row?.sessions ?? 0,
-    levels: levels.results ?? [],
-    trend: trend.results ?? [],
-    releases: releases.results ?? [],
-    environments: environments.results ?? [],
-    lastSeenAt: row?.lastSeenAt ?? null,
-  };
 }

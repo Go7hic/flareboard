@@ -1,5 +1,5 @@
 import type { Env } from '../env';
-import { eventStoreMode, siteDb } from './site-db';
+import { eventStoreMode, siteDb, siteStoreDb } from './site-db';
 
 const MAX_WEBSITES_PER_TICK = 25;
 const DELETE_BATCH = 5000;
@@ -67,6 +67,7 @@ export async function runRetentionPurge(env: Env, now = Date.now()) {
         .run();
       deleted += result.meta?.changes ?? 0;
     }
+    if (storeMode !== 'd1') deleted += await purgeOtel(env, site.websiteId, cutoff);
   }
 
   console.log(
@@ -77,6 +78,28 @@ export async function runRetentionPurge(env: Env, now = Date.now()) {
     }),
   );
   return { websites: batch.length, deleted };
+}
+
+/**
+ * OpenTelemetry logs and spans live only in the website store (every mode except legacy `d1`).
+ * The store's alarm already drops them after OTEL_RETENTION_DAYS; a shorter website retention
+ * applies here.
+ */
+async function purgeOtel(env: Env, websiteId: string, cutoff: number) {
+  const db = siteStoreDb(env, websiteId);
+  const results = await db.batch([
+    db.prepare(
+      `DELETE FROM log_record WHERE log_id IN (
+         SELECT log_id FROM log_record WHERE created_at < ?1 LIMIT ${DELETE_BATCH}
+       )`,
+    ).bind(cutoff),
+    db.prepare(
+      `DELETE FROM trace_span WHERE rowid IN (
+         SELECT rowid FROM trace_span WHERE created_at < ?1 LIMIT ${DELETE_BATCH}
+       )`,
+    ).bind(cutoff),
+  ]);
+  return results.reduce((sum, result) => sum + (result.meta?.changes ?? 0), 0);
 }
 
 /** R2 allows at most 1000 keys per delete call. */

@@ -331,6 +331,7 @@ app.patch('/api/websites/:websiteId/errors/alerts/:alertRuleId', errors.handleUp
 app.delete('/api/websites/:websiteId/errors/alerts/:alertRuleId', errors.handleDeleteAlertRule);
 app.get('/api/websites/:websiteId/errors/:eventId', errors.handleGet);
 app.get('/api/websites/:websiteId/logs/tail', logs.handleTail);
+app.get('/api/websites/:websiteId/logs/histogram', logs.handleHistogram);
 app.get('/api/websites/:websiteId/logs/services', logs.handleServiceList);
 app.get('/api/websites/:websiteId/logs/traces', logs.handleTraceList);
 app.get('/api/websites/:websiteId/logs/traces/:traceId', logs.handleTraceDetail);

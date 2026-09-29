@@ -58,8 +58,12 @@ No `;` inside SQL comments (the test harness splits statements on `;`).
   translations for your new keys in `apps/dashboard/scripts/i18n-pending/<stream>.json`
   (`{ "ja-JP": {…}, "de-DE": {…}, "fr-FR": {…} }`). Do not edit `i18n-locale-data.json` or the
   generated `src/lib/locales/*.ts`; the coordinator merges them.
-- The tracker script (`handleScript` in `apps/ingest/src/routes/collect.ts`) belongs to the
-  tracker-sdk stream only. Others: describe what you need in your final report.
+- The tracker script lives in `apps/ingest/src/tracker/script.ts` (fake-browser tests in
+  `apps/ingest/test-node`). Keep edits there small and self-contained. The session recorder
+  (`recorder.js`) belongs to the replay stream.
+- Property filters (event / person / dimension) compile through `@flareboard/db/property-filters`
+  (`compilePropertyFilters`, `SqlParams`); reuse it instead of writing new filter SQL.
+- Feature flag bucketing: `packages/shared/src/flag-hash.ts` is the only hash implementation.
 - Avoid new npm dependencies. If one is essential, say why in your report.
 
 ## Done means

@@ -267,7 +267,7 @@ export async function handleCreateFromTemplate(c: Ctx) {
     boardId,
     type: 'dashboard',
     name: parsed.data.name ?? template.name,
-    description: template.description,
+    description: parsed.data.description ?? template.description,
     parameters: { rangePreset: template.rangePreset, filters: [], widgets, template: template.id },
     userId: user.userId,
     teamId,

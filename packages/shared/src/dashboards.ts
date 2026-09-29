@@ -260,6 +260,8 @@ export function findBoardTemplate(id: string): BoardTemplate | null {
 export const createBoardFromTemplateSchema = z.object({
   websiteId: z.string().uuid(),
   name: z.string().trim().min(1).max(100).optional(),
+  /** Localized board description (defaults to the template's English one). */
+  description: z.string().trim().max(500).optional(),
   teamId: z.string().uuid().nullable().optional(),
   /** Localized insight names by template widget key. */
   names: z.record(z.string().trim().min(1).max(120)).optional(),

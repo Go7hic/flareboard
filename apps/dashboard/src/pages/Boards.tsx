@@ -43,6 +43,7 @@ function TemplateGallery({ websites }: { websites: Website[] }) {
         body: JSON.stringify({
           websiteId,
           name: templateText(`boardTemplate_${template.id}`, template.name),
+          description: templateText(`boardTemplateLead_${template.id}`, template.description),
           names: Object.fromEntries(
             template.widgets.map((widget) => [widget.key, templateText(`boardTemplateWidget_${widget.key}`, widget.name)]),
           ),

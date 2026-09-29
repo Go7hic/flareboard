@@ -41,11 +41,14 @@ function projectKeyLimit(env: Env): number {
   return Number.isFinite(configured) && configured > 0 ? configured : PROJECT_KEY_LIMIT_PER_MINUTE;
 }
 
-/** Per-key budget; `bucket` separates event capture from flag evaluation. */
+/**
+ * Per-key budget (requests per minute); `bucket` separates event capture, flag evaluation and
+ * OpenTelemetry exports, so a chatty log exporter cannot starve analytics capture.
+ */
 export async function checkProjectKeyRateLimit(
   env: Env,
   projectKey: string,
-  bucket: 'events' | 'flags' = 'events',
+  bucket: 'events' | 'flags' | 'otlp' = 'events',
 ): Promise<{ allowed: boolean; remaining: number }> {
   return checkDoRateLimit(env.RATE_LIMITER, `project-key:${bucket}`, projectKey, projectKeyLimit(env), WINDOW_SEC);
 }

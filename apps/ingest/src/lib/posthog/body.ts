@@ -23,7 +23,7 @@ export class PostHogBodyError extends Error {
   }
 }
 
-async function readLimited(stream: ReadableStream<Uint8Array> | null, limit: number, what: string): Promise<Uint8Array> {
+export async function readLimited(stream: ReadableStream<Uint8Array> | null, limit: number, what: string): Promise<Uint8Array> {
   if (!stream) return new Uint8Array();
   const reader = stream.getReader();
   // A failed stream also rejects `closed`; the error is reported through read() below.
@@ -49,7 +49,7 @@ async function readLimited(stream: ReadableStream<Uint8Array> | null, limit: num
   return out;
 }
 
-async function gunzip(bytes: Uint8Array, limit: number): Promise<Uint8Array> {
+export async function gunzip(bytes: Uint8Array, limit: number): Promise<Uint8Array> {
   // Cheap checks first: a gzip member has a 10-byte header (deflate method 8) and ends with the
   // uncompressed size mod 2^32. Honest bombs stop here; lying ones stop at the streaming limit.
   // (workerd also logs an internal rejection when DecompressionStream meets corrupt data.)

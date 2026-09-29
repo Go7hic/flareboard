@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '../env';
 import type { StoreParam, StoreResult, StoreStatement } from '@flareboard/db/site-store';
-import { STORE_MIGRATIONS, STORE_SCHEMA_VERSION } from './schema';
+import { OTEL_RETENTION_DAYS, STORE_MIGRATIONS, STORE_SCHEMA_VERSION } from './schema';
 
 export type { StoreMode, StoreParam, StoreResult, StoreStatement } from '@flareboard/db/site-store';
 
@@ -18,6 +18,9 @@ const READ_ONLY_PREFIX = /^\s*(WITH|SELECT|EXPLAIN|VALUES)\b/i;
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Heatmap dedup ids only need to outlive queue redelivery (retries span minutes to hours). */
 const HEATMAP_DEDUP_TTL_MS = 2 * DAY_MS;
+/** Rows deleted per table and alarm; a larger backlog is worked off by a follow-up alarm. */
+const OTEL_PURGE_BATCH = 10_000;
+const OTEL_PURGE_BACKLOG_DELAY_MS = 60 * 1000;
 
 /**
  * One website's analytics store: a SQLite-backed Durable Object addressed by
@@ -42,11 +45,43 @@ export class EventStore extends DurableObject<Env> {
   /** Housekeeping that must not depend on a global cron walking every website. */
   async alarm(): Promise<void> {
     if (!this.migrated) this.migrate();
-    const cutoff = Date.now() - HEATMAP_DEDUP_TTL_MS;
-    this.sql.exec('DELETE FROM heatmap_ingest_dedup WHERE created_at < ?', cutoff);
-    const hasData = this.sql.exec<{ n: number }>('SELECT COUNT(*) AS n FROM heatmap_ingest_dedup').one().n > 0;
+    const now = Date.now();
+    this.sql.exec('DELETE FROM heatmap_ingest_dedup WHERE created_at < ?', now - HEATMAP_DEDUP_TTL_MS);
+    const otelBacklog = this.purgeExpiredOtel(now);
+    const hasData =
+      this.sql.exec<{ n: number }>(
+        `SELECT (EXISTS (SELECT 1 FROM heatmap_ingest_dedup)
+                 OR EXISTS (SELECT 1 FROM log_record)
+                 OR EXISTS (SELECT 1 FROM trace_span)) AS n`,
+      ).one().n > 0;
     // Nothing left to clean: let the store sleep; the constructor re-arms it on the next write.
-    if (hasData) await this.ctx.storage.setAlarm(Date.now() + DAY_MS);
+    if (otelBacklog) await this.ctx.storage.setAlarm(now + OTEL_PURGE_BACKLOG_DELAY_MS);
+    else if (hasData) await this.ctx.storage.setAlarm(now + DAY_MS);
+  }
+
+  /**
+   * Deletes OpenTelemetry logs and spans older than OTEL_RETENTION_DAYS, in bounded batches so
+   * one alarm cannot run long. Returns true while expired rows remain.
+   */
+  private purgeExpiredOtel(now: number): boolean {
+    const cutoff = now - OTEL_RETENTION_DAYS * DAY_MS;
+    let backlog = false;
+    for (const [table, key] of [
+      ['log_record', 'log_id'],
+      ['trace_span', 'rowid'],
+    ] as const) {
+      this.sql
+        .exec(
+          `DELETE FROM ${table} WHERE ${key} IN (
+             SELECT ${key} FROM ${table} WHERE created_at < ? LIMIT ${OTEL_PURGE_BATCH}
+           )`,
+          cutoff,
+        )
+        .toArray();
+      const deleted = Number(this.sql.exec<{ n: number }>('SELECT changes() AS n').one().n) || 0;
+      if (deleted >= OTEL_PURGE_BATCH) backlog = true;
+    }
+    return backlog;
   }
 
   private migrate() {

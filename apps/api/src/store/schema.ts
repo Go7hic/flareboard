@@ -279,6 +279,71 @@ export const STORE_MIGRATIONS: ReadonlyArray<{ version: number; statements: stri
       `CREATE INDEX warehouse_import_website_idx ON warehouse_import (website_id, imported_at)`,
     ],
   },
+  {
+    // OpenTelemetry logs and spans received on ingest's /v1/logs and /v1/traces (docs/logs-otlp.md).
+    // These tables exist only in the website store, in every EVENT_STORE mode: they have no D1
+    // history to migrate. `created_at` is the record's own time in ms (retention and time
+    // filters), `*_us` keep microseconds for ordering and span waterfalls. `attributes` and
+    // `resource` are JSON objects, capped by ingest.
+    version: 3,
+    statements: [
+      `CREATE TABLE log_record (
+        log_id TEXT PRIMARY KEY NOT NULL,
+        website_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        time_us INTEGER NOT NULL,
+        severity TEXT NOT NULL,
+        severity_number INTEGER NOT NULL DEFAULT 0,
+        severity_text TEXT,
+        body TEXT,
+        service TEXT,
+        service_version TEXT,
+        environment TEXT,
+        scope TEXT,
+        trace_id TEXT,
+        span_id TEXT,
+        session_id TEXT,
+        attributes TEXT,
+        resource TEXT
+      )`,
+      `CREATE INDEX log_record_created_idx ON log_record (created_at)`,
+      `CREATE INDEX log_record_severity_created_idx ON log_record (severity, created_at)`,
+      `CREATE INDEX log_record_service_created_idx ON log_record (service, created_at)`,
+      `CREATE INDEX log_record_trace_idx ON log_record (trace_id) WHERE trace_id IS NOT NULL`,
+      `CREATE INDEX log_record_session_idx ON log_record (session_id) WHERE session_id IS NOT NULL`,
+
+      `CREATE TABLE trace_span (
+        trace_id TEXT NOT NULL,
+        span_id TEXT NOT NULL,
+        website_id TEXT NOT NULL,
+        parent_span_id TEXT,
+        name TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'unspecified',
+        service TEXT,
+        service_version TEXT,
+        environment TEXT,
+        scope TEXT,
+        created_at INTEGER NOT NULL,
+        start_us INTEGER NOT NULL,
+        end_us INTEGER NOT NULL,
+        duration_us INTEGER NOT NULL,
+        status_code TEXT NOT NULL DEFAULT 'unset',
+        status_message TEXT,
+        session_id TEXT,
+        attributes TEXT,
+        resource TEXT,
+        events TEXT,
+        links TEXT,
+        PRIMARY KEY (trace_id, span_id)
+      )`,
+      `CREATE INDEX trace_span_created_idx ON trace_span (created_at)`,
+      `CREATE INDEX trace_span_service_created_idx ON trace_span (service, created_at)`,
+      `CREATE INDEX trace_span_session_idx ON trace_span (session_id) WHERE session_id IS NOT NULL`,
+    ],
+  },
 ];
+
+/** OpenTelemetry logs and spans are kept at most this long (the store alarm purges older rows). */
+export const OTEL_RETENTION_DAYS = 30;
 
 export const STORE_SCHEMA_VERSION = STORE_MIGRATIONS[STORE_MIGRATIONS.length - 1]!.version;

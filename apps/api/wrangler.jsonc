@@ -107,7 +107,9 @@
         "EMAIL_FROM": "noreply@flareboard.dev",
         "EMAIL_FROM_NAME": "Flareboard",
         "DASHBOARD_URL": "https://flareboard.dev",
-        "CORS_ORIGINS": "https://flareboard.dev"
+        "CORS_ORIGINS": "https://flareboard.dev",
+        // Stripe price id of the Business plan (not a secret). Cloud's price is the STRIPE_PRICE_CLOUD secret.
+        "STRIPE_PRICE_BUSINESS": "price_1ULO0iBXNJXTmlTiPpFu5uDU"
       },
       "d1_databases": [
         {

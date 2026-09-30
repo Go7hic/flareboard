@@ -89,12 +89,18 @@ const sections: LegalSection[] = [
             <strong>Usage allowances.</strong> Each plan includes monthly allowances for events, OpenTelemetry log
             records and spans, and, on plans with session replay, recordings. Allowances reset on the first day of
             each month (UTC). On the free plan, data of a kind sent after its allowance is reached is not recorded
-            for the rest of that month. On paid plans, collection continues past an allowance up to twice that
-            allowance, then stops for the rest of the month. We do not charge automatically for usage above an
+            for the rest of that month. On paid plans, collection continues past an allowance until usage is 20%
+            over it, then stops for the rest of the month. We do not charge automatically for usage above an
             allowance. We email the account owner when usage reaches 80% and 100% of an allowance and when
             collection stops. Upgrade your plan or contact us to avoid gaps in your data. Plans advertised as
             unlimited in some dimension (such as websites) are subject to reasonable fair-use limits that protect
             the Service for everyone.
+          </li>
+          <li>
+            <strong>Plan changes.</strong> When you move from one paid plan to another, the new plan applies
+            right away and the price difference for the rest of the billing period is prorated on your next
+            invoice. If the new plan has a shorter maximum retention period, raw analytics data older than it is
+            deleted as described in <a href="#your-data">Your data</a>.
           </li>
           <li>
             <strong>Cancellation.</strong> You can cancel at any time from the billing page. Cancellation takes

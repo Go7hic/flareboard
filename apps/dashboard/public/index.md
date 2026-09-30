@@ -25,7 +25,7 @@ Flareboard is for product teams, developers, and Cloudflare-oriented builders wh
 
 ## Pricing Summary
 
-The Free Cloud plan includes one website, 100K events and 1M OpenTelemetry log records and spans per month, raw data kept up to 1 year, and core product analytics. The Cloud plan is $15/month with unlimited websites, 1M events, 5K session replays and 10M log records and spans per month pooled across those sites (collection continues up to 2x each allowance, then pauses until the next month), raw data kept up to 3 years, replay, heatmaps, teams, email reports and subscriptions, CSV import/export, feature flags, experiments, surveys, and the warehouse (including Stripe sync).
+The Free Cloud plan includes one website, 100K events and 50K OpenTelemetry log records and spans per month, raw data kept up to 1 year, and core product analytics. The Cloud plan is $19/month with unlimited websites, 1M events, 5K session replays and 500K log records and spans per month pooled across those sites (collection continues up to 20% over each allowance, then pauses until the next month), raw data kept up to 2 years, replay, heatmaps, teams, email reports and subscriptions, CSV import/export, feature flags, experiments, surveys, and the warehouse (including Stripe sync). The Business plan is $99/month with the same features as Cloud, 5M events, 25K session replays and 5M log records and spans per month, and raw data kept up to 3 years.
 
 ## Try or Self-Host
 

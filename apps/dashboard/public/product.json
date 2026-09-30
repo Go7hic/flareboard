@@ -16,7 +16,7 @@
       "maxWebsites": 1,
       "maxEventsPerMonth": 100000,
       "maxReplaysPerMonth": 0,
-      "maxOtelRowsPerMonth": 1000000,
+      "maxOtelRowsPerMonth": 50000,
       "maxRetentionDays": 365,
       "usageGraceMultiple": 1,
       "included": [
@@ -45,13 +45,37 @@
     {
       "id": "cloud",
       "name": "Cloud",
-      "monthlyPriceUsd": 15,
+      "monthlyPriceUsd": 19,
       "maxWebsites": null,
       "maxEventsPerMonth": 1000000,
       "maxReplaysPerMonth": 5000,
-      "maxOtelRowsPerMonth": 10000000,
+      "maxOtelRowsPerMonth": 500000,
+      "maxRetentionDays": 730,
+      "usageGraceMultiple": 1.2,
+      "included": [
+        "core analytics",
+        "realtime analytics",
+        "session replay",
+        "heatmaps",
+        "teams",
+        "email reports and subscriptions",
+        "CSV import and export",
+        "feature flags",
+        "experiments",
+        "surveys",
+        "warehouse with Stripe sync"
+      ]
+    },
+    {
+      "id": "business",
+      "name": "Business",
+      "monthlyPriceUsd": 99,
+      "maxWebsites": null,
+      "maxEventsPerMonth": 5000000,
+      "maxReplaysPerMonth": 25000,
+      "maxOtelRowsPerMonth": 5000000,
       "maxRetentionDays": 1095,
-      "usageGraceMultiple": 2,
+      "usageGraceMultiple": 1.2,
       "included": [
         "core analytics",
         "realtime analytics",
@@ -72,5 +96,5 @@
     "commercialLicenseAvailable": true
   },
   "lastUpdated": "2026-10-01",
-  "usagePolicy": "Allowances reset monthly (UTC). Past an allowance, Free stops collecting that kind of data until the next month; Cloud keeps collecting up to usageGraceMultiple times the allowance, then stops until the next month. No automatic overage charges."
+  "usagePolicy": "Allowances reset monthly (UTC). Past an allowance, Free stops collecting that kind of data until the next month; Cloud and Business keep collecting up to usageGraceMultiple times the allowance (20% over), then stop until the next month. No automatic overage charges."
 }

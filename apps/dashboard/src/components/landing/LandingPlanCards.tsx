@@ -1,43 +1,46 @@
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
-import { api, bootstrapSession, hasSession } from '../../lib/api';
-import { formatNumber, formatRetentionPeriod } from '../../lib/format';
-import { t } from '../../lib/i18n';
 import {
-  CLOUD_MONTHLY_USD,
-  CLOUD_ORIGINAL_MONTHLY_USD,
-  formatEventLimit,
-  type LandingPlan,
-} from '../../lib/landing-links';
-
-type CheckoutResponse = {
-  url: string;
-};
+  api,
+  bootstrapSession,
+  hasSession,
+  isPaidPlanId,
+  type BillingCheckoutResponse,
+  type PaidPlanId,
+} from '../../lib/api';
+import { formatEventLimit, usageGracePercent, type LandingPlan } from '../../lib/landing-links';
+import { formatPercent, formatRetentionPeriod } from '../../lib/format';
+import { t } from '../../lib/i18n';
 
 export function useLandingPlanActions() {
   const [isLoggedIn, setIsLoggedIn] = useState(hasSession());
+  const navigate = useNavigate();
 
   useEffect(() => {
     void bootstrapSession().then(setIsLoggedIn);
   }, []);
 
   const checkout = useMutation({
-    mutationFn: (planId: string) =>
-      api<CheckoutResponse>('/api/billing/checkout', {
+    mutationFn: (planId: PaidPlanId) =>
+      api<BillingCheckoutResponse>('/api/billing/checkout', {
         method: 'POST',
         body: JSON.stringify({ planId }),
       }),
     onSuccess: (res) => {
-      if (res.url) window.location.href = res.url;
+      if ('url' in res) window.location.href = res.url;
+      // Already subscribed: the plan changed in place; Billing shows the result.
+      else navigate(`/billing?switched=${res.planId}`);
     },
   });
 
   return {
     isLoggedIn,
-    startCloudCheckout: checkout.mutate,
+    startCheckout: checkout.mutate,
     isCheckoutPending: checkout.isPending,
+    /** The plan the last checkout attempt was for, so only its card shows the error. */
+    checkoutPlanId: checkout.variables ?? null,
     checkoutError: checkout.isError
       ? checkout.error instanceof Error
         ? checkout.error.message
@@ -77,8 +80,9 @@ function planFeatureItems(plan: LandingPlan): PlanFeatureLine[] {
     text: t(enabled ? onKey : offKey),
     included: enabled,
   });
+  const gracePercent = usageGracePercent(plan);
 
-  return [
+  const allowances: PlanFeatureLine[] = [
     { text: websiteLine, included: true },
     {
       text: t('landingPlanEventsPerMonth').replace('{limit}', formatEventLimit(plan.maxEventsPerMonth)),
@@ -100,9 +104,18 @@ function planFeatureItems(plan: LandingPlan): PlanFeatureLine[] {
     ...optionalLine(plan.maxRetentionDays > 0, () =>
       t('landingPlanRetention').replace('{duration}', formatRetentionPeriod(plan.maxRetentionDays)),
     ),
-    ...optionalLine(plan.usageGraceMultiple > 1, () =>
-      t('landingPlanUsageGrace').replace('{multiple}', formatNumber(plan.usageGraceMultiple)),
+    ...optionalLine(gracePercent > 0, () =>
+      t('landingPlanUsageGrace').replace('{percent}', formatPercent(gracePercent)),
     ),
+  ];
+
+  // Business has Cloud's features; its card only adds the larger allowances.
+  if (plan.id === 'business') {
+    return [...allowances, { text: t('landingPlanEverythingInCloud'), included: true }];
+  }
+
+  return [
+    ...allowances,
     toggle(plan.emailReportsEnabled, 'landingPlanEmailReportsIncluded', 'landingPlanEmailReportsExcluded'),
     toggle(plan.heatmapsEnabled, 'landingPlanHeatmapsIncluded', 'landingPlanHeatmapsExcluded'),
     toggle(plan.teamsEnabled, 'landingPlanTeamsIncluded', 'landingPlanTeamsExcluded'),
@@ -126,14 +139,22 @@ export function planFeatureLines(plan: LandingPlan, compact = false): string[] {
   return (compact ? items.filter((item) => item.included) : items).map((item) => item.text);
 }
 
+const PLAN_TAGLINE_KEYS: Record<LandingPlan['id'], string> = {
+  free: 'landingPlanFreeTagline',
+  cloud: 'landingPlanCloudTagline',
+  business: 'landingPlanBusinessTagline',
+};
+
 type LandingPlanCardProps = {
   plan: LandingPlan;
   featured?: boolean;
   startHref: string;
   isLoggedIn?: boolean;
   isCheckoutPending?: boolean;
+  /** Shown on this card only when `checkoutPlanId` is this plan. */
   checkoutError?: string | null;
-  onCloudCheckout?: (planId: string) => void;
+  checkoutPlanId?: string | null;
+  onCheckout?: (planId: PaidPlanId) => void;
   /** Only list included features (landing page). */
   compact?: boolean;
 };
@@ -145,55 +166,31 @@ export function LandingPlanCard({
   isLoggedIn = false,
   isCheckoutPending = false,
   checkoutError,
-  onCloudCheckout,
+  checkoutPlanId,
+  onCheckout,
   compact = false,
 }: LandingPlanCardProps) {
-  const priceUsd = plan.monthlyPriceUsd ?? (plan.id === 'cloud' ? CLOUD_MONTHLY_USD : 0);
-  const tagline =
-    plan.id === 'cloud' ? t('landingPlanCloudTagline') : t('landingPlanFreeTagline');
-  const ctaHref = isLoggedIn && plan.id === 'free' ? '/dashboard' : startHref;
-  const ctaLabel =
-    isLoggedIn && plan.id === 'cloud'
+  const paidPlanId = isPaidPlanId(plan.id) ? plan.id : null;
+  const priceUsd = plan.monthlyPriceUsd ?? 0;
+  const ctaHref = isLoggedIn && !paidPlanId ? '/dashboard' : startHref;
+  const ctaLabel = !paidPlanId
+    ? t('landingPlanFreeCta')
+    : isLoggedIn
       ? t('landingPlanCloudSubscribeCta')
-      : plan.id === 'free'
-        ? t('landingPlanFreeCta')
-        : t('landingPlanCloudCta');
-  const priceAria =
-    plan.id === 'cloud'
-      ? t('landingPlanPriceAriaCloud')
-          .replace('{price}', String(priceUsd))
-          .replace('{original}', String(CLOUD_ORIGINAL_MONTHLY_USD))
-      : t('landingPlanPriceAriaFree').replace('{price}', String(priceUsd));
+      : t('landingPlanCloudCta');
 
   return (
     <article className={`landing-plan-card${featured ? ' landing-plan-card-featured' : ''}`}>
       {featured ? <p className="landing-plan-badge">{t('landingPlanRecommended')}</p> : null}
       <div className="landing-plan-card-top">
-        <p className="landing-plan-label">
-          {plan.id === 'cloud' ? t('landingPlanPaidLabel') : t('landingPlanFreeLabel')}
-        </p>
+        <p className="landing-plan-label">{paidPlanId ? t('landingPlanPaidLabel') : t('landingPlanFreeLabel')}</p>
         <h3 className="landing-plan-name">{plan.name}</h3>
-        <p className="landing-plan-price" aria-label={priceAria}>
-          {plan.id === 'cloud' ? (
-            <>
-              <span className="promo-price">
-                <span className="promo-price-original" aria-hidden="true">
-                  ${CLOUD_ORIGINAL_MONTHLY_USD}
-                </span>
-                <span className="landing-plan-price-value">${priceUsd}</span>
-              </span>
-              <span className="landing-plan-price-period">{t('landingPlanPerMonth')}</span>
-              <span className="promo-price-label">{t('landingPromoLabel')}</span>
-            </>
-          ) : (
-            <>
-              <span className="landing-plan-price-value">$0</span>
-              <span className="landing-plan-price-period">{t('landingPlanPerMonth')}</span>
-            </>
-          )}
+        <p className="landing-plan-price" aria-label={t('landingPlanPriceAria').replace('{price}', String(priceUsd))}>
+          <span className="landing-plan-price-value">${priceUsd}</span>
+          <span className="landing-plan-price-period">{t('landingPlanPerMonth')}</span>
         </p>
       </div>
-      <p className="landing-plan-tagline">{tagline}</p>
+      <p className="landing-plan-tagline">{t(PLAN_TAGLINE_KEYS[plan.id] ?? 'landingPlanCloudTagline')}</p>
       <ul className="landing-plan-features">
         {planFeatureLines(plan, compact).map((line) => (
           <li key={line}>
@@ -202,22 +199,18 @@ export function LandingPlanCard({
           </li>
         ))}
       </ul>
-      {isLoggedIn && plan.id === 'cloud' ? (
+      {isLoggedIn && paidPlanId ? (
         <>
           <Button
             type="button"
             variant={featured ? 'primary' : 'secondary'}
             className="landing-plan-cta"
             disabled={isCheckoutPending}
-            onClick={() => onCloudCheckout?.(plan.id)}
+            onClick={() => onCheckout?.(paidPlanId)}
           >
             {ctaLabel}
           </Button>
-          {checkoutError ? (
-            <p className="text-danger mt-3">
-              {checkoutError}
-            </p>
-          ) : null}
+          {checkoutError && checkoutPlanId === paidPlanId ? <p className="text-danger">{checkoutError}</p> : null}
         </>
       ) : (
         <Button asChild variant={featured ? 'primary' : 'secondary'} className="landing-plan-cta">

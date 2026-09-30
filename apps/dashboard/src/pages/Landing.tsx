@@ -7,6 +7,7 @@ import { LandingHowItWorks } from '../components/landing/LandingHowItWorks';
 import { LandingPlanCard, useLandingPlanActions } from '../components/landing/LandingPlanCards';
 import { LandingProductPreview } from '../components/landing/LandingProductPreview';
 import { Button } from '../components/ui/button';
+import { BILLING_PLAN_IDS } from '../lib/api';
 import { t } from '../lib/i18n';
 import { FLAREBOARD_DEPLOY_DOCS, FLAREBOARD_ENTERPRISE_EMAIL, LANDING_PLANS } from '../lib/landing-links';
 import { useAppConfig, useStartHref } from '../lib/useAppConfig';
@@ -87,8 +88,8 @@ export default function Landing() {
   const config = useAppConfig();
   const startHref = useStartHref();
   const planActions = useLandingPlanActions();
-  const plans = (config.plans?.length ? config.plans : LANDING_PLANS).filter(
-    (p) => p.id === 'free' || p.id === 'cloud',
+  const plans = (config.plans?.length ? config.plans : LANDING_PLANS).filter((p) =>
+    (BILLING_PLAN_IDS as readonly string[]).includes(p.id),
   );
 
   return (
@@ -185,7 +186,8 @@ export default function Landing() {
                 isLoggedIn={planActions.isLoggedIn}
                 isCheckoutPending={planActions.isCheckoutPending}
                 checkoutError={planActions.checkoutError}
-                onCloudCheckout={planActions.startCloudCheckout}
+                checkoutPlanId={planActions.checkoutPlanId}
+                onCheckout={planActions.startCheckout}
               />
             ))}
             <SelfHostCard />

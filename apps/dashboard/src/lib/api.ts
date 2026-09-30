@@ -269,9 +269,30 @@ export interface Website {
   retentionDays?: number | null;
 }
 
+/** Hosted plan ids, cheapest first (mirrors `PLAN_IDS` in packages/shared/src/billing.ts). */
+export const BILLING_PLAN_IDS = ['free', 'cloud', 'business'] as const;
+export type BillingPlanId = (typeof BILLING_PLAN_IDS)[number];
+/** Plans a customer can buy (`POST /api/billing/checkout`). */
+export type PaidPlanId = Exclude<BillingPlanId, 'free'>;
+
+export function isPaidPlanId(id: string | null | undefined): id is PaidPlanId {
+  return id === 'cloud' || id === 'business';
+}
+
+/** Position in `BILLING_PLAN_IDS`; unknown ids sort first, like Free. */
+export function planRank(id: string): number {
+  return Math.max(0, BILLING_PLAN_IDS.indexOf(id as BillingPlanId));
+}
+
+/**
+ * `POST /api/billing/checkout`: a Stripe Checkout URL for a new subscription, or, when the
+ * account already pays, the plan switched in place (prorated by Stripe).
+ */
+export type BillingCheckoutResponse = { url: string } | { switched: true; planId: PaidPlanId };
+
 /** A hosted plan as `/api/billing/plans` and `/api/billing/subscription` return it. */
 export interface BillingPlan {
-  id: string;
+  id: BillingPlanId;
   name: string;
   maxWebsites: number | null;
   maxEventsPerMonth: number;

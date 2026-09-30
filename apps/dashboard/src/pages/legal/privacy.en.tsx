@@ -591,8 +591,9 @@ const sections: LegalSection[] = [
           <li>
             <strong>Analytics data</strong> (raw events and session replay recordings) is kept for each
             website&apos;s retention period and then deleted automatically, unless the customer deletes it sooner.
-            The customer can set a period for each website, up to the maximum of their plan: 1 year on the Free plan
-            and 3 years on the Cloud plan. When no period is set, the plan maximum applies. If an account moves to a
+            The customer can set a period for each website, up to the maximum of their plan: 1 year on the Free plan,
+            2 years on the Cloud plan and 3 years on the Business plan. When no period is set, the plan maximum
+            applies. If an account moves to a
             plan with a shorter maximum, raw data older than that maximum is deleted. Session replay recordings are
             deleted together with the raw events they belong to. Aggregated statistics derived from raw events may
             be kept for the life of the website.

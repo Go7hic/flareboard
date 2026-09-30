@@ -11,6 +11,9 @@ import {
 } from '../lib/landing-links';
 import { buildPricingCompareRows } from '../lib/pricing-comparison';
 
+/** The plan marked “Recommended” on the cards and highlighted in the comparison header. */
+const FEATURED_PLAN_ID = 'cloud';
+
 export default function Pricing() {
   const startHref = useStartHref();
   const planActions = useLandingPlanActions();
@@ -43,12 +46,13 @@ export default function Pricing() {
               <LandingPlanCard
                 key={plan.id}
                 plan={plan}
-                featured={plan.id === 'cloud'}
+                featured={plan.id === FEATURED_PLAN_ID}
                 startHref={startHref}
                 isLoggedIn={planActions.isLoggedIn}
                 isCheckoutPending={planActions.isCheckoutPending}
                 checkoutError={planActions.checkoutError}
-                onCloudCheckout={planActions.startCloudCheckout}
+                checkoutPlanId={planActions.checkoutPlanId}
+                onCheckout={planActions.startCheckout}
               />
             ))}
           </div>
@@ -82,31 +86,38 @@ export default function Pricing() {
               <thead>
                 <tr>
                   <th scope="col">{t('pricingCompareFeature')}</th>
-                  <th scope="col">{t('pricingCompareFree')}</th>
-                  <th scope="col">{t('pricingCompareCloud')}</th>
+                  {LANDING_PLANS.map((plan) => (
+                    <th
+                      key={plan.id}
+                      scope="col"
+                      className={plan.id === FEATURED_PLAN_ID ? 'pricing-compare-featured' : undefined}
+                    >
+                      {plan.id === 'free' ? t('pricingCompareFree') : plan.name}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {compareRows.map((row) =>
                   row.kind === 'section' ? (
                     <tr key={row.labelKey} className="pricing-compare-section">
-                      <th scope="colgroup" colSpan={3}>
-                        {t(row.labelKey)}
+                      <th scope="colgroup" colSpan={LANDING_PLANS.length + 1}>
+                        <span>{t(row.labelKey)}</span>
                       </th>
                     </tr>
                   ) : (
                     <tr key={row.labelKey}>
                       <th scope="row">{t(row.labelKey)}</th>
-                      <td className="pricing-compare-plan">{row.free}</td>
-                      <td
-                        className={
-                          row.cloudExclusive
-                            ? 'pricing-compare-plan pricing-compare-cloud-exclusive'
-                            : 'pricing-compare-plan'
-                        }
-                      >
-                        {row.cloud}
-                      </td>
+                      {row.cells.map((cell) => (
+                        <td
+                          key={cell.planId}
+                          className={
+                            cell.upgraded ? 'pricing-compare-plan pricing-compare-upgraded' : 'pricing-compare-plan'
+                          }
+                        >
+                          {cell.value}
+                        </td>
+                      ))}
                     </tr>
                   ),
                 )}

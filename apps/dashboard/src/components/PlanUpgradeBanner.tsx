@@ -14,7 +14,7 @@ export function PlanUpgradeBanner({ message, className }: PlanUpgradeBannerProps
       <p className="plan-upgrade-banner-text">{message}</p>
       <Button variant="primary" size="default" asChild className="plan-upgrade-banner-cta">
         <Link to="/billing">
-          {t('upgradeTo')} Cloud
+          {t('billingUpgradeToPlan').replace('{plan}', 'Cloud')}
           <ArrowUpRight size={16} strokeWidth={2} aria-hidden />
         </Link>
       </Button>

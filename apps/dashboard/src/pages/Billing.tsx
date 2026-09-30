@@ -1,16 +1,56 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
-import { api, type BillingPlan, type BillingSubscription } from '../lib/api';
+import {
+  api,
+  isPaidPlanId,
+  planRank,
+  type BillingCheckoutResponse,
+  type BillingPlan,
+  type BillingSubscription,
+  type PaidPlanId,
+} from '../lib/api';
 import { formatNextMonthStart, formatNumber, formatPercent, formatRetentionPeriod } from '../lib/format';
 import { t } from '../lib/i18n';
-import {
-  CLOUD_MONTHLY_USD,
-  CLOUD_ORIGINAL_MONTHLY_USD,
-  CLOUD_PROMO_LABEL,
-} from '../lib/landing-links';
+import { formatEventLimit, usageGracePercent } from '../lib/landing-links';
+
+function monthlyPrice(priceUsd: number): string {
+  return t('billingPlanMonthlyPrice').replace('{price}', String(priceUsd));
+}
+
+/** One plan the account can move up to: price, allowances and the upgrade button. */
+function UpgradeOption({
+  plan,
+  disabled,
+  onUpgrade,
+}: {
+  plan: BillingPlan & { id: PaidPlanId };
+  disabled: boolean;
+  onUpgrade: (planId: PaidPlanId) => void;
+}) {
+  const summary = t('billingUpgradeSummary')
+    .replace('{events}', formatEventLimit(plan.maxEventsPerMonth))
+    .replace('{replays}', formatEventLimit(plan.maxReplaysPerMonth))
+    .replace('{otel}', formatEventLimit(plan.maxOtelRowsPerMonth))
+    .replace('{duration}', formatRetentionPeriod(plan.maxRetentionDays));
+  return (
+    <li className="billing-upgrade-option">
+      <div className="billing-upgrade-copy">
+        <p className="billing-upgrade-name">
+          <span>{plan.name}</span>
+          <span className="billing-upgrade-price">{monthlyPrice(plan.monthlyPriceUsd ?? 0)}</span>
+        </p>
+        <p className="field-hint">{summary}</p>
+      </div>
+      <Button variant="primary" size="sm" disabled={disabled} onClick={() => onUpgrade(plan.id)}>
+        {t('billingUpgradeToPlan').replace('{plan}', plan.name)}
+      </Button>
+    </li>
+  );
+}
 
 type UsageMeterProps = {
   label: string;
@@ -74,6 +114,9 @@ export default function Billing() {
   const [params] = useSearchParams();
   const success = params.get('success') === '1';
   const canceled = params.get('canceled') === '1';
+  const queryClient = useQueryClient();
+  /** Plan an in-place switch moved to (from this page, or `?switched=` from the pricing page). */
+  const [switchedTo, setSwitchedTo] = useState<string | null>(params.get('switched'));
 
   const { data, isLoading } = useQuery({
     queryKey: ['billing-subscription'],
@@ -86,13 +129,19 @@ export default function Billing() {
   });
 
   const checkout = useMutation({
-    mutationFn: (planId: string) =>
-      api<{ url: string }>('/api/billing/checkout', {
+    mutationFn: (planId: PaidPlanId) =>
+      api<BillingCheckoutResponse>('/api/billing/checkout', {
         method: 'POST',
         body: JSON.stringify({ planId }),
       }),
     onSuccess: (res) => {
-      if (res.url) window.location.href = res.url;
+      if ('url' in res) {
+        window.location.href = res.url;
+        return;
+      }
+      // Already subscribed: Stripe changed the plan in place.
+      setSwitchedTo(res.planId);
+      void queryClient.invalidateQueries({ queryKey: ['billing-subscription'] });
     },
   });
 
@@ -119,12 +168,20 @@ export default function Billing() {
   const plan = data.plan!;
   const usage = data.usage;
   const resetDate = formatNextMonthStart();
+  const gracePercent = usageGracePercent({ usageGraceMultiple: plan.usageGraceMultiple ?? 1 });
   const meters = [
     { key: 'events', label: t('billingUsageEvents'), used: usage?.eventsThisMonth ?? 0, included: plan.maxEventsPerMonth },
     { key: 'replays', label: t('billingUsageReplays'), used: usage?.replaysThisMonth ?? 0, included: plan.maxReplaysPerMonth ?? 0 },
     { key: 'otel', label: t('billingUsageOtel'), used: usage?.otelRowsThisMonth ?? 0, included: plan.maxOtelRowsPerMonth ?? 0 },
   ].filter((meter) => meter.included > 0);
-  const upgradePlans = (plansData?.plans ?? []).filter((p) => p.id === 'cloud' && plan.id !== 'cloud');
+  const plans = plansData?.plans ?? [];
+  const upgradePlans = plans.filter(
+    (p): p is BillingPlan & { id: PaidPlanId } => isPaidPlanId(p.id) && planRank(p.id) > planRank(plan.id),
+  );
+  // `/subscription` has no price; `/plans` does.
+  const priceUsd = plan.monthlyPriceUsd ?? plans.find((p) => p.id === plan.id)?.monthlyPriceUsd;
+  // Shown once the refetched subscription reflects the switch (the API applies it before replying).
+  const switchedPlanName = switchedTo && switchedTo === plan.id ? plan.name : null;
 
   return (
     <Page>
@@ -132,6 +189,11 @@ export default function Billing() {
       <PageBody>
       {success ? <p className="text-muted panel-body">{t('billingSuccess')}</p> : null}
       {canceled ? <p className="text-muted panel-body">{t('billingCanceled')}</p> : null}
+      {switchedPlanName ? (
+        <p className="text-muted panel-body" role="status">
+          {t('billingSwitched').replace('{plan}', switchedPlanName)}
+        </p>
+      ) : null}
 
       <section className="panel section-gap">
         <div className="panel-body">
@@ -150,11 +212,7 @@ export default function Billing() {
             {plan.experimentationEnabled ? t('yes') : t('no')} · {t('surveys')}:{' '}
             {plan.surveysEnabled ? t('yes') : t('no')} · {t('dataWarehouse')}:{' '}
             {plan.warehouseEnabled ? t('yes') : t('no')}
-            {plan.monthlyPriceUsd != null && plan.monthlyPriceUsd > 0
-              ? ` · $${plan.monthlyPriceUsd}/mo`
-              : plan.id === 'free'
-                ? ' · Free'
-                : ''}
+            {priceUsd != null ? ` · ${monthlyPrice(priceUsd)}` : null}
           </p>
           {plan.maxRetentionDays ? (
             <p className="text-muted">
@@ -163,7 +221,12 @@ export default function Billing() {
           ) : null}
           <div className="billing-usage-group">
             <h3 className="billing-usage-title">{t('billingUsageTitle')}</h3>
-            <p className="field-hint">{t('billingUsageResets').replace('{date}', resetDate)}</p>
+            <p className="field-hint">
+              {t('billingUsageResets').replace('{date}', resetDate)}{' '}
+              {gracePercent > 0
+                ? t('billingUsageGraceHint').replace('{percent}', formatPercent(gracePercent))
+                : t('billingUsageStopsHint')}
+            </p>
             {meters.map((meter) => (
               <UsageMeter
                 key={meter.key}
@@ -175,30 +238,23 @@ export default function Billing() {
               />
             ))}
           </div>
-          <div className="mt-5">
-            {upgradePlans.length > 0 ? (
-              <div className="billing-cloud-promo">
-                <p className="promo-price billing-promo-price">
-                  <span className="promo-price-original" aria-hidden="true">
-                    ${CLOUD_ORIGINAL_MONTHLY_USD}
-                  </span>
-                  <span className="promo-price-current">${CLOUD_MONTHLY_USD}/mo</span>
+          {upgradePlans.length > 0 ? (
+            <div className="billing-usage-group">
+              <h3 className="billing-usage-title">{t('billingUpgradeTitle')}</h3>
+              {isPaidPlanId(plan.id) ? <p className="field-hint">{t('billingUpgradeProrated')}</p> : null}
+              <ul className="billing-upgrade-list">
+                {upgradePlans.map((p) => (
+                  <UpgradeOption key={p.id} plan={p} disabled={checkout.isPending} onUpgrade={checkout.mutate} />
+                ))}
+              </ul>
+              {checkout.isError ? (
+                <p className="text-danger mt-3">
+                  {checkout.error instanceof Error ? checkout.error.message : t('requestFailed')}
                 </p>
-                <p className="promo-price-label">{CLOUD_PROMO_LABEL}</p>
-              </div>
-            ) : null}
-            <div className={`flex flex-wrap gap-2${upgradePlans.length > 0 ? ' mt-3' : ''}`}>
-            {upgradePlans.map((p) => (
-              <Button
-                key={p.id}
-                variant="primary"
-                size="sm"
-                disabled={checkout.isPending}
-                onClick={() => checkout.mutate(p.id)}
-              >
-                {t('upgradeTo')} Cloud
-              </Button>
-            ))}
+              ) : null}
+            </div>
+          ) : null}
+          <div className="mt-5">
             <Button
               variant="secondary"
               size="sm"
@@ -207,13 +263,7 @@ export default function Billing() {
             >
               {t('manageBilling')}
             </Button>
-            </div>
           </div>
-          {checkout.isError ? (
-            <p className="text-danger mt-3">
-              {checkout.error instanceof Error ? checkout.error.message : t('requestFailed')}
-            </p>
-          ) : null}
         </div>
       </section>
       </PageBody>

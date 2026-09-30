@@ -1986,6 +1986,53 @@ code {
   color: var(--danger);
 }
 
+/* Billing upgrade options */
+.billing-upgrade-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.billing-upgrade-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.billing-upgrade-copy {
+  flex: 1;
+  min-width: 14rem;
+}
+
+.billing-upgrade-copy .field-hint {
+  margin: 0.25rem 0 0;
+}
+
+.billing-upgrade-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0;
+  font-weight: 600;
+}
+
+.billing-upgrade-price {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
 /* Route error boundary */
 .route-error {
   display: flex;
@@ -10410,7 +10457,7 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 
 .pricing-compare-table {
   width: 100%;
-  min-width: 28rem;
+  min-width: 36rem;
   border-collapse: collapse;
   font-size: 0.9375rem;
 }
@@ -10443,6 +10490,24 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   min-width: 9rem;
 }
 
+/* Keep the feature names in view while the plan columns scroll sideways on narrow screens. */
+.pricing-compare-table thead th:first-child,
+.pricing-compare-table tbody th[scope='row'] {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+
+.pricing-compare-table tbody th[scope='row'] {
+  background: var(--bg-elevated);
+}
+
+/* Section labels span every column; pin the text so it stays visible while scrolled. */
+.pricing-compare-table tbody tr.pricing-compare-section th > span {
+  position: sticky;
+  left: 1.15rem;
+}
+
 .pricing-compare-table tbody tr.pricing-compare-section th {
   padding-top: 1.1rem;
   padding-bottom: 0.55rem;
@@ -10470,7 +10535,7 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   border-bottom: none;
 }
 
-.pricing-compare-table thead th:nth-child(3) {
+.pricing-compare-table thead th.pricing-compare-featured {
   color: var(--accent);
   font-weight: 600;
 }
@@ -10480,7 +10545,7 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   font-weight: 500;
 }
 
-.pricing-compare-table tbody td.pricing-compare-cloud-exclusive {
+.pricing-compare-table tbody td.pricing-compare-upgraded {
   color: var(--accent);
   font-weight: 600;
 }
@@ -10580,7 +10645,7 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 
 .landing-plans-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1.25rem;
   align-items: stretch;
 }
@@ -10665,45 +10730,6 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   color: var(--text-muted);
 }
 
-.promo-price {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.promo-price-original {
-  font-family: var(--font-mono);
-  font-size: 1.125rem;
-  font-weight: 500;
-  color: var(--text-muted);
-  text-decoration: line-through;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-}
-
-.promo-price-current {
-  font-family: var(--font-mono);
-  font-size: 1rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-}
-
-.promo-price-label {
-  display: block;
-  margin-top: 0.35rem;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-
-.billing-promo-price {
-  margin: 0;
-}
-
 .landing-plan-tagline {
   margin: 0;
   padding-bottom: 0.25rem;
@@ -10720,6 +10746,8 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   display: grid;
   gap: 0.6rem;
   flex: 1;
+  /* Shorter lists (Business) stay packed at the top of an equal-height card. */
+  align-content: start;
 }
 
 .landing-plan-features li {

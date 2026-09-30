@@ -30,14 +30,14 @@ Flareboard combines core website analytics with PostHog-like product analytics a
 
 ## Sessions and Experience
 
-- Session replay on the Cloud plan: input and text masking, blocked elements, optional console and network timelines, inactivity skipping, and share links.
-- Heatmaps on the Cloud plan.
+- Session replay on the Cloud and Business plans: input and text masking, blocked elements, optional console and network timelines, inactivity skipping, and share links.
+- Heatmaps on the Cloud and Business plans.
 - Session timelines and declarative event tracking.
 
 ## Experimentation and Feedback
 
-- Feature flags and experiments on the Cloud plan: condition groups, person, group, and cohort targeting, variants, JSON payloads, and early access.
-- Multi-question surveys on the Cloud plan: branching, NPS and rating scales, hosted survey links, partial responses, and CSV export.
+- Feature flags and experiments on the Cloud and Business plans: condition groups, person, group, and cohort targeting, variants, JSON payloads, and early access.
+- Multi-question surveys on the Cloud and Business plans: branching, NPS and rating scales, hosted survey links, partial responses, and CSV export.
 
 ## Quality and Observability
 
@@ -48,12 +48,12 @@ Flareboard combines core website analytics with PostHog-like product analytics a
 ## Automation and Warehouse
 
 - Actions, annotations, and event-triggered workflows with filters, delays, conditions, and webhook, email, or Slack steps (signed webhooks, retries, delivery log).
-- Warehouse on the Cloud plan: SQL over events, imported HTTP data, and Stripe, with a schema browser, saved queries, and CSV export.
+- Warehouse on the Cloud and Business plans: SQL over events, imported HTTP data, and Stripe, with a schema browser, saved queries, and CSV export.
 - MCP server: connect Claude, Cursor, or any MCP client with a personal API key.
 
 ## Collaboration and Operations
 
-- Teams on the Cloud plan.
+- Teams on the Cloud and Business plans.
 - Boards with board-wide filters, drag-and-drop layout, templates, and public share links with expiry.
-- Insight alerts, daily or weekly email subscriptions (Cloud plan), and notebooks.
-- Share links, links, pixels, email reports, CSV import, revenue analytics (MRR, ARR, churn, ARPU, attribution; Stripe sync on the Cloud plan), admin console, OAuth sign-in, and commercial licensing.
+- Insight alerts, daily or weekly email subscriptions (Cloud and Business plans), and notebooks.
+- Share links, links, pixels, email reports, CSV import, revenue analytics (MRR, ARR, churn, ARPU, attribution; Stripe sync on the Cloud and Business plans), admin console, OAuth sign-in, and commercial licensing.

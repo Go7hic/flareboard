@@ -1368,18 +1368,13 @@
 
 .home-plans {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: stretch;
   gap: 1rem;
 }
 
 .home-plans .landing-plan-card {
   border-radius: var(--radius-md);
-}
-
-/* Compact lists are shorter than the card; keep rows packed at the top. */
-.home-plans .landing-plan-features {
-  align-content: start;
 }
 
 .home-enterprise {
@@ -1684,7 +1679,13 @@
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1080px) {
+  .home-plans {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
   .home-plans {
     grid-template-columns: minmax(0, 1fr);
   }

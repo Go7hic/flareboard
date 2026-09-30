@@ -1,22 +1,19 @@
-import {
-  CLOUD_MONTHLY_USD,
-  formatEventLimit,
-  LANDING_PLANS,
-  type LandingPlan,
-} from './landing-links';
-import { formatNumber, formatRetentionPeriod } from './format';
+import { formatEventLimit, LANDING_PLANS, usageGracePercent, type LandingPlan } from './landing-links';
+import { formatPercent, formatRetentionPeriod } from './format';
 import { t } from './i18n';
 
 export type CompareRowKind = 'section' | 'feature';
 
-export type ResolvedCompareRow = {
-  kind: CompareRowKind;
-  labelKey: string;
-  free?: string;
-  cloud?: string;
-  /** True when the Cloud cell differs from Free (tier-gated or higher limits). */
-  cloudExclusive?: boolean;
+export type ResolvedCompareCell = {
+  planId: LandingPlan['id'];
+  value: string;
+  /** True when this plan's value differs from the plan before it (what upgrading adds). */
+  upgraded: boolean;
 };
+
+export type ResolvedCompareRow =
+  | { kind: 'section'; labelKey: string }
+  | { kind: 'feature'; labelKey: string; cells: ResolvedCompareCell[] };
 
 type CompareCellSpec =
   | { type: 'included' }
@@ -39,256 +36,136 @@ type CompareCellSpec =
   | { type: 'retention' }
   | { type: 'overage' }
   | { type: 'price' }
-  | { type: 'text'; freeKey: string; cloudKey: string };
+  /** Fixed copy: one text for Free, another for every paid plan. */
+  | { type: 'text'; freeKey: string; paidKey: string };
 
+/** One row of the table; `cell` is resolved against each plan's column. */
 type CompareEntry =
   | { kind: 'section'; labelKey: string }
-  | {
-      kind: 'feature';
-      labelKey: string;
-      free: CompareCellSpec;
-      cloud: CompareCellSpec;
-    };
+  | { kind: 'feature'; labelKey: string; cell: CompareCellSpec };
 
 /** Row definitions for the pricing comparison table. */
 export const PRICING_COMPARE_ENTRIES: CompareEntry[] = [
   { kind: 'section', labelKey: 'pricingCompareSectionData' },
-  { kind: 'feature', labelKey: 'pricingComparePrice', free: { type: 'price' }, cloud: { type: 'price' } },
-  {
-    kind: 'feature',
-    labelKey: 'pricingCompareWebsites',
-    free: { type: 'websites' },
-    cloud: { type: 'websites' },
-  },
-  {
-    kind: 'feature',
-    labelKey: 'pricingCompareEvents',
-    free: { type: 'events' },
-    cloud: { type: 'events' },
-  },
-  {
-    kind: 'feature',
-    labelKey: 'pricingCompareReplays',
-    free: { type: 'replays' },
-    cloud: { type: 'replays' },
-  },
-  {
-    kind: 'feature',
-    labelKey: 'pricingCompareOtel',
-    free: { type: 'otel' },
-    cloud: { type: 'otel' },
-  },
-  {
-    kind: 'feature',
-    labelKey: 'pricingCompareOverage',
-    free: { type: 'overage' },
-    cloud: { type: 'overage' },
-  },
-  {
-    kind: 'feature',
-    labelKey: 'pricingCompareRetention',
-    free: { type: 'retention' },
-    cloud: { type: 'retention' },
-  },
-  {
-    kind: 'feature',
-    labelKey: 'featCsvExportTitle',
-    free: { type: 'yesNo', field: 'dataPortabilityEnabled' },
-    cloud: { type: 'yesNo', field: 'dataPortabilityEnabled' },
-  },
+  { kind: 'feature', labelKey: 'pricingComparePrice', cell: { type: 'price' } },
+  { kind: 'feature', labelKey: 'pricingCompareWebsites', cell: { type: 'websites' } },
+  { kind: 'feature', labelKey: 'pricingCompareEvents', cell: { type: 'events' } },
+  { kind: 'feature', labelKey: 'pricingCompareReplays', cell: { type: 'replays' } },
+  { kind: 'feature', labelKey: 'pricingCompareOtel', cell: { type: 'otel' } },
+  { kind: 'feature', labelKey: 'pricingCompareOverage', cell: { type: 'overage' } },
+  { kind: 'feature', labelKey: 'pricingCompareRetention', cell: { type: 'retention' } },
+  { kind: 'feature', labelKey: 'featCsvExportTitle', cell: { type: 'yesNo', field: 'dataPortabilityEnabled' } },
   {
     kind: 'feature',
     labelKey: 'featDataImportTitle',
-    free: { type: 'yesNo', field: 'dataPortabilityEnabled' },
-    cloud: { type: 'yesNo', field: 'dataPortabilityEnabled' },
+    cell: { type: 'yesNo', field: 'dataPortabilityEnabled' },
   },
 
   { kind: 'section', labelKey: 'pricingCompareSectionPlatform' },
-  { kind: 'feature', labelKey: 'featEdgeIngestTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featCfStackTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featPosthogSdkTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featApiKeysTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  {
-    kind: 'feature',
-    labelKey: 'featPrivacyDefaultTitle',
-    free: { type: 'included' },
-    cloud: { type: 'included' },
-  },
-  {
-    kind: 'feature',
-    labelKey: 'featDataOwnershipTitle',
-    free: { type: 'included' },
-    cloud: { type: 'included' },
-  },
+  { kind: 'feature', labelKey: 'featEdgeIngestTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featCfStackTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featPosthogSdkTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featApiKeysTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featPrivacyDefaultTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featDataOwnershipTitle', cell: { type: 'included' } },
 
   { kind: 'section', labelKey: 'pricingCompareSectionAnalytics' },
-  {
-    kind: 'feature',
-    labelKey: 'featWebsiteStatsTitle',
-    free: { type: 'included' },
-    cloud: { type: 'included' },
-  },
-  {
-    kind: 'feature',
-    labelKey: 'featCustomEventsTitle',
-    free: { type: 'included' },
-    cloud: { type: 'included' },
-  },
-  {
-    kind: 'feature',
-    labelKey: 'pricingCompareSessions',
-    free: { type: 'included' },
-    cloud: { type: 'included' },
-  },
-  { kind: 'feature', labelKey: 'featRealtimeTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featSegmentsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'people', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'groups', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'stickiness', free: { type: 'included' }, cloud: { type: 'included' } },
-  {
-    kind: 'feature',
-    labelKey: 'pricingComparePeriodCompare',
-    free: { type: 'included' },
-    cloud: { type: 'included' },
-  },
+  { kind: 'feature', labelKey: 'featWebsiteStatsTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featCustomEventsTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'pricingCompareSessions', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featRealtimeTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featSegmentsTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'people', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'groups', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'stickiness', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'pricingComparePeriodCompare', cell: { type: 'included' } },
 
   { kind: 'section', labelKey: 'pricingCompareSectionReports' },
-  { kind: 'feature', labelKey: 'featFunnelTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featRetentionTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featAttributionTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featUtmTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featBreakdownTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featWebVitalsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featGoalsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featCohortsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featJourneysTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featInsightsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featFunnelTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featRetentionTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featAttributionTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featUtmTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featBreakdownTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featWebVitalsTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featGoalsTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featCohortsTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featJourneysTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featInsightsTitle', cell: { type: 'included' } },
 
   { kind: 'section', labelKey: 'pricingCompareSectionProduct' },
   {
     kind: 'feature',
     labelKey: 'featFeatureFlagsTitle',
-    free: { type: 'yesNo', field: 'experimentationEnabled' },
-    cloud: { type: 'yesNo', field: 'experimentationEnabled' },
+    cell: { type: 'yesNo', field: 'experimentationEnabled' },
   },
   {
     kind: 'feature',
     labelKey: 'featExperimentsTitle',
-    free: { type: 'yesNo', field: 'experimentationEnabled' },
-    cloud: { type: 'yesNo', field: 'experimentationEnabled' },
+    cell: { type: 'yesNo', field: 'experimentationEnabled' },
   },
-  {
-    kind: 'feature',
-    labelKey: 'featSurveysTitle',
-    free: { type: 'yesNo', field: 'surveysEnabled' },
-    cloud: { type: 'yesNo', field: 'surveysEnabled' },
-  },
-  { kind: 'feature', labelKey: 'featActionsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featErrorsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featLogsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featAiObservabilityTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featAnnotationsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featWorkflowsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featMcpTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  {
-    kind: 'feature',
-    labelKey: 'featWarehouseTitle',
-    free: { type: 'yesNo', field: 'warehouseEnabled' },
-    cloud: { type: 'yesNo', field: 'warehouseEnabled' },
-  },
+  { kind: 'feature', labelKey: 'featSurveysTitle', cell: { type: 'yesNo', field: 'surveysEnabled' } },
+  { kind: 'feature', labelKey: 'featActionsTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featErrorsTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featLogsTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featAiObservabilityTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featAnnotationsTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featWorkflowsTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featMcpTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featWarehouseTitle', cell: { type: 'yesNo', field: 'warehouseEnabled' } },
 
   { kind: 'section', labelKey: 'pricingCompareSectionSessions' },
-  { kind: 'feature', labelKey: 'featHeatmapsTitle', free: { type: 'yesNo', field: 'heatmapsEnabled' }, cloud: { type: 'yesNo', field: 'heatmapsEnabled' } },
-  {
-    kind: 'feature',
-    labelKey: 'featReplayTitle',
-    free: { type: 'yesNo', field: 'replayEnabled' },
-    cloud: { type: 'yesNo', field: 'replayEnabled' },
-  },
-  {
-    kind: 'feature',
-    labelKey: 'featSessionTimelineTitle',
-    free: { type: 'included' },
-    cloud: { type: 'included' },
-  },
-  {
-    kind: 'feature',
-    labelKey: 'featDeclarativeEventsTitle',
-    free: { type: 'included' },
-    cloud: { type: 'included' },
-  },
+  { kind: 'feature', labelKey: 'featHeatmapsTitle', cell: { type: 'yesNo', field: 'heatmapsEnabled' } },
+  { kind: 'feature', labelKey: 'featReplayTitle', cell: { type: 'yesNo', field: 'replayEnabled' } },
+  { kind: 'feature', labelKey: 'featSessionTimelineTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featDeclarativeEventsTitle', cell: { type: 'included' } },
 
   { kind: 'section', labelKey: 'pricingCompareSectionCollaboration' },
-  { kind: 'feature', labelKey: 'featTeamsTitle', free: { type: 'yesNo', field: 'teamsEnabled' }, cloud: { type: 'yesNo', field: 'teamsEnabled' } },
-  { kind: 'feature', labelKey: 'featShareLinksTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featBoardsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featLinksPixelsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'featNotebooksTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featTeamsTitle', cell: { type: 'yesNo', field: 'teamsEnabled' } },
+  { kind: 'feature', labelKey: 'featShareLinksTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featBoardsTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featLinksPixelsTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featNotebooksTitle', cell: { type: 'included' } },
 
   { kind: 'section', labelKey: 'pricingCompareSectionOperations' },
   {
     kind: 'feature',
     labelKey: 'pricingCompareEmailReports',
-    free: { type: 'yesNo', field: 'emailReportsEnabled' },
-    cloud: { type: 'yesNo', field: 'emailReportsEnabled' },
+    cell: { type: 'yesNo', field: 'emailReportsEnabled' },
   },
-  { kind: 'feature', labelKey: 'featRevenueTitle', free: { type: 'included' }, cloud: { type: 'included' } },
-  { kind: 'feature', labelKey: 'auditLog', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featRevenueTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'auditLog', cell: { type: 'included' } },
   {
     kind: 'feature',
     labelKey: 'featAdminTitle',
-    free: {
-      type: 'text',
-      freeKey: 'pricingCompareValueAdminRole',
-      cloudKey: 'pricingCompareValueAdminRole',
-    },
-    cloud: {
-      type: 'text',
-      freeKey: 'pricingCompareValueAdminRole',
-      cloudKey: 'pricingCompareValueAdminRole',
-    },
+    cell: { type: 'text', freeKey: 'pricingCompareValueAdminRole', paidKey: 'pricingCompareValueAdminRole' },
   },
 
   { kind: 'section', labelKey: 'pricingCompareSectionHosting' },
   {
     kind: 'feature',
     labelKey: 'featSelfHostTitle',
-    free: { type: 'text', freeKey: 'pricingCompareValueSelfHost', cloudKey: 'pricingCompareValueSelfHost' },
-    cloud: { type: 'text', freeKey: 'pricingCompareValueSelfHost', cloudKey: 'pricingCompareValueSelfHost' },
+    cell: { type: 'text', freeKey: 'pricingCompareValueSelfHost', paidKey: 'pricingCompareValueSelfHost' },
   },
   {
     kind: 'feature',
     labelKey: 'featCloudBillingTitle',
-    free: { type: 'text', freeKey: 'pricingCompareValueNoSubscription', cloudKey: 'pricingCompareValueStripeSubscription' },
-    cloud: { type: 'text', freeKey: 'pricingCompareValueNoSubscription', cloudKey: 'pricingCompareValueStripeSubscription' },
+    cell: { type: 'text', freeKey: 'pricingCompareValueNoSubscription', paidKey: 'pricingCompareValueStripeSubscription' },
   },
-  { kind: 'feature', labelKey: 'featOAuthTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featOAuthTitle', cell: { type: 'included' } },
   {
     kind: 'feature',
     labelKey: 'featEnterpriseTitle',
-    free: { type: 'text', freeKey: 'pricingCompareValueNoncommercial', cloudKey: 'pricingCompareValueCommercialSeparate' },
-    cloud: { type: 'text', freeKey: 'pricingCompareValueNoncommercial', cloudKey: 'pricingCompareValueCommercialSeparate' },
+    cell: { type: 'text', freeKey: 'pricingCompareValueNoncommercial', paidKey: 'pricingCompareValueCommercialSeparate' },
   },
-  {
-    kind: 'feature',
-    labelKey: 'featCookielessTitle',
-    free: { type: 'included' },
-    cloud: { type: 'included' },
-  },
-  {
-    kind: 'feature',
-    labelKey: 'featNoFingerprintTitle',
-    free: { type: 'included' },
-    cloud: { type: 'included' },
-  },
-  { kind: 'feature', labelKey: 'featSecurityTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featCookielessTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featNoFingerprintTitle', cell: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featSecurityTitle', cell: { type: 'included' } },
 
   { kind: 'section', labelKey: 'pricingCompareSectionSupport' },
   {
     kind: 'feature',
     labelKey: 'pricingCompareSupport',
-    free: { type: 'text', freeKey: 'pricingCompareValueSupportCommunity', cloudKey: 'pricingCompareValueSupportEmail' },
-    cloud: { type: 'text', freeKey: 'pricingCompareValueSupportCommunity', cloudKey: 'pricingCompareValueSupportEmail' },
+    cell: { type: 'text', freeKey: 'pricingCompareValueSupportCommunity', paidKey: 'pricingCompareValueSupportEmail' },
   },
 ];
 
@@ -314,47 +191,32 @@ function resolveCell(spec: CompareCellSpec, plan: LandingPlan): string {
       return formatEventLimit(plan.maxOtelRowsPerMonth);
     case 'retention':
       return t('pricingCompareUpToDuration').replace('{duration}', formatRetentionPeriod(plan.maxRetentionDays));
-    case 'overage':
-      return plan.usageGraceMultiple > 1
-        ? t('pricingCompareValueGrace').replace('{multiple}', formatNumber(plan.usageGraceMultiple))
+    case 'overage': {
+      const percent = usageGracePercent(plan);
+      return percent > 0
+        ? t('pricingCompareValueGrace').replace('{percent}', formatPercent(percent))
         : t('pricingCompareValueStopsAtAllowance');
-    case 'price':
-      return plan.monthlyPriceUsd ? `$${CLOUD_MONTHLY_USD}` : '$0';
-    case 'text':
-      return t(spec.freeKey);
-  }
-}
-
-function resolveCellForPlan(spec: CompareCellSpec, plan: LandingPlan, column: 'free' | 'cloud'): string {
-  if (spec.type === 'text') {
-    return t(column === 'free' ? spec.freeKey : spec.cloudKey);
-  }
-  return resolveCell(spec, plan);
-}
-
-export function buildPricingCompareRows(): ResolvedCompareRow[] {
-  const freeLanding = LANDING_PLANS.find((plan) => plan.id === 'free')!;
-  const cloudLanding = LANDING_PLANS.find((plan) => plan.id === 'cloud')!;
-
-  return PRICING_COMPARE_ENTRIES.map((entry) => {
-    if (entry.kind === 'section') {
-      return { kind: 'section', labelKey: entry.labelKey };
     }
+    case 'price':
+      return `$${plan.monthlyPriceUsd ?? 0}`;
+    case 'text':
+      return t(plan.id === 'free' ? spec.freeKey : spec.paidKey);
+  }
+}
 
-    const free = resolveCellForPlan(entry.free, freeLanding, 'free');
-    const cloud = resolveCellForPlan(entry.cloud, cloudLanding, 'cloud');
-
+/** Rows for the comparison table, one cell per plan (columns cheapest first). */
+export function buildPricingCompareRows(plans: readonly LandingPlan[] = LANDING_PLANS): ResolvedCompareRow[] {
+  return PRICING_COMPARE_ENTRIES.map((entry) => {
+    if (entry.kind === 'section') return entry;
+    const values = plans.map((plan) => resolveCell(entry.cell, plan));
     return {
       kind: 'feature',
       labelKey: entry.labelKey,
-      free,
-      cloud,
-      cloudExclusive: free !== cloud,
+      cells: plans.map((plan, i) => ({
+        planId: plan.id,
+        value: values[i],
+        upgraded: i > 0 && values[i] !== values[i - 1],
+      })),
     };
   });
-}
-
-/** Count of feature rows (excludes section headers). */
-export function pricingCompareFeatureRowCount(): number {
-  return PRICING_COMPARE_ENTRIES.filter((entry) => entry.kind === 'feature').length;
 }

@@ -16,6 +16,7 @@ import {
 } from '@flareboard/shared';
 import type { Env } from '../env';
 import { logAdminAction } from '../lib/audit';
+import { isDemoUserId } from '../lib/demo-access';
 import { readAuthToken } from '../lib/auth-credentials';
 import { csrfOriginAllowed } from '../lib/csrf';
 import { bumpTokenVersion, startSession, verifySessionToken } from '../lib/auth-token';
@@ -221,7 +222,9 @@ export async function handleLogin(c: Ctx) {
   const lock = await passwordLockStatus(c.env, secret, identifier, ip);
   if (lock.locked) return lockedResponse(lock);
 
-  const user = await resolveLoginUser(c.env, identifier);
+  // The demo account has no password: it is only reachable through POST /api/demo/session.
+  const found = await resolveLoginUser(c.env, identifier);
+  const user = found && !isDemoUserId(found.userId) ? found : null;
   const valid = user ? checkPassword(parsed.data.password, user.password) : checkPasswordAgainstNothing(parsed.data.password);
   if (!user || !valid) {
     const after = await recordPasswordFailure(c.env, secret, identifier, ip);
@@ -317,7 +320,7 @@ export async function handleSso(c: Ctx) {
   if (!payload) return unauthorized({ message: 'Invalid or expired SSO token' });
 
   const user = await getUserById(c.env, payload.userId);
-  if (!user) return unauthorized({ message: 'User not found' });
+  if (!user || isDemoUserId(user.userId)) return unauthorized({ message: 'User not found' });
 
   // The SSO token is minted by a trusted system holding SSO_SECRET, which owns authentication
   // for these users, so it is not stepped up with this account's second factor.
@@ -362,6 +365,8 @@ export async function handleOAuthRedirect(c: Ctx) {
   if (c.req.query('link') === '1') {
     const session = await currentSessionUser(c);
     if (!session) return unauthorized();
+    // Nobody may attach a sign-in method to the shared demo account.
+    if (isDemoUserId(session.userId)) return forbidden('The demo is read-only');
     linkUserId = session.userId;
   }
 

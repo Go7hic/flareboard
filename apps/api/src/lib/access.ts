@@ -3,8 +3,9 @@ import { createDb, schema, type Website } from '@flareboard/db';
 
 type Link = typeof schema.link.$inferSelect;
 type Pixel = typeof schema.pixel.$inferSelect;
-import { ROLES, type AuthUser } from '@flareboard/shared';
+import { DEMO_TEAM_ID, ROLES, type AuthUser } from '@flareboard/shared';
 import type { Env } from '../env';
+import { isDemoUserId, isDemoWebsiteId } from './demo-access';
 
 export function isGlobalReadOnly(role: string) {
   return role === ROLES.viewOnly || role === ROLES.teamViewOnly;
@@ -80,20 +81,34 @@ async function teamWebsiteMembership(env: Env, website: Website, userId: string)
 }
 
 /**
+ * The demo websites are shared, view-only, with members of the demo team without belonging to
+ * it: their owner and team stay as they are. The role is fixed so the grant never allows edits.
+ */
+async function demoWebsiteMembership(env: Env, website: Website, userId: string) {
+  if (!isDemoWebsiteId(website.websiteId)) return null;
+  const membership = await userHasTeamAccess(env, userId, DEMO_TEAM_ID);
+  return membership ? { role: ROLES.teamViewOnly } : null;
+}
+
+/**
  * Whether a user id (not necessarily the caller) can access a website —
  * used to validate references like error-issue assignees.
  */
 export async function userIdHasWebsiteAccess(env: Env, website: Website, userId: string) {
-  if (website.teamId) return Boolean(await teamWebsiteMembership(env, website, userId));
-  return website.userId === userId;
+  // The demo account sees the demo websites and nothing else.
+  if (isDemoUserId(userId)) return Boolean(await demoWebsiteMembership(env, website, userId));
+  if (website.teamId ? await teamWebsiteMembership(env, website, userId) : website.userId === userId) return true;
+  return Boolean(await demoWebsiteMembership(env, website, userId));
 }
 
 export async function canAccessWebsite(env: Env, website: Website, user: AuthUser) {
+  if (isDemoUserId(user.userId)) return userIdHasWebsiteAccess(env, website, user.userId);
   if (user.role === ROLES.admin) return true;
   return userIdHasWebsiteAccess(env, website, user.userId);
 }
 
 export async function canMutateWebsite(env: Env, website: Website, user: AuthUser) {
+  if (isDemoUserId(user.userId)) return false;
   if (user.role === ROLES.admin) return true;
   if (isGlobalReadOnly(user.role)) return false;
   if (!website.teamId) return website.userId === user.userId;
@@ -120,7 +135,7 @@ function websiteModulePermissions(canView: boolean, canEdit: boolean, canManageT
 }
 
 export async function getWebsitePermissions(env: Env, website: Website, user: AuthUser) {
-  if (user.role === ROLES.admin) {
+  if (user.role === ROLES.admin && !isDemoUserId(user.userId)) {
     return {
       role: ROLES.admin,
       canView: true,
@@ -136,13 +151,16 @@ export async function getWebsitePermissions(env: Env, website: Website, user: Au
     };
   }
 
-  const membership = website.teamId ? await userHasTeamAccess(env, user.userId, website.teamId) : null;
-  const canView = website.userId === user.userId || Boolean(membership);
+  const membership =
+    (website.teamId && !isDemoUserId(user.userId) ? await userHasTeamAccess(env, user.userId, website.teamId) : null) ??
+    (await demoWebsiteMembership(env, website, user.userId));
+  const canView = (website.userId === user.userId && !isDemoUserId(user.userId)) || Boolean(membership);
   const canEdit = await canMutateWebsite(env, website, user);
   const role = membership?.role ?? user.role;
   const canManageTeam =
     Boolean(membership && (membership.role === ROLES.teamOwner || membership.role === ROLES.teamManager)) &&
-    !isGlobalReadOnly(user.role);
+    !isGlobalReadOnly(user.role) &&
+    !isDemoUserId(user.userId);
 
   return {
     role,
@@ -165,6 +183,7 @@ export async function canMutateTeam(
   user: AuthUser,
   allowSelfLeave = false,
 ) {
+  if (isDemoUserId(user.userId)) return false;
   if (user.role === ROLES.admin) return true;
   if (isGlobalReadOnly(user.role)) return false;
   const membership = await userHasTeamAccess(env, user.userId, teamId);
@@ -178,7 +197,7 @@ export async function canAccessTeamResource(
   resource: { userId: string | null; teamId: string | null },
   user: AuthUser,
 ) {
-  if (user.role === ROLES.admin) return true;
+  if (user.role === ROLES.admin && !isDemoUserId(user.userId)) return true;
   if (resource.userId === user.userId) return true;
   if (resource.teamId) {
     const membership = await userHasTeamAccess(env, user.userId, resource.teamId);
@@ -192,6 +211,7 @@ export async function canMutateTeamResource(
   resource: { userId: string | null; teamId: string | null },
   user: AuthUser,
 ) {
+  if (isDemoUserId(user.userId)) return false;
   if (user.role === ROLES.admin) return true;
   if (isGlobalReadOnly(user.role)) return false;
   if (resource.userId === user.userId) return true;

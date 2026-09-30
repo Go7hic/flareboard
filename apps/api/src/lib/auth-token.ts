@@ -46,19 +46,29 @@ export async function issueAuthToken(
   c: { env: Env; req: { url: string } },
   user: { userId: string; role: string },
   sessionId: string,
+  ttlMs?: number,
 ): Promise<string> {
   const tv = await getTokenVersion(c.env, user.userId);
-  return createSecureToken({ userId: user.userId, role: user.role, tv, sid: sessionId }, getAppSecret(c));
+  const expiresIn = ttlMs ? `${Math.ceil(ttlMs / 1000)}s` : undefined;
+  return createSecureToken({ userId: user.userId, role: user.role, tv, sid: sessionId }, getAppSecret(c), expiresIn);
 }
 
-/** Records a new signed-in session (listed under account security) and returns its token. */
+/**
+ * Records a new signed-in session (listed under account security) and returns its token.
+ * `ttlMs` shortens the session and its token (demo sessions); the default is SESSION_TTL_MS.
+ */
 export async function startSession(
   c: { env: Env; req: { url: string; header(name: string): string | undefined } },
   user: { userId: string; role: string },
   method: SessionMethod,
+  options: { ttlMs?: number } = {},
 ) {
-  const sessionId = await createUserSession(c.env, user.userId, { method, userAgent: c.req.header('User-Agent') });
-  return { token: await issueAuthToken(c, user, sessionId), sessionId };
+  const sessionId = await createUserSession(c.env, user.userId, {
+    method,
+    userAgent: c.req.header('User-Agent'),
+    ttlMs: options.ttlMs,
+  });
+  return { token: await issueAuthToken(c, user, sessionId, options.ttlMs), sessionId };
 }
 
 export type VerifiedSession = { userId: string; role: string; sessionId: string | null; tokenVersion: number };

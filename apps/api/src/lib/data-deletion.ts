@@ -1,3 +1,4 @@
+import { DEMO_USER_ID } from '@flareboard/shared';
 import type { Env } from '../env';
 import { resolvedIssueKvPrefix } from './error-issue-keys';
 import { eventStoreMode, siteStoreStub } from './site-db';
@@ -197,6 +198,8 @@ const USER_REFERENCES: ReadonlyArray<[table: string, column: string]> = [
 ];
 
 async function purgeUser(env: Env, budget: Budget, userId: string) {
+  // The shared demo account is recreated on demand and never erased (its sessions expire as usual).
+  if (userId === DEMO_USER_ID) return false;
   // Personal websites are erased by purgeWebsite first (they were soft-deleted with the account).
   budget.left--;
   const personalSite = await env.DB.prepare('SELECT 1 AS found FROM website WHERE user_id = ?1 AND team_id IS NULL LIMIT 1')
@@ -256,9 +259,10 @@ export async function runDataDeletion(env: Env, now = Date.now()) {
     `UPDATE website
      SET deleted_at = (SELECT u.deleted_at FROM user u WHERE u.user_id = website.user_id), updated_at = ?1
      WHERE deleted_at IS NULL AND team_id IS NULL
-       AND user_id IN (SELECT user_id FROM user WHERE deleted_at IS NOT NULL AND deleted_at < ?2)`,
+       AND user_id IN (SELECT user_id FROM user WHERE deleted_at IS NOT NULL AND deleted_at < ?2 AND user_id <> ?3)`,
     now,
     cutoff,
+    DEMO_USER_ID,
   );
 
   let websites = 0;
@@ -276,10 +280,10 @@ export async function runDataDeletion(env: Env, now = Date.now()) {
 
   let users = 0;
   const dueUsers = await env.DB.prepare(
-    `SELECT user_id AS id FROM user WHERE deleted_at IS NOT NULL AND deleted_at < ?1
+    `SELECT user_id AS id FROM user WHERE deleted_at IS NOT NULL AND deleted_at < ?1 AND user_id <> ?2
      ORDER BY deleted_at LIMIT ${MAX_ITEMS_PER_TICK}`,
   )
-    .bind(cutoff)
+    .bind(cutoff, DEMO_USER_ID)
     .all<{ id: string }>();
   budget.left--;
   for (const { id } of dueUsers.results ?? []) {

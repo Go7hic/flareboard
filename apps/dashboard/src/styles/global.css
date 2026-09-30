@@ -10820,6 +10820,91 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   margin-top: 1rem;
 }
 
+/* Read-only demo session: one calm strip above every app page (outside the scrolling main). */
+.demo-session-banner {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.5rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+
+.demo-session-banner-text {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.demo-session-banner-badge {
+  flex-shrink: 0;
+}
+
+.demo-session-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .demo-session-banner {
+    padding: 0.5rem 1rem;
+  }
+
+  .demo-session-banner-badge {
+    display: none;
+  }
+}
+
+.demo-launcher {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  background: var(--bg);
+}
+
+.demo-launcher-panel {
+  width: 100%;
+  max-width: 28rem;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-sm);
+}
+
+.demo-launcher-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.demo-launcher-body {
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.demo-launcher-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
 /* Marketing CTA band (Features / Compare / Pricing) */
 .landing-cta-band {
   position: relative;

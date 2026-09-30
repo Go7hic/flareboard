@@ -134,6 +134,7 @@ app.get('/api/replay-shares/:token', replays.handlePublicShare);
 app.get('/api/demo', demo.handleMeta);
 app.get('/api/demo/overview', demo.handleOverview);
 app.get('/api/demo/metrics', demo.handleMetrics);
+app.post('/api/demo/session', demo.handleSession);
 
 // Hono matches `use` paths exactly: '/api/me' alone left /api/me/password without a user (500).
 app.use('/api/me', jwtAuth);

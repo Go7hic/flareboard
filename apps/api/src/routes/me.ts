@@ -8,6 +8,7 @@ import { twoFactorBlockedTeams } from '../lib/access';
 import { bumpTokenVersion, issueAuthToken, startSession } from '../lib/auth-token';
 import { stripeRequest } from '../lib/billing';
 import { DELETION_GRACE_DAYS } from '../lib/data-deletion';
+import { isDemoUserId } from '../lib/demo-access';
 import { badRequest, json, unauthorized } from '../lib/response';
 import { clearSessionCookie, setSessionCookie } from '../lib/session-cookie';
 import { hasTwoFactor } from '../lib/two-factor';
@@ -35,6 +36,8 @@ export async function handleMe(c: Ctx) {
     twoFactorEnabled: await hasTwoFactor(c.env, user.userId),
     // Teams that stay locked until this user enables two-factor authentication.
     twoFactorRequiredBy: await twoFactorBlockedTeams(c.env, user.userId),
+    // The shared read-only demo account: the dashboard shows the demo banner and hides changes.
+    isDemo: isDemoUserId(user.userId),
   });
 }
 

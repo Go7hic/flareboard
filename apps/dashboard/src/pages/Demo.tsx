@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Line, LineChart } from 'recharts';
 import { AnalyticsChart } from '../components/AnalyticsChart';
 import { BrandLogo } from '../components/BrandLogo';
@@ -15,7 +15,7 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { Button } from '../components/ui/button';
 import { StatCard, StatCardSkeleton } from '../components/ui/stat-card';
-import { api, type WebsiteStats } from '../lib/api';
+import { api, bootstrapSession, logoutSession, startDemoSession, type WebsiteStats } from '../lib/api';
 import {
   isHourlyChartRange,
   mergePageviewsVisitors,
@@ -25,6 +25,7 @@ import { presetToRange, rangeQueryString, type DateRangePreset } from '../lib/da
 import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
+import { fetchMe } from '../lib/useDemoSession';
 
 type DemoWebsite = {
   name: string;
@@ -54,7 +55,11 @@ function OverviewKpi({
   return <StatCard label={label} value={formatNumber(stat.value)} />;
 }
 
-export default function DemoPage() {
+/**
+ * Public overview of the sample website: the fallback when a demo session cannot be started
+ * (demo unavailable, rate limited, offline API).
+ */
+function DemoOverview() {
   const chartColors = useChartColors();
   const [startHref, setStartHref] = useState('/register');
   const [preset, setPreset] = useState<DateRangePreset>('30d');
@@ -292,5 +297,81 @@ export default function DemoPage() {
         </Page>
       )}
     </div>
+  );
+}
+
+type LauncherState = { kind: 'starting' } | { kind: 'signed-in' } | { kind: 'fallback' };
+
+/**
+ * `/demo`: opens the real dashboard, read-only, signed in as the shared demo account. A real
+ * account is asked first (the demo replaces its session); if no demo session can be started,
+ * the public sample overview is shown instead.
+ */
+export default function DemoPage() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [state, setState] = useState<LauncherState>({ kind: 'starting' });
+  const started = useRef(false);
+
+  async function openDemo() {
+    setState({ kind: 'starting' });
+    try {
+      const { websiteId } = await startDemoSession();
+      // Nothing from a previous account may show inside the demo.
+      queryClient.clear();
+      navigate(`/websites/${websiteId}`, { replace: true });
+    } catch {
+      setState({ kind: 'fallback' });
+    }
+  }
+
+  async function leaveAccountForDemo() {
+    await logoutSession();
+    queryClient.clear();
+    await openDemo();
+  }
+
+  useEffect(() => {
+    // Once per visit (StrictMode runs effects twice in development).
+    if (started.current) return;
+    started.current = true;
+    void (async () => {
+      if (await bootstrapSession()) {
+        const me = await fetchMe().catch(() => null);
+        if (me && !me.isDemo) {
+          setState({ kind: 'signed-in' });
+          return;
+        }
+      }
+      await openDemo();
+    })();
+  }, []);
+
+  if (state.kind === 'fallback') return <DemoOverview />;
+  if (state.kind === 'starting') {
+    return (
+      <main className="demo-launcher" aria-busy="true">
+        <p className="demo-launcher-body">{t('demoLauncherOpening')}</p>
+      </main>
+    );
+  }
+
+  return (
+    <main className="demo-launcher">
+      <section className="demo-launcher-panel" aria-labelledby="demo-launcher-title">
+        <h1 id="demo-launcher-title" className="demo-launcher-title">
+          {t('demoLauncherSignedInTitle')}
+        </h1>
+        <p className="demo-launcher-body">{t('demoLauncherSignedInBody')}</p>
+        <div className="demo-launcher-actions">
+          <Button type="button" variant="primary" onClick={() => void leaveAccountForDemo()}>
+            {t('demoLauncherOpenDemo')}
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/dashboard">{t('demoLauncherBackToDashboard')}</Link>
+          </Button>
+        </div>
+      </section>
+    </main>
   );
 }

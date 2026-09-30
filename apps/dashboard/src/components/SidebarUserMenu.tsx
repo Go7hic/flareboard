@@ -6,6 +6,8 @@ import { resolveTheme, setTheme, themeChangeEventName, type Theme } from '../lib
 
 type SidebarUserMenuProps = {
   userLabel: string;
+  /** Read-only demo session: no account items, and "Log out" reads "Exit demo". */
+  isDemo?: boolean;
   /** Configured OAuth providers the signed-in user can link to this account. */
   oauthProviders?: string[];
   onLogout: () => void;
@@ -81,6 +83,7 @@ function positionFlyout(flyoutEl: HTMLElement, anchorEl: HTMLElement) {
 
 export function SidebarUserMenu({
   userLabel,
+  isDemo = false,
   oauthProviders = [],
   onLogout,
   onDeleteAccount,
@@ -284,7 +287,7 @@ export function SidebarUserMenu({
             ) : null}
           </div>
 
-          {oauthProviders.length ? (
+          {oauthProviders.length && !isDemo ? (
             <>
               <div className="sidebar-user-menu-separator" role="separator" />
               {oauthProviders.map((provider) => (
@@ -304,30 +307,26 @@ export function SidebarUserMenu({
 
           <div className="sidebar-user-menu-separator" role="separator" />
 
-          <Link
-            to="/api-keys"
-            role="menuitem"
-            className="sidebar-user-menu-item"
-            onClick={() => {
-              setOpen(false);
-              setActiveFlyout(null);
-              onNavigate?.();
-            }}
-          >
-            <span className="sidebar-user-menu-item-label">{t('apiKeys')}</span>
-          </Link>
-          <Link
-            to="/account/security"
-            role="menuitem"
-            className="sidebar-user-menu-item"
-            onClick={() => {
-              setOpen(false);
-              setActiveFlyout(null);
-              onNavigate?.();
-            }}
-          >
-            <span className="sidebar-user-menu-item-label">{t('accountSecurity')}</span>
-          </Link>
+          {isDemo
+            ? null
+            : [
+                { to: '/api-keys', labelKey: 'apiKeys' },
+                { to: '/account/security', labelKey: 'accountSecurity' },
+              ].map((item) => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  role="menuitem"
+                  className="sidebar-user-menu-item"
+                  onClick={() => {
+                    setOpen(false);
+                    setActiveFlyout(null);
+                    onNavigate?.();
+                  }}
+                >
+                  <span className="sidebar-user-menu-item-label">{t(item.labelKey)}</span>
+                </Link>
+              ))}
           {onDeleteAccount ? (
             <button type="button" role="menuitem" className="sidebar-user-menu-item" onClick={handleDeleteAccount}>
               <span className="sidebar-user-menu-item-label">{t('deleteAccountMenu')}</span>
@@ -339,7 +338,7 @@ export function SidebarUserMenu({
             className="sidebar-user-menu-item sidebar-user-menu-item--danger"
             onClick={handleLogout}
           >
-            <span className="sidebar-user-menu-item-label">{t('logout')}</span>
+            <span className="sidebar-user-menu-item-label">{isDemo ? t('demoSessionExit') : t('logout')}</span>
           </button>
         </div>
       ) : null}

@@ -1,6 +1,7 @@
 import { eq, and, isNull, sql, gte, lte, count, countDistinct, inArray, desc, asc, or } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
-import { EVENT_TYPE, type UtmReportResponse } from '@flareboard/shared';
+import { DEMO_TEAM_ID, DEMO_WEBSITE_IDS, EVENT_TYPE, type UtmReportResponse } from '@flareboard/shared';
+import { isDemoUserId, isDemoWebsiteId } from './demo-access';
 import { seriesTimezone, siteLocalMsSql } from './site-time';
 import type { Env } from '../env';
 import { cachedRead } from './cache';
@@ -76,13 +77,28 @@ export async function getAccessibleWebsites(env: Env, userId: string) {
     : [];
   const liveOtherTeamIds = new Set(liveOtherTeams.map((t) => t.teamId));
   const owned = created.filter((w) => !w.teamId || !liveOtherTeamIds.has(w.teamId));
-  if (!teamIds.size) return owned;
-  const teamSites = await db
-    .select()
-    .from(schema.website)
-    .where(and(inArray(schema.website.teamId, [...teamIds]), isNull(schema.website.deletedAt)));
+  const teamSites = teamIds.size
+    ? await db
+        .select()
+        .from(schema.website)
+        .where(and(inArray(schema.website.teamId, [...teamIds]), isNull(schema.website.deletedAt)))
+    : [];
+  // Demo websites are shared with the demo team without belonging to it (see access.ts).
+  const demoSites = teamIds.has(DEMO_TEAM_ID)
+    ? await db
+        .select()
+        .from(schema.website)
+        .where(and(inArray(schema.website.websiteId, [...DEMO_WEBSITE_IDS]), isNull(schema.website.deletedAt)))
+    : [];
   const seen = new Set(owned.map((w) => w.websiteId));
-  return [...owned, ...teamSites.filter((w) => !seen.has(w.websiteId))];
+  const sites = [...owned];
+  for (const site of [...teamSites, ...demoSites]) {
+    if (seen.has(site.websiteId)) continue;
+    seen.add(site.websiteId);
+    sites.push(site);
+  }
+  // The demo account sees the demo websites and nothing else.
+  return isDemoUserId(userId) ? sites.filter((w) => isDemoWebsiteId(w.websiteId)) : sites;
 }
 
 export async function getTeamWebsites(env: Env, teamId: string) {

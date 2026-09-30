@@ -19,6 +19,7 @@ import {
 import type { Env } from '../env';
 import { canMutateWebsite } from '../lib/access';
 import { listEntityAuditLog } from '../lib/audit';
+import { isDemoUserId } from '../lib/demo-access';
 import {
   evaluateAllFeatureFlags,
   evaluateFeatureFlagConfigs,
@@ -262,7 +263,8 @@ export async function handleEvaluate(c: Ctx) {
   const [result] = await evaluateFeatureFlagConfigs(c.env, website!.websiteId, [flagConfigFromRow(row)], context);
 
   const sessionId = context.sessionId ?? context.distinctId ?? context.anonymousId;
-  if (sessionId) {
+  // A demo session only previews the result: exposures would change the demo's data.
+  if (sessionId && !isDemoUserId(c.get('user').userId)) {
     await recordFeatureFlagEvaluation(c.env, website!.websiteId, {
       flagKey: row.key,
       variant: typeof result.variant === 'string' ? result.variant : null,

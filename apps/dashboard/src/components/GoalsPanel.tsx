@@ -11,6 +11,7 @@ import { Button } from './ui/button';
 import { api, type Website } from '../lib/api';
 import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
+import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { useChartColors } from '../lib/useChartColors';
 
 export type GoalReportRow = {
@@ -52,6 +53,8 @@ export function GoalsPanel({
   websiteId: string;
   reportUrl: (kind: string, extra?: string) => string;
 }) {
+  // View-only members (and the demo) see progress without create, edit or delete.
+  const { canEdit } = useWebsitePermissions(websiteId, 'settings');
   const chartColors = useChartColors();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
@@ -219,9 +222,11 @@ export function GoalsPanel({
               aria-label={t('goalSearch')}
             />
           </div>
-          <Button type="button" variant="primary" size="sm" onClick={() => openCreate()}>
-            {t('createGoal')}
-          </Button>
+          {canEdit ? (
+            <Button type="button" variant="primary" size="sm" onClick={() => openCreate()}>
+              {t('createGoal')}
+            </Button>
+          ) : null}
           </div>
         </header>
 
@@ -232,7 +237,7 @@ export function GoalsPanel({
             title={configuredGoals.length === 0 ? t('noGoals') : t('noDataInPeriod')}
             description={configuredGoals.length === 0 ? t('noGoalsHint') : undefined}
           >
-            {configuredGoals.length === 0 ? (
+            {configuredGoals.length === 0 && canEdit ? (
               <Button type="button" variant="primary" size="sm" onClick={() => openCreate()}>
                 {t('createGoal')}
               </Button>
@@ -289,24 +294,26 @@ export function GoalsPanel({
                           )}
                         </td>
                         <td className="cohorts-actions-col">
-                          <div className="cohorts-row-actions">
-                            <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(row)}>
-                              {isConfigured ? t('edit') : t('goalSetTarget')}
-                            </Button>
-                            {isConfigured ? (
-                              <Button
-                                type="button"
-                                variant="destructive-ghost"
-                                size="sm"
-                                onClick={() => {
-                                  const config = configuredGoals.find((g) => g.event === row.event);
-                                  if (config) setDeleteTarget(config);
-                                }}
-                              >
-                                {t('delete')}
+                          {canEdit ? (
+                            <div className="cohorts-row-actions">
+                              <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(row)}>
+                                {isConfigured ? t('edit') : t('goalSetTarget')}
                               </Button>
-                            ) : null}
-                          </div>
+                              {isConfigured ? (
+                                <Button
+                                  type="button"
+                                  variant="destructive-ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    const config = configuredGoals.find((g) => g.event === row.event);
+                                    if (config) setDeleteTarget(config);
+                                  }}
+                                >
+                                  {t('delete')}
+                                </Button>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </td>
                       </tr>
                     );

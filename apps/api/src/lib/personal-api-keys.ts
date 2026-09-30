@@ -6,6 +6,7 @@ import {
   type PersonalApiKeyScope,
 } from '@flareboard/shared';
 import type { Env } from '../env';
+import { isDemoUserId } from './demo-access';
 
 /** Keeps a leaked session from minting keys without bound; far above any real need. */
 export const MAX_PERSONAL_API_KEYS = 50;
@@ -69,6 +70,8 @@ export async function createPersonalApiKey(
   userId: string,
   input: { name: string; scopes: PersonalApiKeyScope[] },
 ): Promise<PersonalApiKeySummary & { key: string }> {
+  // The shared demo account never gets credentials (the demo middleware also refuses the route).
+  if (isDemoUserId(userId)) throw new Error('The demo account cannot have API keys');
   const key = generatePersonalApiKey();
   const row: KeyRow = {
     keyId: crypto.randomUUID(),
@@ -121,7 +124,8 @@ export async function authenticatePersonalApiKey(env: Env, secret: string): Prom
   )
     .bind(await hashApiKey(secret))
     .first<{ keyId: string; userId: string; scopes: string; lastUsedAt: number | null; role: string }>();
-  if (!row) return null;
+  // The shared demo account never authenticates with an API key.
+  if (!row || isDemoUserId(row.userId)) return null;
   return { ...row, scopes: parseScopes(row.scopes) };
 }
 

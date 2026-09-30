@@ -1,6 +1,7 @@
 import { hashPassword, ROLES, uuid } from '@flareboard/shared';
 import { createDb, schema } from '@flareboard/db';
 import type { Env } from '../env';
+import { isDemoUserId } from './demo-access';
 import { isHostedMode } from './billing';
 import { getUserByEmail, getUserById, getUserByUsername } from './queries';
 
@@ -239,6 +240,8 @@ async function resolveOAuthUser(
   const linked = await findLinkedUser(env, provider, profile.id);
 
   if (linkUserId) {
+    // The shared demo account never gets a sign-in method (handleOAuthRedirect refuses it too).
+    if (isDemoUserId(linkUserId)) return { error: 'oauth_account_not_linked' };
     if (linked && linked.userId !== linkUserId) return { error: 'oauth_identity_in_use' };
     const user = await getUserById(env, linkUserId);
     if (!user) return { error: 'User creation failed' };

@@ -14,6 +14,7 @@ import { emptyStatsWidgetDraft, parseBoardConfig } from '../lib/board-config';
 import { api, type Board, type BoardTemplateSummary, type Insight, type Website } from '../lib/api';
 import { formatDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
+import { useDemoSession } from '../lib/useDemoSession';
 
 /** Localized template text, falling back to the API's English copy. */
 function templateText(key: string, fallback: string) {
@@ -111,6 +112,8 @@ export default function BoardsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [createFormKey, setCreateFormKey] = useState(0);
+  // The read-only demo browses boards but cannot create them.
+  const { isDemo } = useDemoSession();
 
   const websitesQuery = useQuery({
     queryKey: ['websites'],
@@ -183,9 +186,9 @@ export default function BoardsPage() {
       />
 
       <PageBody>
-        <TemplateGallery websites={websites} />
+        {isDemo ? null : <TemplateGallery websites={websites} />}
 
-        {hasBoards ? (
+        {isDemo ? null : hasBoards ? (
           <CollapsibleSection title={t('collapseNewBoard')} summary={t('newBoardLead')}>
             {editor}
           </CollapsibleSection>

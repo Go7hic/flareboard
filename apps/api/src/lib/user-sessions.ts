@@ -10,7 +10,8 @@ const SESSION_CHECK_TTL_SEC = 300;
 /** Revocation markers outlive any token that could still carry the session id. */
 const REVOKED_TTL_SEC = Math.ceil(SESSION_TTL_MS / 1000) + 3600;
 
-export type SessionMethod = 'password' | 'google' | 'github' | 'sso' | 'email';
+/** `demo`: the shared read-only demo account (POST /api/demo/session). */
+export type SessionMethod = 'password' | 'google' | 'github' | 'sso' | 'email' | 'demo';
 
 const stateKey = (sessionId: string) => `session-state:${sessionId}`;
 
@@ -52,7 +53,7 @@ export function summarizeUserAgent(ua: string | undefined | null): string | null
 export async function createUserSession(
   env: Env,
   userId: string,
-  { method, userAgent }: { method: SessionMethod; userAgent?: string | null },
+  { method, userAgent, ttlMs = SESSION_TTL_MS }: { method: SessionMethod; userAgent?: string | null; ttlMs?: number },
 ) {
   const sessionId = randomToken(16);
   const now = Date.now();
@@ -65,7 +66,7 @@ export async function createUserSession(
       method,
       createdAt: new Date(now),
       lastSeenAt: new Date(now),
-      expiresAt: new Date(now + SESSION_TTL_MS),
+      expiresAt: new Date(now + ttlMs),
     });
   await env.CACHE.put(stateKey(sessionId), `ok:${userId}`, { expirationTtl: SESSION_CHECK_TTL_SEC });
   return sessionId;

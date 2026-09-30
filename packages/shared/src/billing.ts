@@ -1,13 +1,13 @@
 /** Hosted plan definitions (limits apply when HOSTED_MODE is enabled). */
-export const PLAN_IDS = ['free', 'cloud'] as const;
+export const PLAN_IDS = ['free', 'cloud', 'business'] as const;
 export type PlanId = (typeof PLAN_IDS)[number];
 
-/** Legacy plan ids stored before the single paid tier — treated as Cloud. */
+/** Legacy plan ids stored before the Cloud tier — treated as Cloud. */
 const LEGACY_PAID_PLAN_IDS = new Set(['hobby', 'pro']);
 
 /**
  * Unpublished abuse cap when a plan does not advertise a website limit.
- * Cloud marketing is unlimited websites; this stops runaway site creation.
+ * Paid plans market unlimited websites; this stops runaway site creation.
  */
 export const WEBSITE_SAFETY_CAP = 100;
 
@@ -49,7 +49,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     maxWebsites: 1,
     maxEventsPerMonth: 100_000,
     maxReplaysPerMonth: 0,
-    maxOtelRowsPerMonth: 1_000_000,
+    maxOtelRowsPerMonth: 50_000,
     maxRetentionDays: 365,
     usageGraceMultiple: 1,
     replayEnabled: false,
@@ -69,9 +69,9 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     maxWebsites: null,
     maxEventsPerMonth: 1_000_000,
     maxReplaysPerMonth: 5_000,
-    maxOtelRowsPerMonth: 10_000_000,
-    maxRetentionDays: 1095,
-    usageGraceMultiple: 2,
+    maxOtelRowsPerMonth: 500_000,
+    maxRetentionDays: 730,
+    usageGraceMultiple: 1.2,
     replayEnabled: true,
     emailReportsEnabled: true,
     heatmapsEnabled: true,
@@ -80,10 +80,38 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     warehouseEnabled: true,
     experimentationEnabled: true,
     surveysEnabled: true,
-    monthlyPriceUsd: 15,
+    monthlyPriceUsd: 19,
     stripePriceEnvKey: 'STRIPE_PRICE_CLOUD',
   },
+  /** Same features as Cloud; larger allowances and longer retention. */
+  business: {
+    id: 'business',
+    name: 'Business',
+    maxWebsites: null,
+    maxEventsPerMonth: 5_000_000,
+    maxReplaysPerMonth: 25_000,
+    maxOtelRowsPerMonth: 5_000_000,
+    maxRetentionDays: 1095,
+    usageGraceMultiple: 1.2,
+    replayEnabled: true,
+    emailReportsEnabled: true,
+    heatmapsEnabled: true,
+    teamsEnabled: true,
+    dataPortabilityEnabled: true,
+    warehouseEnabled: true,
+    experimentationEnabled: true,
+    surveysEnabled: true,
+    monthlyPriceUsd: 99,
+    stripePriceEnvKey: 'STRIPE_PRICE_BUSINESS',
+  },
 };
+
+/** Plans a customer can buy, cheapest first. */
+export const PAID_PLAN_IDS = ['cloud', 'business'] as const satisfies readonly PlanId[];
+
+export function isPaidPlanId(planId: string | null | undefined): planId is (typeof PAID_PLAN_IDS)[number] {
+  return (PAID_PLAN_IDS as readonly string[]).includes(planId ?? '');
+}
 
 export function normalizePlanId(planId: string | null | undefined): PlanId {
   if (planId && planId in PLANS) return planId as PlanId;

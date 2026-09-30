@@ -4,6 +4,7 @@ import { currentMonthKey } from '@flareboard/shared';
 import { applyTestMigrations } from './helpers/migrations';
 import { fetchWorkerWithEnv, recordingQueue, seedProjectKey } from './helpers/queue';
 import { testSiteDb } from './helpers/site-db';
+import { forgetIsolateMemo } from '../src/lib/isolate-memo';
 
 const OWNER = 'quota-owner';
 const SITE = '00000000-0000-0000-0000-0000000000d7';
@@ -27,6 +28,7 @@ async function setAccount(planId: 'free' | 'cloud', usage: { events?: number; re
     .bind(OWNER, currentMonthKey(), usage.events ?? 0, usage.replays ?? 0, usage.otel ?? 0)
     .run();
   await env.CACHE.delete(`quota:${OWNER}:${currentMonthKey()}`);
+  forgetIsolateMemo();
 }
 
 async function usage() {
@@ -130,12 +132,12 @@ describe('hosted monthly allowances', () => {
     expect(refused.events).toHaveLength(0);
   });
 
-  it('keeps collecting for Cloud past the allowance, up to twice it', async () => {
-    await setAccount('cloud', { events: 1_500_000 });
+  it('keeps collecting for Cloud past the allowance, up to 20 % over it', async () => {
+    await setAccount('cloud', { events: 1_150_000 });
     const over = await send();
     expect(over.status).toBe(200);
     expect(over.events).toHaveLength(1);
-    await setAccount('cloud', { events: 2_000_000 });
+    await setAccount('cloud', { events: 1_200_000 });
     expect((await send()).status).toBe(402);
   });
 
@@ -172,7 +174,7 @@ describe('hosted monthly allowances', () => {
     await setAccount('free', { events: 100_000, otel: 5 });
     expect((await exportLogs(3)).status).toBe(200);
     expect((await usage())!.otel).toBe(8);
-    await setAccount('free', { otel: 1_000_000 });
+    await setAccount('free', { otel: 50_000 });
     expect((await exportLogs(1)).status).toBe(402);
   });
 });

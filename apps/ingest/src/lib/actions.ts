@@ -5,6 +5,7 @@ import {
   type ActionRule,
 } from '@flareboard/shared';
 import type { Env } from '../env';
+import { isolateMemo } from './isolate-memo';
 
 type CachedActions = {
   loadedAt: number;
@@ -30,8 +31,14 @@ function setActionCache(websiteId: string, cacheKey: string, value: CachedAction
   }
 }
 
-async function getActionDefinitionsVersion(env: Env, websiteId: string) {
-  return (await env.CACHE.get(`action-definitions-version:${websiteId}`)) ?? '0';
+const ACTION_VERSION_MEMO_MS = 30_000;
+
+function getActionDefinitionsVersion(env: Env, websiteId: string) {
+  return isolateMemo(
+    `action-version:${websiteId}`,
+    ACTION_VERSION_MEMO_MS,
+    async () => (await env.CACHE.get(`action-definitions-version:${websiteId}`)) ?? '0',
+  );
 }
 
 export async function loadWebsiteActionDefinitions(env: Env, websiteId: string) {

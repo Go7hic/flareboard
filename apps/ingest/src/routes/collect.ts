@@ -46,6 +46,7 @@ import { eventMessage, pageContext, parsePageUrl, sessionDataMessage, sessionMes
 import { recordAlias } from '../lib/person-identity';
 import { writeSiteTables } from '../lib/site-db';
 import { resolveWebsiteRef } from '../lib/project-keys';
+import { isolateMemo } from '../lib/isolate-memo';
 
 const SEND_BODY_MAX_BYTES = 65_536;
 
@@ -125,6 +126,18 @@ type ProcessSendOpts = {
   projectKey?: string;
   waitUntil: (promise: Promise<void>) => void;
 };
+
+const WEBSITE_MEMO_MS = 5 * 60_000;
+
+/** Whether the website exists: in-isolate memo, then KV (an hour), then D1. */
+function websiteExists(env: Env, websiteId: string): Promise<boolean> {
+  return isolateMemo(`website:${websiteId}`, WEBSITE_MEMO_MS, async () => {
+    if (await env.CACHE.get(`website:${websiteId}`)) return true;
+    if (!(await getWebsiteById(env, websiteId))) return false;
+    await env.CACHE.put(`website:${websiteId}`, '1', { expirationTtl: 3600 });
+    return true;
+  });
+}
 
 function deferWrite(waitUntil: ProcessSendOpts['waitUntil'], fn: () => Promise<void>) {
   waitUntil(fn().catch((e) => console.error('waitUntil task failed', e)));
@@ -260,12 +273,7 @@ async function processSend(
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      const cachedWebsite = await env.CACHE.get(`website:${websiteId}`);
-      if (!cachedWebsite) {
-        const website = await getWebsiteById(env, websiteId);
-        if (!website) return badRequest('Website not found.');
-        await env.CACHE.put(`website:${websiteId}`, '1', { expirationTtl: 3600 });
-      }
+      if (!(await websiteExists(env, websiteId))) return badRequest('Website not found.');
       const client = getClientInfoFromRequest(req, {});
 
       const createdAt = parseEventTimestamp(payload.timestamp) ?? new Date();
@@ -379,12 +387,7 @@ async function processSend(
       cache = parsedCache;
 
       if (!cache?.websiteId) {
-        const cached = await env.CACHE.get(`website:${websiteId}`);
-        if (!cached) {
-          const website = await getWebsiteById(env, websiteId);
-          if (!website) return badRequest('Website not found.');
-          await env.CACHE.put(`website:${websiteId}`, '1', { expirationTtl: 3600 });
-        }
+        if (!(await websiteExists(env, websiteId))) return badRequest('Website not found.');
       }
     } else {
       cache = await parseCacheToken(req, secret, opts.cacheToken);

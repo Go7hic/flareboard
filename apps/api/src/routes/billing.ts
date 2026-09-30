@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 import { eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
-import { getPlan, type PlanId } from '@flareboard/shared';
+import { getPlan, isPaidPlanId, type PlanId } from '@flareboard/shared';
 import type { Env } from '../env';
 import {
   getMonthlyUsage,
@@ -69,7 +69,7 @@ export async function handleCheckout(c: Ctx) {
 
   const body = await c.req.json().catch(() => null);
   const planId = (body as { planId?: string } | null)?.planId;
-  if (planId !== 'cloud') return badRequest('Invalid plan');
+  if (!isPaidPlanId(planId)) return badRequest('Invalid plan');
 
   const priceId = getStripePriceId(c.env, planId);
   if (!priceId) return json({ message: 'Plan price is not configured' }, 503);
@@ -81,6 +81,35 @@ export async function handleCheckout(c: Ctx) {
 
   const sub = await getUserSubscription(c.env, userId);
   const base = dashboardBase(c);
+
+  // Already subscribed: switch the subscription's price (prorated) instead of opening a second one.
+  if (sub.stripeSubscriptionId && (sub.status === 'active' || sub.status === 'trialing')) {
+    if (sub.planId === planId) return badRequest('You are already on this plan');
+    const current = await stripeRequest<{ items?: { data?: Array<{ id?: string }> } }>(
+      c.env,
+      `/subscriptions/${sub.stripeSubscriptionId}`,
+      {},
+      'GET',
+    );
+    const itemId = current.items?.data?.[0]?.id;
+    if (!itemId) return json({ message: 'Subscription has no item to change' }, 409);
+    await stripeRequest(c.env, `/subscriptions/${sub.stripeSubscriptionId}`, {
+      'items[0][id]': itemId,
+      'items[0][price]': priceId,
+      proration_behavior: 'create_prorations',
+      'metadata[userId]': userId,
+      'metadata[planId]': planId,
+    });
+    // The customer.subscription.updated webhook confirms this; apply it now so the dashboard updates.
+    await upsertSubscriptionFromStripe(c.env, userId, {
+      planId,
+      stripeCustomerId: sub.stripeCustomerId,
+      stripeSubscriptionId: sub.stripeSubscriptionId,
+      stripePriceId: priceId,
+      status: sub.status,
+    });
+    return json({ switched: true, planId });
+  }
 
   const params: Record<string, string> = {
     mode: 'subscription',

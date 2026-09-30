@@ -1,3 +1,4 @@
+import { forgetIsolateMemo } from '../src/lib/isolate-memo';
 import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { currentMonthKey, EVENT_TYPE, uuid } from '@flareboard/shared';
@@ -401,11 +402,13 @@ describe('PostHog-compatible capture', () => {
     )
       .bind(owner, currentMonthKey(), 1e12)
       .run();
+    forgetIsolateMemo();
     const { response, messages } = await postJson('/e/', [pageview()], {}, { HOSTED_MODE: 'true' });
     expect(response.status).toBe(402);
     expect(messages).toHaveLength(0);
     await env.DB.prepare(`DELETE FROM usage_monthly WHERE user_id = ?1`).bind(owner).run();
     await env.CACHE.delete(`quota:${owner}:${currentMonthKey()}`);
+    forgetIsolateMemo();
   });
 });
 

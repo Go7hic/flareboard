@@ -93,8 +93,8 @@ describe('paid feature gates follow the website owner’s plan', () => {
     const saved = (await (await hostedCall(FREE_OWNER, `/api/websites/${FREE_SITE}`)).json()) as { retentionDays: number | null };
     expect(saved.retentionDays).toBe(365);
     expect((await patch(FREE_OWNER, FREE_SITE, null)).status).toBe(200);
-    expect((await patch(PAID_OWNER, PAID_SITE, 1095)).status).toBe(200);
-    expect((await patch(PAID_OWNER, PAID_SITE, 1096)).status).toBe(400);
+    expect((await patch(PAID_OWNER, PAID_SITE, 730)).status).toBe(200);
+    expect((await patch(PAID_OWNER, PAID_SITE, 731)).status).toBe(400);
   });
 
   it('reports every monthly allowance with this month’s usage', async () => {
@@ -107,7 +107,7 @@ describe('paid feature gates follow the website owner’s plan', () => {
       plan: Record<string, unknown>;
       usage: Record<string, number>;
     };
-    expect(body.plan).toMatchObject({ maxReplaysPerMonth: 5000, maxOtelRowsPerMonth: 10_000_000, maxRetentionDays: 1095, usageGraceMultiple: 2 });
+    expect(body.plan).toMatchObject({ maxReplaysPerMonth: 5000, maxOtelRowsPerMonth: 500_000, maxRetentionDays: 730, usageGraceMultiple: 1.2 });
     expect(body.usage).toEqual({ eventsThisMonth: 1200, replaysThisMonth: 7, otelRowsThisMonth: 30 });
   });
 });

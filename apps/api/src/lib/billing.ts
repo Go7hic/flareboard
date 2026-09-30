@@ -20,14 +20,9 @@ export function isHostedMode(env: Env): boolean {
 }
 
 export function getStripePriceId(env: Env, planId: PlanId): string | null {
-  const plan = PLANS[planId];
-  if (!plan.stripePriceEnvKey) return null;
-  const map: Record<string, string | undefined> = {
-    STRIPE_PRICE_CLOUD: env.STRIPE_PRICE_CLOUD,
-    STRIPE_PRICE_HOBBY: env.STRIPE_PRICE_HOBBY,
-    STRIPE_PRICE_PRO: env.STRIPE_PRICE_PRO,
-  };
-  return map[plan.stripePriceEnvKey] ?? env.STRIPE_PRICE_HOBBY ?? env.STRIPE_PRICE_PRO ?? null;
+  if (planId === 'business') return env.STRIPE_PRICE_BUSINESS ?? null;
+  if (planId === 'cloud') return env.STRIPE_PRICE_CLOUD ?? env.STRIPE_PRICE_HOBBY ?? env.STRIPE_PRICE_PRO ?? null;
+  return null;
 }
 
 /** Plan the read-only demo account browses under. It has no subscription row and never pays. */
@@ -62,6 +57,7 @@ export async function getUserSubscription(env: Env, userId: string) {
     planId,
     status: row.status,
     stripeCustomerId: row.stripeCustomerId,
+    stripeSubscriptionId: row.stripeSubscriptionId,
     currentPeriodEnd: row.currentPeriodEnd,
   };
 }
@@ -192,6 +188,7 @@ export async function upsertSubscriptionFromStripe(
 
 export function planIdFromStripePrice(env: Env, priceId: string | null | undefined): PlanId {
   if (!priceId) return 'free';
+  if (env.STRIPE_PRICE_BUSINESS && priceId === env.STRIPE_PRICE_BUSINESS) return 'business';
   if (env.STRIPE_PRICE_CLOUD && priceId === env.STRIPE_PRICE_CLOUD) return 'cloud';
   if (env.STRIPE_PRICE_HOBBY && priceId === env.STRIPE_PRICE_HOBBY) return 'cloud';
   if (env.STRIPE_PRICE_PRO && priceId === env.STRIPE_PRICE_PRO) return 'cloud';

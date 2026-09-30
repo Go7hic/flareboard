@@ -115,7 +115,7 @@ describe('runRetentionPurge on hosted installs', () => {
         .bind(userId, planId, now)
         .run();
     }
-    // Free with no setting gets the plan maximum (365 days); Cloud's longer setting is capped at 1095.
+    // Free with no setting gets the plan maximum (365 days); Cloud's longer setting is capped at 730.
     await env.DB.prepare(
       `INSERT OR REPLACE INTO website (website_id, name, user_id, retention_days, created_at, updated_at)
        VALUES (?1, 'F', 'retention-free-owner', NULL, ?3, ?3), (?2, 'C', 'retention-cloud-owner', 3650, ?3, ?3)`,
@@ -124,13 +124,13 @@ describe('runRetentionPurge on hosted installs', () => {
       .run();
     await seedEvent('free-400d', FREE_SITE, NOW - 400 * DAY);
     await seedEvent('free-300d', FREE_SITE, NOW - 300 * DAY);
-    await seedEvent('cloud-1200d', CLOUD_SITE, NOW - 1200 * DAY);
-    await seedEvent('cloud-1000d', CLOUD_SITE, NOW - 1000 * DAY);
+    await seedEvent('cloud-800d', CLOUD_SITE, NOW - 800 * DAY);
+    await seedEvent('cloud-700d', CLOUD_SITE, NOW - 700 * DAY);
   });
 
   it("caps every website's retention at its owner's plan maximum", async () => {
     await runRetentionPurge({ ...env, HOSTED_MODE: 'true' }, NOW);
     expect(await eventIds(FREE_SITE)).toEqual(['free-300d']);
-    expect(await eventIds(CLOUD_SITE)).toEqual(['cloud-1000d']);
+    expect(await eventIds(CLOUD_SITE)).toEqual(['cloud-700d']);
   });
 });

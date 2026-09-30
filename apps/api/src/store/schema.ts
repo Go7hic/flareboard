@@ -481,6 +481,12 @@ export const STORE_MIGRATIONS: ReadonlyArray<{ version: number; statements: stri
       `CREATE INDEX trace_span_session_idx ON trace_span (session_id) WHERE session_id IS NOT NULL`,
     ],
   },
+  {
+    version: 7,
+    // Storage bills every index entry as a written row. (website_id, created_at) is a prefix of the
+    // path and event-name indexes, which serve the same range scans, so it only cost a row per event.
+    statements: [`DROP INDEX IF EXISTS website_event_website_created_idx`],
+  },
 ];
 
 /** OpenTelemetry logs and spans are kept at most this long (the store alarm purges older rows). */

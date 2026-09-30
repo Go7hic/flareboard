@@ -8,6 +8,7 @@ import {
   type UsageMetric,
 } from '@flareboard/shared';
 import type { Env } from '../env';
+import { isolateMemo } from './isolate-memo';
 
 /**
  * Monthly usage lives in D1 `usage_monthly`: the aggregator counts product events as it writes
@@ -35,7 +36,14 @@ function isHostedMode(env: Env): boolean {
   return env.HOSTED_MODE === 'true';
 }
 
-async function getWebsiteOwnerId(env: Env, websiteId: string): Promise<string | null> {
+const OWNER_MEMO_MS = 5 * 60_000;
+const QUOTA_MEMO_MS = 30_000;
+
+function getWebsiteOwnerId(env: Env, websiteId: string): Promise<string | null> {
+  return isolateMemo(`owner:${websiteId}`, OWNER_MEMO_MS, () => loadWebsiteOwnerId(env, websiteId));
+}
+
+async function loadWebsiteOwnerId(env: Env, websiteId: string): Promise<string | null> {
   const cacheKey = `website:owner:${websiteId}`;
   const cached = await env.CACHE.get(cacheKey);
   if (cached) return cached;
@@ -67,7 +75,11 @@ async function loadQuotaState(env: Env, userId: string, monthKey: string): Promi
   };
 }
 
-async function getQuotaState(env: Env, userId: string): Promise<QuotaState> {
+function getQuotaState(env: Env, userId: string): Promise<QuotaState> {
+  return isolateMemo(`quota:${userId}:${currentMonthKey()}`, QUOTA_MEMO_MS, () => loadCachedQuotaState(env, userId));
+}
+
+async function loadCachedQuotaState(env: Env, userId: string): Promise<QuotaState> {
   const monthKey = currentMonthKey();
   const cacheKey = `quota:${userId}:${monthKey}`;
   const cached = await env.CACHE.get<QuotaState>(cacheKey, 'json');

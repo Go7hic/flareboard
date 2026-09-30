@@ -58,7 +58,8 @@ describe('usage notices', () => {
     expect(usageLevel(cloud, 'events', 799_999)).toBeNull();
     expect(usageLevel(cloud, 'events', 800_000)).toBe('80');
     expect(usageLevel(cloud, 'events', 1_000_000)).toBe('100');
-    expect(usageLevel(cloud, 'events', 2_000_000)).toBe('stop');
+    expect(usageLevel(cloud, 'events', 1_199_999)).toBe('100');
+    expect(usageLevel(cloud, 'events', 1_200_000)).toBe('stop');
     // Free stops at the allowance, and has no replays to warn about.
     expect(usageLevel(getPlan('free'), 'events', 100_000)).toBe('stop');
     expect(usageLevel(getPlan('free'), 'replays', 10)).toBeNull();
@@ -71,10 +72,10 @@ describe('usage notices', () => {
     await runUsageNotices(hostedEnv(sent), NOW);
     expect(sent.map((m) => m.subject)).toEqual(["You've used 80% of this month's events"]);
     expect(sent[0]!.to).toBe(`${CLOUD}@example.test`);
-    expect(sent[0]!.text).toContain('continues up to 2,000,000');
+    expect(sent[0]!.text).toContain('continues up to 1,200,000');
     expect(sent[0]!.text).toContain('November 1, 2026');
 
-    await setUsage(CLOUD, { events: 2_100_000, otel: 8_500_000 });
+    await setUsage(CLOUD, { events: 1_300_000, otel: 450_000 });
     await runUsageNotices(hostedEnv(sent), NOW);
     expect(sent.slice(1).map((m) => m.subject).sort()).toEqual([
       'Flareboard has paused collecting events until November 1, 2026',
@@ -92,7 +93,7 @@ describe('usage notices', () => {
   });
 
   it('does nothing on self-hosted installs', async () => {
-    await setUsage(CLOUD, { events: 2_100_000 });
+    await setUsage(CLOUD, { events: 1_300_000 });
     expect(await runUsageNotices({ ...env, HOSTED_MODE: 'false' }, NOW)).toEqual({ sent: 0 });
   });
 

@@ -57,7 +57,7 @@ export const ASSISTANT_LIMITS = {
 } as const;
 
 /** Hosted mode: answers per account per day, by the website owner's plan. */
-export const ASSISTANT_DAILY_LIMITS: Record<PlanId, number> = { free: 20, cloud: 200 };
+export const ASSISTANT_DAILY_LIMITS: Record<PlanId, number> = { free: 20, cloud: 200, business: 500 };
 
 const DAY_MS = 86_400_000;
 

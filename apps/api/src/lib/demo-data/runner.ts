@@ -45,7 +45,57 @@ export function demoSite(website: DemoWebsite): DemoSite {
 
 export type Budget = { deadline: number; maxHours: number; maxReplayChunks: number };
 
-export type RangeResult = { cursor: number; hours: number; events: number; replayChunks: number; complete: boolean };
+export type RealtimeVisit = { sessionId: string; urlPath: string; referrerDomain: string | null; country: string | null };
+
+export type RangeResult = {
+  cursor: number;
+  hours: number;
+  events: number;
+  replayChunks: number;
+  complete: boolean;
+  /** Sessions with a pageview or event in the realtime window before `now`. */
+  live: RealtimeVisit[];
+};
+
+/** Matches the API realtime window and the ingest key TTL (apps/ingest/src/lib/realtime-kv.ts). */
+const REALTIME_WINDOW_MS = 5 * 60_000;
+
+function realtimeVisits(hours: HourData[], now: number): RealtimeVisit[] {
+  const since = now - REALTIME_WINDOW_MS;
+  const countries = new Map<string, string>();
+  const visits = new Map<string, RealtimeVisit & { at: number }>();
+  for (const data of hours) {
+    for (const session of data.sessions) countries.set(session.sessionId, session.country);
+    for (const event of data.events) {
+      if (event.createdAt < since || event.createdAt > now) continue;
+      const previous = visits.get(event.sessionId);
+      if (previous && previous.at > event.createdAt) continue;
+      visits.set(event.sessionId, {
+        sessionId: event.sessionId,
+        urlPath: event.urlPath,
+        referrerDomain: event.referrerDomain ?? previous?.referrerDomain ?? null,
+        country: countries.get(event.sessionId) ?? null,
+        at: event.createdAt,
+      });
+    }
+  }
+  return [...visits.values()].map(({ at: _at, ...visit }) => visit);
+}
+
+/**
+ * Realtime keys in the shape ingest writes them, so the realtime page shows the demo's visitors.
+ * Stamped with the tick time: the next 5-minute tick replaces them before they leave the window.
+ */
+export async function writeRealtimeVisits(env: Env, websiteId: string, visits: RealtimeVisit[], now: number) {
+  await Promise.all(
+    visits.slice(0, 200).map(({ sessionId, ...meta }) =>
+      env.CACHE.put(`rt:${websiteId}:s:${sessionId}`, JSON.stringify({ ...meta, updatedAt: now }), {
+        expirationTtl: REALTIME_WINDOW_MS / 1000,
+        metadata: { u: now },
+      }),
+    ),
+  );
+}
 
 /**
  * Generates hours from `from` up to the hour in progress at `now`, within the budget. Returns
@@ -61,6 +111,7 @@ export async function generateRange(env: Env, site: DemoSite, from: number, now:
   let replayChunks = 0;
   let pending: HourData[] = [];
   let heatmap: HeatmapCellRow[] = [];
+  let live: RealtimeVisit[] = [];
 
   const flush = async () => {
     if (!pending.length && !heatmap.length) return;
@@ -83,6 +134,7 @@ export async function generateRange(env: Env, site: DemoSite, from: number, now:
     });
     pending.push(data);
     hours++;
+    if (hour + HOUR_MS > now - REALTIME_WINDOW_MS) live = [...live, ...realtimeVisits([data], now)];
     const dayStart = Math.floor(hour / DAY_MS) * DAY_MS;
     const endOfDay = hour + HOUR_MS === dayStart + DAY_MS;
     const lastOfRun = hour === lastHour || hours >= budget.maxHours;
@@ -96,7 +148,7 @@ export async function generateRange(env: Env, site: DemoSite, from: number, now:
     hour += HOUR_MS;
   }
   await flush();
-  return { cursor, hours, events, replayChunks, complete: cursor >= lastHour };
+  return { cursor, hours, events, replayChunks, complete: cursor >= lastHour, live };
 }
 
 function countChunks(hours: HourData[]) {
@@ -110,8 +162,21 @@ export type DemoTickResult = {
   websites: Array<{ websiteId: string; hours?: number; events?: number; until?: string; skipped?: string; error?: string }>;
 };
 
-/** Hourly cron step (scheduled-jobs.ts). */
-export async function runDemoDataGenerator(env: Env, now = Date.now(), options: { maxHoursPerSite?: number; budgetMs?: number } = {}): Promise<DemoTickResult> {
+/**
+ * Extra cron that keeps the demo's realtime view alive between the hourly runs. Minute 0 is left
+ * to the hourly maintenance run, which also rebuilds rollups and prunes.
+ */
+export const DEMO_LIVE_CRON = '5,10,15,20,25,30,35,40,45,50,55 * * * *';
+
+/**
+ * Cron step: the hourly run (scheduled-jobs.ts) and the 5-minute `live` run (DEMO_LIVE_CRON),
+ * which only writes the hour in progress and leaves rollups and pruning to the hourly run.
+ */
+export async function runDemoDataGenerator(
+  env: Env,
+  now = Date.now(),
+  options: { maxHoursPerSite?: number; budgetMs?: number; live?: boolean } = {},
+): Promise<DemoTickResult> {
   const reason = demoDataDisabledReason(env);
   if (reason) {
     if (reason === 'store-mode' && !loggedStoreModeSkip) {
@@ -136,8 +201,11 @@ export async function runDemoDataGenerator(env: Env, now = Date.now(), options: 
       const from = Math.max(start, hourFloor(now) - DEMO_HISTORY_DAYS * DAY_MS);
       const range = await generateRange(env, demoSite(website), from, now, { deadline, maxHours: options.maxHoursPerSite ?? 12, maxReplayChunks: 400 });
       await env.CACHE.put(WATERMARK_KEY(websiteId), String(range.cursor));
-      if (range.hours) await siteStoreStub(env, websiteId).rebuildRollups(websiteId);
-      await pruneDemoData(env, website, now);
+      await writeRealtimeVisits(env, websiteId, range.live, now);
+      if (!options.live) {
+        if (range.hours) await siteStoreStub(env, websiteId).rebuildRollups(websiteId);
+        await pruneDemoData(env, website, now);
+      }
       results.push({ websiteId, hours: range.hours, events: range.events, until: new Date(range.cursor).toISOString() });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -145,7 +213,7 @@ export async function runDemoDataGenerator(env: Env, now = Date.now(), options: 
       results.push({ websiteId, error: message });
     }
   }
-  console.log(JSON.stringify({ event: 'demo_data_complete', websites: results }));
+  console.log(JSON.stringify({ event: 'demo_data_complete', live: Boolean(options.live), websites: results }));
   return { websites: results };
 }
 
@@ -246,6 +314,7 @@ export async function runDemoBackfill(
       });
       state.cursor = range.cursor;
       await env.CACHE.put(WATERMARK_KEY(websiteId), String(range.cursor));
+      await writeRealtimeVisits(env, websiteId, range.live, now);
       if (range.complete) {
         await siteStoreStub(env, websiteId).rebuildRollups(websiteId);
         state.phase = 'done';

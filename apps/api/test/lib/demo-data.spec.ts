@@ -315,6 +315,24 @@ describe('demo data generator', () => {
     expect(again.websites.find((row) => row.websiteId === PUBLIC_DEMO_WEBSITE_ID)!.hours).toBe(1);
     expect(await count(PUBLIC_DEMO_WEBSITE_ID, 'SELECT COUNT(*) AS n FROM website_event')).toBe(events);
     expect(await count(PUBLIC_DEMO_WEBSITE_ID, 'SELECT COUNT(*) AS n FROM website_event WHERE created_at > ?1', NOW)).toBe(0);
+
+    // The 5-minute live tick fills the rest of the hour in progress, up to its own moment.
+    const later = NOW + 20 * 60_000;
+    const live = await runDemoDataGenerator(testEnv, later, { live: true });
+    expect(live.websites.find((row) => row.websiteId === PUBLIC_DEMO_WEBSITE_ID)!.error).toBeUndefined();
+    expect(await count(PUBLIC_DEMO_WEBSITE_ID, 'SELECT COUNT(*) AS n FROM website_event')).toBeGreaterThan(events);
+    expect(await count(PUBLIC_DEMO_WEBSITE_ID, 'SELECT COUNT(*) AS n FROM website_event WHERE created_at > ?1', later)).toBe(0);
+
+    // Sessions active in the last five minutes appear on the realtime page, as ingest would record them.
+    const active = await count(
+      PUBLIC_DEMO_WEBSITE_ID,
+      'SELECT COUNT(DISTINCT session_id) AS n FROM website_event WHERE created_at >= ?1 AND created_at <= ?2',
+      later - 5 * 60_000,
+      later,
+    );
+    expect(active).toBeGreaterThan(0);
+    const keys = await testEnv.CACHE.list<{ u?: number }>({ prefix: `rt:${PUBLIC_DEMO_WEBSITE_ID}:s:` });
+    expect(keys.keys.filter((key) => key.metadata?.u === later).length).toBe(active);
   });
 
   it('cron step skips when the store is not in do mode or DEMO_DATA is off', async () => {

@@ -13,7 +13,8 @@ import {
 import type { Env } from '../env';
 import { eventStoreMode, siteDb, siteStoreStub } from '../lib/site-db';
 import { backfillWebsite, getBackfillState, resetBackfill, verifyWebsiteStore } from '../lib/store-backfill';
-import { demoDataDisabledReason, isDemoWebsiteId, runDemoBackfill } from '../lib/demo-data';
+import { isDemoWebsiteId } from '../lib/demo-access';
+import { demoDataDisabledReason, runDemoBackfill } from '../lib/demo-data';
 import { bumpTokenVersion } from '../lib/auth-token';
 import { logAdminAction, listAuditLog } from '../lib/audit';
 import { getAllTeamsAdmin, getAllUsers, getAllWebsitesAdmin } from '../lib/queries';

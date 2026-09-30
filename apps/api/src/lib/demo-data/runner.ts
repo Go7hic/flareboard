@@ -1,5 +1,6 @@
 import { DEMO_WEBSITE_IDS } from '@flareboard/shared';
 import type { Env } from '../../env';
+import { isDemoWebsiteId } from '../demo-access';
 import { eventStoreMode, siteStoreDb, siteStoreStub } from '../site-db';
 import { profileFor } from './catalog';
 import { DEMO_RETENTION_DAYS, demoHostname, ensureDemoConfig, loadDemoWebsite, type DemoWebsite } from './config';
@@ -29,10 +30,6 @@ const CRON_START_BACK_MS = 6 * HOUR_MS;
 const WRITE_GROUP_HOURS = 6;
 
 let loggedStoreModeSkip = false;
-
-export function isDemoWebsiteId(websiteId: string): boolean {
-  return (DEMO_WEBSITE_IDS as readonly string[]).includes(websiteId);
-}
 
 /** Why the generator must not run here, or null. */
 export function demoDataDisabledReason(env: Env): 'disabled' | 'store-mode' | null {

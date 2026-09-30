@@ -100,7 +100,10 @@ const json = (value: unknown) => JSON.stringify(value);
  * `force` is set (annotations and the regression cycle move with the calendar).
  */
 export async function ensureDemoConfig(env: Env, website: DemoWebsite, now = Date.now(), options: { force?: boolean } = {}): Promise<ConfigResult> {
-  const marker = `${DEMO_CONFIG_VERSION}:${dayNumber(now)}`;
+  // Boards reach the demo account through the demo team (created on the first demo sign-in), so
+  // its appearance also refreshes the configuration.
+  const demoTeam = await env.DB.prepare(`SELECT team_id AS id FROM team WHERE team_id = ?1 AND deleted_at IS NULL`).bind(DEMO_TEAM_ID).first<{ id: string }>();
+  const marker = `${DEMO_CONFIG_VERSION}:${dayNumber(now)}:${demoTeam ? 'team' : ''}`;
   if (!options.force && (await env.CACHE.get(CONFIG_MARKER(website.websiteId))) === marker) {
     return { ensured: false, statements: 0, skipped: [] };
   }
@@ -340,7 +343,6 @@ export async function ensureDemoConfig(env: Env, website: DemoWebsite, now = Dat
     }
 
     // Boards are listed by owner or team: the demo team makes this one visible to the demo account.
-    const demoTeam = await db.prepare(`SELECT team_id AS id FROM team WHERE team_id = ?1 AND deleted_at IS NULL`).bind(DEMO_TEAM_ID).first<{ id: string }>();
     const teamId = demoTeam?.id ?? website.teamId ?? null;
     const insights = demoInsights(kind);
     const widgetWidth = (type: string) => (type === 'funnel' || type === 'retention' ? 'large' : 'medium');

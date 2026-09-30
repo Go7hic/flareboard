@@ -5,6 +5,7 @@ import {
   cohortDefinitionSchema,
   createSecureToken,
   DEMO_DOCS_WEBSITE_ID,
+  DEMO_TEAM_ID,
   evaluateFeatureFlag,
   EVENT_TYPE,
   hashPassword,
@@ -191,6 +192,8 @@ describe('demo data generator', () => {
       .bind(PUBLIC_DEMO_WEBSITE_ID, now)
       .run();
 
+    // The demo team (created by the demo sign-in) is how the demo account sees boards.
+    await env.DB.prepare(`INSERT OR IGNORE INTO team (team_id, name, created_at, updated_at) VALUES (?1, 'Flareboard Demo', ?2, ?2)`).bind(DEMO_TEAM_ID, now).run();
     const first = await ensureDemoConfig(testEnv, website, NOW, { force: true });
     expect(first.skipped).toEqual(['flag:holiday-theme']);
     const tables = ['feature_flag', 'experiment', 'survey', 'workflow', 'action_definition', 'cohort', 'insight', 'notebook', 'annotation', 'error_alert_rule', 'log_alert_rule'];
@@ -233,7 +236,8 @@ describe('demo data generator', () => {
     for (const row of insights.results ?? []) expect(insightQuerySchema.safeParse(JSON.parse(row.query)).success).toBe(true);
     const cohorts = await env.DB.prepare(`SELECT definition FROM cohort WHERE website_id = ?1`).bind(PUBLIC_DEMO_WEBSITE_ID).all<{ definition: string }>();
     for (const row of cohorts.results ?? []) expect(cohortDefinitionSchema.safeParse(JSON.parse(row.definition)).success).toBe(true);
-    const board = await env.DB.prepare(`SELECT parameters FROM board WHERE user_id = ?1`).bind(OWNER_ID).first<{ parameters: string }>();
+    const board = await env.DB.prepare(`SELECT parameters, team_id AS teamId FROM board WHERE user_id = ?1`).bind(OWNER_ID).first<{ parameters: string; teamId: string | null }>();
+    expect(board!.teamId).toBe(DEMO_TEAM_ID);
     expect(boardParametersSchema.safeParse(JSON.parse(board!.parameters)).success).toBe(true);
     // Alert rules never deliver.
     const channels = await env.DB.prepare(

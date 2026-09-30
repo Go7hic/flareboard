@@ -4,7 +4,6 @@ export {
   demoDataDisabledReason,
   demoSite,
   generateRange,
-  isDemoWebsiteId,
   pruneDemoData,
   runDemoBackfill,
   runDemoDataGenerator,

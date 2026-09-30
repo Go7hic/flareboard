@@ -54,7 +54,6 @@ import * as emailReports from './routes/email-reports';
 import * as dataImport from './routes/import';
 import internalRoutes from './routes/internal';
 import { runScheduledMaintenance } from './lib/scheduled-jobs';
-import { DEMO_LIVE_CRON, runDemoDataGenerator } from './lib/demo-data';
 import { handleWorkflowTriggerBatch } from './lib/workflow-triggers';
 import { getWebsitePlanId, isHostedMode } from './lib/billing';
 import { getWebsiteById } from './lib/queries';
@@ -502,14 +501,6 @@ export { WorkflowRunner } from './workflows/runner';
 export default {
   fetch: app.fetch,
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    if (event.cron === DEMO_LIVE_CRON) {
-      ctx.waitUntil(
-        runDemoDataGenerator(env, Date.now(), { live: true }).catch((error: unknown) => {
-          console.error(JSON.stringify({ event: 'demo_data_failed', live: true, error: error instanceof Error ? error.message : String(error) }));
-        }),
-      );
-      return;
-    }
     ctx.waitUntil(runScheduledMaintenance(env, event.cron));
   },
   /** Workflow triggers from ingest (queue `flareboard-workflow-triggers`). */

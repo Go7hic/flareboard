@@ -298,7 +298,7 @@ describe('demo data generator', () => {
     expect(orphan).toBe(0);
   });
 
-  it('cron step generates the hours since the watermark and rebuilds rollups', async () => {
+  it('cron step writes the rest of the UTC day once and rebuilds rollups', async () => {
     const first = await runDemoDataGenerator(testEnv, NOW, { maxHoursPerSite: 4 });
     const storeResult = first.websites.find((row) => row.websiteId === PUBLIC_DEMO_WEBSITE_ID)!;
     expect(storeResult.error).toBeUndefined();
@@ -308,31 +308,21 @@ describe('demo data generator', () => {
     const watermark = Number(await testEnv.CACHE.get(`demo-data:watermark:${PUBLIC_DEMO_WEBSITE_ID}`));
     expect(watermark).toBe(NOW - (NOW % HOUR) - 6 * HOUR + 4 * HOUR);
 
-    // Catch up, then a second tick at the same moment only regenerates the hour in progress.
-    await runDemoDataGenerator(testEnv, NOW, { maxHoursPerSite: 12 });
+    // A run cut short continues next time and finishes the day, up to (not past) its end.
+    const dayEnd = NOW - (NOW % DAY) + DAY;
+    await runDemoDataGenerator(testEnv, NOW);
+    expect(Number(await testEnv.CACHE.get(`demo-data:watermark:${PUBLIC_DEMO_WEBSITE_ID}`))).toBe(dayEnd);
+    expect(await count(PUBLIC_DEMO_WEBSITE_ID, 'SELECT COUNT(*) AS n FROM website_event WHERE created_at > ?1', NOW)).toBeGreaterThan(0);
+    expect(await count(PUBLIC_DEMO_WEBSITE_ID, 'SELECT COUNT(*) AS n FROM website_event WHERE created_at >= ?1', dayEnd)).toBe(0);
+
+    // Later runs the same day write nothing; the next day is written by the first run after midnight.
     const events = await count(PUBLIC_DEMO_WEBSITE_ID, 'SELECT COUNT(*) AS n FROM website_event');
-    const again = await runDemoDataGenerator(testEnv, NOW, { maxHoursPerSite: 12 });
-    expect(again.websites.find((row) => row.websiteId === PUBLIC_DEMO_WEBSITE_ID)!.hours).toBe(1);
+    const again = await runDemoDataGenerator(testEnv, NOW + 3 * HOUR);
+    expect(again.websites.find((row) => row.websiteId === PUBLIC_DEMO_WEBSITE_ID)!.skipped).toBe('day-written');
     expect(await count(PUBLIC_DEMO_WEBSITE_ID, 'SELECT COUNT(*) AS n FROM website_event')).toBe(events);
-    expect(await count(PUBLIC_DEMO_WEBSITE_ID, 'SELECT COUNT(*) AS n FROM website_event WHERE created_at > ?1', NOW)).toBe(0);
-
-    // The 5-minute live tick fills the rest of the hour in progress, up to its own moment.
-    const later = NOW + 20 * 60_000;
-    const live = await runDemoDataGenerator(testEnv, later, { live: true });
-    expect(live.websites.find((row) => row.websiteId === PUBLIC_DEMO_WEBSITE_ID)!.error).toBeUndefined();
-    expect(await count(PUBLIC_DEMO_WEBSITE_ID, 'SELECT COUNT(*) AS n FROM website_event')).toBeGreaterThan(events);
-    expect(await count(PUBLIC_DEMO_WEBSITE_ID, 'SELECT COUNT(*) AS n FROM website_event WHERE created_at > ?1', later)).toBe(0);
-
-    // Sessions active in the last five minutes appear on the realtime page, as ingest would record them.
-    const active = await count(
-      PUBLIC_DEMO_WEBSITE_ID,
-      'SELECT COUNT(DISTINCT session_id) AS n FROM website_event WHERE created_at >= ?1 AND created_at <= ?2',
-      later - 5 * 60_000,
-      later,
-    );
-    expect(active).toBeGreaterThan(0);
-    const keys = await testEnv.CACHE.list<{ u?: number }>({ prefix: `rt:${PUBLIC_DEMO_WEBSITE_ID}:s:` });
-    expect(keys.keys.filter((key) => key.metadata?.u === later).length).toBe(active);
+    const next = await runDemoDataGenerator(testEnv, dayEnd + 5 * 60_000);
+    expect(next.websites.find((row) => row.websiteId === PUBLIC_DEMO_WEBSITE_ID)!.hours).toBeGreaterThanOrEqual(24);
+    expect(Number(await testEnv.CACHE.get(`demo-data:watermark:${PUBLIC_DEMO_WEBSITE_ID}`))).toBe(dayEnd + DAY);
   });
 
   it('cron step skips when the store is not in do mode or DEMO_DATA is off', async () => {

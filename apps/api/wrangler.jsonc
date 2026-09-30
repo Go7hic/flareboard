@@ -87,7 +87,7 @@
     ]
   },
   "triggers": {
-    "crons": ["0 * * * *", "5,10,15,20,25,30,35,40,45,50,55 * * * *"]
+    "crons": ["0 * * * *"]
   },
   "observability": {
     "enabled": true,
@@ -175,7 +175,7 @@
         ]
       },
       "triggers": {
-        "crons": ["0 * * * *", "5,10,15,20,25,30,35,40,45,50,55 * * * *"]
+        "crons": ["0 * * * *"]
       },
       "observability": {
         "enabled": true,

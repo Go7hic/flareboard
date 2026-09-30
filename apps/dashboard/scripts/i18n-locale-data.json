@@ -2905,7 +2905,16 @@
     "featAlertsTitle": "アラートと定期配信",
     "featAlertsBody": "トレンドのしきい値・変化率アラートをメールまたは Webhook で通知。Cloud プランではボードやインサイトを毎日・毎週メールで配信できます。",
     "featNotebooksTitle": "ノートブック",
-    "featNotebooksBody": "テキスト、ライブのインサイト結果、リプレイへのリンクを 1 つのドキュメントにまとめ、チームで共有できます。"
+    "featNotebooksBody": "テキスト、ライブのインサイト結果、リプレイへのリンクを 1 つのドキュメントにまとめ、チームで共有できます。",
+    "demoSessionBanner": "サンプルデータを使った読み取り専用のデモを表示しています。",
+    "demoSessionCreateAccount": "無料アカウントを作成",
+    "demoSessionExit": "デモを終了",
+    "demoSessionUser": "デモ",
+    "demoLauncherOpening": "デモを開いています…",
+    "demoLauncherSignedInTitle": "サインイン中です",
+    "demoLauncherSignedInBody": "デモは共有の読み取り専用アカウントで動作します。開くと、このブラウザでご自身のアカウントからサインアウトします。",
+    "demoLauncherOpenDemo": "デモを開く（サインアウトします）",
+    "demoLauncherBackToDashboard": "ダッシュボードに戻る"
   },
   "de-DE": {
     "language": "Sprache",
@@ -5813,7 +5822,16 @@
     "featAlertsTitle": "Alerts & Abonnements",
     "featAlertsBody": "Schwellenwert- und Prozent-Alerts für Trends per E-Mail oder Webhook sowie tägliche oder wöchentliche Board- und Insight-E-Mails im Cloud-Plan.",
     "featNotebooksTitle": "Notebooks",
-    "featNotebooksBody": "Halten Sie Erkenntnisse mit Text, Live-Insight-Ergebnissen und Replay-Links in einem Dokument fest, das Ihr Team öffnen kann."
+    "featNotebooksBody": "Halten Sie Erkenntnisse mit Text, Live-Insight-Ergebnissen und Replay-Links in einem Dokument fest, das Ihr Team öffnen kann.",
+    "demoSessionBanner": "Sie sehen eine schreibgeschützte Demo mit Beispieldaten.",
+    "demoSessionCreateAccount": "Kostenloses Konto erstellen",
+    "demoSessionExit": "Demo beenden",
+    "demoSessionUser": "Demo",
+    "demoLauncherOpening": "Demo wird geöffnet…",
+    "demoLauncherSignedInTitle": "Sie sind angemeldet",
+    "demoLauncherSignedInBody": "Die Demo läuft mit einem gemeinsamen, schreibgeschützten Konto. Wenn Sie sie öffnen, werden Sie in diesem Browser von Ihrem eigenen Konto abgemeldet.",
+    "demoLauncherOpenDemo": "Demo öffnen – Sie werden abgemeldet",
+    "demoLauncherBackToDashboard": "Zurück zu Ihrem Dashboard"
   },
   "fr-FR": {
     "language": "Langue",
@@ -8721,6 +8739,15 @@
     "featAlertsTitle": "Alertes et abonnements",
     "featAlertsBody": "Alertes de seuil et de variation sur les tendances par e-mail ou webhook, et envois quotidiens ou hebdomadaires de tableaux et d’insights avec l’offre Cloud.",
     "featNotebooksTitle": "Notebooks",
-    "featNotebooksBody": "Consignez vos conclusions avec du texte, des résultats d’insights en direct et des liens de replay dans un document partagé avec votre équipe."
+    "featNotebooksBody": "Consignez vos conclusions avec du texte, des résultats d’insights en direct et des liens de replay dans un document partagé avec votre équipe.",
+    "demoSessionBanner": "Vous explorez une démo en lecture seule avec des données d’exemple.",
+    "demoSessionCreateAccount": "Créer un compte gratuit",
+    "demoSessionExit": "Quitter la démo",
+    "demoSessionUser": "Démo",
+    "demoLauncherOpening": "Ouverture de la démo…",
+    "demoLauncherSignedInTitle": "Vous êtes connecté",
+    "demoLauncherSignedInBody": "La démo utilise un compte partagé en lecture seule. L’ouvrir vous déconnecte de votre propre compte dans ce navigateur.",
+    "demoLauncherOpenDemo": "Ouvrir la démo (vous serez déconnecté)",
+    "demoLauncherBackToDashboard": "Retour à votre tableau de bord"
   }
 }

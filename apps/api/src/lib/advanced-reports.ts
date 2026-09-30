@@ -399,7 +399,9 @@ function buildAttributionAttributedCte(
         ) AS rn
       FROM converting_sessions cs
       INNER JOIN website_event e ON e.session_id = cs.session_id
-      WHERE e.website_id = ?
+      -- Unary + keeps SQLite on the session_id index; the (website_id, event_type, created_at)
+      -- index would range-scan every earlier pageview once per converting session.
+      WHERE +e.website_id = ?
         AND e.event_type = ${EVENT_TYPE.pageView}
         AND e.created_at <= cs.converted_at
     ),
@@ -432,7 +434,7 @@ function buildAttributionAttributedCte(
         SELECT 1
         FROM website_event e
         WHERE e.session_id = cs.session_id
-          AND e.website_id = ?
+          AND +e.website_id = ?
           AND e.event_type = ${EVENT_TYPE.pageView}
           AND e.created_at <= cs.converted_at
       )

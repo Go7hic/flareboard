@@ -71,7 +71,19 @@ export async function logoutSession(): Promise<void> {
     }
   }
   sessionActive = false;
+  demoSession = false;
   clearLegacyTokenStorage();
+}
+
+/**
+ * Signs this browser in as the shared read-only demo account (short session cookie) and
+ * returns the demo website to open. Throws when the demo is unavailable.
+ */
+export async function startDemoSession(): Promise<{ websiteId: string }> {
+  const result = await api<{ websiteId: string }>('/api/demo/session', { method: 'POST', body: '{}' });
+  sessionActive = true;
+  demoSession = true;
+  return result;
 }
 
 export type ApiInit = RequestInit;
@@ -109,6 +121,13 @@ function normalizeApiPath(path: string): string {
   return path;
 }
 
+/** Set while the read-only demo account is signed in: an expired session reopens the demo. */
+let demoSession = false;
+
+export function markDemoSession(active: boolean) {
+  demoSession = active;
+}
+
 export function clearSessionAndRedirectToLogin(): void {
   if (sessionRedirectPending) return;
   const { pathname, search } = window.location;
@@ -117,6 +136,11 @@ export function clearSessionAndRedirectToLogin(): void {
   sessionRedirectPending = true;
   sessionActive = false;
   clearLegacyTokenStorage();
+  if (demoSession) {
+    demoSession = false;
+    window.location.replace('/demo');
+    return;
+  }
   const next = encodeURIComponent(pathname + search);
   window.location.replace(`/login?next=${next}`);
 }
@@ -215,6 +239,8 @@ export interface MeResponse {
   twoFactorEnabled?: boolean;
   /** Teams that require two-factor authentication, which the user cannot reach without it. */
   twoFactorRequiredBy?: Array<{ id: string; name: string }>;
+  /** The shared read-only demo account ("Explore the demo"): the API refuses every change. */
+  isDemo?: boolean;
 }
 
 /** Result of `/api/auth/login`,`/api/auth/oauth/exchange` and `/api/auth/verify-email`. */

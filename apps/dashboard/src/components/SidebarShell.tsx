@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, bootstrapSession, hasSession, logoutSession, type MeResponse } from '../lib/api';
+import { api, bootstrapSession, hasSession, logoutSession, markDemoSession } from '../lib/api';
 import { LazyRouteFallback } from './LazyRouteFallback';
 import { t } from '../lib/i18n';
+import { fetchMe, isDemoHiddenPath } from '../lib/useDemoSession';
 import { AppSidebar } from './AppSidebar';
 import { AppTopBar } from './AppTopBar';
 import { DeleteAccountDialog } from './DeleteAccountDialog';
+import { DemoSessionBanner } from './DemoSessionBanner';
 import { Button } from './ui/button';
 
 const SECURITY_PATH = '/account/security';
@@ -50,13 +52,18 @@ export function SidebarShell() {
 
   const meQuery = useQuery({
     queryKey: ['me'],
-    queryFn: () => api<MeResponse>('/api/me'),
+    queryFn: fetchMe,
     enabled: sessionReady && hasSession(),
     staleTime: 60_000,
   });
 
-  const userLabel = meQuery.data?.username || t('username');
+  const isDemo = Boolean(meQuery.data?.isDemo);
+  const userLabel = isDemo ? t('demoSessionUser') : meQuery.data?.username || t('username');
   const twoFactorRequiredBy = meQuery.data?.twoFactorRequiredBy ?? [];
+
+  useEffect(() => {
+    markDemoSession(isDemo);
+  }, [isDemo]);
 
   useEffect(() => {
     api<{ hosted?: boolean; role?: string; oauth?: string[] }>('/api/config')
@@ -81,7 +88,14 @@ export function SidebarShell() {
     await logoutSession();
     // Drop the previous account's cached websites/stats before anyone else signs in.
     queryClient.clear();
-    navigate('/login');
+    navigate(isDemo ? '/' : '/login');
+  }
+
+  /** Ends the demo session first, so the new account does not start inside the demo. */
+  async function leaveDemoFor(path: string) {
+    await logoutSession();
+    queryClient.clear();
+    navigate(path);
   }
 
   async function afterAccountDeleted() {
@@ -99,6 +113,11 @@ export function SidebarShell() {
     return <LazyRouteFallback />;
   }
 
+  // Credentials, billing and team pages have nothing a demo visitor can use.
+  if (isDemo && isDemoHiddenPath(location.pathname)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   return (
     <div className="shell">
       <a href="#main-content" className="skip-link">
@@ -108,12 +127,13 @@ export function SidebarShell() {
         <AppSidebar
           hosted={hosted}
           isAdmin={isAdmin}
+          isDemo={isDemo}
           mobileOpen={mobileNavOpen}
           userLabel={userLabel}
           oauthProviders={oauthProviders}
           onNavigate={closeMobileNav}
           onLogout={logout}
-          onDeleteAccount={meQuery.data ? () => setDeleteAccountOpen(true) : undefined}
+          onDeleteAccount={meQuery.data && !isDemo ? () => setDeleteAccountOpen(true) : undefined}
         />
         {mobileNavOpen ? (
           <button
@@ -128,6 +148,13 @@ export function SidebarShell() {
             menuOpen={mobileNavOpen}
             onMenuToggle={() => setMobileNavOpen((open) => !open)}
           />
+          {isDemo ? (
+            <DemoSessionBanner
+              // Registration is open on hosted installs only; elsewhere accounts come from an admin.
+              onCreateAccount={() => void leaveDemoFor(hosted ? '/register?from=demo' : '/login')}
+              onExit={() => void leaveDemoFor('/')}
+            />
+          ) : null}
           <main id="main-content" className="shell-main" tabIndex={-1}>
             <div className="shell-content-inner">
               {twoFactorRequiredBy.length ? (
@@ -141,7 +168,7 @@ export function SidebarShell() {
           </main>
         </div>
       </div>
-      {meQuery.data ? (
+      {meQuery.data && !isDemo ? (
         <DeleteAccountDialog
           open={deleteAccountOpen}
           onOpenChange={setDeleteAccountOpen}

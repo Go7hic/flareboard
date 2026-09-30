@@ -16,9 +16,11 @@ type WebsiteNavGroup = {
 
 type WebsiteSidebarProps = {
   onNavigate?: () => void;
+  /** Read-only demo session: no share links or settings, which it could not change anyway. */
+  isDemo?: boolean;
 };
 
-export function WebsiteSidebar({ onNavigate }: WebsiteSidebarProps) {
+export function WebsiteSidebar({ onNavigate, isDemo = false }: WebsiteSidebarProps) {
   const { websiteId } = useParams<{ websiteId: string }>();
   if (!websiteId) return null;
 
@@ -96,9 +98,9 @@ export function WebsiteSidebar({ onNavigate }: WebsiteSidebarProps) {
     },
     {
       items: [
-        { to: `${base}/share`, labelKey: 'navShareLinks', icon: 'share' },
+        ...(isDemo ? [] : [{ to: `${base}/share`, labelKey: 'navShareLinks', icon: 'share' as const }]),
         { to: `${base}/audit`, labelKey: 'auditLog', icon: 'audit' },
-        { to: `${base}/settings`, labelKey: 'settings', icon: 'settings' },
+        ...(isDemo ? [] : [{ to: `${base}/settings`, labelKey: 'settings', icon: 'settings' as const }]),
       ],
     },
   ];

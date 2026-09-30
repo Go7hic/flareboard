@@ -18,6 +18,7 @@ import { Button } from './ui/button';
 import { api } from '../lib/api';
 import { formatDateOnly } from '../lib/format';
 import { t } from '../lib/i18n';
+import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 
 type CohortRow = {
   id: string;
@@ -30,6 +31,8 @@ type CohortRow = {
 
 export function CohortsPanel({ websiteId }: { websiteId: string }) {
   const queryClient = useQueryClient();
+  // View-only members (and the demo) see the list without create, edit or delete.
+  const { canEdit } = useWebsitePermissions(websiteId, 'analytics');
   const [search, setSearch] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [editId, setEditId] = useState<string | undefined>();
@@ -96,9 +99,11 @@ export function CohortsPanel({ websiteId }: { websiteId: string }) {
             placeholder={t('cohortSearch')}
             aria-label={t('cohortSearch')}
           />
-          <Button type="button" variant="primary" size="sm" onClick={openCreate}>
-            {t('createCohort')}
-          </Button>
+          {canEdit ? (
+            <Button type="button" variant="primary" size="sm" onClick={openCreate}>
+              {t('createCohort')}
+            </Button>
+          ) : null}
         </header>
 
         {cohortsQuery.isLoading ? (
@@ -133,22 +138,26 @@ export function CohortsPanel({ websiteId }: { websiteId: string }) {
                   }
                   actions={
                     <div className="cohorts-row-actions">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEdit(selectedCohort)}
-                      >
-                        {t('edit')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="destructive-ghost"
-                        size="sm"
-                        onClick={() => setDeleteTarget(selectedCohort)}
-                      >
-                        {t('delete')}
-                      </Button>
+                      {canEdit ? (
+                        <>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEdit(selectedCohort)}
+                          >
+                            {t('edit')}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="destructive-ghost"
+                            size="sm"
+                            onClick={() => setDeleteTarget(selectedCohort)}
+                          >
+                            {t('delete')}
+                          </Button>
+                        </>
+                      ) : null}
                       <Button type="button" variant="secondary" size="sm" asChild>
                         <Link to={`/websites/${websiteId}?cohort=${encodeURIComponent(selectedCohort.id)}`}>
                           {t('dashboard')}

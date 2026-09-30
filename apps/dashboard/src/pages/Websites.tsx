@@ -15,6 +15,7 @@ import { EmptyState } from '../components/EmptyState';
 import { api, type Website } from '../lib/api';
 import { formatDateOnly } from '../lib/format';
 import { t } from '../lib/i18n';
+import { useDemoSession } from '../lib/useDemoSession';
 
 function AddWebsiteForm({
   onSuccess,
@@ -76,6 +77,8 @@ export default function Websites() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [editingSite, setEditingSite] = useState<Website | null>(null);
+  // The read-only demo can neither add nor edit websites.
+  const { isDemo } = useDemoSession();
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['websites'],
@@ -116,7 +119,7 @@ export default function Websites() {
       <PageHeader title={t('websites')} lead={t('websitesSubtitle')} />
 
       <PageBody>
-      {hasSites ? (
+      {isDemo ? null : hasSites ? (
         <CollapsibleSection title={t('collapseAddWebsite')} summary={t('addWebsiteLead')}>
           {renderAddWebsite()}
         </CollapsibleSection>
@@ -155,17 +158,19 @@ export default function Websites() {
                     {site.domain ? <span className="site-card-domain">{site.domain}</span> : null}
                   </Link>
                   <div className="site-card-actions">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="site-card-edit"
-                      onClick={() => setEditingSite(site)}
-                      aria-label={t('editWebsite')}
-                      title={t('editWebsite')}
-                    >
-                      <Pencil size={14} strokeWidth={2} aria-hidden />
-                    </Button>
+                    {isDemo ? null : (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="site-card-edit"
+                        onClick={() => setEditingSite(site)}
+                        aria-label={t('editWebsite')}
+                        title={t('editWebsite')}
+                      >
+                        <Pencil size={14} strokeWidth={2} aria-hidden />
+                      </Button>
+                    )}
                     <Link to={`/websites/${site.id}`} className="site-card-open" aria-hidden>
                       →
                     </Link>

@@ -4,11 +4,14 @@ import { BrandLogo } from './BrandLogo';
 import { SidebarUserMenu } from './SidebarUserMenu';
 import { WebsiteSidebar } from './WebsiteSidebar';
 import { SidebarNavIcon } from './SidebarNavIcon';
+import { isDemoHiddenPath } from '../lib/useDemoSession';
 import { filterShellNavItems, shellNavItems } from './shellNavItems';
 
 type AppSidebarProps = {
   hosted: boolean;
   isAdmin: boolean;
+  /** Read-only demo session: no billing, team, link or account pages. */
+  isDemo?: boolean;
   mobileOpen: boolean;
   userLabel: string;
   oauthProviders?: string[];
@@ -20,6 +23,7 @@ type AppSidebarProps = {
 export function AppSidebar({
   hosted,
   isAdmin,
+  isDemo = false,
   mobileOpen,
   userLabel,
   oauthProviders,
@@ -29,7 +33,9 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const websiteMatch = useMatch('/websites/:websiteId/*');
   const isWebsiteContext = Boolean(websiteMatch);
-  const items = filterShellNavItems(shellNavItems, hosted, isAdmin);
+  const items = filterShellNavItems(shellNavItems, hosted, isAdmin).filter(
+    (item) => !isDemo || !isDemoHiddenPath(item.to),
+  );
 
   return (
     <aside
@@ -47,7 +53,7 @@ export function AppSidebar({
         aria-label={isWebsiteContext ? t('websiteNav') : 'Main'}
       >
         {isWebsiteContext ? (
-          <WebsiteSidebar onNavigate={onNavigate} />
+          <WebsiteSidebar onNavigate={onNavigate} isDemo={isDemo} />
         ) : (
           items.map(({ to, labelKey, icon, ...rest }) => (
             <NavLink
@@ -66,6 +72,7 @@ export function AppSidebar({
       <div className="app-sidebar-footer">
         <SidebarUserMenu
           userLabel={userLabel}
+          isDemo={isDemo}
           oauthProviders={oauthProviders}
           onLogout={onLogout}
           onDeleteAccount={onDeleteAccount}

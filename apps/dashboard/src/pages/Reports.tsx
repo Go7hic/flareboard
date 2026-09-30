@@ -15,6 +15,7 @@ import { api, type Website } from '../lib/api';
 import { isMetricTab } from '../lib/breakdown-dimensions';
 import { type DateRangePreset, presetToRange } from '../lib/dateRange';
 import { t } from '../lib/i18n';
+import { useDemoSession } from '../lib/useDemoSession';
 
 type SavedReport = {
   id: string;
@@ -106,6 +107,8 @@ function reportDestination(
 }
 
 export default function ReportsPage() {
+  // The read-only demo runs reports but cannot save them.
+  const { isDemo } = useDemoSession();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [websiteId, setWebsiteId] = useState('');
@@ -285,40 +288,42 @@ export default function ReportsPage() {
               ) : null}
 
               <h3 className="reports-sidebar-subtitle">{t('savedReports')}</h3>
-              <form
-                className="reports-sidebar-form"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  saveReportMutation.mutate();
-                }}
-              >
-                <Input
-                  placeholder={t('reportName')}
-                  value={savedName}
-                  onChange={(e) => setSavedName(e.target.value)}
-                />
-                <select className="select" value={savedType} onChange={(e) => setSavedType(e.target.value)}>
-                  {reportTemplates.map((template) => (
-                    <option key={template.type} value={template.type}>
-                      {template.name || reportTypeLabel(template.type)}
-                    </option>
-                  ))}
-                </select>
-                {selectedTemplate?.description ? (
-                  <p className="text-muted reports-template-desc">{selectedTemplate.description}</p>
-                ) : null}
-                {savedType === 'funnel' ? (
+              {isDemo ? null : (
+                <form
+                  className="reports-sidebar-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    saveReportMutation.mutate();
+                  }}
+                >
                   <Input
-                    value={funnelSteps}
-                    onChange={(e) => setFunnelSteps(e.target.value)}
-                    placeholder={t('funnelStepsPlaceholder')}
-                    aria-label={t('funnel')}
+                    placeholder={t('reportName')}
+                    value={savedName}
+                    onChange={(e) => setSavedName(e.target.value)}
                   />
-                ) : null}
-                <Button type="submit" variant="primary" size="sm" disabled={saveReportMutation.isPending}>
-                  {t('save')}
-                </Button>
-              </form>
+                  <select className="select" value={savedType} onChange={(e) => setSavedType(e.target.value)}>
+                    {reportTemplates.map((template) => (
+                      <option key={template.type} value={template.type}>
+                        {template.name || reportTypeLabel(template.type)}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedTemplate?.description ? (
+                    <p className="text-muted reports-template-desc">{selectedTemplate.description}</p>
+                  ) : null}
+                  {savedType === 'funnel' ? (
+                    <Input
+                      value={funnelSteps}
+                      onChange={(e) => setFunnelSteps(e.target.value)}
+                      placeholder={t('funnelStepsPlaceholder')}
+                      aria-label={t('funnel')}
+                    />
+                  ) : null}
+                  <Button type="submit" variant="primary" size="sm" disabled={saveReportMutation.isPending}>
+                    {t('save')}
+                  </Button>
+                </form>
+              )}
               <div className="section-gap">
                 <DataViewState
                   loading={savedReportsQuery.isLoading}

@@ -28,7 +28,7 @@ const REASONS = [
 
 const SELF_HOST_FEATURES = ['homeSelfHostFeatureAll', 'homeSelfHostFeatureStack', 'homeSelfHostFeatureLicense'];
 
-const FAQ = [1, 2, 3, 4, 5].map((n) => ({ q: `homeFaqQ${n}`, a: `homeFaqA${n}` }));
+const FAQ = [1, 2, 3, 4, 5, 6, 7].map((n) => ({ q: `homeFaqQ${n}`, a: `homeFaqA${n}` }));
 
 function useScrollToHash() {
   const location = useLocation();

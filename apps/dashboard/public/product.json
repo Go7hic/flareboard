@@ -3,7 +3,7 @@
   "url": "https://flareboard.dev/",
   "type": "web_application",
   "category": "product_analytics",
-  "description": "Flareboard is a PostHog-like product analytics platform built on Cloudflare Workers, D1, R2, KV, Queues, and Durable Objects.",
+  "description": "Flareboard is a PostHog-like product analytics platform built on Cloudflare Workers, Durable Objects, D1, R2, KV, Queues, and Workflows. It accepts events from PostHog SDKs.",
   "repository": "https://github.com/Go7hic/flareboard",
   "docs": "https://github.com/Go7hic/flareboard#readme",
   "deploymentDocs": "https://github.com/Go7hic/flareboard/blob/main/docs/deployment.md",
@@ -27,7 +27,15 @@
         "journeys",
         "people",
         "groups",
-        "stickiness"
+        "stickiness",
+        "insight builder",
+        "PostHog SDK compatibility",
+        "error tracking",
+        "OpenTelemetry logs and traces",
+        "LLM analytics",
+        "workflows",
+        "MCP server",
+        "two-factor authentication"
       ]
     },
     {
@@ -42,12 +50,12 @@
         "session replay",
         "heatmaps",
         "teams",
-        "email reports",
+        "email reports and subscriptions",
         "CSV import and export",
         "feature flags",
         "experiments",
         "surveys",
-        "D1 warehouse workflows"
+        "warehouse with Stripe sync"
       ]
     }
   ],
@@ -55,5 +63,5 @@
     "personalAndNoncommercial": true,
     "commercialLicenseAvailable": true
   },
-  "lastUpdated": "2026-09-13"
+  "lastUpdated": "2026-09-30"
 }

@@ -1,26 +1,31 @@
 # Flareboard
 
-> Flareboard is a PostHog-like product analytics platform built on Cloudflare Workers, D1, R2, KV, Queues, and Durable Objects.
+> Flareboard is a PostHog-like product analytics platform built on Cloudflare Workers, Durable Objects, D1, R2, KV, Queues, and Workflows. It accepts events from PostHog SDKs.
 
 ## What It Does
 
-Flareboard provides privacy-friendly analytics, realtime session visibility, event catalogs, reports, session replay, heatmaps, feature flags, experiments, surveys, reliability tools, AI observability, and warehouse workflows.
+Flareboard provides privacy-friendly analytics, realtime session visibility, event catalogs, an insight builder, session replay, heatmaps, feature flags, experiments, surveys, error tracking, OpenTelemetry logs and traces, LLM analytics, workflows, revenue analytics, and a SQL warehouse. AI tools can query it through an MCP server.
 
 ## Who It Is For
 
-Flareboard is for product teams, developers, and Cloudflare-oriented builders who want hosted or self-hostable product analytics with a Cloudflare-native data plane.
+Flareboard is for product teams, developers, and Cloudflare-oriented builders who want hosted or self-hostable product analytics with a Cloudflare-native data plane, including teams moving off PostHog who want to keep their existing SDK code.
 
 ## Core Features
 
 - Website stats, realtime analytics, segments, custom events, and CSV export.
-- Funnels, retention, attribution, UTM breakdowns, web vitals, goals, cohorts, and journeys.
-- Session replay, heatmaps, session timelines, and declarative events.
-- Feature flags, experiments, surveys, actions, annotations, workflows, and D1 warehouse tools.
-- Error tracking, logs, traces, AI observability, teams, share links, boards, links, pixels, and email reports.
+- Insight builder: trends with up to five series, formulas, breakdowns, and event, person, or page filters; funnels, retention, lifecycle, and stickiness.
+- Attribution, UTM breakdowns, web vitals, goals, cohorts, and journeys.
+- Session replay with masking, console and network timelines, and share links; heatmaps and session timelines.
+- Feature flags with condition groups and payloads, experiments, and multi-question surveys.
+- Error tracking with issues, regressions, and source maps; OpenTelemetry (OTLP) logs and traces; LLM analytics with token cost per model and user.
+- Workflows with webhook, email, and Slack steps; a SQL warehouse with a Stripe connector; MRR and revenue analytics.
+- Boards with filters, alerts, email subscriptions, notebooks, teams, share links, and an MCP server.
+- PostHog SDK compatibility (posthog-js, posthog-node, posthog-python), project keys, and personal API keys.
+- Two-factor authentication, session management, and audit logs.
 
 ## Pricing Summary
 
-The Free Cloud plan includes one website, 100K events per month, and core product analytics. The Cloud plan is $15/month with unlimited websites, 1M events per month pooled across those sites, replay, heatmaps, teams, email reports, CSV import/export, feature flags, experiments, surveys, and warehouse workflows.
+The Free Cloud plan includes one website, 100K events per month, and core product analytics. The Cloud plan is $15/month with unlimited websites, 1M events per month pooled across those sites, replay, heatmaps, teams, email reports and subscriptions, CSV import/export, feature flags, experiments, surveys, and the warehouse (including Stripe sync).
 
 ## Try or Self-Host
 

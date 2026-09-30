@@ -77,6 +77,8 @@ export const PRICING_COMPARE_ENTRIES: CompareEntry[] = [
   { kind: 'section', labelKey: 'pricingCompareSectionPlatform' },
   { kind: 'feature', labelKey: 'featEdgeIngestTitle', free: { type: 'included' }, cloud: { type: 'included' } },
   { kind: 'feature', labelKey: 'featCfStackTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featPosthogSdkTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featApiKeysTitle', free: { type: 'included' }, cloud: { type: 'included' } },
   {
     kind: 'feature',
     labelKey: 'featPrivacyDefaultTitle',
@@ -131,6 +133,7 @@ export const PRICING_COMPARE_ENTRIES: CompareEntry[] = [
   { kind: 'feature', labelKey: 'featGoalsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
   { kind: 'feature', labelKey: 'featCohortsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
   { kind: 'feature', labelKey: 'featJourneysTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featInsightsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
 
   { kind: 'section', labelKey: 'pricingCompareSectionProduct' },
   {
@@ -157,6 +160,7 @@ export const PRICING_COMPARE_ENTRIES: CompareEntry[] = [
   { kind: 'feature', labelKey: 'featAiObservabilityTitle', free: { type: 'included' }, cloud: { type: 'included' } },
   { kind: 'feature', labelKey: 'featAnnotationsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
   { kind: 'feature', labelKey: 'featWorkflowsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featMcpTitle', free: { type: 'included' }, cloud: { type: 'included' } },
   {
     kind: 'feature',
     labelKey: 'featWarehouseTitle',
@@ -190,6 +194,7 @@ export const PRICING_COMPARE_ENTRIES: CompareEntry[] = [
   { kind: 'feature', labelKey: 'featShareLinksTitle', free: { type: 'included' }, cloud: { type: 'included' } },
   { kind: 'feature', labelKey: 'featBoardsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
   { kind: 'feature', labelKey: 'featLinksPixelsTitle', free: { type: 'included' }, cloud: { type: 'included' } },
+  { kind: 'feature', labelKey: 'featNotebooksTitle', free: { type: 'included' }, cloud: { type: 'included' } },
 
   { kind: 'section', labelKey: 'pricingCompareSectionOperations' },
   {
@@ -247,6 +252,7 @@ export const PRICING_COMPARE_ENTRIES: CompareEntry[] = [
     free: { type: 'included' },
     cloud: { type: 'included' },
   },
+  { kind: 'feature', labelKey: 'featSecurityTitle', free: { type: 'included' }, cloud: { type: 'included' } },
 
   { kind: 'section', labelKey: 'pricingCompareSectionSupport' },
   {

@@ -51,6 +51,9 @@ const ISSUES = [
 ];
 
 const MORE_FEATURES = [
+  'featPosthogSdkTitle',
+  'featMcpTitle',
+  'featInsightsTitle',
   'featHeatmapsTitle',
   'featWebVitalsTitle',
   'featUtmTitle',
@@ -64,11 +67,14 @@ const MORE_FEATURES = [
   'featAiObservabilityTitle',
   'featLogsTitle',
   'featRevenueTitle',
+  'featAlertsTitle',
+  'featNotebooksTitle',
   'featEmailReportsTitle',
   'featShareLinksTitle',
   'featBoardsTitle',
   'featDataImportTitle',
   'featTeamsTitle',
+  'featSecurityTitle',
 ];
 
 function CellHead({ titleKey, bodyKey }: { titleKey: string; bodyKey: string }) {

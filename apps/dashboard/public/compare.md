@@ -8,7 +8,7 @@ Flareboard focuses on privacy-friendly product analytics, first-party ownership,
 
 ## Flareboard vs Umami
 
-Umami is simple web analytics. Flareboard covers core analytics plus product analytics workflows such as feature flags, experiments, surveys, replay, heatmaps, errors, logs, AI observability, and warehouse queries.
+Umami is simple web analytics. Flareboard covers core analytics plus product analytics workflows such as feature flags, experiments, surveys, replay, heatmaps, errors, OpenTelemetry logs, LLM analytics, and warehouse queries.
 
 ## Flareboard vs Plausible
 
@@ -28,4 +28,4 @@ Matomo is an established analytics platform with self-hosting. Flareboard is new
 
 ## Flareboard vs PostHog
 
-PostHog is a mature product analytics platform. Flareboard is PostHog-like but built around Cloudflare Workers, D1, R2, KV, Queues, and Durable Objects, with a Cloudflare-native hosted/self-hosted model.
+PostHog is a mature product analytics platform. Flareboard is PostHog-like but built around Cloudflare Workers, Durable Objects (one SQLite store per website), D1, R2, KV, Queues, and Workflows, with a Cloudflare-native hosted/self-hosted model. Flareboard accepts events from posthog-js, posthog-node, and posthog-python: teams switching from PostHog change the host and key instead of rewriting their tracking.

@@ -1,6 +1,6 @@
 # Flareboard
 
-> Flareboard is a PostHog-like product analytics platform built on Cloudflare Workers, D1, R2, KV, Queues, and Durable Objects. It offers a hosted Cloud plan and noncommercial self-hosting.
+> Flareboard is a PostHog-like product analytics platform built on Cloudflare Workers, Durable Objects, D1, R2, KV, Queues, and Workflows. It accepts events from PostHog SDKs and offers a hosted Cloud plan and noncommercial self-hosting.
 
 ## Primary Links
 
@@ -25,6 +25,6 @@
 
 ## About
 
-Flareboard is for teams and builders who want product analytics on Cloudflare rather than a traditional third-party analytics stack. It covers core traffic analytics, realtime sessions, event catalogs, segments, funnels, retention, cohorts, journeys, attribution, revenue, session replay, heatmaps, feature flags, experiments, surveys, error tracking, logs, AI observability, teams, share links, boards, CSV import/export, and D1 warehouse workflows.
+Flareboard is for teams and builders who want product analytics on Cloudflare rather than a traditional third-party analytics stack. It covers core traffic analytics, realtime sessions, event catalogs, an insight builder with filters and formulas, segments, funnels, retention, cohorts, journeys, attribution, revenue analytics with Stripe (MRR, churn, ARPU), session replay, heatmaps, feature flags, experiments, multi-question surveys, error tracking, OpenTelemetry logs and traces, LLM analytics, workflows, teams, share links, boards with alerts and subscriptions, notebooks, CSV import/export, a SQL warehouse, an MCP server for AI tools, PostHog SDK compatibility, and two-factor authentication.
 
-The Free Cloud plan covers one website and core product analytics. The Cloud plan is $15/month and unlocks unlimited websites, a 1M monthly event pool, plus paid capabilities such as session replay, heatmaps, teams, email reports, CSV import/export, feature flags, experiments, surveys, and warehouse workflows. Personal and noncommercial self-hosting is available under the project license; commercial organizations can purchase a license separately.
+The Free Cloud plan covers one website and core product analytics. The Cloud plan is $15/month and unlocks unlimited websites, a 1M monthly event pool, plus paid capabilities such as session replay, heatmaps, teams, email reports and subscriptions, CSV import/export, feature flags, experiments, surveys, and the warehouse including Stripe sync. Personal and noncommercial self-hosting is available under the project license; commercial organizations can purchase a license separately.

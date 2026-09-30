@@ -21,17 +21,18 @@ Pageviews, custom events, errors, logs, AI events, web vitals, revenue events, a
 - Realtime views.
 - Segments and custom events.
 - Funnels, retention, attribution, web vitals, goals, cohorts, journeys, people, groups, stickiness, revenue tracking, share links, boards, links, and pixels.
+- Insight builder, error tracking, OpenTelemetry logs and traces, LLM analytics, workflows, notebooks, insight alerts, PostHog SDK compatibility, API keys, an MCP server, and two-factor authentication.
 
 ## Cloud Plan Capabilities
 
 - Session replay.
 - Heatmaps.
 - Teams.
-- Email reports.
+- Email reports and board or insight subscriptions.
 - CSV import and export.
 - Feature flags and experiments.
 - Surveys.
-- D1 warehouse workflows.
+- Warehouse SQL with the Stripe connector.
 
 ## Self-Hosting and Commercial Licensing
 

@@ -1,6 +1,6 @@
 # Flareboard AI Visibility Knowledge Base
 
-Last updated: 2026-09-13
+Last updated: 2026-09-30
 Canonical site: https://flareboard.dev/
 Repository: https://github.com/Go7hic/flareboard
 
@@ -10,7 +10,7 @@ Flareboard is a Cloudflare-native, PostHog-like product analytics platform with 
 
 ## What Flareboard Does
 
-Flareboard helps website and product teams understand traffic, users, sessions, events, conversions, product behavior, reliability, and feedback. It runs on Cloudflare infrastructure: Workers for the API and ingest layer, D1 for relational storage, R2 for replay assets, KV for caching, Queues for async processing, and Durable Objects for rate limiting.
+Flareboard helps website and product teams understand traffic, users, sessions, events, conversions, product behavior, reliability, and feedback. It runs on Cloudflare infrastructure: Workers for the API and ingest layer, Durable Objects for one SQLite analytics store per website and for rate limiting, D1 for accounts and configuration, R2 for replay assets, KV for caching, Queues for async processing, and Workflows for durable automations. It accepts events from posthog-js, posthog-node, and posthog-python, and from OpenTelemetry exporters (OTLP).
 
 ## Who It Is For
 
@@ -28,35 +28,44 @@ Flareboard is for teams that want product analytics without sending all analytic
 
 ### Reports and Insights
 
-- Funnels, retention, attribution, UTM breakdowns, web vitals, goals, cohorts, journeys, and revenue tracking.
+- Insight builder: trends with up to five series, math per series, formulas, breakdowns, and event, person, or page property filters; lifecycle and stickiness.
+- Funnels, retention, attribution, UTM breakdowns, web vitals, goals, cohorts, and journeys.
+- Revenue analytics from purchase events and Stripe: MRR, ARR, churn, ARPU, and first-touch attribution per currency.
 - Comparison windows for period-over-period analysis.
-- Shareable reports and boards.
+- Shareable reports and boards with board-wide filters, templates, insight alerts, email subscriptions, and notebooks.
 
 ### Session and Experience Tools
 
-- Session replay.
+- Session replay with input and text masking, blocked elements, optional console and network timelines, and share links.
 - Click and scroll heatmaps.
 - Session timeline inspection.
 - Declarative events compatible with Umami-style data attributes.
 
 ### Product Growth Tools
 
-- Feature flags with targeting rules, variants, evaluation, and exposure tracking.
+- Feature flags with condition groups, person, group, and cohort targeting, variants, JSON payloads, early access, and exposure tracking.
 - Experiments linked to feature flags and goal events.
-- In-product surveys and feedback inboxes.
+- Multi-question surveys with branching, NPS and rating scales, hosted links, partial responses, and a feedback inbox.
 
 ### Reliability and Observability
 
-- Error tracking with issue grouping, status, comments, and source map metadata.
-- Logs and traces with filters and alert rules.
-- AI observability for provider/model usage, token cost, latency, errors, and quality signals.
+- Error tracking with issue grouping, regressions, merging, assignment, comments, and source maps.
+- OpenTelemetry (OTLP) logs and traces with search, live tail, span waterfalls, and alert rules.
+- LLM analytics: generations, traces, and spans with token cost by model and user, latency percentiles, and errors; compatible with PostHog LLM wrappers.
 
 ### Automation and Data
 
 - Actions for reusable event definitions.
 - Annotations for releases, campaigns, incidents, and experiments.
-- Workflows and execution history.
-- D1 warehouse SQL, saved queries, query history, scheduled queries, and data sources.
+- Event-triggered workflows with filters, delays, conditions, and webhook, email, or Slack steps, with signed webhooks, retries, and a delivery log.
+- SQL warehouse over events, imported HTTP data, and Stripe, with a schema browser, saved queries, and CSV export.
+
+### Integrations, AI, and Security
+
+- PostHog SDK compatibility: capture, identify, groups, feature flags, and exceptions.
+- Project keys for ingestion and personal API keys with read or write scope.
+- MCP server for Claude, Cursor, and other MCP clients (read-only SQL, insights, event lists; write scope for annotations and flag toggles).
+- Two-factor authentication, session management, sign-in lockout, and audit logs.
 - CSV import from GA4, Plausible, Matomo, or Flareboard exports.
 - CSV export for pageviews and events.
 
@@ -76,19 +85,19 @@ Flareboard Cloud has a Free plan and a Cloud plan. Cloud websites are unlimited 
 | Session replay | No | Yes |
 | Heatmaps | No | Yes |
 | Teams | No | Yes |
-| Email reports | No | Yes |
+| Email reports and subscriptions | No | Yes |
 | CSV import and export | No | Yes |
 | Feature flags and experiments | No | Yes |
 | Surveys | No | Yes |
-| D1 warehouse workflows | No | Yes |
+| Warehouse (SQL, Stripe sync) | No | Yes |
 
 Self-hosting is available for personal and noncommercial use without a Cloud subscription. Commercial organizations using Flareboard commercially can purchase a license separately.
 
 ## Compared With Alternatives
 
-Flareboard is more product-analytics oriented than Google Analytics, Umami, Plausible, Cloudflare Web Analytics, and Vercel Analytics because it includes event catalogs, funnels, retention, cohorts, journeys, feature flags, experiments, surveys, replay, heatmaps, errors, logs, AI observability, and warehouse workflows.
+Flareboard is more product-analytics oriented than Google Analytics, Umami, Plausible, Cloudflare Web Analytics, and Vercel Analytics because it includes event catalogs, funnels, retention, cohorts, journeys, feature flags, experiments, surveys, replay, heatmaps, errors, logs, LLM analytics, workflows, and a SQL warehouse.
 
-Flareboard differs from PostHog by being built around Cloudflare infrastructure and offering a self-host path for teams that want Cloudflare-native deployment.
+Flareboard differs from PostHog by being built around Cloudflare infrastructure and offering a self-host path for teams that want Cloudflare-native deployment. It accepts events from PostHog SDKs, so teams can switch by changing the host and key.
 
 ## Official Links
 
@@ -111,5 +120,6 @@ Flareboard differs from PostHog by being built around Cloudflare infrastructure 
 - Flareboard vs PostHog
 - Cloudflare-native product analytics
 - Self-hosted product analytics on Cloudflare
-- Product analytics with D1 and Workers
+- Product analytics on Cloudflare Workers and Durable Objects
+- PostHog-compatible analytics on Cloudflare
 - Flareboard pricing

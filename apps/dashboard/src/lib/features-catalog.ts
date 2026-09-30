@@ -18,6 +18,7 @@ export const FEATURE_CATEGORIES: FeatureCategory[] = [
       { titleKey: 'featCookielessTitle', bodyKey: 'featCookielessBody' },
       { titleKey: 'featDataOwnershipTitle', bodyKey: 'featDataOwnershipBody' },
       { titleKey: 'featNoFingerprintTitle', bodyKey: 'featNoFingerprintBody' },
+      { titleKey: 'featSecurityTitle', bodyKey: 'featSecurityBody' },
     ],
   },
   {
@@ -27,6 +28,8 @@ export const FEATURE_CATEGORIES: FeatureCategory[] = [
       { titleKey: 'featEdgeIngestTitle', bodyKey: 'featEdgeIngestBody' },
       { titleKey: 'featCfStackTitle', bodyKey: 'featCfStackBody' },
       { titleKey: 'featSelfHostTitle', bodyKey: 'featSelfHostBody' },
+      { titleKey: 'featPosthogSdkTitle', bodyKey: 'featPosthogSdkBody' },
+      { titleKey: 'featApiKeysTitle', bodyKey: 'featApiKeysBody' },
     ],
   },
   {
@@ -44,6 +47,7 @@ export const FEATURE_CATEGORIES: FeatureCategory[] = [
     id: 'reports',
     titleKey: 'featuresCatReports',
     items: [
+      { titleKey: 'featInsightsTitle', bodyKey: 'featInsightsBody' },
       { titleKey: 'featFunnelTitle', bodyKey: 'featFunnelBody' },
       { titleKey: 'featRetentionTitle', bodyKey: 'featRetentionBody' },
       { titleKey: 'featAttributionTitle', bodyKey: 'featAttributionBody' },
@@ -91,6 +95,7 @@ export const FEATURE_CATEGORIES: FeatureCategory[] = [
       { titleKey: 'featAnnotationsTitle', bodyKey: 'featAnnotationsBody' },
       { titleKey: 'featWorkflowsTitle', bodyKey: 'featWorkflowsBody' },
       { titleKey: 'featWarehouseTitle', bodyKey: 'featWarehouseBody' },
+      { titleKey: 'featMcpTitle', bodyKey: 'featMcpBody' },
     ],
   },
   {
@@ -100,6 +105,8 @@ export const FEATURE_CATEGORIES: FeatureCategory[] = [
       { titleKey: 'featTeamsTitle', bodyKey: 'featTeamsBody' },
       { titleKey: 'featShareLinksTitle', bodyKey: 'featShareLinksBody' },
       { titleKey: 'featBoardsTitle', bodyKey: 'featBoardsBody' },
+      { titleKey: 'featAlertsTitle', bodyKey: 'featAlertsBody' },
+      { titleKey: 'featNotebooksTitle', bodyKey: 'featNotebooksBody' },
       { titleKey: 'featLinksPixelsTitle', bodyKey: 'featLinksPixelsBody' },
     ],
   },

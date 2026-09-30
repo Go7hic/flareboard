@@ -33,7 +33,7 @@ import { getWebsiteById } from '../lib/queries';
 import { hitAllowed, recordHit, sourceExists, type HitSource } from '../lib/link-pixel-hits';
 import { bumpRealtimeVisitor } from '../lib/realtime-kv';
 import { appendMatchedActionTags } from '../lib/actions';
-import { assertEventAllowed, recordEventUsageKv } from '../lib/hosted-limits';
+import { assertEventAllowed } from '../lib/hosted-limits';
 import { checkIpRateLimit, checkProjectKeyRateLimit, checkRateLimit, getTrustedClientIp } from '../lib/rate-limit';
 import { enqueueWorkflowTriggers } from '../lib/workflows';
 import { buildErrorEventDataPayload, reportPossibleRegression } from '../lib/error-tracking';
@@ -290,10 +290,6 @@ async function processSend(
         },
       };
       await env.EVENT_QUEUE.send(msg);
-      if (quota.userId) {
-        const billingUserId = quota.userId;
-        defer(() => recordEventUsageKv(env, billingUserId, 1));
-      }
       return json({ ok: true });
     }
 
@@ -359,7 +355,6 @@ async function processSend(
     const client = getClientInfoFromRequest(req, payload);
 
     let cache: CacheToken | null = null;
-    let billingUserId = '';
     if (websiteId) {
       const [rl, quota, parsedCache] = await Promise.all([
         rateLimit(websiteId, trustedIp),
@@ -381,7 +376,6 @@ async function processSend(
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      billingUserId = quota.userId;
       cache = parsedCache;
 
       if (!cache?.websiteId) {
@@ -712,17 +706,6 @@ async function processSend(
       { websiteId: sourceId, sessionId, visitId, iat },
       getSecret(appSecret),
     );
-
-    // Usage is charged only once the event is accepted for processing (rate
-    // limit and quota checks passed, payload validated, messages built).
-    if (billingUserId) {
-      const usageUserId = billingUserId;
-      const billable = Math.max(
-        1,
-        messages.filter((m) => m.type === 'event' || m.type === 'revenue').length,
-      );
-      defer(() => recordEventUsageKv(env, usageUserId, billable));
-    }
 
     try {
       const [token] = await Promise.all([tokenPromise, queuePromise]);

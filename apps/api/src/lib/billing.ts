@@ -8,6 +8,7 @@ import {
   planForPublic,
   websiteLimitForEnforcement,
   type PlanId,
+  type UsageCounts,
 } from '@flareboard/shared';
 import { eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
@@ -92,17 +93,14 @@ export async function countUserWebsites(env: Env, userId: string): Promise<numbe
   return row?.c ?? 0;
 }
 
-export async function getMonthlyEventUsage(env: Env, userId: string, monthKey = currentMonthKey()): Promise<number> {
-  const kvKey = `usage:${userId}:${monthKey}`;
-  const kv = await env.CACHE.get(kvKey);
-  if (kv !== null) return parseInt(kv, 10) || 0;
-
+/** This month's usage per allowance (usage_monthly: events from the aggregator, the rest from ingest). */
+export async function getMonthlyUsage(env: Env, userId: string, monthKey = currentMonthKey()): Promise<UsageCounts> {
   const row = await env.DB.prepare(
-    `SELECT events_count as c FROM usage_monthly WHERE user_id = ? AND month_key = ?`,
+    `SELECT events_count, replays_count, otel_rows FROM usage_monthly WHERE user_id = ? AND month_key = ?`,
   )
     .bind(userId, monthKey)
-    .first<{ c: number }>();
-  return row?.c ?? 0;
+    .first<{ events_count: number; replays_count: number; otel_rows: number }>();
+  return { events: row?.events_count ?? 0, replays: row?.replays_count ?? 0, otel: row?.otel_rows ?? 0 };
 }
 
 export async function checkWebsiteLimit(env: Env, userId: string): Promise<{ ok: true } | { ok: false; message: string }> {

@@ -15,6 +15,7 @@ import { eventStoreMode } from './site-db';
 import { runStoreBackfill } from './store-backfill';
 import { migrateInlineSourceMapsToR2 } from './source-maps';
 import { runDemoDataGenerator } from './demo-data';
+import { runUsageNotices } from './usage-notices';
 
 // Caps how many websites a single cron tick processes so one invocation
 // cannot blow past Worker CPU/subrequest limits; later ticks continue from a cursor.
@@ -154,6 +155,10 @@ export async function runScheduledMaintenance(env: Env, cron: string) {
     console.error(JSON.stringify({ event: 'demo_data_failed', error: error instanceof Error ? error.message : String(error) }));
     return null;
   });
+  const usageNotices = await runUsageNotices(env).catch((error: unknown) => {
+    console.error(JSON.stringify({ event: 'usage_notices_failed', error: error instanceof Error ? error.message : String(error) }));
+    return null;
+  });
   const retention = await runRetentionPurge(env);
   const workflowLogs = await purgeWorkflowLogs(env);
   const deletion = await runDataDeletion(env);
@@ -163,5 +168,5 @@ export async function runScheduledMaintenance(env: Env, cron: string) {
   });
   // Storage migration: while in `dual`, copy history into the website stores a few sites per tick.
   const storeBackfill = eventStoreMode(env) === 'dual' ? await runStoreBackfill(env) : null;
-  return { alerts, errorTracking, dashboards, warehouse, dataSources, demoData, retention, workflowLogs, deletion, assistantPruned, storeBackfill };
+  return { alerts, errorTracking, dashboards, warehouse, dataSources, demoData, usageNotices, retention, workflowLogs, deletion, assistantPruned, storeBackfill };
 }

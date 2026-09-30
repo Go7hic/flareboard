@@ -1,14 +1,38 @@
-import { currentMonthKey, getPlan, normalizePlanId, type PlanId } from '@flareboard/shared';
+import {
+  currentMonthKey,
+  getPlan,
+  normalizePlanId,
+  usageCeiling,
+  type PlanId,
+  type UsageCounts,
+  type UsageMetric,
+} from '@flareboard/shared';
 import type { Env } from '../env';
 
-const USAGE_KV_TTL_SEC = 60 * 60 * 24 * 40;
+/**
+ * Monthly usage lives in D1 `usage_monthly`: the aggregator counts product events as it writes
+ * them, and ingest counts replays and OpenTelemetry rows below. The hot path only reads it,
+ * through a short KV cache, so collection can overshoot a ceiling by about a minute of traffic.
+ * (Counting every event in one KV key hit KV's one-write-per-second-per-key limit.)
+ */
+const QUOTA_CACHE_TTL_SEC = 60;
+
+const USAGE_COLUMNS: Record<UsageMetric, string> = {
+  events: 'events_count',
+  replays: 'replays_count',
+  otel: 'otel_rows',
+};
+
+const LIMIT_MESSAGES: Record<UsageMetric, string> = {
+  events: 'Monthly event limit exceeded.',
+  replays: 'Monthly session replay limit exceeded.',
+  otel: 'Monthly log and span limit exceeded.',
+};
+
+type QuotaState = { planId: PlanId; used: UsageCounts };
 
 function isHostedMode(env: Env): boolean {
   return env.HOSTED_MODE === 'true';
-}
-
-function usageKey(userId: string, monthKey: string): string {
-  return `usage:${userId}:${monthKey}`;
 }
 
 async function getWebsiteOwnerId(env: Env, websiteId: string): Promise<string | null> {
@@ -26,57 +50,51 @@ async function getWebsiteOwnerId(env: Env, websiteId: string): Promise<string | 
   return userId;
 }
 
-async function getPlanIdForUser(env: Env, userId: string): Promise<PlanId> {
-  const cacheKey = `sub:plan:${userId}`;
-  const cached = await env.CACHE.get(cacheKey);
-  if (cached === 'free' || cached === 'cloud') return cached;
-  if (cached === 'hobby' || cached === 'pro') return 'cloud';
-
-  const row = await env.DB.prepare(
-    `SELECT plan_id FROM user_subscription WHERE user_id = ? LIMIT 1`,
-  )
-    .bind(userId)
-    .first<{ plan_id: string }>();
-  const planId = normalizePlanId(row?.plan_id);
-  await env.CACHE.put(cacheKey, planId, { expirationTtl: 300 });
-  return planId;
-}
-
-async function getMonthlyUsage(env: Env, userId: string): Promise<number> {
-  const monthKey = currentMonthKey();
-  const [kv, row] = await Promise.all([
-    env.CACHE.get(usageKey(userId, monthKey)),
+async function loadQuotaState(env: Env, userId: string, monthKey: string): Promise<QuotaState> {
+  const [plan, usage] = await Promise.all([
+    env.DB.prepare(`SELECT plan_id FROM user_subscription WHERE user_id = ? LIMIT 1`)
+      .bind(userId)
+      .first<{ plan_id: string }>(),
     env.DB.prepare(
-      `SELECT events_count as c FROM usage_monthly WHERE user_id = ? AND month_key = ?`,
+      `SELECT events_count, replays_count, otel_rows FROM usage_monthly WHERE user_id = ? AND month_key = ?`,
     )
       .bind(userId, monthKey)
-      .first<{ c: number }>(),
+      .first<{ events_count: number; replays_count: number; otel_rows: number }>(),
   ]);
-  const kvCount = kv !== null ? parseInt(kv, 10) || 0 : 0;
-  const d1Count = row?.c ?? 0;
-  return Math.max(kvCount, d1Count);
+  return {
+    planId: normalizePlanId(plan?.plan_id),
+    used: { events: usage?.events_count ?? 0, replays: usage?.replays_count ?? 0, otel: usage?.otel_rows ?? 0 },
+  };
+}
+
+async function getQuotaState(env: Env, userId: string): Promise<QuotaState> {
+  const monthKey = currentMonthKey();
+  const cacheKey = `quota:${userId}:${monthKey}`;
+  const cached = await env.CACHE.get<QuotaState>(cacheKey, 'json');
+  if (cached) return cached;
+  const state = await loadQuotaState(env, userId, monthKey);
+  await env.CACHE.put(cacheKey, JSON.stringify(state), { expirationTtl: QUOTA_CACHE_TTL_SEC });
+  return state;
 }
 
 /**
- * Checks the monthly quota without consuming it. Callers must invoke
- * `recordEventUsageKv` once the event is actually accepted for processing,
- * so rate-limited or otherwise rejected requests never charge the quota.
+ * Whether the website owner's plan still collects `metric` this month. Past the allowance a
+ * plan with grace keeps collecting up to its ceiling (usageCeiling); then this refuses.
  */
 export async function assertEventAllowed(
   env: Env,
   websiteId: string,
+  metric: UsageMetric = 'events',
 ): Promise<{ ok: true; userId: string } | { ok: false; message: string }> {
   if (!isHostedMode(env)) return { ok: true, userId: '' };
 
   const userId = await getWebsiteOwnerId(env, websiteId);
   if (!userId) return { ok: false, message: 'Website not found.' };
 
-  const plan = getPlan(await getPlanIdForUser(env, userId));
-  const used = await getMonthlyUsage(env, userId);
-  if (used >= plan.maxEventsPerMonth) {
-    return { ok: false, message: 'Monthly event limit exceeded.' };
+  const state = await getQuotaState(env, userId);
+  if (state.used[metric] >= usageCeiling(getPlan(state.planId), metric)) {
+    return { ok: false, message: LIMIT_MESSAGES[metric] };
   }
-
   return { ok: true, userId };
 }
 
@@ -85,20 +103,17 @@ export async function replayAllowedByPlan(env: Env, websiteId: string): Promise<
   if (!isHostedMode(env)) return true;
   const userId = await getWebsiteOwnerId(env, websiteId);
   if (!userId) return false;
-  return getPlan(await getPlanIdForUser(env, userId)).replayEnabled;
+  return getPlan((await getQuotaState(env, userId)).planId).replayEnabled;
 }
 
-/** KV counter on the ingest hot path; D1 persistence runs in the aggregator. */
-export async function recordEventUsageKv(env: Env, userId: string, delta = 1): Promise<void> {
-  if (!isHostedMode(env) || !userId) return;
-  const monthKey = currentMonthKey();
-  const key = usageKey(userId, monthKey);
-  const current = await env.CACHE.get(key);
-  const count = current !== null ? parseInt(current, 10) || 0 : await getMonthlyUsage(env, userId);
-  await env.CACHE.put(key, String(count + delta), { expirationTtl: USAGE_KV_TTL_SEC });
-}
-
-/** @deprecated Use recordEventUsageKv on ingest; D1 writes belong in the aggregator. */
-export async function recordEventUsage(env: Env, userId: string, delta = 1): Promise<void> {
-  return recordEventUsageKv(env, userId, delta);
+/** Counts replays and OpenTelemetry rows (product events are counted by the aggregator). */
+export async function recordUsage(env: Env, userId: string, metric: Exclude<UsageMetric, 'events'>, delta: number) {
+  if (!isHostedMode(env) || !userId || delta <= 0) return;
+  const column = USAGE_COLUMNS[metric];
+  await env.DB.prepare(
+    `INSERT INTO usage_monthly (user_id, month_key, ${column}) VALUES (?1, ?2, ?3)
+     ON CONFLICT(user_id, month_key) DO UPDATE SET ${column} = ${column} + excluded.${column}`,
+  )
+    .bind(userId, currentMonthKey(), delta)
+    .run();
 }

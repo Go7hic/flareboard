@@ -38,6 +38,8 @@ export const usageMonthly = sqliteTable(
       .references(() => user.userId),
     monthKey: text('month_key').notNull(),
     eventsCount: integer('events_count').notNull().default(0),
+    replaysCount: integer('replays_count').notNull().default(0),
+    otelRows: integer('otel_rows').notNull().default(0),
   },
   (t) => [index('usage_monthly_user_idx').on(t.userId)],
 );

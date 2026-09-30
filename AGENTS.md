@@ -94,6 +94,7 @@ Header chrome: `--shell-bg` + `backdrop-filter` on `.shell-nav` / `.landing-nav`
 - **Logs:** never log one-time links or email bodies in production (`logUndeliveredLink` in `lib/email.ts`).
 - **Security records:** sign-in audit records are pruned after 180 days (`SIGN_IN_RECORD_DAYS` in `data-deletion.ts`) and 2FA secrets, recovery codes and sessions are user-owned tables erased with the account. Both policies promise this.
 - **AI assistant:** "Ask Flareboard" calls DeepSeek (`DEEPSEEK_API_KEY`, `apps/api/src/lib/assistant.ts`, Anthropic-format endpoint). Data sent to it is stored in China and may be used by DeepSeek to improve its models; the Privacy Policy (`#assistant`, subprocessors, transfers) says so. Changing the provider or what is sent means updating those sections.
+- **Plan allowances:** `packages/shared/src/billing.ts` (events, replays, log/span rows, retention, grace). Usage lives in D1 `usage_monthly`: the aggregator counts events, ingest counts replays (first chunk) and OTLP rows; ingest only reads it through a 60 s KV cache (`assertEventAllowed`). Never count per event in KV (one write per second per key). Emails at 80 % / 100 % / stop come from `lib/usage-notices.ts`; hosted retention is capped by the owner's plan in `lib/retention.ts`. Changing allowances means updating pricing copy and both policies.
 - **Warehouse credentials:** Stripe keys are restricted keys only, stored encrypted (`warehouse_credential`) and removed with the data source; never return or log them.
 
 ## Blog

@@ -4,7 +4,6 @@ import type { Env } from '../../env';
 import { isBot } from '../../routes/collect';
 import { enqueueWorkflowTriggers, type WorkflowTriggerEvent } from '../workflows';
 import { loadWebsiteActionDefinitions, tagMatchedActions } from '../actions';
-import { recordEventUsageKv } from '../hosted-limits';
 import { recordAlias } from '../person-identity';
 import { llmCaptureContent } from '../llm-settings';
 import { writeSiteTables } from '../site-db';
@@ -39,8 +38,6 @@ export type CaptureInput = {
   env: Env;
   req: Request;
   websiteId: string;
-  /** Hosted-plan account charged for the events ('' when not metered). */
-  billingUserId: string;
   events: PostHogEvent[];
   sentAt: number | null;
   waitUntil: (promise: Promise<void>) => void;
@@ -306,7 +303,6 @@ export async function capturePostHogEvents(input: CaptureInput): Promise<{ accep
   await sendMessages(env, messages);
 
   const trustedIp = getTrustedClientIp(req);
-  const billable = Math.max(1, events.length);
   input.waitUntil(
     (async () => {
       const tasks: Array<() => Promise<unknown>> = [
@@ -330,7 +326,6 @@ export async function capturePostHogEvents(input: CaptureInput): Promise<{ accep
       if (workflowEvents.length) {
         tasks.push(() => enqueueWorkflowTriggers(env, { websiteId, trustedIp, events: workflowEvents }));
       }
-      if (input.billingUserId) tasks.push(() => recordEventUsageKv(env, input.billingUserId, billable));
       for (const task of tasks) {
         await task().catch((error) =>
           console.error(JSON.stringify({ event: 'posthog_deferred_failed', websiteId, error: String(error) })),

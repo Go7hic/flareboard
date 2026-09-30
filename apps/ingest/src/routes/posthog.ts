@@ -94,7 +94,6 @@ export async function handleCapture(c: Ctx) {
       env: c.env,
       req: c.req.raw,
       websiteId,
-      billingUserId: quota.userId,
       events,
       sentAt: request.sentAt,
       waitUntil: (promise) => c.executionCtx.waitUntil(promise),

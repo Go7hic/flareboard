@@ -394,11 +394,18 @@ describe('PostHog-compatible capture', () => {
   });
 
   it('enforces the hosted event quota', async () => {
-    await env.CACHE.put(`usage:00000000-0000-0000-0000-000000000001:${currentMonthKey()}`, String(1e12));
+    const owner = '00000000-0000-0000-0000-000000000001';
+    await env.DB.prepare(
+      `INSERT INTO usage_monthly (user_id, month_key, events_count) VALUES (?1, ?2, ?3)
+       ON CONFLICT(user_id, month_key) DO UPDATE SET events_count = excluded.events_count`,
+    )
+      .bind(owner, currentMonthKey(), 1e12)
+      .run();
     const { response, messages } = await postJson('/e/', [pageview()], {}, { HOSTED_MODE: 'true' });
     expect(response.status).toBe(402);
     expect(messages).toHaveLength(0);
-    await env.CACHE.delete(`usage:00000000-0000-0000-0000-000000000001:${currentMonthKey()}`);
+    await env.DB.prepare(`DELETE FROM usage_monthly WHERE user_id = ?1`).bind(owner).run();
+    await env.CACHE.delete(`quota:${owner}:${currentMonthKey()}`);
   });
 });
 

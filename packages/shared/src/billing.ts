@@ -17,6 +17,17 @@ export type PlanDefinition = {
   /** Null = unlimited in marketing; enforcement still uses WEBSITE_SAFETY_CAP. */
   maxWebsites: number | null;
   maxEventsPerMonth: number;
+  /** Session replays (recorded visits) per month. */
+  maxReplaysPerMonth: number;
+  /** OpenTelemetry log records and spans per month, counted apart from product events. */
+  maxOtelRowsPerMonth: number;
+  /** Longest raw-data retention a website on this plan keeps (also the default when unset). */
+  maxRetentionDays: number;
+  /**
+   * Past a monthly allowance, collection continues up to this multiple of it (with emails at
+   * 80 %, 100 % and the stop), then stops until the next month. 1 = stop at the allowance.
+   */
+  usageGraceMultiple: number;
   replayEnabled: boolean;
   emailReportsEnabled: boolean;
   heatmapsEnabled: boolean;
@@ -37,6 +48,10 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     name: 'Free',
     maxWebsites: 1,
     maxEventsPerMonth: 100_000,
+    maxReplaysPerMonth: 0,
+    maxOtelRowsPerMonth: 1_000_000,
+    maxRetentionDays: 365,
+    usageGraceMultiple: 1,
     replayEnabled: false,
     emailReportsEnabled: false,
     heatmapsEnabled: false,
@@ -53,6 +68,10 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     name: 'Cloud',
     maxWebsites: null,
     maxEventsPerMonth: 1_000_000,
+    maxReplaysPerMonth: 5_000,
+    maxOtelRowsPerMonth: 10_000_000,
+    maxRetentionDays: 1095,
+    usageGraceMultiple: 2,
     replayEnabled: true,
     emailReportsEnabled: true,
     heatmapsEnabled: true,
@@ -85,6 +104,27 @@ export function websiteLimitForEnforcement(plan: Pick<PlanDefinition, 'maxWebsit
   return plan.maxWebsites ?? WEBSITE_SAFETY_CAP;
 }
 
+/** Monthly allowances, by the usage_monthly column that counts them. */
+export const USAGE_METRICS = ['events', 'replays', 'otel'] as const;
+export type UsageMetric = (typeof USAGE_METRICS)[number];
+export type UsageCounts = Record<UsageMetric, number>;
+
+export function includedUsage(plan: PlanDefinition, metric: UsageMetric): number {
+  if (metric === 'events') return plan.maxEventsPerMonth;
+  if (metric === 'replays') return plan.maxReplaysPerMonth;
+  return plan.maxOtelRowsPerMonth;
+}
+
+/** Where collection of a metric stops for the month: the allowance times the plan's grace. */
+export function usageCeiling(plan: PlanDefinition, metric: UsageMetric): number {
+  return Math.floor(includedUsage(plan, metric) * plan.usageGraceMultiple);
+}
+
+/** Retention a website actually keeps: its own setting, capped by (and defaulting to) the plan's. */
+export function effectiveRetentionDays(plan: Pick<PlanDefinition, 'maxRetentionDays'>, retentionDays: number | null | undefined): number {
+  return retentionDays && retentionDays > 0 ? Math.min(retentionDays, plan.maxRetentionDays) : plan.maxRetentionDays;
+}
+
 export function currentMonthKey(now = new Date()): string {
   const y = now.getUTCFullYear();
   const m = String(now.getUTCMonth() + 1).padStart(2, '0');
@@ -97,6 +137,10 @@ export function planForPublic(plan: PlanDefinition) {
     name: plan.name,
     maxWebsites: plan.maxWebsites,
     maxEventsPerMonth: plan.maxEventsPerMonth,
+    maxReplaysPerMonth: plan.maxReplaysPerMonth,
+    maxOtelRowsPerMonth: plan.maxOtelRowsPerMonth,
+    maxRetentionDays: plan.maxRetentionDays,
+    usageGraceMultiple: plan.usageGraceMultiple,
     replayEnabled: plan.replayEnabled,
     emailReportsEnabled: plan.emailReportsEnabled,
     heatmapsEnabled: plan.heatmapsEnabled,

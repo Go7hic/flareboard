@@ -1,3 +1,4 @@
+import { effectiveRetentionDays, getPlan } from '@flareboard/shared';
 import type { Env } from '../env';
 import { eventStoreMode, siteDb, siteStoreDb } from './site-db';
 
@@ -16,9 +17,10 @@ const PURGE_TABLES: ReadonlyArray<{ table: string; idColumn: string }> = [
 ];
 
 /**
- * Deletes raw event data older than each website's opt-in retention window.
- * Disabled unless `website.retention_days` is set. Work is bounded per tick so
- * a cron invocation cannot exceed Worker limits; the rest is picked up next run.
+ * Deletes raw event data older than each website's retention window. On hosted installs every
+ * website has one: its own setting capped by its owner's plan (the plan maximum when unset).
+ * Self-hosted installs keep data unless `website.retention_days` is set. Work is bounded per
+ * tick so a cron invocation cannot exceed Worker limits; the rest is picked up next run.
  */
 const RETENTION_CURSOR_KEY = 'cron:retention-cursor';
 /** Heatmap dedup ids only need to outlive queue redelivery (retries span minutes to hours). */
@@ -28,17 +30,22 @@ const MAX_DEDUP_BATCHES_PER_TICK = 10;
 export async function runRetentionPurge(env: Env, now = Date.now()) {
   // Walk sites from a persisted cursor: a plain LIMIT kept re-purging the same first sites.
   const cursor = (await env.CACHE.get(RETENTION_CURSOR_KEY)) ?? '';
+  const hosted = env.HOSTED_MODE === 'true';
   const sites = await env.DB.prepare(
-    `SELECT website_id as websiteId, retention_days as retentionDays
-     FROM website
-     WHERE retention_days IS NOT NULL AND retention_days > 0 AND deleted_at IS NULL
-       AND website_id > ?1
-     ORDER BY website_id
+    `SELECT w.website_id as websiteId, w.retention_days as retentionDays, s.plan_id as planId
+     FROM website w
+     LEFT JOIN user_subscription s ON s.user_id = w.user_id
+     WHERE w.deleted_at IS NULL AND w.website_id > ?1
+       ${hosted ? '' : 'AND w.retention_days IS NOT NULL AND w.retention_days > 0'}
+     ORDER BY w.website_id
      LIMIT ${MAX_WEBSITES_PER_TICK}`,
   )
     .bind(cursor)
-    .all<{ websiteId: string; retentionDays: number }>();
-  const batch = sites.results ?? [];
+    .all<{ websiteId: string; retentionDays: number | null; planId: string | null }>();
+  const batch = (sites.results ?? []).map((site) => ({
+    websiteId: site.websiteId,
+    retentionDays: hosted ? effectiveRetentionDays(getPlan(site.planId), site.retentionDays) : site.retentionDays!,
+  }));
   await env.CACHE.put(
     RETENTION_CURSOR_KEY,
     batch.length === MAX_WEBSITES_PER_TICK ? batch[batch.length - 1]!.websiteId : '',

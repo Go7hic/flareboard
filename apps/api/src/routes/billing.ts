@@ -4,7 +4,7 @@ import { createDb, schema } from '@flareboard/db';
 import { getPlan, type PlanId } from '@flareboard/shared';
 import type { Env } from '../env';
 import {
-  getMonthlyEventUsage,
+  getMonthlyUsage,
   getStripePriceId,
   getUserSubscription,
   isHostedMode,
@@ -36,7 +36,7 @@ export async function handleGetSubscription(c: Ctx) {
   const userId = c.get('user').userId;
   const sub = await getUserSubscription(c.env, userId);
   const plan = getPlan(sub.planId);
-  const usage = await getMonthlyEventUsage(c.env, userId);
+  const usage = await getMonthlyUsage(c.env, userId);
   return json({
     hosted: true,
     plan: {
@@ -44,6 +44,10 @@ export async function handleGetSubscription(c: Ctx) {
       name: plan.name,
       maxWebsites: plan.maxWebsites,
       maxEventsPerMonth: plan.maxEventsPerMonth,
+      maxReplaysPerMonth: plan.maxReplaysPerMonth,
+      maxOtelRowsPerMonth: plan.maxOtelRowsPerMonth,
+      maxRetentionDays: plan.maxRetentionDays,
+      usageGraceMultiple: plan.usageGraceMultiple,
       replayEnabled: plan.replayEnabled,
       emailReportsEnabled: plan.emailReportsEnabled,
       heatmapsEnabled: plan.heatmapsEnabled,
@@ -55,7 +59,7 @@ export async function handleGetSubscription(c: Ctx) {
     },
     status: sub.status,
     currentPeriodEnd: sub.currentPeriodEnd ?? null,
-    usage: { eventsThisMonth: usage },
+    usage: { eventsThisMonth: usage.events, replaysThisMonth: usage.replays, otelRowsThisMonth: usage.otel },
   });
 }
 

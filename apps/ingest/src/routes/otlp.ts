@@ -1,6 +1,6 @@
 import type { Context } from 'hono';
 import type { Env } from '../env';
-import { assertEventAllowed, recordEventUsageKv } from '../lib/hosted-limits';
+import { assertEventAllowed, recordUsage } from '../lib/hosted-limits';
 import { normalizeLogs, normalizeSpans, OtlpPayloadError, type Normalized } from '../lib/otlp/normalize';
 import { decodeOtlpProtobuf, encodeExportResponse, encodeRpcStatus, ProtobufError } from '../lib/otlp/protobuf';
 import { otelStore, writeLogRows, writeSpanRows } from '../lib/otlp/store';
@@ -131,7 +131,7 @@ async function handleExport(c: Ctx, signal: Signal) {
 
   const [rl, quota] = await Promise.all([
     checkProjectKeyRateLimit(c.env, key, 'otlp'),
-    assertEventAllowed(c.env, websiteId),
+    assertEventAllowed(c.env, websiteId, 'otel'),
   ]);
   if (!rl.allowed) return statusResponse(format, 429, 'Rate limit exceeded', { 'Retry-After': '30' });
   if (!quota.ok) return statusResponse(format, 402, quota.message);
@@ -176,7 +176,11 @@ async function handleExport(c: Ctx, signal: Signal) {
   }
 
   if (result.rows.length) {
-    c.executionCtx.waitUntil(recordEventUsageKv(c.env, quota.userId, result.rows.length).catch(() => {}));
+    c.executionCtx.waitUntil(
+      recordUsage(c.env, quota.userId, 'otel', result.rows.length).catch((error: unknown) => {
+        console.error(JSON.stringify({ event: 'usage_record_failed', metric: 'otel', error: String(error) }));
+      }),
+    );
   }
   return successResponse(format, signal, result);
 }

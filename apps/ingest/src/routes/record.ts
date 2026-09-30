@@ -8,7 +8,7 @@ import { checkProjectKeyRateLimit, checkRateLimit, getTrustedClientIp } from '..
 import { resolveWebsiteRef } from '../lib/project-keys';
 import { badRequest, json } from '../lib/response';
 import { getWebsiteById } from '../lib/queries';
-import { replayAllowedByPlan } from '../lib/hosted-limits';
+import { assertEventAllowed, recordUsage, replayAllowedByPlan } from '../lib/hosted-limits';
 import { siteDb, writeSiteTables } from '../lib/site-db';
 import { sanitizeReplayChunk } from '../lib/replay-events';
 import { replaySettings } from './tracker-config';
@@ -90,6 +90,19 @@ export async function handleRecord(c: Ctx) {
     return json({ ok: true, replayId: existingChunk.replayId, deduped: true });
   }
 
+  // The monthly replay allowance applies to new recordings (first chunk); one already under way
+  // finishes. Past the allowance, later chunks of a recording that never started are dropped too.
+  const quota = await assertEventAllowed(c.env, website, 'replays');
+  if (!quota.ok) {
+    const started =
+      chunkIndex > 0 &&
+      (await siteDb(c.env, website)
+        .prepare(`SELECT 1 AS found FROM session_replay_summary WHERE website_id = ?1 AND visit_id = ?2 LIMIT 1`)
+        .bind(website, visitId)
+        .first<{ found: number }>());
+    if (!started) return json({ ok: true, skipped: true });
+  }
+
   const replayId = uuid();
 
   if (c.env.REPLAY_BUCKET) {
@@ -148,6 +161,14 @@ export async function handleRecord(c: Ctx) {
       )
       .run();
   });
+
+  if (chunkIndex === 0 && quota.ok) {
+    c.executionCtx.waitUntil(
+      recordUsage(c.env, quota.userId, 'replays', 1).catch((error: unknown) => {
+        console.error(JSON.stringify({ event: 'usage_record_failed', metric: 'replays', error: String(error) }));
+      }),
+    );
+  }
 
   return json({ ok: true, replayId, r2Key: c.env.REPLAY_BUCKET ? r2Key : null });
 }

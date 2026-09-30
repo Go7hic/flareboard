@@ -33,6 +33,8 @@ function serializeWebsite(website: Website) {
     autocapture: website.autocapture !== false,
     persistVisitors: website.persistVisitors === true,
     respectDnt: website.respectDnt === true,
+    /** Null: the plan maximum on hosted installs, kept indefinitely on self-hosted ones. */
+    retentionDays: website.retentionDays ?? null,
     createdAt: website.createdAt,
   };
 }
@@ -154,6 +156,17 @@ export async function handleUpdate(c: Ctx) {
       const planId = await getWebsitePlanId(c.env, website, c.get('user').userId);
       if (!getPlan(planId).replayEnabled) {
         return json({ message: 'Session replay requires a paid plan.' }, 403);
+      }
+    }
+  }
+
+  if (typeof parsed.data.retentionDays === 'number') {
+    const { getWebsitePlanId, isHostedMode } = await import('../lib/billing');
+    const { getPlan } = await import('@flareboard/shared');
+    if (isHostedMode(c.env)) {
+      const plan = getPlan(await getWebsitePlanId(c.env, website, c.get('user').userId));
+      if (parsed.data.retentionDays > plan.maxRetentionDays) {
+        return badRequest(`Data retention is limited to ${plan.maxRetentionDays} days on the ${plan.name} plan.`);
       }
     }
   }

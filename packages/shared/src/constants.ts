@@ -55,6 +55,15 @@ export const PUBLIC_DEMO_WEBSITE_ID = '00000000-0000-4000-8000-000000000001';
 /** Public share slug served at `/demo` after seed. */
 export const PUBLIC_DEMO_SHARE_SLUG = 'demo';
 
+/** Second sample website (documentation site) shown in the demo. */
+export const DEMO_DOCS_WEBSITE_ID = '00000000-0000-4000-8000-000000000002';
+/** Websites the read-only demo account can open, and that the demo data generator keeps fresh. */
+export const DEMO_WEBSITE_IDS = [PUBLIC_DEMO_WEBSITE_ID, DEMO_DOCS_WEBSITE_ID] as const;
+/** The read-only account behind "Explore the demo" sessions. It never has a password. */
+export const DEMO_USER_ID = '00000000-0000-4000-8000-0000000000d0';
+/** Team that gives the demo account view-only access to the demo websites. */
+export const DEMO_TEAM_ID = '00000000-0000-4000-8000-0000000000d1';
+
 export const DATA_TYPE = {
   string: 1,
   number: 2,

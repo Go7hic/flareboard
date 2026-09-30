@@ -24,6 +24,8 @@ export interface Env {
   CORS_ORIGINS?: string;
   /** Public dashboard URL for share links (optional). */
   SHARE_URL?: string;
+  /** "off" stops the demo data generator (hourly cron and admin backfill). */
+  DEMO_DATA?: string;
   /** Optional website id for the public `/demo` console. Overrides share slug `demo`. */
   DEMO_WEBSITE_ID?: string;
   /** When "true", config.disableLogin is set and login may be hidden in dashboard. */

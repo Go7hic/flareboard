@@ -1245,7 +1245,7 @@ export async function getEventDataValues(
     binds.push(`%${search}%`);
   }
   sql += ` ORDER BY value LIMIT 100`;
-  const rows = await env.DB.prepare(sql).bind(...binds).all<{ value: string }>();
+  const rows = await siteDb(env, websiteId).prepare(sql).bind(...binds).all<{ value: string }>();
   return (rows.results ?? []).map((r) => r.value).filter(Boolean);
 }
 
@@ -1307,7 +1307,7 @@ export async function getSessionDataValues(
     binds.push(`%${search}%`);
   }
   sql += ` ORDER BY value LIMIT 100`;
-  const rows = await env.DB.prepare(sql).bind(...binds).all<{ value: string }>();
+  const rows = await siteDb(env, websiteId).prepare(sql).bind(...binds).all<{ value: string }>();
   return (rows.results ?? []).map((r) => r.value).filter(Boolean);
 }
 

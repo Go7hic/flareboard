@@ -13,6 +13,7 @@ import {
 import type { Env } from '../env';
 import { eventStoreMode, siteDb, siteStoreStub } from '../lib/site-db';
 import { backfillWebsite, getBackfillState, resetBackfill, verifyWebsiteStore } from '../lib/store-backfill';
+import { demoDataDisabledReason, isDemoWebsiteId, runDemoBackfill } from '../lib/demo-data';
 import { bumpTokenVersion } from '../lib/auth-token';
 import { logAdminAction, listAuditLog } from '../lib/audit';
 import { getAllTeamsAdmin, getAllUsers, getAllWebsitesAdmin } from '../lib/queries';
@@ -337,4 +338,35 @@ export async function handleStorageRebuildRollups(c: Ctx) {
   }
   await logAdminAction(c.env, c.get('user').userId, 'rebuild_rollups', 'website', body?.websiteId ?? null, { count: ids.length });
   return json({ rebuilt: results });
+}
+
+/**
+ * Demo data: `{ reset: true }` wipes the demo websites' analytics (R2 replays, website store,
+ * generated survey responses and workflow runs; configuration is kept) and backfills 90 days.
+ * Each call does a bounded amount of work and returns `{ done, until }`; call again until
+ * `done`. Without `reset` it only fills missing hours. Only DEMO_WEBSITE_IDS are accepted.
+ */
+export async function handleDemoGenerate(c: Ctx) {
+  const denied = requireAdmin(c);
+  if (denied) return denied;
+  const body = ((await c.req.json().catch(() => null)) ?? {}) as { reset?: unknown; websiteId?: unknown; days?: unknown };
+  if (body.websiteId !== undefined && (typeof body.websiteId !== 'string' || !isDemoWebsiteId(body.websiteId))) {
+    return badRequest('websiteId must be one of the demo websites');
+  }
+  if (body.days !== undefined && (typeof body.days !== 'number' || !Number.isFinite(body.days) || body.days < 1 || body.days > 90)) {
+    return badRequest('days must be between 1 and 90');
+  }
+  const disabled = demoDataDisabledReason(c.env);
+  if (disabled) return json({ message: disabled === 'disabled' ? 'DEMO_DATA is off' : 'Demo data needs EVENT_STORE=do' }, 409);
+  const result = await runDemoBackfill(c.env, {
+    websiteIds: typeof body.websiteId === 'string' ? [body.websiteId] : undefined,
+    reset: body.reset === true,
+    days: typeof body.days === 'number' ? body.days : undefined,
+  });
+  await logAdminAction(c.env, c.get('user').userId, 'demo_generate', 'website', typeof body.websiteId === 'string' ? body.websiteId : null, {
+    reset: body.reset === true,
+    done: result.done,
+    until: result.until,
+  });
+  return json(result);
 }

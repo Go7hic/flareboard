@@ -484,6 +484,7 @@ app.get('/api/admin/export', admin.handleExport);
 app.get('/api/admin/storage', admin.handleStorageStatus);
 app.post('/api/admin/storage/backfill', admin.handleStorageBackfill);
 app.post('/api/admin/storage/rebuild-rollups', admin.handleStorageRebuildRollups);
+app.post('/api/admin/demo/generate', admin.handleDemoGenerate);
 app.get('/api/admin/users', admin.handleListUsers);
 app.post('/api/admin/users', admin.handleCreateUser);
 app.patch('/api/admin/users/:userId', admin.handleUpdateUser);

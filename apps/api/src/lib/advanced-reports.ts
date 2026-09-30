@@ -338,7 +338,7 @@ export async function getAttributionReport(
      ORDER BY sessions DESC
      LIMIT 50`;
 
-  const rows = await env.DB.prepare(sql).bind(...binds).all<{ source: string; sessions: number; pageviews: number }>();
+  const rows = await siteDb(env, websiteId).prepare(sql).bind(...binds).all<{ source: string; sessions: number; pageviews: number }>();
 
   return { model, sources: rows.results ?? [] };
 }
@@ -444,6 +444,7 @@ function buildAttributionAttributedCte(
 
 async function attributionBreakdown(
   env: Env,
+  websiteId: string,
   cte: string,
   cteBinds: (string | number)[],
   column: string,
@@ -457,7 +458,7 @@ async function attributionBreakdown(
     GROUP BY ${column}
     ORDER BY value DESC
     LIMIT 50`;
-  const rows = await env.DB.prepare(sql)
+  const rows = await siteDb(env, websiteId).prepare(sql)
     .bind(...cteBinds)
     .all<{ name: string; value: number }>();
   return rows.results ?? [];
@@ -505,19 +506,19 @@ export async function getAttributionConversionReport(
       ) AS pageviews`;
 
   const totalsBinds = [...cteBinds, websiteId, range.startAt, range.endAt];
-  const totalsRow = await env.DB.prepare(totalsSql)
+  const totalsRow = await siteDb(env, websiteId).prepare(totalsSql)
     .bind(...totalsBinds)
     .first<{ conversions: number; visits: number; visitors: number; pageviews: number }>();
 
   const [referrer, paidAds, utm_source, utm_medium, utm_campaign, utm_content, utm_term] =
     await Promise.all([
-      attributionBreakdown(env, cte, cteBinds, 'referrer'),
-      attributionBreakdown(env, cte, cteBinds, 'paid_ads', 'paid_ads IS NOT NULL'),
-      attributionBreakdown(env, cte, cteBinds, 'utm_source'),
-      attributionBreakdown(env, cte, cteBinds, 'utm_medium'),
-      attributionBreakdown(env, cte, cteBinds, 'utm_campaign'),
-      attributionBreakdown(env, cte, cteBinds, 'utm_content'),
-      attributionBreakdown(env, cte, cteBinds, 'utm_term'),
+      attributionBreakdown(env, websiteId, cte, cteBinds, 'referrer'),
+      attributionBreakdown(env, websiteId, cte, cteBinds, 'paid_ads', 'paid_ads IS NOT NULL'),
+      attributionBreakdown(env, websiteId, cte, cteBinds, 'utm_source'),
+      attributionBreakdown(env, websiteId, cte, cteBinds, 'utm_medium'),
+      attributionBreakdown(env, websiteId, cte, cteBinds, 'utm_campaign'),
+      attributionBreakdown(env, websiteId, cte, cteBinds, 'utm_content'),
+      attributionBreakdown(env, websiteId, cte, cteBinds, 'utm_term'),
     ]);
 
   return {
@@ -586,7 +587,7 @@ export async function getBreakdownReport(
     ...seg.binds,
   ];
 
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT COALESCE(${dimCol}, 'Unknown') as dimension, COUNT(*) as value
      FROM website_event e${joins}
      WHERE ${clauses.join(' AND ')}
@@ -696,13 +697,14 @@ function performanceTrendUnit(startAt: number, endAt: number) {
 
 async function getPerformanceBreakdown(
   env: Env,
+  websiteId: string,
   joins: string,
   where: string,
   binds: (string | number)[],
   groupExpr: string,
   limit = 10,
 ): Promise<PerformanceBreakdownRow[]> {
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT ${groupExpr} as dimension,
       COUNT(*) as samples,
       ROUND(AVG(e.lcp), 2) as lcp,
@@ -775,7 +777,7 @@ export async function getPerformanceReport(
      FROM website_event e${joins}
      WHERE ${perfWhere}`;
 
-  const row = await env.DB.prepare(summarySql)
+  const row = await siteDb(env, websiteId).prepare(summarySql)
     .bind(...binds)
     .first<
       DistributionRow & {
@@ -795,7 +797,7 @@ export async function getPerformanceReport(
 
   const unit = performanceTrendUnit(startAt, endAt);
   const trendFormat = unit === 'hour' ? '%Y-%m-%d %H:00' : '%Y-%m-%d';
-  const trendRows = await env.DB.prepare(
+  const trendRows = await siteDb(env, websiteId).prepare(
     `SELECT strftime('${trendFormat}', datetime(e.created_at / 1000, 'unixepoch')) as x,
       ROUND(AVG(e.lcp), 2) as lcp,
       ROUND(AVG(e.inp), 2) as inp,
@@ -816,9 +818,9 @@ export async function getPerformanceReport(
     : `${joins} INNER JOIN session s ON e.session_id = s.session_id`;
 
   const [byUrl, byBrowser, byCountry] = await Promise.all([
-    getPerformanceBreakdown(env, joins, where, binds, 'e.url_path'),
-    getPerformanceBreakdown(env, sessionJoins, where, binds, "COALESCE(s.browser, 'Unknown')"),
-    getPerformanceBreakdown(env, sessionJoins, where, binds, "COALESCE(s.country, 'Unknown')"),
+    getPerformanceBreakdown(env, websiteId, joins, where, binds, 'e.url_path'),
+    getPerformanceBreakdown(env, websiteId, sessionJoins, where, binds, "COALESCE(s.browser, 'Unknown')"),
+    getPerformanceBreakdown(env, websiteId, sessionJoins, where, binds, "COALESCE(s.country, 'Unknown')"),
   ]);
 
   const distRow = row ?? ({} as DistributionRow);

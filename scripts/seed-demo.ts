@@ -612,6 +612,13 @@ function main(): void {
   console.log(`  Public demo: /demo (share slug ${PUBLIC_DEMO_SHARE_SLUG})`);
   if (!opts.skipAdmin) console.log(`\nSign in: ${LOCAL_DEFAULT_USERNAME} / ${LOCAL_DEFAULT_PASSWORD}`);
   if (!opts.remote) console.log('Start: pnpm dev:api && pnpm dev:dashboard');
+  // The rows above go to D1. With EVENT_STORE=do (local dev and production) the dashboard reads the
+  // per-website stores, which the demo data generator fills (apps/api/src/lib/demo-data).
+  console.log(
+    '\nWith EVENT_STORE=do, fill the demo websites\' stores (90 days, replays, errors, LLM, logs…) as an admin:\n' +
+      '  POST /api/admin/demo/generate {"reset": true}   (repeat until it returns "done": true)\n' +
+      'The hourly cron keeps them current afterwards.',
+  );
 }
 
 try {

@@ -14,6 +14,7 @@ import { pruneIdleConversations } from './assistant';
 import { eventStoreMode } from './site-db';
 import { runStoreBackfill } from './store-backfill';
 import { migrateInlineSourceMapsToR2 } from './source-maps';
+import { runDemoDataGenerator } from './demo-data';
 
 // Caps how many websites a single cron tick processes so one invocation
 // cannot blow past Worker CPU/subrequest limits; later ticks continue from a cursor.
@@ -148,6 +149,11 @@ export async function runScheduledMaintenance(env: Env, cron: string) {
   });
   const warehouse = await runScheduledWarehouseQueries(env);
   const dataSources = await runDueWarehouseDataSourceSyncs(env);
+  // Demo websites: fresh sample data every hour (skips itself unless EVENT_STORE=do).
+  const demoData = await runDemoDataGenerator(env).catch((error: unknown) => {
+    console.error(JSON.stringify({ event: 'demo_data_failed', error: error instanceof Error ? error.message : String(error) }));
+    return null;
+  });
   const retention = await runRetentionPurge(env);
   const workflowLogs = await purgeWorkflowLogs(env);
   const deletion = await runDataDeletion(env);
@@ -157,5 +163,5 @@ export async function runScheduledMaintenance(env: Env, cron: string) {
   });
   // Storage migration: while in `dual`, copy history into the website stores a few sites per tick.
   const storeBackfill = eventStoreMode(env) === 'dual' ? await runStoreBackfill(env) : null;
-  return { alerts, errorTracking, dashboards, warehouse, dataSources, retention, workflowLogs, deletion, assistantPruned, storeBackfill };
+  return { alerts, errorTracking, dashboards, warehouse, dataSources, demoData, retention, workflowLogs, deletion, assistantPruned, storeBackfill };
 }

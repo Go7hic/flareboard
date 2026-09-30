@@ -310,6 +310,7 @@ describe('read-only demo session', () => {
       ['POST', `${site}/warehouse/data-sources`, {}],
       ['POST', `${site}/workflows/some-workflow/test`, { send: true }],
       ['POST', `${site}/project-key/rotate`, {}],
+      ['GET', `${site}/project-key`],
       ['GET', '/api/admin/export'],
       ['POST', '/api/admin/users', { username: 'x', password: 'y', role: 'admin' }],
     ];

@@ -111,6 +111,8 @@ const DEMO_BLOCKED_PATHS: readonly RegExp[] = [
   /^\/api\/billing\/(checkout|portal)(\/|$)/,
   /^\/api\/admin(\/|$)/,
   /^\/api\/websites\/[^/]+\/assistant(\/|$)/,
+  // The project key would let a visitor send events into the demo websites.
+  /^\/api\/websites\/[^/]+\/project-key(\/|$)/,
 ];
 
 /**

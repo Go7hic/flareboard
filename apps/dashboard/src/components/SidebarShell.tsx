@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, bootstrapSession, hasSession, logoutSession, markDemoSession } from '../lib/api';
 import { LazyRouteFallback } from './LazyRouteFallback';
 import { t } from '../lib/i18n';
-import { fetchMe, isDemoHiddenPath } from '../lib/useDemoSession';
+import { demoRedirectTarget, fetchMe, isDemoHiddenPath } from '../lib/useDemoSession';
 import { AppSidebar } from './AppSidebar';
 import { AppTopBar } from './AppTopBar';
 import { DeleteAccountDialog } from './DeleteAccountDialog';
@@ -115,7 +115,7 @@ export function SidebarShell() {
 
   // Credentials, billing and team pages have nothing a demo visitor can use.
   if (isDemo && isDemoHiddenPath(location.pathname)) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={demoRedirectTarget(location.pathname)} replace />;
   }
 
   return (

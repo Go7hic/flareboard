@@ -254,16 +254,23 @@ export default function Billing() {
               ) : null}
             </div>
           ) : null}
-          <div className="mt-5">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={portal.isPending}
-              onClick={() => portal.mutate()}
-            >
-              {t('manageBilling')}
-            </Button>
-          </div>
+          {data.billingAccount ? (
+            <div className="mt-5">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={portal.isPending}
+                onClick={() => portal.mutate()}
+              >
+                {t('manageBilling')}
+              </Button>
+              {portal.isError ? (
+                <p className="text-danger mt-3">
+                  {portal.error instanceof Error ? portal.error.message : t('requestFailed')}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </section>
       </PageBody>

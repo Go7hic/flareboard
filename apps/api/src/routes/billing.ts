@@ -59,6 +59,8 @@ export async function handleGetSubscription(c: Ctx) {
     },
     status: sub.status,
     currentPeriodEnd: sub.currentPeriodEnd ?? null,
+    /** A Stripe customer exists, so the billing portal can open (plans set by hand have none). */
+    billingAccount: Boolean(sub.stripeCustomerId),
     usage: { eventsThisMonth: usage.events, replaysThisMonth: usage.replays, otelRowsThisMonth: usage.otel },
   });
 }

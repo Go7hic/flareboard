@@ -109,5 +109,7 @@ describe('paid feature gates follow the website owner’s plan', () => {
     };
     expect(body.plan).toMatchObject({ maxReplaysPerMonth: 5000, maxOtelRowsPerMonth: 500_000, maxRetentionDays: 730, usageGraceMultiple: 1.2 });
     expect(body.usage).toEqual({ eventsThisMonth: 1200, replaysThisMonth: 7, otelRowsThisMonth: 30 });
+    // Set by hand, without a Stripe customer: there is no billing portal to open.
+    expect((body as unknown as { billingAccount: boolean }).billingAccount).toBe(false);
   });
 });

@@ -328,6 +328,8 @@ export interface BillingSubscription {
   status?: string;
   currentPeriodEnd?: string | number | null;
   usage?: BillingUsage;
+  /** A Stripe customer exists, so "Manage billing" can open the Stripe portal. */
+  billingAccount?: boolean;
 }
 
 export interface StatValue {

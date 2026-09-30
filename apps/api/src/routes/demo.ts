@@ -1,8 +1,12 @@
 import type { Context } from 'hono';
-import { metricsQuerySchema } from '@flareboard/shared';
+import { DEMO_USER_ID, metricsQuerySchema, ROLES } from '@flareboard/shared';
 import type { Env } from '../env';
+import { readAuthToken } from '../lib/auth-credentials';
+import { startSession, verifySessionToken } from '../lib/auth-token';
 import { cachedRead } from '../lib/cache';
+import { csrfOriginAllowed } from '../lib/csrf';
 import { resolveDemoWebsite, serializeDemoWebsite } from '../lib/demo';
+import { DEMO_SESSION_TTL_MS, ensureDemoAccess, isDemoUserId } from '../lib/demo-access';
 import { parseStatsRange } from '../lib/parse-range';
 import {
   getMetrics,
@@ -12,7 +16,8 @@ import {
   getWebsiteStats,
 } from '../lib/queries';
 import { checkIpRateLimit, getTrustedClientIp } from '../lib/rate-limit';
-import { json, notFound } from '../lib/response';
+import { forbidden, getAppSecret, json, notFound } from '../lib/response';
+import { setSessionCookie } from '../lib/session-cookie';
 
 type Ctx = Context<{ Bindings: Env }>;
 
@@ -21,6 +26,42 @@ function chartUnit(startAt: number, endAt: number) {
   if (periodMs <= 48 * 60 * 60 * 1000) return 'hour';
   if (periodMs <= 90 * 24 * 60 * 60 * 1000) return 'day';
   return 'month';
+}
+
+/** Demo sign-ins per IP per window: enough to reopen the demo, not to mint sessions in bulk. */
+const DEMO_SESSION_LIMIT = 10;
+const DEMO_SESSION_WINDOW_SEC = 15 * 60;
+
+/**
+ * POST /api/demo/session — signs the browser in as the shared read-only demo account for
+ * DEMO_SESSION_TTL_MS. Records the same session row as any sign-in (browser/OS summary only)
+ * and no sign-in audit entry. 404 when no demo website exists.
+ */
+export async function handleSession(c: Ctx) {
+  // Sets the session cookie, so a foreign page must not be able to trigger it.
+  if (!csrfOriginAllowed(c)) return forbidden('Invalid origin');
+  const limited = await checkIpRateLimit(
+    c.env,
+    'demo-session',
+    getTrustedClientIp(c.req.raw),
+    DEMO_SESSION_LIMIT,
+    DEMO_SESSION_WINDOW_SEC,
+  );
+  if (!limited.allowed) return json({ message: 'Too many requests' }, 429);
+
+  const access = await ensureDemoAccess(c.env);
+  if (!access) return notFound();
+
+  // Already in the demo: keep that session rather than starting another.
+  const token = readAuthToken(c);
+  const current = token ? await verifySessionToken(c.env, token, getAppSecret(c)) : null;
+  if (current && isDemoUserId(current.userId)) return json({ websiteId: access.websiteId });
+
+  const session = await startSession(c, { userId: DEMO_USER_ID, role: ROLES.viewOnly }, 'demo', {
+    ttlMs: DEMO_SESSION_TTL_MS,
+  });
+  setSessionCookie(c, session.token, DEMO_SESSION_TTL_MS / 1000);
+  return json({ websiteId: access.websiteId });
 }
 
 async function requireDemo(c: Ctx) {

@@ -10,7 +10,8 @@ import {
 } from '@flareboard/shared';
 import type { Env } from '../env';
 import { canMutateWebsite } from '../lib/access';
-import { checkIpRateLimit } from '../lib/rate-limit';
+import { isDemoUserId } from '../lib/demo-access';
+import { checkIpRateLimit, getTrustedClientIp } from '../lib/rate-limit';
 import {
   createWarehouseDataSource,
   createWarehouseSavedQuery,
@@ -43,6 +44,20 @@ import type { ApiVariables } from '../middleware/auth';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
 
+/** 20 queries a minute per user; demo visitors share one account, so they count per IP. */
+function queryRateLimit(c: Ctx, websiteId: string) {
+  const { userId } = c.get('user');
+  const caller = isDemoUserId(userId) ? `demo:${getTrustedClientIp(c.req.raw)}` : userId;
+  return checkIpRateLimit(c.env, `warehouse-query:${websiteId}:${caller}`, caller, 20, 60);
+}
+
+/** Query history is shared by everyone on the website; demo visitors' queries stay out of it. */
+async function recordHistory(c: Ctx, websiteId: string, input: Parameters<typeof recordWarehouseQueryHistory>[3]) {
+  const { userId } = c.get('user');
+  if (isDemoUserId(userId)) return;
+  await recordWarehouseQueryHistory(c.env, websiteId, userId, input);
+}
+
 export async function handleSchema(c: Ctx) {
   const { website, response } = await requireWebsiteOr404(c);
   if (response) return response;
@@ -57,19 +72,13 @@ export async function handleQuery(c: Ctx) {
   const parsed = warehouseQuerySchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
 
-  const rateLimit = await checkIpRateLimit(
-    c.env,
-    `warehouse-query:${website!.websiteId}:${c.get('user').userId}`,
-    c.get('user').userId,
-    20,
-    60,
-  );
+  const rateLimit = await queryRateLimit(c, website!.websiteId);
   if (!rateLimit.allowed) return json({ message: 'Rate limit exceeded' }, 429);
 
   const startedAt = Date.now();
   try {
     const result = await runWarehouseQuery(c.env, website!.websiteId, parsed.data.sql);
-    await recordWarehouseQueryHistory(c.env, website!.websiteId, c.get('user').userId, {
+    await recordHistory(c, website!.websiteId, {
       sql: parsed.data.sql,
       status: 'success',
       rowCount: result.rowCount,
@@ -79,7 +88,7 @@ export async function handleQuery(c: Ctx) {
     return json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await recordWarehouseQueryHistory(c.env, website!.websiteId, c.get('user').userId, {
+    await recordHistory(c, website!.websiteId, {
       sql: parsed.data.sql,
       status: 'failed',
       rowCount: 0,
@@ -102,19 +111,13 @@ export async function handleQueryExport(c: Ctx) {
   const parsed = warehouseQuerySchema.safeParse(body);
   if (!parsed.success) return badRequest(parsed.error.message);
 
-  const rateLimit = await checkIpRateLimit(
-    c.env,
-    `warehouse-query:${website!.websiteId}:${c.get('user').userId}`,
-    c.get('user').userId,
-    20,
-    60,
-  );
+  const rateLimit = await queryRateLimit(c, website!.websiteId);
   if (!rateLimit.allowed) return json({ message: 'Rate limit exceeded' }, 429);
 
   const startedAt = Date.now();
   try {
     const result = await runWarehouseExport(c.env, website!.websiteId, parsed.data.sql);
-    await recordWarehouseQueryHistory(c.env, website!.websiteId, c.get('user').userId, {
+    await recordHistory(c, website!.websiteId, {
       sql: parsed.data.sql,
       status: 'success',
       rowCount: result.rowCount,
@@ -133,7 +136,7 @@ export async function handleQueryExport(c: Ctx) {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await recordWarehouseQueryHistory(c.env, website!.websiteId, c.get('user').userId, {
+    await recordHistory(c, website!.websiteId, {
       sql: parsed.data.sql,
       status: 'failed',
       rowCount: 0,

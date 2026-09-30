@@ -12,6 +12,7 @@ import {
 import { eq } from 'drizzle-orm';
 import { createDb, schema } from '@flareboard/db';
 import type { Env } from '../env';
+import { isDemoUserId } from './demo-access';
 
 export function isHostedMode(env: Env): boolean {
   return env.HOSTED_MODE === 'true';
@@ -28,16 +29,24 @@ export function getStripePriceId(env: Env, planId: PlanId): string | null {
   return map[plan.stripePriceEnvKey] ?? env.STRIPE_PRICE_HOBBY ?? env.STRIPE_PRICE_PRO ?? null;
 }
 
+/** Plan the read-only demo account browses under. It has no subscription row and never pays. */
+const DEMO_PLAN_ID: PlanId = 'cloud';
+
 /**
  * Plan that governs a website's features: its owner's (website.user_id), the same
  * account ingest bills events to. Team members use the site under the owner's plan.
  */
 export async function getWebsitePlanId(env: Env, website: { userId: string | null }, fallbackUserId: string) {
+  // The demo shows every feature on the demo websites, whatever their owner's plan.
+  if (isDemoUserId(fallbackUserId)) return DEMO_PLAN_ID;
   const sub = await getUserSubscription(env, website.userId ?? fallbackUserId);
   return sub.planId;
 }
 
 export async function getUserSubscription(env: Env, userId: string) {
+  if (isDemoUserId(userId)) {
+    return { planId: DEMO_PLAN_ID, status: 'active' as const, stripeCustomerId: null as string | null };
+  }
   const db = createDb(env.DB);
   const [row] = await db
     .select()

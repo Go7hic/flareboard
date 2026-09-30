@@ -5,19 +5,19 @@ import type { Env } from '../env';
 export const SESSION_COOKIE = 'flareboard_session';
 const SESSION_MAX_AGE_SEC = 60 * 60 * 24 * 7;
 
-function sessionCookieOptions(env: Env) {
+function sessionCookieOptions(env: Env, maxAge = SESSION_MAX_AGE_SEC) {
   const production = env.ENVIRONMENT === 'production';
   return {
     httpOnly: true,
     secure: production,
     sameSite: production ? ('None' as const) : ('Lax' as const),
     path: '/',
-    maxAge: SESSION_MAX_AGE_SEC,
+    maxAge,
   };
 }
 
-export function setSessionCookie<E extends { Bindings: Env }>(c: Context<E>, token: string) {
-  setCookie(c, SESSION_COOKIE, token, sessionCookieOptions(c.env));
+export function setSessionCookie<E extends { Bindings: Env }>(c: Context<E>, token: string, maxAgeSec?: number) {
+  setCookie(c, SESSION_COOKIE, token, sessionCookieOptions(c.env, maxAgeSec));
 }
 
 export function clearSessionCookie<E extends { Bindings: Env }>(c: Context<E>) {

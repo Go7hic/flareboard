@@ -5,6 +5,7 @@ import type { Env } from '../env';
 import { verifySessionToken } from '../lib/auth-token';
 import { readAuthToken, readBearerToken } from '../lib/auth-credentials';
 import { csrfOriginAllowed } from '../lib/csrf';
+import { DEMO_READ_ONLY_MESSAGE, demoRequestAllowed, isDemoUserId } from '../lib/demo-access';
 import { authenticatePersonalApiKey, touchPersonalApiKey } from '../lib/personal-api-keys';
 import { forbidden, getAppSecret, unauthorized } from '../lib/response';
 
@@ -105,6 +106,14 @@ export const jwtAuth = createMiddleware<{ Bindings: Env; Variables: ApiVariables
 
   if (!csrfOriginAllowed(c)) {
     return forbidden('Invalid origin');
+  }
+
+  // The shared demo account changes nothing: an allowlist of reads, and none of the view-only
+  // exceptions below (password, account security, assistant) apply to it.
+  if (isDemoUserId(userId)) {
+    if (!demoRequestAllowed(c.req.method, c.req.path)) return forbidden(DEMO_READ_ONLY_MESSAGE);
+    await next();
+    return;
   }
 
   if (

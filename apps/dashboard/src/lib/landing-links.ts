@@ -15,6 +15,14 @@ export type LandingPlan = {
   /** Null = unlimited websites in marketing (Cloud). */
   maxWebsites: number | null;
   maxEventsPerMonth: number;
+  /** Session replays (recordings) per month; 0 = no replay. */
+  maxReplaysPerMonth: number;
+  /** OpenTelemetry log records and spans per month. */
+  maxOtelRowsPerMonth: number;
+  /** Longest raw-data retention per website, in days. */
+  maxRetentionDays: number;
+  /** Past an allowance, collection continues up to this multiple of it; 1 = stops at it. */
+  usageGraceMultiple: number;
   replayEnabled: boolean;
   emailReportsEnabled: boolean;
   heatmapsEnabled: boolean;
@@ -33,6 +41,10 @@ export const LANDING_PLANS: LandingPlan[] = [
     name: 'Free',
     maxWebsites: 1,
     maxEventsPerMonth: 100_000,
+    maxReplaysPerMonth: 0,
+    maxOtelRowsPerMonth: 1_000_000,
+    maxRetentionDays: 365,
+    usageGraceMultiple: 1,
     replayEnabled: false,
     emailReportsEnabled: false,
     heatmapsEnabled: false,
@@ -48,6 +60,10 @@ export const LANDING_PLANS: LandingPlan[] = [
     name: 'Cloud',
     maxWebsites: null,
     maxEventsPerMonth: 1_000_000,
+    maxReplaysPerMonth: 5_000,
+    maxOtelRowsPerMonth: 10_000_000,
+    maxRetentionDays: 1095,
+    usageGraceMultiple: 2,
     replayEnabled: true,
     emailReportsEnabled: true,
     heatmapsEnabled: true,

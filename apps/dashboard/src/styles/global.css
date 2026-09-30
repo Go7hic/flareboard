@@ -1926,7 +1926,19 @@ code {
   opacity: 0.6;
 }
 
-/* Billing usage meter */
+/* Billing usage meters */
+.billing-usage-group {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.billing-usage-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
 .billing-usage {
   margin-top: 1.25rem;
 }
@@ -1952,7 +1964,26 @@ code {
 }
 
 .billing-usage-fill.is-near-limit {
+  background: var(--warning);
+}
+
+.billing-usage-fill.is-over {
   background: var(--danger);
+}
+
+.billing-usage-note {
+  margin: 0.4rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.billing-usage-note.is-warning {
+  color: var(--warning);
+}
+
+.billing-usage-note.is-danger {
+  color: var(--danger);
 }
 
 /* Route error boundary */

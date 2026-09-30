@@ -265,6 +265,48 @@ export interface Website {
   persistVisitors?: boolean;
   /** Tracker: send nothing from browsers with Do Not Track / Global Privacy Control. */
   respectDnt?: boolean;
+  /** Raw-data retention in days; null = the plan maximum (hosted) or keep forever (self-hosted). */
+  retentionDays?: number | null;
+}
+
+/** A hosted plan as `/api/billing/plans` and `/api/billing/subscription` return it. */
+export interface BillingPlan {
+  id: string;
+  name: string;
+  maxWebsites: number | null;
+  maxEventsPerMonth: number;
+  /** Session replays (recordings) per month; 0 when the plan has no replay. */
+  maxReplaysPerMonth: number;
+  /** OpenTelemetry log records and spans per month, counted apart from events. */
+  maxOtelRowsPerMonth: number;
+  /** Longest raw-data retention a website keeps on this plan (also the default). */
+  maxRetentionDays: number;
+  /** Past an allowance, collection continues up to this multiple of it; 1 = stops at it. */
+  usageGraceMultiple: number;
+  replayEnabled: boolean;
+  emailReportsEnabled: boolean;
+  heatmapsEnabled: boolean;
+  teamsEnabled: boolean;
+  dataPortabilityEnabled?: boolean;
+  warehouseEnabled: boolean;
+  experimentationEnabled: boolean;
+  surveysEnabled: boolean;
+  monthlyPriceUsd?: number | null;
+}
+
+export interface BillingUsage {
+  eventsThisMonth: number;
+  replaysThisMonth: number;
+  otelRowsThisMonth: number;
+}
+
+/** `/api/billing/subscription`: `hosted: false` on self-hosted installs (no plan, no usage). */
+export interface BillingSubscription {
+  hosted: boolean;
+  plan?: BillingPlan;
+  status?: string;
+  currentPeriodEnd?: string | number | null;
+  usage?: BillingUsage;
 }
 
 export interface StatValue {

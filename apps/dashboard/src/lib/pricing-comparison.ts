@@ -4,6 +4,7 @@ import {
   LANDING_PLANS,
   type LandingPlan,
 } from './landing-links';
+import { formatNumber, formatRetentionPeriod } from './format';
 import { t } from './i18n';
 
 export type CompareRowKind = 'section' | 'feature';
@@ -33,6 +34,10 @@ type CompareCellSpec =
     }
   | { type: 'websites' }
   | { type: 'events' }
+  | { type: 'replays' }
+  | { type: 'otel' }
+  | { type: 'retention' }
+  | { type: 'overage' }
   | { type: 'price' }
   | { type: 'text'; freeKey: string; cloudKey: string };
 
@@ -60,6 +65,30 @@ export const PRICING_COMPARE_ENTRIES: CompareEntry[] = [
     labelKey: 'pricingCompareEvents',
     free: { type: 'events' },
     cloud: { type: 'events' },
+  },
+  {
+    kind: 'feature',
+    labelKey: 'pricingCompareReplays',
+    free: { type: 'replays' },
+    cloud: { type: 'replays' },
+  },
+  {
+    kind: 'feature',
+    labelKey: 'pricingCompareOtel',
+    free: { type: 'otel' },
+    cloud: { type: 'otel' },
+  },
+  {
+    kind: 'feature',
+    labelKey: 'pricingCompareOverage',
+    free: { type: 'overage' },
+    cloud: { type: 'overage' },
+  },
+  {
+    kind: 'feature',
+    labelKey: 'pricingCompareRetention',
+    free: { type: 'retention' },
+    cloud: { type: 'retention' },
   },
   {
     kind: 'feature',
@@ -279,6 +308,16 @@ function resolveCell(spec: CompareCellSpec, plan: LandingPlan): string {
         : t('pricingCompareUpToWebsites').replace('{count}', String(plan.maxWebsites));
     case 'events':
       return formatEventLimit(plan.maxEventsPerMonth);
+    case 'replays':
+      return plan.replayEnabled && plan.maxReplaysPerMonth > 0 ? formatEventLimit(plan.maxReplaysPerMonth) : t('no');
+    case 'otel':
+      return formatEventLimit(plan.maxOtelRowsPerMonth);
+    case 'retention':
+      return t('pricingCompareUpToDuration').replace('{duration}', formatRetentionPeriod(plan.maxRetentionDays));
+    case 'overage':
+      return plan.usageGraceMultiple > 1
+        ? t('pricingCompareValueGrace').replace('{multiple}', formatNumber(plan.usageGraceMultiple))
+        : t('pricingCompareValueStopsAtAllowance');
     case 'price':
       return plan.monthlyPriceUsd ? `$${CLOUD_MONTHLY_USD}` : '$0';
     case 'text':

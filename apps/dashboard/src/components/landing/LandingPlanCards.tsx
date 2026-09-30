@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { api, bootstrapSession, hasSession } from '../../lib/api';
+import { formatNumber, formatRetentionPeriod } from '../../lib/format';
 import { t } from '../../lib/i18n';
 import {
   CLOUD_MONTHLY_USD,
@@ -61,6 +62,10 @@ function PlanCheckIcon() {
 
 type PlanFeatureLine = { text: string; included: boolean };
 
+function optionalLine(show: boolean, text: () => string): PlanFeatureLine[] {
+  return show ? [{ text: text(), included: true }] : [];
+}
+
 function planFeatureItems(plan: LandingPlan): PlanFeatureLine[] {
   const websiteLine =
     plan.maxWebsites == null
@@ -79,7 +84,25 @@ function planFeatureItems(plan: LandingPlan): PlanFeatureLine[] {
       text: t('landingPlanEventsPerMonth').replace('{limit}', formatEventLimit(plan.maxEventsPerMonth)),
       included: true,
     },
-    toggle(plan.replayEnabled, 'landingPlanReplayIncluded', 'landingPlanReplayExcluded'),
+    // Allowance fields are optional on `/api/config` plans from an older API: skip what is missing.
+    plan.replayEnabled
+      ? {
+          text:
+            plan.maxReplaysPerMonth > 0
+              ? t('landingPlanReplaysPerMonth').replace('{limit}', formatEventLimit(plan.maxReplaysPerMonth))
+              : t('landingPlanReplayIncluded'),
+          included: true,
+        }
+      : { text: t('landingPlanReplayExcluded'), included: false },
+    ...optionalLine(plan.maxOtelRowsPerMonth > 0, () =>
+      t('landingPlanOtelPerMonth').replace('{limit}', formatEventLimit(plan.maxOtelRowsPerMonth)),
+    ),
+    ...optionalLine(plan.maxRetentionDays > 0, () =>
+      t('landingPlanRetention').replace('{duration}', formatRetentionPeriod(plan.maxRetentionDays)),
+    ),
+    ...optionalLine(plan.usageGraceMultiple > 1, () =>
+      t('landingPlanUsageGrace').replace('{multiple}', formatNumber(plan.usageGraceMultiple)),
+    ),
     toggle(plan.emailReportsEnabled, 'landingPlanEmailReportsIncluded', 'landingPlanEmailReportsExcluded'),
     toggle(plan.heatmapsEnabled, 'landingPlanHeatmapsIncluded', 'landingPlanHeatmapsExcluded'),
     toggle(plan.teamsEnabled, 'landingPlanTeamsIncluded', 'landingPlanTeamsExcluded'),

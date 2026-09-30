@@ -83,7 +83,9 @@ const sections: LegalSection[] = [
           Payments are handled by Stripe. Card details are entered on Stripe’s pages and never reach our servers.
           We receive and store your Stripe customer and subscription identifiers, plan, subscription status and
           billing period, and we send Stripe your email address and account identifier to create the subscription.
-          We also count the events your websites send each month to apply plan limits.
+          We also count the events, session recordings and OpenTelemetry log records and spans your websites send
+          each month, to apply your plan’s allowances and to email you about your usage. When collection of a kind
+          of data has stopped for the month, what your websites send of it is discarded, not stored.
         </p>
         <h3>Content you create</h3>
         <p>
@@ -322,8 +324,9 @@ const sections: LegalSection[] = [
           <li>To create and secure your account, sign you in and provide the service you signed up for.</li>
           <li>To process payments, apply plan limits and manage your subscription.</li>
           <li>
-            To send service emails: email verification, password resets, and alerts, reports or workflow emails
-            you configure. We do not send marketing email without your consent, and you can opt out at any time.
+            To send service emails: email verification, password resets, usage notices to the account owner (when
+            usage reaches 80% and 100% of a monthly allowance and when collection stops), and alerts, reports or
+            workflow emails you configure. We do not send marketing email without your consent, and you can opt out at any time.
           </li>
           <li>To answer support requests.</li>
           <li>To prevent abuse, fraud and security incidents, and to debug problems.</li>
@@ -586,10 +589,13 @@ const sections: LegalSection[] = [
             seven years.
           </li>
           <li>
-            <strong>Analytics data</strong> is kept until the customer deletes it or it expires under the data
-            retention period the customer sets for each website (from 1 day to 10 years). By default there is no
-            expiry. Session replay recordings are deleted together with the raw events they belong to. Aggregated
-            statistics derived from raw events may be kept for the life of the website.
+            <strong>Analytics data</strong> (raw events and session replay recordings) is kept for each
+            website&apos;s retention period and then deleted automatically, unless the customer deletes it sooner.
+            The customer can set a period for each website, up to the maximum of their plan: 1 year on the Free plan
+            and 3 years on the Cloud plan. When no period is set, the plan maximum applies. If an account moves to a
+            plan with a shorter maximum, raw data older than that maximum is deleted. Session replay recordings are
+            deleted together with the raw events they belong to. Aggregated statistics derived from raw events may
+            be kept for the life of the website.
           </li>
           <li>
             <strong>Imported warehouse data</strong> (HTTP and Stripe imports) is kept until the customer deletes

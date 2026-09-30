@@ -1,4 +1,4 @@
-import { getLocale } from './i18n';
+import { getLocale, t } from './i18n';
 
 const EMPTY = '-';
 
@@ -95,6 +95,26 @@ export function formatTimeOfDay(
 }
 
 /** Short mono label for long ids; never equals the full id when truncated. */
+/** A retention period in days, as years when it is a whole number of them ("3 years", "90 days"). */
+export function formatRetentionPeriod(days: number): string {
+  if (days >= 365 && days % 365 === 0) {
+    const years = days / 365;
+    return years === 1 ? t('retentionPeriodOneYear') : t('retentionPeriodYears').replace('{count}', formatNumber(years));
+  }
+  return days === 1 ? t('retentionPeriodOneDay') : t('retentionPeriodDays').replace('{count}', formatNumber(days));
+}
+
+/** First day of the next UTC month, when monthly allowances reset, as a localized date. */
+export function formatNextMonthStart(now = new Date()): string {
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  return new Intl.DateTimeFormat(getLocale(), {
+    timeZone: 'UTC',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  }).format(next);
+}
+
 export function shortId(id: string, len = 8): string {
   const trimmed = id.trim();
   if (trimmed.length <= len) return trimmed;

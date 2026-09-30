@@ -18,9 +18,13 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Panel } from '../components/ui/panel';
 import { SITE_TIMEZONE_OPTIONS } from '@flareboard/shared/timezone';
-import { api, authenticatedFetch, type Website } from '../lib/api';
+import { api, authenticatedFetch, type BillingSubscription, type Website } from '../lib/api';
+import { formatNumber, formatRetentionPeriod } from '../lib/format';
 import { t } from '../lib/i18n';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+
+/** Upper bound the API accepts for `retentionDays` (10 years), whatever the plan. */
+const MAX_RETENTION_DAYS = 3650;
 
 type HeatmapConfig = {
   sampleRate?: number;
@@ -53,6 +57,8 @@ export default function WebsiteSettingsPage() {
   const [autocapture, setAutocapture] = useState(true);
   const [persistVisitors, setPersistVisitors] = useState(false);
   const [respectDnt, setRespectDnt] = useState(false);
+  /** Days as typed; empty = the plan maximum (hosted) or no expiry (self-hosted). */
+  const [retentionInput, setRetentionInput] = useState('');
   const [heatmapConfigJson, setHeatmapConfigJson] = useState('{"sampleRate":0.1,"enabled":true}');
   const [heatmapPreviewUrl, setHeatmapPreviewUrl] = useState('');
   const [importFormat, setImportFormat] = useState<'flareboard' | 'ga4' | 'plausible' | 'matomo'>('ga4');
@@ -71,15 +77,7 @@ export default function WebsiteSettingsPage() {
 
   const billingQuery = useQuery({
     queryKey: ['billing-subscription'],
-    queryFn: () =>
-      api<{
-        hosted: boolean;
-        plan?: {
-          emailReportsEnabled?: boolean;
-          heatmapsEnabled?: boolean;
-          dataPortabilityEnabled?: boolean;
-        };
-      }>('/api/billing/subscription'),
+    queryFn: () => api<BillingSubscription>('/api/billing/subscription'),
   });
 
   const emailReportsAllowed =
@@ -90,6 +88,21 @@ export default function WebsiteSettingsPage() {
 
   const dataPortabilityAllowed =
     !billingQuery.data?.hosted || Boolean(billingQuery.data?.plan?.dataPortabilityEnabled);
+
+  const hostedPlan = billingQuery.data?.hosted ? billingQuery.data.plan : undefined;
+  const maxRetentionDays = hostedPlan?.maxRetentionDays ?? MAX_RETENTION_DAYS;
+  const savedRetentionDays = websiteQuery.data?.retentionDays ?? null;
+  const retentionDays = retentionInput.trim() === '' ? null : Number(retentionInput);
+  // Only a changed value is sent (and checked), so a site whose stored retention is above a
+  // lower plan's maximum can still save its other settings.
+  const retentionChanged = retentionDays !== savedRetentionDays;
+  const retentionError = !retentionChanged || retentionDays == null
+    ? null
+    : !Number.isInteger(retentionDays) || retentionDays < 1
+      ? t('dataRetentionInvalid')
+      : retentionDays > maxRetentionDays
+        ? t('dataRetentionTooLong').replace('{max}', formatNumber(maxRetentionDays))
+        : null;
 
   const emailReportQuery = useQuery({
     queryKey: ['email-report', websiteId],
@@ -120,6 +133,7 @@ export default function WebsiteSettingsPage() {
     setAutocapture(w.autocapture !== false);
     setPersistVisitors(w.persistVisitors === true);
     setRespectDnt(w.respectDnt === true);
+    setRetentionInput(w.retentionDays != null ? String(w.retentionDays) : '');
     const heatmapConfig = (w as { heatmapConfig?: HeatmapConfig }).heatmapConfig;
     if (heatmapConfig) {
       setHeatmapConfigJson(JSON.stringify(heatmapConfig, null, 2));
@@ -154,6 +168,7 @@ export default function WebsiteSettingsPage() {
           autocapture,
           persistVisitors,
           respectDnt,
+          ...(retentionChanged ? { retentionDays } : {}),
           // datetime-local is local time; `null` clears a previous reset.
           resetAt: resetAt ? new Date(resetAt).toISOString() : null,
         }),
@@ -243,7 +258,7 @@ export default function WebsiteSettingsPage() {
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!heatmapJsonValid) return;
+    if (!heatmapJsonValid || retentionError) return;
     saveMutation.mutate();
   }
 
@@ -332,6 +347,39 @@ export default function WebsiteSettingsPage() {
                     {t('respectDntSetting')}
                   </label>
                   <p className="field-hint">{t('respectDntSettingHint')}</p>
+                </div>
+              </Panel>
+
+              <Panel variant="accent-rail">
+                <h2 className="section-title">{t('dataRetention')}</h2>
+                <p className="section-lead">{t('dataRetentionLead')}</p>
+                <div className="field">
+                  <Label htmlFor="retention-days">{t('dataRetentionDays')}</Label>
+                  <Input
+                    id="retention-days"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={maxRetentionDays}
+                    step={1}
+                    value={retentionInput}
+                    onChange={(e) => setRetentionInput(e.target.value)}
+                    placeholder={hostedPlan ? String(hostedPlan.maxRetentionDays) : undefined}
+                    aria-invalid={retentionError ? true : undefined}
+                    aria-describedby="retention-days-hint"
+                  />
+                  <p id="retention-days-hint" className="field-hint">
+                    {hostedPlan
+                      ? t('dataRetentionPlanHint')
+                          .replace('{plan}', hostedPlan.name)
+                          .replace('{duration}', formatRetentionPeriod(hostedPlan.maxRetentionDays))
+                      : t('dataRetentionSelfHostedHint')}
+                  </p>
+                  {retentionError ? (
+                    <p className="text-danger mt-1 text-sm" role="alert">
+                      {retentionError}
+                    </p>
+                  ) : null}
                 </div>
               </Panel>
 
@@ -532,7 +580,7 @@ export default function WebsiteSettingsPage() {
               </Panel>
 
               <div className="page-settings-form-actions">
-                <Button type="submit" variant="primary" disabled={saveMutation.isPending || !heatmapJsonValid}>
+                <Button type="submit" variant="primary" disabled={saveMutation.isPending || !heatmapJsonValid || Boolean(retentionError)}>
                   {t('saveSettings')}
                 </Button>
                 {saveMutation.error ? (

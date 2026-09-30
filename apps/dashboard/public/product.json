@@ -15,6 +15,10 @@
       "monthlyPriceUsd": 0,
       "maxWebsites": 1,
       "maxEventsPerMonth": 100000,
+      "maxReplaysPerMonth": 0,
+      "maxOtelRowsPerMonth": 1000000,
+      "maxRetentionDays": 365,
+      "usageGraceMultiple": 1,
       "included": [
         "core analytics",
         "realtime analytics",
@@ -44,6 +48,10 @@
       "monthlyPriceUsd": 15,
       "maxWebsites": null,
       "maxEventsPerMonth": 1000000,
+      "maxReplaysPerMonth": 5000,
+      "maxOtelRowsPerMonth": 10000000,
+      "maxRetentionDays": 1095,
+      "usageGraceMultiple": 2,
       "included": [
         "core analytics",
         "realtime analytics",
@@ -63,5 +71,6 @@
     "personalAndNoncommercial": true,
     "commercialLicenseAvailable": true
   },
-  "lastUpdated": "2026-09-30"
+  "lastUpdated": "2026-10-01",
+  "usagePolicy": "Allowances reset monthly (UTC). Past an allowance, Free stops collecting that kind of data until the next month; Cloud keeps collecting up to usageGraceMultiple times the allowance, then stops until the next month. No automatic overage charges."
 }

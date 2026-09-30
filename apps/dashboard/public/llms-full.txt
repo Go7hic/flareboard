@@ -71,13 +71,17 @@ Flareboard is for teams that want product analytics without sending all analytic
 
 ## Pricing and Entitlements
 
-Flareboard Cloud has a Free plan and a Cloud plan. Cloud websites are unlimited and share one 1M monthly event pool. Free remains one website.
+Flareboard Cloud has a Free plan and a Cloud plan. Cloud websites are unlimited and share one set of monthly allowances (1M events, 5K session replays, 10M OpenTelemetry log records and spans). Free remains one website. Past an allowance, Free stops collecting that kind of data until the next month; Cloud keeps collecting up to 2x the allowance, then stops until the next month, with no automatic overage charges. The account owner is emailed at 80% and 100% of each allowance and when collection stops.
 
 | Capability | Free | Cloud |
 | --- | --- | --- |
 | Price | $0/month | $15/month |
 | Websites | 1 | Unlimited |
 | Events per month | 100K | 1M |
+| Session replays per month | Not included | 5K |
+| OpenTelemetry log records and spans per month | 1M | 10M |
+| Past a monthly allowance | Collection stops until next month | Keeps collecting up to 2x, then stops until next month |
+| Raw data retention | Up to 1 year | Up to 3 years |
 | Core analytics | Yes | Yes |
 | Realtime | Yes | Yes |
 | Segments | Yes | Yes |

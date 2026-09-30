@@ -2,7 +2,10 @@ import { Link } from 'react-router-dom';
 import type { LegalDoc, LegalSection } from '../../components/landing/LegalPage';
 import { Mail, UPDATED } from './shared';
 
-/* Plan prices and limits live on /pricing; keep them out of this text so it does not drift. */
+/*
+ * Plan prices and allowance sizes live on /pricing; keep them out of this text so it does not
+ * drift. How allowances and retention work (grace multiple, what stops) is part of the terms.
+ */
 const sections: LegalSection[] = [
   {
     id: 'agreement',
@@ -83,16 +86,22 @@ const sections: LegalSection[] = [
             where applicable.
           </li>
           <li>
-            <strong>Usage limits.</strong> Each plan includes a monthly event allowance. Events sent after you reach
-            it are not recorded for the rest of that month; upgrade your plan to avoid gaps in your data. Plans
-            advertised as unlimited in some dimension (such as websites) are subject to reasonable fair-use limits
-            that protect the Service for everyone.
+            <strong>Usage allowances.</strong> Each plan includes monthly allowances for events, OpenTelemetry log
+            records and spans, and, on plans with session replay, recordings. Allowances reset on the first day of
+            each month (UTC). On the free plan, data of a kind sent after its allowance is reached is not recorded
+            for the rest of that month. On paid plans, collection continues past an allowance up to twice that
+            allowance, then stops for the rest of the month. We do not charge automatically for usage above an
+            allowance. We email the account owner when usage reaches 80% and 100% of an allowance and when
+            collection stops. Upgrade your plan or contact us to avoid gaps in your data. Plans advertised as
+            unlimited in some dimension (such as websites) are subject to reasonable fair-use limits that protect
+            the Service for everyone.
           </li>
           <li>
             <strong>Cancellation.</strong> You can cancel at any time from the billing page. Cancellation takes
             effect at the end of the current billing period, after which your account moves to the free plan.
-            Features not included in the free plan stop working, but your data is not deleted because of the
-            downgrade.
+            Features not included in the free plan stop working. Your data is not deleted because of the
+            downgrade, except that raw analytics data older than the free plan’s retention period is then deleted
+            as described in <a href="#your-data">Your data</a>.
           </li>
           <li>
             <strong>Refunds.</strong> Fees are non-refundable, including for partial months, except where required
@@ -148,6 +157,13 @@ const sections: LegalSection[] = [
             website.
           </li>
         </ul>
+        <p>
+          Raw analytics data (events and session replays) is kept for each website’s retention period: the period
+          you set for the website, up to the maximum of your plan, or the plan maximum when you set none. Logs and
+          traces are kept for a shorter fixed period. Older raw data is deleted automatically and cannot be
+          recovered. The periods are listed in our{' '}
+          <Link to="/privacy#retention">Privacy Policy</Link>.
+        </p>
         <p>
           You can export analytics data on plans that include export. You can delete websites or your whole account
           from the dashboard at any time, or ask us to delete Customer Data by emailing <Mail />.

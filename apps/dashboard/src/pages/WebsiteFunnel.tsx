@@ -11,7 +11,7 @@ import { PropertyFilterBuilder } from '../components/PropertyFilterBuilder';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';
 import { Label } from '../components/ui/label';
 import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
-import { api } from '../lib/api';
+import { api, type EventCatalogResponse } from '../lib/api';
 import { formatNumber, formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
@@ -39,19 +39,39 @@ function windowLabel(ms: number) {
   return ms < DAY ? t('funnelWindowHours').replace('{n}', String(ms / HOUR)) : t('funnelWindowDays').replace('{n}', String(ms / DAY));
 }
 
+/**
+ * Opening steps when the URL names none: `signup` → `purchase` when the website sends both,
+ * otherwise its three custom events reached by the most sessions (busiest first, which is
+ * usually the order of a funnel).
+ */
+function defaultFunnelSteps(events: EventCatalogResponse['events'] | undefined): string[] {
+  if (!events) return [];
+  const custom = events.filter((event) => !event.eventName.startsWith('$'));
+  const names = new Set(custom.map((event) => event.eventName));
+  if (names.has('signup') && names.has('purchase')) return ['signup', 'purchase'];
+  return [...custom].sort((a, b) => b.sessions - a.sessions).slice(0, 3).map((event) => event.eventName);
+}
+
 export default function WebsiteFunnelPage() {
   const chartColors = useChartColors();
   const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl, timezone, rangeQs } =
     useWebsiteReportContext('30d');
   const [searchParams] = useSearchParams();
-  // Saved funnel reports open with `?steps=a,b,c`.
-  const [funnelSteps, setFunnelSteps] = useState(() => {
+  // Saved funnel reports open with `?steps=a,b,c`; otherwise start from the website's own events.
+  const [editedSteps, setFunnelSteps] = useState<string[] | null>(() => {
     const fromUrl = (searchParams.get('steps') ?? '')
       .split(',')
       .map((step) => step.trim())
       .filter(Boolean);
-    return fromUrl.length ? fromUrl : ['signup', 'purchase'];
+    return fromUrl.length ? fromUrl : null;
   });
+  // Same query key as EventCatalogPicker, so the picker reuses this response.
+  const catalogQuery = useQuery({
+    queryKey: ['event-catalog', websiteId, ''],
+    enabled: Boolean(websiteId) && editedSteps === null,
+    queryFn: () => api<EventCatalogResponse>(`/api/websites/${websiteId}/events/catalog`),
+  });
+  const funnelSteps = editedSteps ?? defaultFunnelSteps(catalogQuery.data?.events);
   const [countBy, setCountBy] = useState<'session' | 'person'>('session');
   const [order, setOrder] = useState<'strict' | 'any'>('strict');
   const [windowMs, setWindowMs] = useState(90 * DAY);
@@ -158,7 +178,7 @@ export default function WebsiteFunnelPage() {
       </section>
       <div className="section-gap">
         <DataViewState
-          loading={funnelQuery.isLoading}
+          loading={funnelQuery.isLoading || (editedSteps === null && catalogQuery.isLoading)}
           error={funnelQuery.isError ? funnelQuery.error : null}
           onRetry={() => funnelQuery.refetch()}
           isEmpty={!funnelQuery.isLoading && (funnelChartData.length === 0 || !funnelHasData)}

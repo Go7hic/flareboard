@@ -1572,6 +1572,15 @@ img.website-switcher-icon {
   grid-column: 1 / -1;
 }
 
+/* Funnel: steps and filters span the form; count, order and window share the row between. */
+.panel-form.funnel-form {
+  align-items: start;
+}
+
+.panel-form .funnel-form-row {
+  grid-column: 1 / -1;
+}
+
 .panel-form .field {
   margin-bottom: 0;
   min-width: 0;

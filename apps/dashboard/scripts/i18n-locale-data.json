@@ -1088,7 +1088,7 @@
     "segmentClearFilter": "セグメントフィルターを解除",
     "type": "タイプ",
     "topMetric": "上位",
-    "funnelStepsPlaceholder": "step1,step2,step3",
+    "funnelStepsPlaceholder": "イベントを選択…",
     "comparePageviews": "ページビューを比較",
     "compareVisitors": "訪問者を比較",
     "invalidSegmentJson": "パラメータ JSON が無効",
@@ -2951,7 +2951,9 @@
     "billingSwitched": "{plan} プランに切り替えました。差額は日割りで次回の請求に反映されます。",
     "landingPlanPriceAria": "月 {price} ドル",
     "landingPlanBusinessTagline": "より大きな利用枠と長い生データ保持期間。トラフィックの多いプロダクト向け。",
-    "landingPlanEverythingInCloud": "Cloud のすべての機能"
+    "landingPlanEverythingInCloud": "Cloud のすべての機能",
+    "funnelNoStepsTitle": "ファネルのステップを選択してください",
+    "funnelNoStepsHint": "ユーザーが行う順に 2 つ以上のイベントを選びます。サイトが track() でカスタムイベントを送信すると、ここに表示されます。"
   },
   "de-DE": {
     "language": "Sprache",
@@ -4042,7 +4044,7 @@
     "segmentClearFilter": "Segmentfilter entfernen",
     "type": "Typ",
     "topMetric": "Top",
-    "funnelStepsPlaceholder": "step1,step2,step3",
+    "funnelStepsPlaceholder": "Events auswählen…",
     "comparePageviews": "Seitenaufrufe vergleichen",
     "compareVisitors": "Besucher vergleichen",
     "invalidSegmentJson": "Ungültiges JSON in Parametern",
@@ -5905,7 +5907,9 @@
     "billingSwitched": "Sie sind jetzt im Tarif {plan}. Die Preisdifferenz wird anteilig mit Ihrer nächsten Rechnung verrechnet.",
     "landingPlanPriceAria": "{price} Dollar pro Monat",
     "landingPlanBusinessTagline": "Größere Kontingente und längere Rohdaten-Aufbewahrung für Produkte mit viel Traffic.",
-    "landingPlanEverythingInCloud": "Alles aus Cloud"
+    "landingPlanEverythingInCloud": "Alles aus Cloud",
+    "funnelNoStepsTitle": "Funnel-Schritte auswählen",
+    "funnelNoStepsHint": "Wähle mindestens zwei Events in der Reihenfolge, in der Nutzer sie ausführen. Eigene Events erscheinen hier, sobald deine Website sie mit track() sendet."
   },
   "fr-FR": {
     "language": "Langue",
@@ -6996,7 +7000,7 @@
     "segmentClearFilter": "Effacer le filtre de segment",
     "type": "Type",
     "topMetric": "Top",
-    "funnelStepsPlaceholder": "etape1,etape2,etape3",
+    "funnelStepsPlaceholder": "Choisir des événements…",
     "comparePageviews": "Comparer pages vues",
     "compareVisitors": "Comparer visiteurs",
     "invalidSegmentJson": "JSON invalide dans paramètres",
@@ -8859,6 +8863,8 @@
     "billingSwitched": "Vous êtes maintenant sur l’offre {plan}. La différence de prix est répercutée au prorata sur votre prochaine facture.",
     "landingPlanPriceAria": "{price} dollars par mois",
     "landingPlanBusinessTagline": "Des quotas plus élevés et une conservation plus longue des données brutes pour les produits à fort trafic.",
-    "landingPlanEverythingInCloud": "Tout ce qu’inclut Cloud"
+    "landingPlanEverythingInCloud": "Tout ce qu’inclut Cloud",
+    "funnelNoStepsTitle": "Choisissez les étapes du funnel",
+    "funnelNoStepsHint": "Sélectionnez au moins deux événements, dans l’ordre où les visiteurs les réalisent. Les événements personnalisés apparaissent ici dès que votre site les envoie avec track()."
   }
 }

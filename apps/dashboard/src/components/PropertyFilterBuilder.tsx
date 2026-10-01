@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import {
   INSIGHT_DIMENSIONS,
   MAX_PROPERTY_FILTERS,
@@ -304,13 +304,15 @@ export function PropertyFilterBuilder({
       {value.length < MAX_PROPERTY_FILTERS ? (
         <Button
           type="button"
-          variant="ghost"
+          variant="outline"
           size="sm"
+          className="self-start"
           onClick={() => {
             const type = allowedTypes[0] ?? 'event';
             onChange([...value, { type, key: type === 'dimension' ? 'path' : '', operator: 'is', value: [] }]);
           }}
         >
+          <Plus data-icon="inline-start" aria-hidden />
           {addLabel ?? t('propertyFilterAdd')}
         </Button>
       ) : null}

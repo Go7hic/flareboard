@@ -116,8 +116,8 @@ export default function WebsiteFunnelPage() {
 
       <PageBody>
       <section className="panel section-gap">
-        <div className="panel-form">
-          <div className="field">
+        <div className="panel-form funnel-form">
+          <div className="field funnel-form-row">
             <Label htmlFor="funnel-steps">{t('insightSteps')}</Label>
             <EventCatalogPicker
               mode="multi"
@@ -129,48 +129,46 @@ export default function WebsiteFunnelPage() {
               aria-label={t('funnel')}
             />
           </div>
-          <div className="workflow-insights-grid">
-            <div className="field">
-              <Label htmlFor="funnel-count-by">{t('insightCountBy')}</Label>
-              <select
-                id="funnel-count-by"
-                className="select"
-                value={countBy}
-                onChange={(event) => setCountBy(event.target.value as 'session' | 'person')}
-              >
-                <option value="session">{t('insightCountSessions')}</option>
-                <option value="person">{t('insightCountPeople')}</option>
-              </select>
-            </div>
-            <div className="field">
-              <Label htmlFor="funnel-order">{t('insightStepOrder')}</Label>
-              <select
-                id="funnel-order"
-                className="select"
-                value={order}
-                onChange={(event) => setOrder(event.target.value as 'strict' | 'any')}
-              >
-                <option value="strict">{t('insightOrderStrict')}</option>
-                <option value="any">{t('insightOrderAny')}</option>
-              </select>
-            </div>
-            <div className="field">
-              <Label htmlFor="funnel-window">{t('insightConversionWindow')}</Label>
-              <select
-                id="funnel-window"
-                className="select"
-                value={windowMs}
-                onChange={(event) => setWindowMs(Number(event.target.value))}
-              >
-                {WINDOW_OPTIONS.map((ms) => (
-                  <option key={ms} value={ms}>
-                    {windowLabel(ms)}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="field">
+            <Label htmlFor="funnel-count-by">{t('insightCountBy')}</Label>
+            <select
+              id="funnel-count-by"
+              className="select"
+              value={countBy}
+              onChange={(event) => setCountBy(event.target.value as 'session' | 'person')}
+            >
+              <option value="session">{t('insightCountSessions')}</option>
+              <option value="person">{t('insightCountPeople')}</option>
+            </select>
           </div>
           <div className="field">
+            <Label htmlFor="funnel-order">{t('insightStepOrder')}</Label>
+            <select
+              id="funnel-order"
+              className="select"
+              value={order}
+              onChange={(event) => setOrder(event.target.value as 'strict' | 'any')}
+            >
+              <option value="strict">{t('insightOrderStrict')}</option>
+              <option value="any">{t('insightOrderAny')}</option>
+            </select>
+          </div>
+          <div className="field">
+            <Label htmlFor="funnel-window">{t('insightConversionWindow')}</Label>
+            <select
+              id="funnel-window"
+              className="select"
+              value={windowMs}
+              onChange={(event) => setWindowMs(Number(event.target.value))}
+            >
+              {WINDOW_OPTIONS.map((ms) => (
+                <option key={ms} value={ms}>
+                  {windowLabel(ms)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field funnel-form-row">
             <Label>{t('insightFilters')}</Label>
             <PropertyFilterBuilder websiteId={websiteId} rangeQs={rangeQs} value={filters} onChange={setFilters} />
           </div>
@@ -182,9 +180,13 @@ export default function WebsiteFunnelPage() {
           error={funnelQuery.isError ? funnelQuery.error : null}
           onRetry={() => funnelQuery.refetch()}
           isEmpty={!funnelQuery.isLoading && (funnelChartData.length === 0 || !funnelHasData)}
-          emptyTitle={t('noDataInPeriod')}
+          emptyTitle={funnelSteps.length === 0 ? t('funnelNoStepsTitle') : t('noDataInPeriod')}
           emptyDescription={
-            funnelChartData.length > 0 ? t('funnelNoDataHint') : t('noDataInPeriodHint')
+            funnelSteps.length === 0
+              ? t('funnelNoStepsHint')
+              : funnelChartData.length > 0
+                ? t('funnelNoDataHint')
+                : t('noDataInPeriodHint')
           }
         >
           <>

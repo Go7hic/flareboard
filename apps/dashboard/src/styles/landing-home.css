@@ -266,6 +266,7 @@
 }
 
 .home-preview-nav-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.625rem;
@@ -282,11 +283,21 @@
   flex-shrink: 0;
 }
 
+/* Same active state as the dashboard sidebar (.sidebar-link.active in global.css). */
 .home-preview-nav-item.is-active {
-  background: var(--bg-subtle);
-  box-shadow: inset 2px 0 0 var(--text);
+  background: var(--accent-muted);
   color: var(--text);
   font-weight: 500;
+}
+
+.home-preview-nav-item.is-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  width: 2px;
+  background: var(--geist-gray-1000);
 }
 
 .home-preview-main {

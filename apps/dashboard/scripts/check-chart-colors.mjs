@@ -191,7 +191,8 @@ const resolved = {
 };
 assert(resolved.pageviews === '#006bff', `pageviews leaf expected #006bff got ${resolved.pageviews}`);
 assert(resolved.visitors === '#e85d04', `visitors leaf expected #e85d04 got ${resolved.visitors}`);
-assert(resolved.visits === '#28a948', `visits leaf expected #28a948 got ${resolved.visits}`);
+// Teal (slot 3) since console v2: the validated order is blue, orange, teal, purple, green, pink.
+assert(resolved.visits === '#00927f', `visits leaf expected #00927f got ${resolved.visits}`);
 assert(
   resolved.pageviews !== resolved.visitors,
   'Overview series colors must differ (legend vs line share tokens)',

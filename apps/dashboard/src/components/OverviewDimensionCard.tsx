@@ -1,7 +1,9 @@
+import { ArrowRight } from 'lucide-react';
 import type { MetricRow } from '../lib/api';
 import { t } from '../lib/i18n';
 import { DataViewState } from './DataViewState';
 import { MetricsTable } from './MetricsTable';
+import { SectionCard } from './SectionCard';
 import { SegmentTabs } from './SegmentTabs';
 
 export type OverviewDimensionTab = {
@@ -33,34 +35,30 @@ export function OverviewDimensionCard({
   onMoreClick?: () => void;
 }) {
   return (
-    <section className="panel overview-dimension-card">
-      <div className="overview-dimension-card-head">
-        <h2 className="overview-dimension-card-title">{title}</h2>
-        <SegmentTabs
-          tabs={tabs}
-          value={activeTab}
-          onChange={onTabChange}
-          aria-label={title}
-        />
-      </div>
+    <SectionCard
+      className="overview-dimension-card"
+      title={title}
+      actions={<SegmentTabs tabs={tabs} value={activeTab} onChange={onTabChange} aria-label={title} />}
+      footer={
+        onMoreClick ? (
+          <button type="button" className="card-footer-link" onClick={onMoreClick}>
+            {t('overviewMore')}
+            <ArrowRight aria-hidden />
+          </button>
+        ) : undefined
+      }
+    >
       <DataViewState error={error} onRetry={onRetry}>
         <MetricsTable
           embedded
           hideTitle
-          maxRows={5}
+          maxRows={8}
           rows={rows}
           loading={loading}
           primaryMetric={primaryMetric}
           title=""
         />
       </DataViewState>
-      {onMoreClick ? (
-        <div className="overview-dimension-card-footer">
-          <button type="button" className="overview-dimension-more" onClick={onMoreClick}>
-            {t('overviewMore')}
-          </button>
-        </div>
-      ) : null}
-    </section>
+    </SectionCard>
   );
 }

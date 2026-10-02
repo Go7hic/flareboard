@@ -1,9 +1,25 @@
-@import url('https://cdn.jsdelivr.net/npm/geist@1.3.1/dist/fonts/geist-sans/style.css');
-@import url('https://cdn.jsdelivr.net/npm/geist@1.3.1/dist/fonts/geist-mono/style.css');
 @import './geist-tokens.css';
 @import "tailwindcss";
 @source "../../index.html";
 @source "../**/*.{html,js,ts,jsx,tsx}";
+
+/* Geist, self-hosted (OFL, src/assets/fonts/GEIST-LICENSE.txt). The jsDelivr stylesheet this
+   used to import does not exist, so the console silently rendered in system fonts. */
+@font-face {
+  font-family: 'Geist';
+  src: url('../assets/fonts/Geist-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('../assets/fonts/GeistMono-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
 
 /* ── Dark mode variant: matches existing [data-theme="dark"] toggle ── */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
@@ -20,13 +36,14 @@
 
   --nav-height: 64px;
   --sidebar-width: 240px;
-  --container-max: 1200px;
+  --container-max: 1320px;
   --transition: 150ms cubic-bezier(0.175, 0.885, 0.32, 1.1);
 }
 
 /* ── Tailwind color aliases (inline refs to geist-tokens.css per-theme vars) ── */
 @theme inline {
-  --color-background: var(--bg);
+  /* shadcn "background" is the surface controls sit on: the card, not the page. */
+  --color-background: var(--bg-elevated);
   --color-foreground: var(--text);
   --color-muted: var(--bg-subtle);
   --color-muted-foreground: var(--text-muted);
@@ -392,7 +409,19 @@ textarea {
   width: 100%;
   max-width: var(--container-max);
   margin: 0 auto;
-  padding: 1.5rem 1.5rem 3rem;
+  padding: 1.5rem 1.5rem 3.5rem;
+}
+
+@media (min-width: 1280px) {
+  .page {
+    padding: 1.75rem 2rem 4rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 1.25rem 1rem 3rem;
+  }
 }
 
 .page-narrow {
@@ -937,8 +966,34 @@ textarea {
   align-items: center;
   gap: 0.75rem 1rem;
   flex-wrap: nowrap;
-  padding: 1.75rem 0 0.85rem;
-  border-bottom: 1px solid var(--border-subtle);
+  min-height: 3.25rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.website-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: 0.875rem;
+}
+
+.website-breadcrumb-link {
+  color: var(--text-muted);
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--transition);
+}
+
+.website-breadcrumb-link:hover {
+  color: var(--text);
+}
+
+.website-breadcrumb-sep {
+  color: var(--text-faint);
 }
 
 .website-content-nav {
@@ -1139,9 +1194,9 @@ img.website-switcher-icon {
   }
 }
 
-/* Page header — Geist: tighter title block, 6px toolbar radius */
+/* Page header (console v2): title + lead + actions; toolbar row below without a box. */
 .page-header {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
 }
 
 .page-back {
@@ -1160,25 +1215,21 @@ img.website-switcher-icon {
 
 .page-title {
   margin: 0;
-  font-size: clamp(1.375rem, 2.2vw, 1.75rem);
+  font-size: 1.5rem;
   font-weight: 600;
   letter-spacing: -0.02em;
-  line-height: 1.1;
+  line-height: 1.2;
+  text-wrap: balance;
 }
 
 .page-subtitle {
-  margin: 0.35rem 0 0;
+  margin: 0.3rem 0 0;
+  max-width: 72ch;
   color: var(--text-muted);
   font-size: 0.875rem;
   letter-spacing: 0;
-  line-height: 1.45;
-}
-
-/* Desktop: keep PageHeader lead on one line beside actions; wrap below 900px. */
-@media (min-width: 901px) {
-  .page-header-copy .page-subtitle {
-    white-space: nowrap;
-  }
+  line-height: 1.5;
+  text-wrap: pretty;
 }
 
 .product-line-cross-links {
@@ -1188,9 +1239,9 @@ img.website-switcher-icon {
 .page-header-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 0.75rem 1.5rem;
+  flex-wrap: wrap;
 }
 
 .page-header-copy {
@@ -1207,12 +1258,11 @@ img.website-switcher-icon {
 }
 
 .page-header-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
   margin-top: 1rem;
-  padding: 1.5rem;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-sm);
 }
 
 /* Website context: sub-nav + toolbar stay stable across tabs */
@@ -1255,18 +1305,19 @@ img.website-switcher-icon {
   border: 0;
 }
 
-/* Cards & panels — Geist: 6px radius, 24px padding, tonal borders */
+/* Cards (console v2): flat white on the off-white page, 12px radius, hairline, no shadow. */
 .panel {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 1.5rem;
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-md);
+  padding: var(--card-pad-y, 1.25rem) var(--card-pad-x, 1.25rem);
+  box-shadow: none;
+  min-width: 0;
 }
 
 /* Gray rail for panels that lead a section (ui/Panel variant="accent-rail"). */
 .panel-accent-rail {
-  box-shadow: inset 3px 0 0 var(--border-strong), var(--shadow-sm);
+  box-shadow: inset 3px 0 0 var(--border-strong);
 }
 
 .panel-danger-zone {
@@ -1276,19 +1327,18 @@ img.website-switcher-icon {
 .panel-flush {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   overflow: hidden;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
+  min-width: 0;
 }
 
 .panel-header {
-  padding: 0.9rem 1.5rem;
-  border-bottom: 1px solid var(--border-subtle);
-  font-size: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.875rem;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-  text-transform: uppercase;
+  color: var(--text);
 }
 
 .panel .panel-header {
@@ -1428,7 +1478,7 @@ img.website-switcher-icon {
 
 .stat-delta {
   font-size: 0.75rem;
-  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   margin-top: 0.4rem;
 }
 
@@ -1769,25 +1819,63 @@ img.website-switcher-icon {
 
 .data-table th {
   text-align: left;
-  font-size: 0.6875rem;
-  font-weight: 600;
+  font-size: 0.75rem;
+  font-weight: 500;
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 0.55rem 0;
+  padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--border);
+  white-space: nowrap;
 }
 
 .data-table td {
-  padding: 0.55rem 0;
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 0.7rem 0.75rem;
+  border-bottom: 1px solid var(--border);
   word-break: break-word;
+  vertical-align: middle;
+}
+
+.data-table th:first-child,
+.data-table td:first-child {
+  padding-left: 0;
+}
+
+.data-table th:last-child,
+.data-table td:last-child {
+  padding-right: 0;
+}
+
+/* Tables flush with their card edges get the card padding back on the outer cells. */
+.panel-flush .data-table th:first-child,
+.panel-flush .data-table td:first-child,
+.table-scroll--flush .data-table th:first-child,
+.table-scroll--flush .data-table td:first-child {
+  padding-left: var(--card-pad-x, 1.25rem);
+}
+
+.panel-flush .data-table th:last-child,
+.panel-flush .data-table td:last-child,
+.table-scroll--flush .data-table th:last-child,
+.table-scroll--flush .data-table td:last-child {
+  padding-right: var(--card-pad-x, 1.25rem);
+}
+
+.panel-flush .data-table th {
+  background: var(--bg-subtle);
+}
+
+.data-table tbody tr {
+  transition: background var(--transition);
+}
+
+.data-table--interactive tbody tr:hover,
+.data-table tbody tr.is-clickable:hover {
+  background: var(--row-hover, var(--bg-subtle));
+  cursor: pointer;
 }
 
 .data-table td.num,
 .data-table th.num {
   text-align: right;
-  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2483,59 +2571,6 @@ code {
   cursor: default;
 }
 
-/* Website overview — one KPI strip (5-up) → chart → dimensions */
-.page-stats .page-stats-kpis .analytics-hero-stats {
-  margin-bottom: 0;
-}
-
-.page-stats .page-stats-kpis .analytics-hero-stats > * {
-  min-width: 0;
-  padding: 0.85rem 1rem;
-}
-
-.page-stats .analytics-compare-strip {
-  margin-top: 0.85rem;
-  margin-bottom: 0;
-}
-
-.page-stats .page-stats-chart {
-  padding: 1.5rem;
-}
-
-.page-stats .page-stats-chart .section-title {
-  margin: 0 0 0.85rem;
-}
-
-.page-stats .overview-dimensions-head {
-  margin-bottom: 1rem;
-}
-
-.page-stats .overview-dimensions-head .section-title {
-  margin: 0;
-}
-
-.page-stats .overview-secondary {
-  margin-top: 2rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--border-subtle);
-  display: flex;
-  flex-direction: column;
-  gap: 1.35rem;
-}
-
-.page-stats .overview-secondary .panel,
-.page-stats .overview-secondary .overview-map-heatmap {
-  border-color: var(--border-subtle);
-  box-shadow: none;
-}
-
-.page-stats .overview-secondary .section-title,
-.page-stats .overview-secondary .metrics-table-embedded-title {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--text-muted);
-}
-
 /* Core Web Vitals performance page */
 .cwv-vital-card .cwv-dist-bar {
   margin-top: 0.65rem;
@@ -3077,66 +3112,10 @@ code {
   width: auto;
 }
 
-/* Overview dimension cards (Umami-style 2×2 grid) */
-.overview-dimensions-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-}
-
-@media (max-width: 900px) {
-  .overview-dimensions-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 .overview-dimension-card {
   display: flex;
   flex-direction: column;
   min-height: 0;
-}
-
-.overview-dimension-card-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 0.75rem;
-  margin-bottom: 0.85rem;
-}
-
-.overview-dimension-card-title {
-  margin: 0;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.overview-dimension-card .metrics-table-embedded {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.overview-dimension-card-footer {
-  margin-top: 0.85rem;
-  padding-top: 0.65rem;
-  border-top: 1px solid var(--border);
-}
-
-.overview-dimension-more {
-  appearance: none;
-  border: none;
-  padding: 0;
-  background: transparent;
-  font: inherit;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--accent);
-  cursor: pointer;
-}
-
-.overview-dimension-more:hover {
-  text-decoration: underline;
 }
 
 .utm-dimensions-stack {
@@ -3555,17 +3534,19 @@ code {
   font-size: 0.8125rem;
 }
 
+/* Active filter notice (segment / cohort): a quiet strip with a clear action, not a callout box. */
 .cohort-filter-banner {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.65rem 1rem;
-  background: var(--accent-muted);
-  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
+  padding: 0.4rem 0.4rem 0.4rem 0.85rem;
+  background: var(--bg-subtle);
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  color: var(--text);
 }
 
 .cohort-conditions-list {
@@ -3621,68 +3602,6 @@ code {
   min-height: 420px;
 }
 
-.traffic-heatmap-wrap {
-  margin-top: 0.25rem;
-}
-
-.traffic-heatmap-punch {
-  display: grid;
-  grid-template-columns: 3.25rem repeat(7, minmax(0, 1fr));
-  gap: 0.15rem 0.35rem;
-  align-items: center;
-}
-
-.traffic-heatmap-punch-corner {
-  grid-column: 1;
-}
-
-.traffic-heatmap-punch-dow {
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-align: center;
-  color: var(--text-muted);
-}
-
-.traffic-heatmap-punch-hour {
-  font-size: 0.6875rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-muted);
-  white-space: nowrap;
-  padding-right: 0.35rem;
-  text-align: right;
-}
-
-.traffic-heatmap-punch-cell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 1.125rem;
-}
-
-.traffic-heatmap-punch-dot {
-  display: block;
-  border-radius: 999px;
-  flex-shrink: 0;
-}
-
-.traffic-heatmap-legend {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-  max-width: 960px;
-  font-size: 0.8125rem;
-  color: var(--text-muted);
-}
-
-.traffic-heatmap-legend-dots {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  flex: 1;
-  justify-content: center;
-}
-
 .traffic-heatmap-skeleton {
   border-radius: var(--radius-md);
 }
@@ -3702,10 +3621,10 @@ code {
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.2rem;
-  padding: 0.25rem;
+  gap: 2px;
+  padding: 2px;
   background: var(--bg-subtle);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-sm);
 }
 
@@ -3736,12 +3655,12 @@ code {
 .segment-tab[aria-selected='true'] {
   background: var(--bg-elevated);
   color: var(--text);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 0 0 1px var(--border);
 }
 
 .segment-tabs--sm .segment-tab {
-  font-size: 0.75rem;
-  padding: 0.3rem 0.55rem;
+  font-size: 0.8125rem;
+  padding: 0.25rem 0.6rem;
 }
 
 @media (max-width: 720px) {
@@ -3931,31 +3850,36 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   font-size: 0.8125rem;
 }
 
-/* Empty state block */
+/* Empty state (console v2): quiet, centered, no dashed box; icon tile when given. */
 .empty-state-block {
-  padding: 2rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2.5rem 1.25rem;
   text-align: center;
-  background: var(--bg-subtle);
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-md);
 }
 
 .empty-state-block-title {
   margin: 0;
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--text);
 }
 
 .empty-state-block-desc {
-  margin: 0.45rem 0 0;
+  margin: 0.35rem auto 0;
   font-size: 0.8125rem;
   color: var(--text-muted);
-  max-width: 36rem;
-  margin-left: auto;
-  margin-right: auto;
-  padding-inline: 1rem;
-  line-height: 1.5;
+  max-width: 46ch;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.empty-state-block > .empty-state-actions {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
 }
 
 .data-view-error-actions {
@@ -5740,21 +5664,48 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 
 .master-detail-layout {
   display: grid;
-  grid-template-columns: minmax(16rem, 0.7fr) minmax(0, 1.5fr);
-  gap: 1rem;
+  grid-template-columns: minmax(17rem, 20rem) minmax(0, 1fr);
+  gap: var(--section-gap, 1rem);
   align-items: start;
 }
 
+/* The list is one card of hairline-separated rows (console v2), sticky beside a long detail. */
 .master-detail-list {
-  display: grid;
-  gap: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden auto;
+  max-height: calc(100dvh - var(--nav-height, 64px) - 2rem);
+  position: sticky;
+  top: 1rem;
+}
+
+.master-detail-list-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.master-detail-list-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }
 
 .master-detail-list-item {
+  position: relative;
   appearance: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-elevated);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
   color: var(--text);
   cursor: pointer;
   display: flex;
@@ -5762,15 +5713,39 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   align-items: flex-start;
   gap: 0.75rem;
   min-width: 0;
-  overflow: hidden;
-  padding: 0.85rem;
+  padding: 0.75rem 0.9rem;
   text-align: left;
   width: 100%;
+  font: inherit;
+  transition: background var(--transition);
 }
 
+.master-detail-list-item:last-child {
+  border-bottom: 0;
+}
+
+.master-detail-list-item:hover {
+  background: var(--row-hover, var(--bg-subtle));
+}
+
+.master-detail-list-item:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* Same selected treatment as the sidebar: tinted row + 2px bar. */
 .master-detail-list-item.is-selected {
-  border-color: var(--border-strong);
-  background: var(--bg-subtle);
+  background: var(--row-selected, var(--accent-muted));
+}
+
+.master-detail-list-item.is-selected::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  width: 2px;
+  background: var(--geist-gray-1000);
 }
 
 .master-detail-list-main {
@@ -5783,20 +5758,23 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 
 .master-detail-list-main > svg {
   flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
   color: var(--text-muted);
   margin-top: 0.1rem;
 }
 
 .master-detail-list-copy {
   display: grid;
-  gap: 0.15rem;
+  gap: 0.2rem;
   min-width: 0;
   flex: 1 1 auto;
 }
 
 .master-detail-list-title {
   display: block;
-  font-weight: 700;
+  font-size: 0.875rem;
+  font-weight: 500;
   line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5806,9 +5784,8 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 .master-detail-list-subtitle {
   display: block;
   color: var(--text-muted);
-  font-family: var(--font-mono);
   font-size: 0.75rem;
-  line-height: 1.35;
+  line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5818,10 +5795,13 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   align-items: flex-end;
   display: flex;
   flex-direction: column;
-  flex: 0 1 auto;
-  gap: 0.35rem;
-  max-width: 42%;
+  flex: 0 0 auto;
+  gap: 0.3rem;
+  max-width: 45%;
   min-width: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .master-detail-list-meta > * {
@@ -5832,36 +5812,58 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 }
 
 .master-detail-pane {
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
-  padding: 1rem;
+  padding: 1.25rem;
 }
 
 .master-detail-pane-head {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
 }
 
+.master-detail-pane-head .section-title {
+  margin: 0;
+  font-size: 1.125rem;
+  letter-spacing: -0.015em;
+}
+
+.master-detail-pane-head .text-muted {
+  margin: 0.3rem 0 0;
+  font-size: 0.8125rem;
+}
+
+/* Inline KPI row inside a detail card: cells split by hairlines, no nested boxes. */
 .detail-stats {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
   display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-  margin-bottom: 1rem;
-  padding: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  margin: 0 0 1.25rem;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
+.detail-stats > * {
+  padding: 0.85rem 1rem 0.85rem 0;
+  min-width: 0;
+}
+
+/* A section of a detail card: separated by a hairline, not boxed. */
 .detail-section {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
   display: grid;
-  gap: 1rem;
-  margin-bottom: 1rem;
-  padding: 1rem;
+  gap: 0.85rem;
+  margin: 0;
+  padding: 1.25rem 0 0;
+  border-top: 1px solid var(--border);
+}
+
+.detail-section + .detail-section {
+  margin-top: 1.25rem;
 }
 
 .detail-section .field {
@@ -7105,10 +7107,6 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
     padding-inline: 0;
   }
 
-  .page-header-toolbar {
-    padding: 1.35rem;
-  }
-
   .date-range-picker-custom {
     width: 100%;
   }
@@ -7293,9 +7291,9 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
 /* Dashboard section vocabulary */
 .section-title {
   margin: 0 0 0.65rem;
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.005em;
   color: var(--text);
 }
 

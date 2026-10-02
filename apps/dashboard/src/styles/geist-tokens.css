@@ -9,7 +9,7 @@
   --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', monospace;
   --nav-height: 64px;
   --sidebar-width: 240px;
-  --container-max: 1200px;
+  --container-max: 1320px;
   --transition: 150ms cubic-bezier(0.175, 0.885, 0.32, 1.1);
   --ease-geist: cubic-bezier(0.175, 0.885, 0.32, 1.1);
 }
@@ -115,7 +115,8 @@
   --geist-pink-1000: #460523;
   --background-100: var(--geist-background-100);
   --background-200: var(--geist-background-200);
-  --bg: var(--geist-background-100);
+  /* Page sits one step below the cards, so cards read without shadows (console v2). */
+  --bg: var(--geist-background-200);
   --bg-elevated: var(--geist-background-100);
   --bg-subtle: var(--geist-gray-100);
   --bg-hover: var(--geist-gray-200);
@@ -140,19 +141,22 @@
   --cf-orange: #e85d04;
   --cf-orange-muted: rgba(232, 93, 4, 0.12);
   /* Data-series hues only — never gray-1000 / --accent / --text (chrome). */
+  /* Fixed categorical order, validated with the dataviz checks on #fff: worst adjacent
+     CVD ΔE 9.7, normal-vision ΔE 28.3, every slot ≥ 3:1. Never reorder or cycle. */
   --chart-1: var(--geist-blue-700);
   --chart-2: var(--cf-orange);
-  --chart-3: var(--geist-green-700);
+  --chart-3: var(--geist-teal-800);
   --chart-4: var(--geist-purple-700);
-  --chart-5: var(--geist-pink-700);
-  --chart-6: var(--geist-teal-700);
+  --chart-5: var(--geist-green-900);
+  --chart-6: var(--geist-pink-800);
   /* Log severities (logs explorer histogram and legend). */
-  --chart-severity-trace: var(--chart-6);
-  --chart-severity-debug: var(--chart-4);
+  /* Severity is a status scale, not categorical: quiet for trace/debug, red family for failures. */
+  --chart-severity-trace: var(--geist-gray-600);
+  --chart-severity-debug: var(--geist-teal-700);
   --chart-severity-info: var(--chart-1);
   --chart-severity-warn: var(--geist-amber-700);
   --chart-severity-error: var(--geist-red-700);
-  --chart-severity-fatal: var(--chart-5);
+  --chart-severity-fatal: var(--geist-purple-800);
   --chart-pageviews: var(--chart-1);
   --chart-visitors: var(--chart-2);
   --chart-visits: var(--chart-3);
@@ -288,8 +292,9 @@
   --geist-pink-1000: #ffe9f4;
   --background-100: var(--geist-background-100);
   --background-200: var(--geist-background-200);
-  --bg: var(--geist-background-100);
-  --bg-elevated: var(--geist-background-100);
+  /* Page is true black; cards one step up (Geist dark background-100). */
+  --bg: #000000;
+  --bg-elevated: #0a0a0a;
   --bg-subtle: var(--geist-gray-100);
   --bg-hover: var(--geist-gray-200);
   --border: var(--geist-gray-alpha-400);
@@ -313,19 +318,21 @@
   --cf-orange: #e85d04;
   --cf-orange-muted: rgba(232, 93, 4, 0.12);
   /* Data-series hues only — never gray-1000 / --accent / --text (chrome). */
+  /* Same hues stepped for #0a0a0a: worst adjacent CVD ΔE 14.5, every slot ≥ 3:1. */
   --chart-1: var(--geist-blue-700);
   --chart-2: var(--cf-orange);
-  --chart-3: var(--geist-green-700);
+  --chart-3: var(--geist-teal-700);
   --chart-4: var(--geist-purple-700);
-  --chart-5: var(--geist-pink-700);
-  --chart-6: var(--geist-teal-700);
+  --chart-5: var(--geist-green-700);
+  --chart-6: var(--geist-pink-600);
   /* Log severities (logs explorer histogram and legend). */
-  --chart-severity-trace: var(--chart-6);
-  --chart-severity-debug: var(--chart-4);
+  /* Severity is a status scale, not categorical: quiet for trace/debug, red family for failures. */
+  --chart-severity-trace: var(--geist-gray-600);
+  --chart-severity-debug: var(--geist-teal-700);
   --chart-severity-info: var(--chart-1);
   --chart-severity-warn: var(--geist-amber-700);
   --chart-severity-error: var(--geist-red-700);
-  --chart-severity-fatal: var(--chart-5);
+  --chart-severity-fatal: var(--geist-purple-800);
   --chart-pageviews: var(--chart-1);
   --chart-visitors: var(--chart-2);
   --chart-visits: var(--chart-3);

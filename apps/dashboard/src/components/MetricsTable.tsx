@@ -3,7 +3,9 @@ import type { MetricRow } from '../lib/api';
 import { formatDurationSeconds, formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { Skeleton } from './ui/skeleton';
+import { BreakdownList, type BreakdownColumn, type BreakdownItem } from './BreakdownList';
 import { EmptyState } from './EmptyState';
+import { SectionCard } from './SectionCard';
 
 type SortColumn = 'name' | 'views' | 'visitors' | 'time';
 type SortDirection = 'asc' | 'desc';
@@ -78,18 +80,37 @@ export function MetricsTable({
     primaryMetric === 'visitors' ? (row.visitors ?? row.y) : row.y;
   const maxY = displayRows.length ? Math.max(...displayRows.map(rowValue), 1) : 1;
 
-  const renderHeader = (label: string, column: SortColumn, className?: string) => {
-    if (!sortable) {
-      return <th className={className}>{label}</th>;
-    }
-    return (
-      <th className={className} aria-sort={sortAriaValue(column, sortColumn, sortDirection)}>
-        <button type="button" className="metrics-table-sort-btn" onClick={() => handleSort(column)}>
-          {label}
-        </button>
-      </th>
-    );
-  };
+  const sortColumnFor = (column: SortColumn) =>
+    sortable
+      ? { onSort: () => handleSort(column), sort: sortAriaValue(column, sortColumn, sortDirection) }
+      : {};
+
+  const columns: BreakdownColumn[] = showPageStats
+    ? [
+        { label: t('pagesSort_views'), ...sortColumnFor('views') },
+        { label: t('pagesSort_visitors'), ...sortColumnFor('visitors') },
+        { label: t('pagesSort_time'), ...sortColumnFor('time') },
+      ]
+    : [
+        {
+          label: primaryMetric === 'visitors' ? t('visitors') : t('views'),
+          ...sortColumnFor(primaryMetric === 'visitors' ? 'visitors' : 'views'),
+        },
+      ];
+
+  const items: BreakdownItem[] = displayRows.map((row) => {
+    const value = rowValue(row);
+    return {
+      id: `${title}-${row.x}`,
+      label: row.x,
+      title: row.x,
+      mono: row.x.startsWith('/'),
+      share: value / maxY,
+      values: showPageStats
+        ? [formatNumber(row.y), formatNumber(row.visitors ?? 0), formatDurationSeconds(row.avgTime)]
+        : [formatNumber(value)],
+    };
+  });
 
   const body = (
     <>
@@ -97,58 +118,19 @@ export function MetricsTable({
         <div className="metrics-table-skeleton" aria-busy>
           <Skeleton className="h-6 w-full" />
           <Skeleton className="mt-2 h-6 w-3/4" />
+          <Skeleton className="mt-2 h-6 w-1/2" />
         </div>
       ) : null}
       {!loading && displayRows.length > 0 ? (
-        <table className="data-table">
-          <thead>
-            <tr>
-              {renderHeader(t('metricName'), 'name')}
-              {showPageStats ? (
-                <>
-                  {renderHeader(t('pagesSort_views'), 'views', 'num')}
-                  {renderHeader(t('pagesSort_visitors'), 'visitors', 'num')}
-                  {renderHeader(t('pagesSort_time'), 'time', 'num')}
-                </>
-              ) : (
-                renderHeader(
-                  primaryMetric === 'visitors' ? t('visitors') : t('views'),
-                  primaryMetric === 'visitors' ? 'visitors' : 'views',
-                  'num',
-                )
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {displayRows.map((row) => {
-              const value = rowValue(row);
-              const barPct = Math.min(100, Math.max(0, Math.round((value / maxY) * 100)));
-              return (
-                <tr key={`${title}-${row.x}`}>
-                  <td className="metrics-table-dim">
-                    <div className="metrics-table-label" title={row.x}>
-                      {row.x}
-                    </div>
-                    <div className="metrics-table-bar" aria-hidden>
-                      <div className="metrics-table-bar-fill">
-                        <div className="metrics-table-bar-inner" style={{ width: `${barPct}%` }} />
-                      </div>
-                    </div>
-                  </td>
-                  {showPageStats ? (
-                    <>
-                      <td className="num">{formatNumber(row.y)}</td>
-                      <td className="num">{formatNumber(row.visitors ?? 0)}</td>
-                      <td className="num">{formatDurationSeconds(row.avgTime)}</td>
-                    </>
-                  ) : (
-                    <td className="num metrics-table-metric">{formatNumber(value)}</td>
-                  )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <BreakdownList
+          items={items}
+          columns={columns}
+          labelHeader={sortable ? (
+            <button type="button" className="breakdown-sort" onClick={() => handleSort('name')}>
+              {t('metricName')}
+            </button>
+          ) : t('metricName')}
+        />
       ) : null}
       {!loading && displayRows.length === 0 ? (
         <EmptyState title={t('noDataInPeriod')} description={t('noDataInPeriodHint')} />
@@ -166,9 +148,8 @@ export function MetricsTable({
   }
 
   return (
-    <section className="panel-flush">
-      <div className="panel-header">{title}</div>
-      <div className="panel-body">{body}</div>
-    </section>
+    <SectionCard title={title}>
+      {body}
+    </SectionCard>
   );
 }

@@ -1,6 +1,7 @@
 import { deDELocale } from './locales/de-DE';
 import { frFRLocale } from './locales/fr-FR';
 import { jaJPLocale } from './locales/ja-JP';
+import { extraMessages } from './i18n-extra';
 
 export const LOCALES = ['en-US', 'zh-CN', 'ja-JP', 'de-DE', 'fr-FR'] as const;
 export type Locale = (typeof LOCALES)[number];
@@ -6011,11 +6012,11 @@ const zhCN: Partial<Record<string, string>> = {
 };
 
 const messages: Record<Locale, Record<string, string>> = {
-  'en-US': enUS,
-  'zh-CN': mergeLocale(zhCN),
-  'ja-JP': mergeLocale(jaJPLocale),
-  'de-DE': mergeLocale(deDELocale),
-  'fr-FR': mergeLocale(frFRLocale),
+  'en-US': { ...enUS, ...extraMessages('en-US') },
+  'zh-CN': { ...mergeLocale(zhCN), ...extraMessages('zh-CN') },
+  'ja-JP': { ...mergeLocale(jaJPLocale), ...extraMessages('ja-JP') },
+  'de-DE': { ...mergeLocale(deDELocale), ...extraMessages('de-DE') },
+  'fr-FR': { ...mergeLocale(frFRLocale), ...extraMessages('fr-FR') },
 };
 
 export function isLocale(value: string): value is Locale {

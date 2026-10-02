@@ -9,6 +9,13 @@ import { ApiError } from './lib/api';
 import { initTheme } from './lib/theme';
 import { initFlareboardTracking } from './lib/tracking';
 import './styles/global.css';
+import './styles/console.css';
+import './styles/pages/traffic.css';
+import './styles/pages/behavior.css';
+import './styles/pages/audience.css';
+import './styles/pages/product.css';
+import './styles/pages/quality.css';
+import './styles/pages/workspace.css';
 
 initTheme();
 initFlareboardTracking();

@@ -7,7 +7,7 @@ import { isMetricTab } from '../lib/breakdown-dimensions';
 import { formatMetricLabel } from '../lib/metric-labels';
 import { t } from '../lib/i18n';
 
-const CARD_LIMIT = 5;
+const CARD_LIMIT = 8;
 
 type CardConfig = {
   titleKey: string;
@@ -109,13 +109,11 @@ export function OverviewDimensions({
   }, [searchParams, hideExplorer]);
 
   return (
-    <section className="overview-dimensions section-gap" aria-labelledby="overview-dimensions-heading">
-      <header className="overview-dimensions-head">
-        <h2 id="overview-dimensions-heading" className="section-title">
-          {t('breakdownMetrics')}
-        </h2>
-      </header>
-      <div className="overview-dimensions-grid">
+    <section className="overview-dimensions" aria-labelledby="overview-dimensions-heading">
+      <h2 id="overview-dimensions-heading" className="visually-hidden">
+        {t('breakdownMetrics')}
+      </h2>
+      <div className="layout-grid layout-grid--stretch overview-dimensions-grid">
         {OVERVIEW_CARDS.map((card) => (
           <OverviewDimensionCardSection
             key={card.titleKey}

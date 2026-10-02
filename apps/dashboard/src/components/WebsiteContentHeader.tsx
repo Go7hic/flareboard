@@ -1,46 +1,24 @@
 import type { ReactNode } from 'react';
-import { ArrowLeft } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { t } from '../lib/i18n';
-import { SidebarNavIcon } from './SidebarNavIcon';
 import { WebsiteSwitcher } from './WebsiteSwitcher';
 
-const OVERVIEW_PATH = '/dashboard';
-
+/**
+ * Website pages' top bar (console v2): a breadcrumb back to all websites and the site switcher,
+ * page-level tools (Ask Flareboard) on the right. The sidebar logo leads to the dashboard.
+ */
 export function WebsiteContentHeader({ actions }: { actions?: ReactNode }) {
-  const navigate = useNavigate();
-
-  function goBack() {
-    if (window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate(OVERVIEW_PATH);
-  }
-
   return (
     <div className="website-content-header">
-      <div className="website-content-nav">
-        <Link
-          to={OVERVIEW_PATH}
-          className="website-content-nav-link"
-          aria-label={t('dashboard')}
-          title={t('dashboard')}
-        >
-          <SidebarNavIcon name="dashboard" />
+      <nav className="website-breadcrumb" aria-label={t('allWebsites')}>
+        <Link to="/websites" className="website-breadcrumb-link">
+          {t('allWebsites')}
         </Link>
-        <button
-          type="button"
-          className="website-content-nav-link"
-          onClick={goBack}
-          aria-label={t('backPrevious')}
-          title={t('backPrevious')}
-        >
-          <ArrowLeft size={14} strokeWidth={2} aria-hidden />
-          <span>{t('back')}</span>
-        </button>
-      </div>
-      <WebsiteSwitcher />
+        <span className="website-breadcrumb-sep" aria-hidden>
+          /
+        </span>
+        <WebsiteSwitcher />
+      </nav>
       {actions ? <div className="website-content-actions">{actions}</div> : null}
     </div>
   );

@@ -1,19 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { Line, LineChart } from 'recharts';
+import { LineChart, Line } from 'recharts';
 import { AnalyticsChart } from '../components/AnalyticsChart';
+import { ChartLegend } from '../components/ChartLegend';
 import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
+import { KpiCell, KpiStrip, KpiStripSkeleton } from '../components/KpiStrip';
 import { StatChangeDelta } from '../components/StatChangeDelta';
 import { MetricsTable } from '../components/MetricsTable';
 import { OverviewDimensions } from '../components/OverviewDimensions';
-import { OverviewMapHeatmapPanel } from '../components/OverviewMapHeatmapPanel';
+import { OverviewCountryMapCard, OverviewTrafficHeatmapCard } from '../components/OverviewMapHeatmapPanel';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
+import { SectionCard } from '../components/SectionCard';
 import { WebsiteStatsControls } from '../components/WebsiteStatsControls';
 import { Button } from '../components/ui/button';
-import { StatCard, StatCardSkeleton, type StatCardSize } from '../components/ui/stat-card';
+import { Skeleton } from '../components/ui/skeleton';
 import {
   api,
   type MetricRow,
@@ -26,30 +29,51 @@ import {
   type MetricsSeries,
 } from '../lib/chartTimeseries';
 import { computeCompareRange, type CompareMode } from '../lib/compare-utils';
-import { formatNumber } from '../lib/format';
+import { lineMark } from '../lib/chartMarks';
+import { formatDurationSeconds, formatNumber, formatPercent } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsiteExport } from '../lib/useWebsiteExport';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
 import { useChartColors } from '../lib/useChartColors';
 
-function OverviewKpi({
-  label,
-  stat,
-  size = 'default',
-}: {
-  label: string;
-  stat?: { value: number; change?: number };
-  size?: StatCardSize;
-}) {
-  if (!stat) return null;
-  return (
-    <StatCard
-      size={size}
-      label={label}
-      value={formatNumber(stat.value)}
-      delta={stat.change !== undefined ? <StatChangeDelta change={stat.change} /> : undefined}
-    />
-  );
+type StatValue = { value: number; change?: number };
+
+/** The previous period's value implied by a value and its % change (undefined when unknown). */
+function previousValue(stat: StatValue | undefined): number | undefined {
+  if (!stat || stat.change === undefined) return undefined;
+  const factor = 1 + stat.change / 100;
+  return factor > 0 ? stat.value / factor : undefined;
+}
+
+function percentChange(current: number, previous: number | undefined): number | undefined {
+  if (previous === undefined || !Number.isFinite(previous) || previous === 0) return undefined;
+  return ((current - previous) / previous) * 100;
+}
+
+/**
+ * Headline metrics for the KPI strip. Bounce rate and average visit duration are derived from
+ * counts (bounces ÷ visits, total time ÷ visits): the raw totals mean little on their own.
+ */
+function overviewMetrics(stats: WebsiteStats) {
+  const visits = stats.visits.value;
+  const bounceRate = visits > 0 ? (stats.bounces.value / visits) * 100 : 0;
+  const avgDuration = visits > 0 ? stats.totaltime.value / visits : 0;
+  const prevVisits = previousValue(stats.visits);
+  const prevBounces = previousValue(stats.bounces);
+  const prevTotal = previousValue(stats.totaltime);
+  const prevBounceRate =
+    prevVisits && prevBounces !== undefined ? (prevBounces / prevVisits) * 100 : undefined;
+  const prevAvgDuration = prevVisits && prevTotal !== undefined ? prevTotal / prevVisits : undefined;
+  return {
+    bounceRate,
+    bounceRateChange: percentChange(bounceRate, prevBounceRate),
+    avgDuration,
+    avgDurationChange: percentChange(avgDuration, prevAvgDuration),
+  };
+}
+
+function compareHint(label: string, value: string) {
+  return `${label} ${value}`;
 }
 
 export default function WebsiteStatsPage() {
@@ -165,22 +189,12 @@ export default function WebsiteStatsPage() {
   const overviewInitialLoading = overviewQuery.isLoading && !overviewQuery.data;
 
   const overviewLoadingFallback = (
-    <>
-      <section className="page-stats-kpis section-gap" aria-hidden>
-        <div className="analytics-hero-stats">
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-        </div>
-      </section>
-      <section className="panel page-stats-chart section-gap" aria-hidden>
-        <div className="chart-wrap chart-wrap-hero chart-skeleton" aria-busy>
-          <div className="skeleton skeleton-block" />
-        </div>
-      </section>
-    </>
+    <div className="stack" aria-hidden>
+      <KpiStripSkeleton cells={5} />
+      <SectionCard title={t('trafficOverTime')}>
+        <Skeleton className="h-[300px] w-full" />
+      </SectionCard>
+    </div>
   );
 
   function clearCohortFilter() {
@@ -233,9 +247,9 @@ export default function WebsiteStatsPage() {
         }
       />
 
-      <PageBody>
+      <PageBody className="stack">
       {activeSegmentId ? (
-        <div className="cohort-filter-banner section-gap">
+        <div className="cohort-filter-banner">
           <span>
             {t('segmentFilterActive').replace(
               '{name}',
@@ -249,7 +263,7 @@ export default function WebsiteStatsPage() {
       ) : null}
 
       {cohortId ? (
-        <div className="cohort-filter-banner section-gap">
+        <div className="cohort-filter-banner">
           <span>
             {t('cohortFilterActive').replace('{name}', cohortQuery.data?.name ?? cohortId)}
           </span>
@@ -265,106 +279,74 @@ export default function WebsiteStatsPage() {
         onRetry={() => overviewQuery.refetch()}
         loadingFallback={overviewLoadingFallback}
       >
-        <section className="page-stats-kpis section-gap" aria-labelledby="analytics-overview">
+        <section aria-labelledby="analytics-overview">
           <h2 id="analytics-overview" className="visually-hidden">
             {t('trafficOverTime')}
           </h2>
-
-          <div className="analytics-hero-stats">
-            {statsLoading ? (
-              <>
-                <StatCardSkeleton />
-                <StatCardSkeleton />
-                <StatCardSkeleton />
-                <StatCardSkeleton />
-                <StatCardSkeleton />
-              </>
-            ) : stats ? (
-              <>
-                <OverviewKpi label={t('pageviews')} stat={stats.pageviews} />
-                <OverviewKpi label={t('visitors')} stat={stats.visitors} />
-                <OverviewKpi label={t('visits')} stat={stats.visits} />
-                <OverviewKpi label={t('bounces')} stat={stats.bounces} />
-                <OverviewKpi label={t('totalTime')} stat={stats.totaltime} />
-              </>
-            ) : null}
-          </div>
-
+          {statsLoading ? (
+            <KpiStripSkeleton cells={5} />
+          ) : stats ? (
+            <OverviewKpiStrip
+              stats={stats}
+              compare={compareEnabled ? compareQuery.data?.compare.stats : undefined}
+              compareLabel={compareModeLabel}
+              pageviewsColor={metricColors.pageviews}
+              visitorsColor={metricColors.visitors}
+            />
+          ) : null}
           {compareEnabled && compareQuery.data ? (
-            <div className="analytics-compare-strip">
-              <div className="analytics-compare-strip-head">
-                <span className="text-muted">{compareModeLabel}</span>
-                <Link className="shell-link analytics-compare-deep-link" to={comparePageTo}>
-                  {t('overviewCompareOpenFull')}
-                </Link>
-              </div>
-              <OverviewKpi
-                label={t('comparePageviews')}
-                stat={compareQuery.data.compare.stats.pageviews}
-                size="secondary"
-              />
-              <OverviewKpi
-                label={t('compareVisitors')}
-                stat={compareQuery.data.compare.stats.visitors}
-                size="secondary"
-              />
-            </div>
+            <p className="overview-compare-note">
+              <span>{compareModeLabel}</span>
+              <Link className="shell-link" to={comparePageTo}>
+                {t('overviewCompareOpenFull')}
+              </Link>
+            </p>
           ) : null}
         </section>
 
-        <section className="panel page-stats-chart section-gap" aria-labelledby="traffic-chart-title">
-          <h2 id="traffic-chart-title" className="section-title">
-            {t('trafficOverTime')}
-          </h2>
+        <SectionCard
+          title={t('trafficOverTime')}
+          actions={
+            <ChartLegend
+              items={[
+                { label: t('visitors'), color: 'var(--chart-visitors)' },
+                { label: t('pageviews'), color: 'var(--chart-pageviews)' },
+              ]}
+            />
+          }
+        >
           {chartLoading ? (
-            <div className="chart-wrap chart-wrap-hero chart-skeleton" aria-busy>
-              <div className="skeleton skeleton-block" />
-            </div>
+            <Skeleton className="h-[300px] w-full" />
           ) : chartData.length > 0 ? (
-            <>
-              <div className="chart-wrap chart-wrap-hero">
-                <AnalyticsChart
-                  Chart={LineChart}
-                  data={chartData}
-                  xAxis={{
-                    dataKey: 'x',
-                    interval: hourly ? 'preserveStartEnd' : undefined,
-                    minTickGap: hourly ? 24 : 8,
-                  }}
-                >
-                  <Line
-                    type="monotone"
-                    dataKey="pageviews"
-                    name={t('pageviews')}
-                    stroke={metricColors.pageviews}
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="visitors"
-                    name={t('visitors')}
-                    stroke={metricColors.visitors}
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                </AnalyticsChart>
-              </div>
-              <div className="dashboard-aggregate-legend analytics-chart-legend" aria-hidden>
-                <span className="dashboard-aggregate-legend-item">
-                  <span className="dashboard-aggregate-legend-swatch dashboard-aggregate-legend-swatch--pageviews" />
-                  <span className="dashboard-aggregate-legend-label">{t('pageviews')}</span>
-                </span>
-                <span className="dashboard-aggregate-legend-item">
-                  <span className="dashboard-aggregate-legend-swatch dashboard-aggregate-legend-swatch--visitors" />
-                  <span className="dashboard-aggregate-legend-label">{t('visitors')}</span>
-                </span>
-              </div>
-            </>
+            <div className="overview-trend-chart">
+              <AnalyticsChart
+                Chart={LineChart}
+                data={chartData}
+                responsive={{ height: 300 }}
+                xAxis={{
+                  dataKey: 'x',
+                  interval: 'preserveStartEnd',
+                  minTickGap: hourly ? 32 : 24,
+                }}
+              >
+                <Line
+                  dataKey="pageviews"
+                  name={t('pageviews')}
+                  stroke={metricColors.pageviews}
+                  {...lineMark(chartColors.panel)}
+                />
+                <Line
+                  dataKey="visitors"
+                  name={t('visitors')}
+                  stroke={metricColors.visitors}
+                  {...lineMark(chartColors.panel)}
+                />
+              </AnalyticsChart>
+            </div>
           ) : (
             <EmptyState title={t('chartNoData')} description={t('noDataInPeriodHint')} />
           )}
-        </section>
+        </SectionCard>
       </DataViewState>
 
       {websiteId ? (
@@ -376,25 +358,80 @@ export default function WebsiteStatsPage() {
         />
       ) : null}
 
-      {eventsQuery.isLoading ||
-      (eventsQuery.data?.length ?? 0) > 0 ||
-      websiteId ? (
-        <div className="overview-secondary">
-          {eventsQuery.isLoading || (eventsQuery.data?.length ?? 0) > 0 ? (
-            <section className="panel custom-events-panel">
-              <MetricsTable
-                embedded
-                title={t('customEvents')}
-                rows={eventsQuery.data ?? []}
-                loading={eventsQuery.isLoading}
-              />
-            </section>
-          ) : null}
-
-          {websiteId ? <OverviewMapHeatmapPanel websiteId={websiteId} qs={qs} /> : null}
+      {websiteId ? (
+        <div className="layout-grid layout-grid--stretch">
+          <OverviewCountryMapCard websiteId={websiteId} qs={qs} className="span-7" />
+          <SectionCard className="span-5" title={t('customEvents')}>
+            <MetricsTable
+              embedded
+              hideTitle
+              title={t('customEvents')}
+              rows={eventsQuery.data ?? []}
+              loading={eventsQuery.isLoading}
+              maxRows={8}
+            />
+          </SectionCard>
+          <OverviewTrafficHeatmapCard websiteId={websiteId} qs={qs} className="span-12" />
         </div>
       ) : null}
       </PageBody>
     </Page>
+  );
+}
+
+function OverviewKpiStrip({
+  stats,
+  compare,
+  compareLabel,
+  pageviewsColor,
+  visitorsColor,
+}: {
+  stats: WebsiteStats;
+  compare?: WebsiteStats;
+  compareLabel: string;
+  pageviewsColor: string;
+  visitorsColor: string;
+}) {
+  const derived = overviewMetrics(stats);
+  const compareDerived = compare ? overviewMetrics(compare) : undefined;
+  const delta = (change: number | undefined, invert = false) =>
+    change === undefined ? undefined : <StatChangeDelta change={change} invertColors={invert} />;
+  const hint = (value: string | undefined) => (value === undefined ? undefined : compareHint(compareLabel, value));
+
+  return (
+    <KpiStrip columns={5}>
+      <KpiCell
+        label={t('visitors')}
+        keyColor={visitorsColor}
+        value={formatNumber(stats.visitors.value)}
+        delta={delta(stats.visitors.change)}
+        hint={hint(compare ? formatNumber(compare.visitors.value) : undefined)}
+      />
+      <KpiCell
+        label={t('visits')}
+        value={formatNumber(stats.visits.value)}
+        delta={delta(stats.visits.change)}
+        hint={hint(compare ? formatNumber(compare.visits.value) : undefined)}
+      />
+      <KpiCell
+        label={t('pageviews')}
+        keyColor={pageviewsColor}
+        value={formatNumber(stats.pageviews.value)}
+        delta={delta(stats.pageviews.change)}
+        hint={hint(compare ? formatNumber(compare.pageviews.value) : undefined)}
+      />
+      <KpiCell
+        label={t('bounceRate')}
+        value={formatPercent(derived.bounceRate, { digits: derived.bounceRate < 10 ? 1 : 0 })}
+        delta={delta(derived.bounceRateChange, true)}
+        hint={hint(compareDerived ? formatPercent(compareDerived.bounceRate) : undefined)}
+      />
+      <KpiCell
+        label={t('avgDuration')}
+        value={formatDurationSeconds(derived.avgDuration)}
+        delta={delta(derived.avgDurationChange)}
+        hint={hint(compareDerived ? formatDurationSeconds(compareDerived.avgDuration) : undefined)}
+      />
+    </KpiStrip>
   );
 }

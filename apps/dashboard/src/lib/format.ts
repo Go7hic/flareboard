@@ -69,6 +69,80 @@ export function formatDateTime(
   });
 }
 
+/**
+ * Compact date-time for tables, lists and detail fields: "Oct 2, 23:32" / "10月2日 23:32",
+ * with the year only when it is not the current one. Put the full timestamp in a `title`.
+ */
+export function formatShortDateTime(
+  value: string | number | Date | null | undefined,
+  opts?: { timeZone?: string; now?: Date },
+): string {
+  if (value == null) return EMPTY;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return EMPTY;
+  const now = opts?.now ?? new Date();
+  return date.toLocaleString(getLocale(), {
+    ...(date.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' as const }),
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    timeZone: opts?.timeZone,
+  });
+}
+
+/** Compact date without time: "Oct 2" / "10月2日", with the year only when not the current one. */
+export function formatShortDate(
+  value: string | number | Date | null | undefined,
+  opts?: { timeZone?: string; now?: Date },
+): string {
+  if (value == null) return EMPTY;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return EMPTY;
+  const now = opts?.now ?? new Date();
+  return date.toLocaleDateString(getLocale(), {
+    ...(date.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' as const }),
+    month: 'short',
+    day: 'numeric',
+    timeZone: opts?.timeZone,
+  });
+}
+
+const RELATIVE_STEPS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+  ['second', 60],
+  ['minute', 60],
+  ['hour', 24],
+  ['day', 7],
+  ['week', 4.34524],
+  ['month', 12],
+  ['year', Number.POSITIVE_INFINITY],
+];
+
+/**
+ * "just now", "3 min ago", "2 天前": for lists where recency matters more than the exact time.
+ * Beyond ~a week it falls back to formatShortDate, which reads better than "5 weeks ago".
+ */
+export function formatRelativeTime(
+  value: string | number | Date | null | undefined,
+  opts?: { now?: number; maxDays?: number },
+): string {
+  if (value == null) return EMPTY;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return EMPTY;
+  const now = opts?.now ?? Date.now();
+  const diffSeconds = (date.getTime() - now) / 1000;
+  if (Math.abs(diffSeconds) >= (opts?.maxDays ?? 7) * 86_400) return formatShortDate(date);
+  if (Math.abs(diffSeconds) < 45) return t('timeJustNow');
+  const rtf = new Intl.RelativeTimeFormat(getLocale(), { numeric: 'auto', style: 'short' });
+  let amount = diffSeconds;
+  for (const [unit, size] of RELATIVE_STEPS) {
+    if (Math.abs(amount) < size) return rtf.format(Math.round(amount), unit);
+    amount /= size;
+  }
+  return formatShortDate(date);
+}
+
 export function formatDateOnly(value: string | number | null | undefined): string {
   if (value == null) return EMPTY;
   const date = new Date(value);

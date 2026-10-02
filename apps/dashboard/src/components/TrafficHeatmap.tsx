@@ -7,6 +7,8 @@ import { Skeleton } from './ui/skeleton';
 
 const DOW_ORDER = [1, 2, 3, 4, 5, 6, 0];
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
+/** Steps of the sequential ramp (one hue, light → dark), also drawn as the scale legend. */
+const RAMP = [0.12, 0.3, 0.5, 0.72, 1];
 
 function dowLabel(dow: number): string {
   return t(`trafficHeatmapDow_${dow}`);
@@ -22,24 +24,17 @@ function formatHourLabel(hour: number): string {
   return t('trafficHeatmapHourPm').replace('{hour}', String(hour - 12));
 }
 
-function circleStyle(intensity: number, count: number): CSSProperties {
-  if (count <= 0) {
-    return {
-      width: '6px',
-      height: '6px',
-      background: 'var(--border)',
-      opacity: 0.35,
-    };
-  }
-  const size = 6 + intensity * 14;
-  const pct = Math.round(20 + intensity * 80);
-  return {
-    width: `${size}px`,
-    height: `${size}px`,
-    background: `color-mix(in srgb, var(--chart-1) ${pct}%, var(--bg-subtle))`,
-  };
+/** Sequential slot-1 ramp mixed into the subtle surface, so it works on both themes. */
+function cellStyle(intensity: number, count: number): CSSProperties {
+  if (count <= 0) return {};
+  const step = RAMP.find((value) => intensity <= value) ?? 1;
+  return { background: `color-mix(in srgb, var(--chart-1) ${Math.round(step * 100)}%, var(--bg-subtle))` };
 }
 
+/**
+ * Weekday × hour heatmap (console v2): 7 rows of 24 cells, one-hue sequential ramp, hour ticks
+ * every 3 hours, exact counts on hover. Replaces the tall 24-row punch card.
+ */
 export function TrafficHeatmap({
   cells,
   max,
@@ -51,64 +46,53 @@ export function TrafficHeatmap({
 }) {
   const matrix = useMemo(() => {
     const lookup = new Map(cells.map((c) => [`${c.dow}:${c.hour}`, c.count]));
-    return HOURS.map((hour) =>
-      DOW_ORDER.map((dow) => lookup.get(`${dow}:${hour}`) ?? 0),
-    );
+    return DOW_ORDER.map((dow) => HOURS.map((hour) => lookup.get(`${dow}:${hour}`) ?? 0));
   }, [cells]);
 
   const peak = Math.max(max, 1);
 
   if (loading) {
-    return <Skeleton className="traffic-heatmap-skeleton h-56 w-full" />;
+    return <Skeleton className="traffic-heatmap-skeleton h-44 w-full" />;
   }
 
   if (!cells.length) {
-    return (
-      <EmptyState title={t('noDataInPeriod')} description={t('noDataInPeriodHint')} />
-    );
+    return <EmptyState title={t('noDataInPeriod')} description={t('noDataInPeriodHint')} />;
   }
 
   return (
-    <div className="traffic-heatmap-wrap">
-      <div className="traffic-heatmap-punch" role="grid" aria-label={t('trafficHeatmap')}>
-        <div className="traffic-heatmap-punch-corner" aria-hidden />
-        {DOW_ORDER.map((dow) => (
-          <div key={dow} className="traffic-heatmap-punch-dow" role="columnheader">
-            {dowLabel(dow)}
-          </div>
+    <div className="traffic-heatmap">
+      <div className="traffic-heatmap-grid" role="grid" aria-label={t('trafficHeatmap')}>
+        <span aria-hidden />
+        {HOURS.map((hour) => (
+          <span key={hour} className="traffic-heatmap-hour" role="columnheader" aria-label={formatHourLabel(hour)}>
+            {hour % 3 === 0 ? formatHourLabel(hour) : ''}
+          </span>
         ))}
-        {HOURS.map((hour, rowIndex) => (
-          <Fragment key={hour}>
-            <div className="traffic-heatmap-punch-hour" role="rowheader">
-              {formatHourLabel(hour)}
-            </div>
-            {DOW_ORDER.map((dow, colIndex) => {
-              const count = matrix[rowIndex]?.[colIndex] ?? 0;
-              const intensity = count / peak;
+        {DOW_ORDER.map((dow, rowIndex) => (
+          <Fragment key={dow}>
+            <span className="traffic-heatmap-dow" role="rowheader">
+              {dowLabel(dow)}
+            </span>
+            {HOURS.map((hour) => {
+              const count = matrix[rowIndex]?.[hour] ?? 0;
               return (
-                <div key={`${hour}-${dow}`} className="traffic-heatmap-punch-cell" role="gridcell">
-                  <span
-                    className="traffic-heatmap-punch-dot"
-                    style={circleStyle(intensity, count)}
-                    title={`${dowLabel(dow)} ${formatHourLabel(hour)} — ${formatNumber(count)} ${t('pageviews')}`}
-                  />
-                </div>
+                <span
+                  key={hour}
+                  role="gridcell"
+                  className="traffic-heatmap-cell"
+                  style={cellStyle(count / peak, count)}
+                  title={`${dowLabel(dow)} ${formatHourLabel(hour)} · ${formatNumber(count)} ${t('pageviews')}`}
+                />
               );
             })}
           </Fragment>
         ))}
       </div>
-      <div className="heatmap-legend traffic-heatmap-legend">
+      <div className="traffic-heatmap-legend">
         <span>{t('heatmapLegendLow')}</span>
-        <div className="traffic-heatmap-legend-dots" aria-hidden>
-          {[0.15, 0.4, 0.7, 1].map((intensity) => (
-            <span
-              key={intensity}
-              className="traffic-heatmap-punch-dot"
-              style={circleStyle(intensity, 1)}
-            />
-          ))}
-        </div>
+        {RAMP.map((step) => (
+          <span key={step} className="traffic-heatmap-cell" style={cellStyle(step, 1)} aria-hidden />
+        ))}
         <span>{t('heatmapLegendHigh')}</span>
       </div>
     </div>

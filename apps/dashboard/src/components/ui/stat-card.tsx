@@ -15,29 +15,22 @@ interface StatCardProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 const sizeShell: Record<StatCardSize, string> = {
-  default: 'px-[1.2rem] py-[1.1rem]',
-  hero: 'px-[1.5rem] py-[1.4rem]',
-  secondary: 'px-[1.1rem] py-[0.95rem] shadow-none hover:shadow-none',
-};
-
-const sizeLabel: Record<StatCardSize, string> = {
-  default: 'text-[0.6875rem]',
-  hero: 'text-[0.6875rem]',
-  secondary: 'text-[0.625rem]',
+  default: 'px-[1.25rem] py-[1rem]',
+  hero: 'px-[1.25rem] py-[1.15rem]',
+  secondary: 'px-[1rem] py-[0.85rem]',
 };
 
 const sizeValue: Record<StatCardSize, string> = {
-  default: 'text-[1.75rem] leading-[1.05]',
-  hero: 'text-[2.125rem] leading-[1.05]',
-  secondary: 'text-[1.375rem] leading-[1.1]',
+  default: 'text-[1.75rem] leading-[1.1]',
+  hero: 'text-[2.25rem] leading-[1.05]',
+  secondary: 'text-[1.375rem] leading-[1.15]',
 };
 
-const sizeDelta: Record<StatCardSize, string> = {
-  default: 'text-[0.75rem]',
-  hero: 'text-[0.75rem]',
-  secondary: 'text-[0.625rem]',
-};
-
+/**
+ * A single figure in its own card (console v2). Prefer <KpiStrip> for a row of headline numbers;
+ * StatCard is for a lone figure beside other content. Labels are sentence case, values use
+ * proportional Geist Sans figures (tabular figures are for columns).
+ */
 function StatCard({
   label,
   value,
@@ -52,27 +45,17 @@ function StatCard({
   return (
     <div
       className={cn(
-        'rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-elevated)]',
+        'min-w-0 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-elevated)]',
         sizeShell[size],
-        size === 'default' && 'shadow-[var(--shadow-sm)]',
-        'transition-[border-color,box-shadow] duration-200',
-        size !== 'secondary' && 'hover:border-[var(--border-strong)] hover:shadow-[var(--shadow-md)]',
-        variant === 'primary' && 'border-[var(--border-strong)] bg-[var(--bg-subtle)]',
+        variant === 'primary' && 'bg-[var(--bg-subtle)]',
         className
       )}
       {...props}
     >
+      <p className="truncate text-[0.8125rem] font-medium text-[var(--text-muted)]">{label}</p>
       <p
         className={cn(
-          'font-semibold uppercase tracking-[0.05em] text-[var(--text-muted)]',
-          sizeLabel[size]
-        )}
-      >
-        {label}
-      </p>
-      <p
-        className={cn(
-          'mt-[0.3rem] font-mono font-semibold tracking-[-0.03em] tabular-nums [overflow-wrap:anywhere]',
+          'mt-[0.35rem] truncate font-semibold tracking-[-0.02em] text-[var(--text)]',
           sizeValue[size]
         )}
       >
@@ -81,8 +64,7 @@ function StatCard({
       {delta !== undefined ? (
         <div
           className={cn(
-            'mt-[0.4rem] font-mono tabular-nums whitespace-nowrap',
-            sizeDelta[size],
+            'mt-[0.4rem] text-[0.75rem] whitespace-nowrap [font-variant-numeric:tabular-nums]',
             deltaDirection === 'positive' && 'text-[var(--success)]',
             deltaDirection === 'negative' && 'text-[var(--danger)]',
             deltaDirection === 'neutral' && 'text-[var(--text-muted)]'
@@ -106,9 +88,8 @@ function StatCardSkeleton({
   return (
     <div
       className={cn(
-        'rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg-elevated)]',
+        'rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg-elevated)]',
         sizeShell[size],
-        size === 'default' && 'shadow-[var(--shadow-sm)]',
         className
       )}
       aria-hidden

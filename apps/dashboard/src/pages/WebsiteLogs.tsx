@@ -328,11 +328,11 @@ export default function WebsiteLogsPage() {
         lead={t('qualityLogsLead')}
         actions={
           <div className="q-header-actions">
-            <Button type="button" variant="outline" size="sm" onClick={() => setSheet('filters')}>
+            <Button type="button" variant="outline" onClick={() => setSheet('filters')}>
               <Bookmark aria-hidden />
               {t('logsSavedFilters')}
             </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => setSheet('alerts')}>
+            <Button type="button" variant="outline" onClick={() => setSheet('alerts')}>
               <BellRing aria-hidden />
               {t('logsAlertRules')}
             </Button>

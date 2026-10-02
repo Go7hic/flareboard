@@ -4189,17 +4189,6 @@ code {
     align-items: flex-start;
   }
 
-  .page-header-actions {
-    width: 100%;
-    justify-content: flex-end;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .page-header-actions::-webkit-scrollbar {
-    display: none;
-  }
 }
 
 @media (max-width: 720px) {
@@ -5086,6 +5075,23 @@ code {
   max-width: 100%;
   margin-left: auto;
   justify-content: flex-end;
+}
+
+/* Narrow screens: actions sit under the title, left-aligned like the copy, and wrap so no
+   control hides off-screen; nested groups drop their push-right auto margins. */
+@media (max-width: 900px) {
+  .page-header-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .page-header-actions > *,
+  .page-header-actions .stats-header-controls,
+  .page-header-actions .date-range-picker {
+    margin-left: 0;
+  }
 }
 
 

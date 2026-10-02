@@ -521,11 +521,6 @@ const sections: LegalSection[] = [
                 </td>
                 <td>Your questions, recent conversation messages and capped query results about the website</td>
               </tr>
-              <tr>
-                <td>favicon.so</td>
-                <td>Shows the icon of each website in your dashboard</td>
-                <td>The domain names of websites you add, plus your IP address as part of the request</td>
-              </tr>
             </tbody>
           </table>
         </div>

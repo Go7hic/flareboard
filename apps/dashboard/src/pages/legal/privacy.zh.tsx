@@ -401,11 +401,6 @@ const sections: LegalSection[] = [
                 </td>
                 <td>你的问题、近期对话消息，以及有大小上限的网站查询结果</td>
               </tr>
-              <tr>
-                <td>favicon.so</td>
-                <td>在控制台中显示每个网站的图标</td>
-                <td>你添加的网站域名，以及请求中包含的你的 IP 地址</td>
-              </tr>
             </tbody>
           </table>
         </div>

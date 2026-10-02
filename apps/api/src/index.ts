@@ -19,6 +19,7 @@ import * as dashboardOverview from './routes/dashboard-overview';
 import * as eventData from './routes/event-data';
 import * as errors from './routes/errors';
 import * as experiments from './routes/experiments';
+import * as favicon from './routes/favicon';
 import * as featureFlags from './routes/feature-flags';
 import * as groups from './routes/groups';
 import * as insights from './routes/insights';
@@ -135,6 +136,9 @@ app.get('/api/demo', demo.handleMeta);
 app.get('/api/demo/overview', demo.handleOverview);
 app.get('/api/demo/metrics', demo.handleMetrics);
 app.post('/api/demo/session', demo.handleSession);
+
+app.use('/api/favicon', jwtAuth);
+app.get('/api/favicon', favicon.handleFavicon);
 
 // Hono matches `use` paths exactly: '/api/me' alone left /api/me/password without a user (500).
 app.use('/api/me', jwtAuth);

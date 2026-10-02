@@ -1,5 +1,9 @@
+import { useState } from 'react';
+import { ChevronRight } from 'lucide-react';
 import type { ResolvedStackFrame } from '../lib/api';
 import { t } from '../lib/i18n';
+import { cn } from '../lib/utils';
+import { StatusBadge } from './StatusBadge';
 
 function frameLocation(frame: ResolvedStackFrame) {
   if (frame.resolved && frame.source) {
@@ -10,45 +14,83 @@ function frameLocation(frame: ResolvedStackFrame) {
 }
 
 /**
- * Stack frames, innermost first. In-app frames are emphasized; resolved frames show the original
- * source location and, when the source map embeds sources, the lines around the failing one.
+ * Stack frames, innermost first, as hairline rows inside their card. In-app frames read at full
+ * strength, library frames are dimmed. Frames with source context expand to show the lines around
+ * the failing one; the first of them starts open.
  */
 export function ErrorStackTrace({ frames }: { frames: ResolvedStackFrame[] }) {
+  const firstWithContext = frames.findIndex((frame) => frame.context);
+  const [open, setOpen] = useState<Set<number>>(() => new Set(firstWithContext >= 0 ? [firstWithContext] : []));
+
+  const toggle = (index: number) =>
+    setOpen((current) => {
+      const next = new Set(current);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+
   return (
-    <ol className="error-stack">
-      {frames.map((frame, index) => (
-        <li
-          key={`${index}:${frame.raw}`}
-          className={frame.inApp ? 'error-stack-frame' : 'error-stack-frame error-stack-frame-library'}
-        >
-          <div className="error-stack-frame-head">
-            <span className="mono error-stack-function">{frame.functionName || '<anonymous>'}</span>
-            <span className="mono text-muted error-stack-location">{frameLocation(frame)}</span>
-            {!frame.inApp ? <span className="badge error-stack-badge">{t('errorIssueFrameLibrary')}</span> : null}
-          </div>
-          {frame.resolved ? (
-            <div className="mono text-muted error-stack-generated">
-              {frame.file}:{frame.line ?? '?'}:{frame.column ?? '?'}
-            </div>
-          ) : null}
-          {frame.context ? (
-            <pre className="error-stack-context">
-              {frame.context.lines.map((text, offset) => {
-                const lineNumber = frame.context!.startLine + offset;
-                const current = lineNumber === frame.sourceLine;
-                return (
-                  <code key={lineNumber} className={current ? 'error-stack-context-line is-current' : 'error-stack-context-line'}>
-                    <span className="error-stack-context-number" aria-hidden>
-                      {lineNumber}
-                    </span>
-                    {text || ' '}
-                  </code>
-                );
-              })}
-            </pre>
-          ) : null}
-        </li>
-      ))}
+    <ol className="q-stack">
+      {frames.map((frame, index) => {
+        const expandable = Boolean(frame.context);
+        const expanded = expandable && open.has(index);
+        const head = (
+          <>
+            {expandable ? (
+              <ChevronRight className={cn('q-stack-chevron', expanded && 'is-open')} size={14} strokeWidth={2} aria-hidden />
+            ) : (
+              <span className="q-stack-chevron" aria-hidden />
+            )}
+            <span className="q-stack-fn">{frame.functionName || '<anonymous>'}</span>
+            <span className="q-stack-loc" title={frameLocation(frame)}>
+              {frameLocation(frame)}
+            </span>
+            {!frame.inApp ? (
+              <StatusBadge dot={false} className="q-stack-badge">
+                {t('errorIssueFrameLibrary')}
+              </StatusBadge>
+            ) : null}
+          </>
+        );
+        return (
+          <li key={`${index}:${frame.raw}`} className={cn('q-stack-frame', !frame.inApp && 'is-library')}>
+            {expandable ? (
+              <button
+                type="button"
+                className="q-stack-head"
+                aria-expanded={expanded}
+                onClick={() => toggle(index)}
+              >
+                {head}
+              </button>
+            ) : (
+              <div className="q-stack-head">{head}</div>
+            )}
+            {frame.resolved ? (
+              <div className="q-stack-generated">
+                {frame.file}:{frame.line ?? '?'}:{frame.column ?? '?'}
+              </div>
+            ) : null}
+            {expanded && frame.context ? (
+              <pre className="q-stack-context">
+                {frame.context.lines.map((text, offset) => {
+                  const lineNumber = frame.context!.startLine + offset;
+                  const current = lineNumber === frame.sourceLine;
+                  return (
+                    <code key={lineNumber} className={cn('q-stack-line', current && 'is-current')}>
+                      <span className="q-stack-line-no" aria-hidden>
+                        {lineNumber}
+                      </span>
+                      {text || ' '}
+                    </code>
+                  );
+                })}
+              </pre>
+            ) : null}
+          </li>
+        );
+      })}
     </ol>
   );
 }

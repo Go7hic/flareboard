@@ -1,11 +1,13 @@
-import { CHART_SERIES_COLORS } from '../lib/chart-colors';
-
-/** Tiny bar sparkline of an issue's occurrences across the selected range. */
+/**
+ * Tiny bar sparkline of an issue's occurrences across the selected range (one bar per slice, a
+ * hairline tick where a slice is empty). Bars use the series slot 1 color through CSS
+ * (`.q-spark-bar`), so they follow the theme.
+ */
 export function ErrorIssueTrend({
   values,
   label,
-  width = 96,
-  height = 24,
+  width = 72,
+  height = 20,
 }: {
   values: number[];
   label: string;
@@ -14,32 +16,34 @@ export function ErrorIssueTrend({
 }) {
   const max = Math.max(1, ...values);
   const slot = values.length ? width / values.length : width;
-  const barWidth = Math.max(1, slot - 1);
+  const gap = slot > 3 ? 1 : 0;
+  const barWidth = Math.max(1, slot - gap);
+  const total = values.reduce((sum, value) => sum + value, 0);
   return (
     <svg
-      className="error-issue-trend"
+      className="q-spark"
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
       role="img"
-      aria-label={`${label}: ${values.reduce((sum, value) => sum + value, 0)}`}
+      aria-label={`${label}: ${total}`}
     >
-      <line x1={0} x2={width} y1={height - 0.5} y2={height - 0.5} className="error-issue-trend-baseline" />
-      {values.map((value, index) =>
-        value > 0 ? (
+      {values.map((value, index) => {
+        const barHeight = value > 0 ? Math.max(2, (value / max) * height) : 1;
+        return (
           <rect
             key={index}
+            className={value > 0 ? 'q-spark-bar' : 'q-spark-empty'}
             x={index * slot}
-            y={height - Math.max(2, (value / max) * height)}
+            y={height - barHeight}
             width={barWidth}
-            height={Math.max(2, (value / max) * height)}
-            rx={1}
-            fill={CHART_SERIES_COLORS[0]}
+            height={barHeight}
+            rx={value > 0 ? 1 : 0}
           >
-            <title>{value}</title>
+            {value > 0 ? <title>{value}</title> : null}
           </rect>
-        ) : null,
-      )}
+        );
+      })}
     </svg>
   );
 }

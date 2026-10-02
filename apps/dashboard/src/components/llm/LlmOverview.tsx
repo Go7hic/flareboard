@@ -1,218 +1,314 @@
-import { useMemo, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
-import { Bar, BarChart, Line, LineChart } from 'recharts';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Bar, BarChart, BarStack, Line, LineChart } from 'recharts';
+import { Sparkles } from 'lucide-react';
 import { AnalyticsChart } from '../AnalyticsChart';
+import { BreakdownList, type BreakdownItem } from '../BreakdownList';
+import { ChartLegend } from '../ChartLegend';
 import { EmptyState } from '../EmptyState';
-import { StatCard } from '../ui/stat-card';
+import { KpiCell, KpiStrip } from '../KpiStrip';
+import { SectionCard } from '../SectionCard';
+import { StatusBadge } from '../StatusBadge';
+import { bucketTicks, NonZeroTooltip, stackedAxis } from '../quality/chartParts';
+import { RelativeTime } from '../quality/RelativeTime';
+import { useMediaQuery } from '../quality/useMediaQuery';
 import { type AiObservabilityResponse } from '../../lib/api';
-import { chartSeriesColor } from '../../lib/chart-colors';
-import { formatDateTime, formatNumber } from '../../lib/format';
+import { getSeverityColors } from '../../lib/chart-colors';
+import { BAR_MARK, lineMark, STACK_MARK } from '../../lib/chartMarks';
+import { formatNumber, formatPercent } from '../../lib/format';
 import { t } from '../../lib/i18n';
 import { useChartColors } from '../../lib/useChartColors';
-import { formatBucket, formatMs, formatUsd } from './llm-format';
+import { formatBucket, formatMs, formatMsTick, formatUsd, formatUsdTick } from './llm-format';
 
 type Stats = AiObservabilityResponse['stats'];
 type TrendRow = Stats['trend'][number];
 
 const HOUR = 60 * 60 * 1000;
 
-function nextBucket(bucket: string, unit: 'hour' | 'day') {
-  if (unit === 'hour') return new Date(Date.parse(bucket) + HOUR).toISOString().replace('.000Z', 'Z');
-  const date = new Date(`${bucket}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + 1);
-  return date.toISOString().slice(0, 10);
+function emptyRow(date: string): TrendRow {
+  return {
+    date,
+    calls: 0,
+    tokens: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    costUsd: 0,
+    unpricedCalls: 0,
+    errors: 0,
+    errorRate: 0,
+    avgLatencyMs: null,
+    sessions: 0,
+    p50LatencyMs: null,
+    p95LatencyMs: null,
+  };
 }
 
-/** Continuous buckets between the first and last with data, so gaps read as zero. */
-function fillTrend(rows: TrendRow[], unit: 'hour' | 'day'): TrendRow[] {
-  if (rows.length < 2) return rows;
+/** Site-local calendar date (YYYY-MM-DD) of a timestamp. */
+function localDate(ms: number, timeZone: string) {
+  return new Date(ms).toLocaleDateString('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
+}
+
+function nextDate(date: string) {
+  const next = new Date(`${date}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return next.toISOString().slice(0, 10);
+}
+
+/**
+ * Every bucket of the selected range, so quiet hours read as zero and the bars spread over the
+ * whole period instead of only the stretch that had calls. Hours are ISO UTC, days site-local.
+ */
+export function fillTrend(rows: TrendRow[], unit: 'hour' | 'day', range: { startAt: number; endAt: number }, timeZone: string) {
   const byBucket = new Map(rows.map((row) => [row.date, row]));
   const out: TrendRow[] = [];
-  const last = rows[rows.length - 1]!.date;
-  for (let bucket = rows[0]!.date, guard = 0; bucket <= last && guard < 2000; bucket = nextBucket(bucket, unit), guard++) {
-    out.push(
-      byBucket.get(bucket) ?? {
-        date: bucket,
-        calls: 0,
-        tokens: 0,
-        inputTokens: 0,
-        outputTokens: 0,
-        costUsd: 0,
-        unpricedCalls: 0,
-        errors: 0,
-        errorRate: 0,
-        avgLatencyMs: null,
-        sessions: 0,
-        p50LatencyMs: null,
-        p95LatencyMs: null,
-      },
-    );
+  if (unit === 'hour') {
+    const first = Math.floor(range.startAt / HOUR) * HOUR;
+    for (let at = first, guard = 0; at <= range.endAt && guard < 2000; at += HOUR, guard++) {
+      const bucket = new Date(at).toISOString().replace('.000Z', 'Z');
+      out.push(byBucket.get(bucket) ?? emptyRow(bucket));
+    }
+  } else {
+    const last = localDate(range.endAt, timeZone);
+    for (let date = localDate(range.startAt, timeZone), guard = 0; date <= last && guard < 400; date = nextDate(date), guard++) {
+      out.push(byBucket.get(date) ?? emptyRow(date));
+    }
   }
-  return out;
+  // Buckets the range walk did not produce (should not happen) are kept, in order.
+  const seen = new Set(out.map((row) => row.date));
+  for (const row of rows) if (!seen.has(row.date)) out.push(row);
+  return out.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-function Legend({ items }: { items: Array<{ label: string; color: string }> }) {
-  return (
-    <div className="llm-legend">
-      {items.map((item) => (
-        <span key={item.label} className="llm-legend-item">
-          <span className="llm-legend-swatch" style={{ background: item.color }} aria-hidden />
-          {item.label}
-        </span>
-      ))}
-    </div>
-  );
-}
+type Dimension = 'provider' | 'release' | 'environment' | 'quality';
 
-function ChartPanel({ title, legend, children }: { title: string; legend?: ReactNode; children: ReactNode }) {
-  return (
-    <div className="panel llm-chart-panel">
-      <header className="compact-panel-header">
-        <h3 className="section-title">{title}</h3>
-        {legend}
-      </header>
-      <div className="chart-wrap chart-wrap-compact">{children}</div>
-    </div>
-  );
-}
-
-function Breakdown({ title, rows }: { title: string; rows: Array<{ key: string; calls: number; detail: string }> }) {
-  const max = Math.max(1, ...rows.map((row) => row.calls));
-  if (!rows.length) return null;
-  return (
-    <div className="detail-section">
-      <h3 className="section-title">{title}</h3>
-      <div className="breakdown-list">
-        {rows.map((row) => (
-          <div key={row.key} className="breakdown-row">
-            <div className="breakdown-meta">
-              <strong>{row.key}</strong>
-              <span className="text-muted">{row.detail}</span>
-            </div>
-            <div className="breakdown-track" aria-hidden>
-              <span style={{ width: `${Math.round((row.calls / max) * 100)}%` }} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+/**
+ * Latency lines break where an hour had no calls (no value, not zero). A value with empty
+ * neighbours would then draw nothing, so it gets a small dot instead.
+ */
+function isolatedDot(rows: Array<Record<string, unknown>>, key: string, color: string) {
+  return function IsolatedDot(props: { cx?: number; cy?: number; index?: number }) {
+    const index = props.index ?? -1;
+    const has = (i: number) => rows[i]?.[key] != null;
+    if (props.cx == null || props.cy == null || !has(index) || has(index - 1) || has(index + 1)) {
+      return <g key={`${key}-${index}`} />;
+    }
+    return <circle key={`${key}-${index}`} cx={props.cx} cy={props.cy} r={2.5} fill={color} />;
+  };
 }
 
 export function LlmOverview({
   websiteId,
   stats,
   events,
+  range,
+  timezone,
 }: {
   websiteId: string;
   stats: Stats | undefined;
   events: AiObservabilityResponse['events'];
+  range: { startAt: number; endAt: number };
+  timezone: string;
 }) {
   const colors = useChartColors();
+  const narrow = useMediaQuery('(max-width: 640px)');
+  const navigate = useNavigate();
+  const severityColors = useMemo(() => getSeverityColors(), [colors]);
+  const [dimension, setDimension] = useState<Dimension>('provider');
   const unit = stats?.unit ?? 'day';
-  const trend = useMemo(
-    () =>
-      fillTrend(stats?.trend ?? [], unit).map((row) => ({
-        ...row,
-        label: formatBucket(row.date, unit),
-      })),
-    [stats?.trend, unit],
-  );
+  const trend = useMemo(() => {
+    let previous = '';
+    return fillTrend(stats?.trend ?? [], unit, range, timezone).map((row, i) => {
+      const label = formatBucket(row.date, unit);
+      const tick = label === previous ? '' : label;
+      previous = label;
+      return { ...row, i, tick, title: label, successes: Math.max(0, row.calls - row.errors) };
+    });
+  }, [stats?.trend, unit, range, timezone]);
+  const ticks = useMemo(() => bucketTicks(trend, narrow ? 4 : 8), [trend, narrow]);
 
   if (!stats) return null;
   if (!stats.calls) {
-    return (
-      <EmptyState title={t('aiEmptyTitle')} description={t('aiSetupBody')} />
-    );
+    return <EmptyState variant="rich" icon={<Sparkles />} title={t('aiEmptyTitle')} description={t('aiSetupBody')} />;
   }
 
-  const palette = colors.palette;
-  const series = (index: number) => palette[index] || colors.accent;
+  const series = (index: number) => colors.palette[index] || colors.accent;
+  const xAxis = {
+    dataKey: 'i',
+    ticks,
+    interval: 0 as const,
+    tickFormatter: (index: number) => trend[index]?.tick ?? '',
+  };
+  const titleFor = (payload: readonly { payload?: Record<string, unknown> }[]) => String(payload[0]?.payload?.title ?? '');
+
+  const maxModelCost = Math.max(0, ...stats.models.map((row) => row.costUsd));
+  const costByModel: BreakdownItem[] = [...stats.models]
+    .sort((a, b) => b.costUsd - a.costUsd || b.calls - a.calls)
+    .slice(0, 8)
+    .map((row) => ({
+      id: row.model,
+      label: row.model,
+      title: row.model,
+      mono: true,
+      share: maxModelCost ? row.costUsd / maxModelCost : 0,
+      values: [row.unpricedCalls && !row.costUsd ? t('aiUnpriced') : formatUsd(row.costUsd), formatNumber(row.calls)],
+    }));
+
+  const dimensionRows: Record<Dimension, Array<{ key: string; calls: number; cost?: number }>> = {
+    provider: stats.providers.map((row) => ({ key: row.provider, calls: row.calls, cost: row.costUsd })),
+    release: stats.releases.filter((row) => row.release !== 'unknown').map((row) => ({ key: row.release, calls: row.calls, cost: row.costUsd })),
+    environment: stats.environments
+      .filter((row) => row.environment !== 'unknown')
+      .map((row) => ({ key: row.environment, calls: row.calls, cost: row.costUsd })),
+    quality: stats.qualities.filter((row) => row.quality !== 'unknown').map((row) => ({ key: row.quality, calls: row.calls })),
+  };
+  const dimensionLabels: Record<Dimension, string> = {
+    provider: t('aiProvider'),
+    release: t('release'),
+    environment: t('environment'),
+    quality: t('aiQuality'),
+  };
+  const dimensions = (Object.keys(dimensionRows) as Dimension[]).filter((key) => dimensionRows[key].length > 0);
+  const activeDimension = dimensions.includes(dimension) ? dimension : (dimensions[0] ?? 'provider');
+  const activeRows = dimensionRows[activeDimension];
+  const maxCalls = Math.max(1, ...activeRows.map((row) => row.calls));
 
   return (
     <>
-      <section className="analytics-hero-stats section-gap" aria-label={t('aiTabOverview')}>
-        <StatCard
+      <KpiStrip columns={6}>
+        <KpiCell
           label={t('aiCost')}
           value={formatUsd(stats.costUsd)}
           hint={stats.unpricedCalls ? `${t('aiUnpriced')}: ${formatNumber(stats.unpricedCalls)}` : undefined}
         />
-        <StatCard label={t('aiGenerations')} value={formatNumber(stats.calls)} hint={`${t('aiTracesCount')}: ${formatNumber(stats.traces)}`} />
-        <StatCard
-          label={t('aiTokens')}
-          value={formatNumber(stats.tokens, { compact: true })}
-          hint={`${formatNumber(stats.inputTokens, { compact: true })} / ${formatNumber(stats.outputTokens, { compact: true })}`}
+        <KpiCell
+          label={t('aiGenerations')}
+          value={formatNumber(stats.calls)}
+          hint={`${t('aiTracesCount')} ${formatNumber(stats.traces)}`}
         />
-        <StatCard label={t('aiP50Latency')} value={formatMs(stats.p50LatencyMs)} hint={`${t('aiP95Latency')}: ${formatMs(stats.p95LatencyMs)}`} />
-        <StatCard label={t('aiErrorRate')} value={`${formatNumber(stats.errorRate)}%`} hint={`${t('aiErrors')}: ${formatNumber(stats.errors)}`} />
-        <StatCard label={t('aiUsersCount')} value={formatNumber(stats.users)} />
-      </section>
+        <KpiCell
+          label={t('aiTokens')}
+          value={formatNumber(stats.tokens, { compact: stats.tokens >= 10_000 })}
+          title={formatNumber(stats.tokens)}
+          hint={t('qualityTokensInOut')
+            .replace('{input}', formatNumber(stats.inputTokens, { compact: true }))
+            .replace('{output}', formatNumber(stats.outputTokens, { compact: true }))}
+        />
+        <KpiCell label={t('aiP50Latency')} value={formatMs(stats.p50LatencyMs)} hint={`p95 ${formatMs(stats.p95LatencyMs)}`} />
+        <KpiCell
+          label={t('aiErrorRate')}
+          value={formatPercent(stats.errorRate, { digits: stats.errorRate > 0 && stats.errorRate < 10 ? 1 : 0 })}
+          hint={`${t('aiErrors')} ${formatNumber(stats.errors)}`}
+        />
+        <KpiCell label={t('aiUsersCount')} value={formatNumber(stats.users)} hint={t('qualitySessionsCount').replace('{count}', formatNumber(stats.sessions))} />
+      </KpiStrip>
 
       {stats.unpricedCalls ? (
-        <p className="text-muted section-gap">{t('aiUnpricedHint').replace('{count}', formatNumber(stats.unpricedCalls))}</p>
+        <p className="q-view-only">{t('aiUnpricedHint').replace('{count}', formatNumber(stats.unpricedCalls))}</p>
       ) : null}
 
-      <section className="llm-chart-grid section-gap">
-        <ChartPanel title={t('aiCostOverTime')}>
-          <AnalyticsChart
-            Chart={BarChart}
-            data={trend}
-            margin={{ left: 8, right: 16 }}
-            xAxis={{ dataKey: 'label' }}
-            yAxis={{ allowDecimals: true, tickFormatter: (value: number) => formatUsd(value) }}
-            tooltip={{ formatter: (value) => formatUsd(Number(value)) }}
-          >
-            <Bar dataKey="costUsd" name={t('aiCost')} fill={series(0)} radius={[3, 3, 0, 0]} />
-          </AnalyticsChart>
-        </ChartPanel>
-        <ChartPanel
-          title={t('aiCallsOverTime')}
-          legend={
-            <Legend
-              items={[
-                { label: t('aiGenerations'), color: chartSeriesColor(1) },
-                { label: t('aiErrors'), color: chartSeriesColor(4) },
-              ]}
-            />
-          }
-        >
-          <AnalyticsChart Chart={BarChart} data={trend} margin={{ left: 8, right: 16 }} xAxis={{ dataKey: 'label' }}>
-            <Bar dataKey="calls" name={t('aiGenerations')} fill={series(1)} radius={[3, 3, 0, 0]} />
-            <Bar dataKey="errors" name={t('aiErrors')} fill={series(4)} radius={[3, 3, 0, 0]} />
-          </AnalyticsChart>
-        </ChartPanel>
-        <ChartPanel
-          title={t('aiLatencyOverTime')}
-          legend={
-            <Legend
-              items={[
-                { label: 'p50', color: chartSeriesColor(2) },
-                { label: 'p95', color: chartSeriesColor(3) },
-              ]}
-            />
-          }
-        >
-          <AnalyticsChart
-            Chart={LineChart}
-            data={trend}
-            margin={{ left: 8, right: 16 }}
-            xAxis={{ dataKey: 'label' }}
-            yAxis={{ tickFormatter: (value: number) => formatMs(value) }}
-            tooltip={{ formatter: (value) => formatMs(Number(value)) }}
-          >
-            <Line type="monotone" dataKey="p50LatencyMs" name="p50" stroke={series(2)} strokeWidth={2} dot={false} connectNulls />
-            <Line type="monotone" dataKey="p95LatencyMs" name="p95" stroke={series(3)} strokeWidth={2} dot={false} connectNulls />
-          </AnalyticsChart>
-        </ChartPanel>
-      </section>
-
-      <section className="section-gap">
-        <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('aiModels')}</h2>
-            <p className="text-muted">{t('aiModelsLead')}</p>
+      <div className="layout-grid layout-grid--stretch">
+        <SectionCard className="span-6" title={t('aiCost')} description={formatUsd(stats.costUsd)}>
+          <div className="q-chart">
+            <AnalyticsChart
+              Chart={BarChart}
+              data={trend}
+              responsive={{ height: 200 }}
+              xAxis={xAxis}
+              yAxis={{ width: 52, allowDecimals: true }}
+              valueFormatter={formatUsdTick}
+              tooltip={{
+                formatter: (value) => formatUsd(Number(value)),
+                labelFormatter: (_: unknown, payload: readonly { payload?: Record<string, unknown> }[]) => titleFor(payload),
+              }}
+            >
+              <Bar dataKey="costUsd" name={t('aiCost')} fill={series(0)} {...BAR_MARK} />
+            </AnalyticsChart>
           </div>
-        </header>
+        </SectionCard>
+
+        <SectionCard
+          className="span-6"
+          title={t('aiCallsOverTime')}
+          description={`${formatNumber(stats.calls)} · ${t('aiErrors')} ${formatNumber(stats.errors)}`}
+          actions={
+            <ChartLegend
+              items={[
+                { label: t('qualitySucceeded'), color: 'var(--chart-1)', shape: 'box' },
+                { label: t('aiErrors'), color: 'var(--chart-severity-error)', shape: 'box' },
+              ]}
+            />
+          }
+        >
+          <div className="q-chart">
+            <AnalyticsChart
+              Chart={BarChart}
+              data={trend}
+              responsive={{ height: 200 }}
+              xAxis={xAxis}
+              yAxis={{ ...stackedAxis(trend, ['successes', 'errors']), width: 40 }}
+              tooltip={{
+                content: <NonZeroTooltip indicator="box" labelFormatter={(_, payload) => titleFor(payload)} />,
+              }}
+            >
+              <BarStack radius={[4, 4, 0, 0]}>
+                <Bar dataKey="errors" name={t('aiErrors')} fill={severityColors.error} {...STACK_MARK} />
+                <Bar dataKey="successes" name={t('qualitySucceeded')} fill={series(0)} {...STACK_MARK} />
+              </BarStack>
+            </AnalyticsChart>
+          </div>
+        </SectionCard>
+
+        <SectionCard
+          className="span-6"
+          title={t('aiLatencyOverTime')}
+          description={`p50 ${formatMs(stats.p50LatencyMs)} · p95 ${formatMs(stats.p95LatencyMs)}`}
+          actions={
+            <ChartLegend
+              items={[
+                { label: 'p50', color: 'var(--chart-1)' },
+                { label: 'p95', color: 'var(--chart-2)' },
+              ]}
+            />
+          }
+        >
+          <div className="q-chart">
+            <AnalyticsChart
+              Chart={LineChart}
+              data={trend}
+              responsive={{ height: 200 }}
+              margin={{ top: 8, right: 20, bottom: 0, left: 0 }}
+              xAxis={xAxis}
+              yAxis={{ width: 52 }}
+              valueFormatter={formatMsTick}
+              tooltip={{
+                formatter: (value) => formatMs(Number(value)),
+                labelFormatter: (_: unknown, payload: readonly { payload?: Record<string, unknown> }[]) => titleFor(payload),
+              }}
+            >
+              <Line
+                dataKey="p50LatencyMs"
+                name="p50"
+                stroke={series(0)}
+                {...lineMark(colors.panel)}
+                dot={isolatedDot(trend, 'p50LatencyMs', series(0))}
+              />
+              <Line
+                dataKey="p95LatencyMs"
+                name="p95"
+                stroke={series(1)}
+                {...lineMark(colors.panel)}
+                dot={isolatedDot(trend, 'p95LatencyMs', series(1))}
+              />
+            </AnalyticsChart>
+          </div>
+        </SectionCard>
+
+        <SectionCard className="span-6" title={t('qualityCostByModel')}>
+          <BreakdownList items={costByModel} labelHeader={t('aiModel')} columns={[{ label: t('aiCost') }, { label: t('aiGenerations') }]} />
+        </SectionCard>
+      </div>
+
+      <SectionCard flush title={t('aiModels')} description={t('aiModelsLead')}>
         <div className="table-scroll">
           <table className="data-table">
             <thead>
@@ -231,63 +327,69 @@ export function LlmOverview({
               {stats.models.map((row) => (
                 <tr key={row.model}>
                   <td className="mono">{row.model}</td>
-                  <td>{row.provider ?? '—'}</td>
+                  <td className="q-col-muted">{row.provider ?? '—'}</td>
                   <td className="num">{formatNumber(row.calls)}</td>
                   <td className="num">{formatNumber(row.inputTokens)}</td>
                   <td className="num">{formatNumber(row.outputTokens)}</td>
                   <td className="num">
                     {row.unpricedCalls && !row.costUsd ? (
-                      <span className="badge">{t('aiUnpriced')}</span>
+                      <StatusBadge tone="warning" dot={false}>
+                        {t('aiUnpriced')}
+                      </StatusBadge>
                     ) : (
                       <span title={row.priceSource ? t(`aiPriceSource_${row.priceSource}`) : undefined}>{formatUsd(row.costUsd)}</span>
                     )}
                   </td>
-                  <td className="num">{formatNumber(row.errorRate)}%</td>
+                  <td className="num">{formatPercent(row.errorRate, { digits: row.errorRate > 0 && row.errorRate < 10 ? 1 : 0 })}</td>
                   <td className="num">{formatMs(row.avgLatencyMs)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </section>
+      </SectionCard>
 
-      <section className="panel section-gap llm-breakdowns">
-        <Breakdown
-          title={t('aiProviderBreakdown')}
-          rows={stats.providers.map((row) => ({ key: row.provider, calls: row.calls, detail: `${formatNumber(row.calls)} · ${formatUsd(row.costUsd)}` }))}
-        />
-        <Breakdown
-          title={t('aiQualityBreakdown')}
-          rows={stats.qualities
-            .filter((row) => row.quality !== 'unknown')
-            .map((row) => ({ key: row.quality, calls: row.calls, detail: formatNumber(row.calls) }))}
-        />
-        <Breakdown
-          title={t('aiReleaseBreakdown')}
-          rows={stats.releases
-            .filter((row) => row.release !== 'unknown')
-            .map((row) => ({ key: row.release, calls: row.calls, detail: `${formatNumber(row.calls)} · ${formatUsd(row.costUsd)}` }))}
-        />
-        <Breakdown
-          title={t('aiEnvironmentBreakdown')}
-          rows={stats.environments
-            .filter((row) => row.environment !== 'unknown')
-            .map((row) => ({ key: row.environment, calls: row.calls, detail: `${formatNumber(row.calls)} · ${formatUsd(row.costUsd)}` }))}
-        />
-      </section>
+      {dimensions.length ? (
+        <SectionCard
+          title={t('qualityBreakdown')}
+          actions={
+            dimensions.length > 1 ? (
+              <div className="segmented" role="tablist" aria-label={t('qualityBreakdown')}>
+                {dimensions.map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={key === activeDimension}
+                    onClick={() => setDimension(key)}
+                  >
+                    {dimensionLabels[key]}
+                  </button>
+                ))}
+              </div>
+            ) : null
+          }
+        >
+          <BreakdownList
+            labelHeader={dimensionLabels[activeDimension]}
+            columns={activeDimension === 'quality' ? [{ label: t('aiGenerations') }] : [{ label: t('aiGenerations') }, { label: t('aiCost') }]}
+            items={activeRows.map((row) => ({
+              id: row.key,
+              label: row.key,
+              title: row.key,
+              share: row.calls / maxCalls,
+              values: row.cost === undefined ? [formatNumber(row.calls)] : [formatNumber(row.calls), formatUsd(row.cost)],
+            }))}
+          />
+        </SectionCard>
+      ) : null}
 
-      <section className="section-gap">
-        <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('aiRecentCalls')}</h2>
-            <p className="text-muted">{t('aiRecentCallsLead')}</p>
-          </div>
-        </header>
+      <SectionCard flush title={t('aiRecentCalls')} description={t('aiRecentCallsLead')}>
         <div className="table-scroll">
-          <table className="data-table">
+          <table className="data-table data-table--interactive">
             <thead>
               <tr>
-                <th>{t('created')}</th>
+                <th>{t('when')}</th>
                 <th>{t('aiModel')}</th>
                 <th className="num">{t('aiTokens')}</th>
                 <th className="num">{t('aiCost')}</th>
@@ -297,30 +399,41 @@ export function LlmOverview({
               </tr>
             </thead>
             <tbody>
-              {events.slice(0, 25).map((event) => (
-                <tr key={event.id}>
-                  <td className="text-muted">{formatDateTime(event.createdAt)}</td>
-                  <td className="mono">{event.model ?? t('unknown')}</td>
-                  <td className="num">{formatNumber(event.totalTokens)}</td>
-                  <td className="num">{event.costUsd == null ? <span className="badge">{t('aiUnpriced')}</span> : formatUsd(event.costUsd)}</td>
-                  <td className="num">{formatMs(event.latencyMs)}</td>
-                  <td>
-                    <span className={`badge ${event.status === 'error' ? 'log-level-error' : ''}`}>{event.status ?? 'success'}</span>
-                  </td>
-                  <td>
-                    <Link
-                      className="inline-link mono"
-                      to={`/websites/${websiteId}/ai-observability/traces/${encodeURIComponent(event.traceId)}?at=${event.createdAt}`}
-                    >
-                      {event.traceId.slice(0, 12)}
-                    </Link>
-                  </td>
-                </tr>
-              ))}
+              {events.slice(0, 25).map((event) => {
+                const href = `/websites/${websiteId}/ai-observability/traces/${encodeURIComponent(event.traceId)}?at=${event.createdAt}`;
+                const failed = event.status === 'error';
+                return (
+                  <tr key={event.id} onClick={() => navigate(href)}>
+                    <td className="q-col-when">
+                      <RelativeTime value={event.createdAt} />
+                    </td>
+                    <td className="mono">{event.model ?? t('unknown')}</td>
+                    <td className="num">{formatNumber(event.totalTokens)}</td>
+                    <td className="num">
+                      {event.costUsd == null ? (
+                        <StatusBadge tone="warning" dot={false}>
+                          {t('aiUnpriced')}
+                        </StatusBadge>
+                      ) : (
+                        formatUsd(event.costUsd)
+                      )}
+                    </td>
+                    <td className="num">{formatMs(event.latencyMs)}</td>
+                    <td>
+                      <StatusBadge tone={failed ? 'danger' : 'success'}>{event.status ?? 'success'}</StatusBadge>
+                    </td>
+                    <td>
+                      <Link className="q-id-link" to={href} onClick={(clickEvent) => clickEvent.stopPropagation()}>
+                        {event.traceId.slice(0, 12)}
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
-      </section>
+      </SectionCard>
     </>
   );
 }

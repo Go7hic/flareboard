@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { SegmentTabs } from './SegmentTabs';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
+import { FormSelect } from './quality/FormSelect';
+import { SettingSwitch } from './quality/SettingsCard';
 import { t } from '../lib/i18n';
 
 /** Saved as website.replay_config; ingest normalizes it for recorder.js (replaySettings). */
@@ -62,8 +63,11 @@ export function replayConfigToJson(config: ReplayConfig): Record<string, unknown
   return out;
 }
 
+/**
+ * Replay recording options, grouped as sampling and privacy (hairline-separated sections of the
+ * session replay settings card), plus a raw JSON editor for everything at once.
+ */
 export function ReplayConfigWizard({ enabled, config, onChange }: Props) {
-  const [step, setStep] = useState(0);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [advancedJson, setAdvancedJson] = useState('');
   const [jsonError, setJsonError] = useState<string | null>(null);
@@ -89,34 +93,18 @@ export function ReplayConfigWizard({ enabled, config, onChange }: Props) {
   }
 
   if (!enabled) {
-    return (
-      <p className="section-lead">
-        {t('replayWizardDisabledHint')}
-      </p>
-    );
+    return <p className="q-field-hint">{t('replayWizardDisabledHint')}</p>;
   }
 
-  const steps = [t('replayWizardStep1'), t('replayWizardStep2'), t('replayWizardStep3')];
-
   return (
-    <div className="replay-wizard">
-      <SegmentTabs
-        className="replay-wizard-steps"
-        tabs={steps.map((label, i) => ({ id: String(i), label: `${i + 1}. ${label}` }))}
-        value={String(step)}
-        onChange={(id) => setStep(Number(id))}
-        aria-label={t('replayWizardStep1')}
-      />
-
-      {step === 0 ? (
-        <p className="section-lead">{t('replayWizardStep1Lead')}</p>
-      ) : null}
-
-      {step === 1 ? (
-        <div className="field">
-          <Label htmlFor="replay-sample-rate">
-            {t('replaySampleRate')}: {samplePct}%
-          </Label>
+    <div className="q-replay">
+      <div className="q-subsection">
+        <h3 className="q-subsection-title">{t('replayWizardStep2')}</h3>
+        <div className="q-field">
+          <div className="q-range-head">
+            <Label htmlFor="replay-sample-rate">{t('replaySampleRate')}</Label>
+            <span className="q-range-value">{samplePct}%</span>
+          </div>
           <input
             id="replay-sample-rate"
             type="range"
@@ -125,111 +113,97 @@ export function ReplayConfigWizard({ enabled, config, onChange }: Props) {
             step={1}
             value={samplePct}
             onChange={(e) => update({ sampleRate: parseInt(e.target.value, 10) / 100 })}
-            className="w-full max-w-96"
+            className="q-range"
           />
-          <p className="field-hint">
-            {t('replaySampleRateHint')}
-          </p>
-          <Label htmlFor="replay-min-duration" className="mt-4">
-            {t('replayMinDurationSetting')}
-          </Label>
-          <select
-            id="replay-min-duration"
-            className="select max-w-96"
-            value={String(config.minDurationSeconds ?? 0)}
-            onChange={(e) => update({ minDurationSeconds: Number(e.target.value) })}
-          >
-            {MIN_DURATION_OPTIONS.map((seconds) => (
-              <option key={seconds} value={String(seconds)}>
-                {seconds ? t('replayMinDurationSeconds').replace('{n}', String(seconds)) : t('replayMinDurationNone')}
-              </option>
-            ))}
-          </select>
-          <p className="field-hint">{t('replayMinDurationHint')}</p>
-          <label className="field field-inline mt-4">
-            <input
-              type="checkbox"
-              checked={config.captureConsole === true}
-              onChange={(e) => update({ captureConsole: e.target.checked })}
-            />
-            {t('replayCaptureConsole')}
-          </label>
-          <p className="field-hint">{t('replayCaptureConsoleHint')}</p>
-          <label className="field field-inline">
-            <input
-              type="checkbox"
-              checked={config.captureNetwork === true}
-              onChange={(e) => update({ captureNetwork: e.target.checked })}
-            />
-            {t('replayCaptureNetwork')}
-          </label>
-          <p className="field-hint">{t('replayCaptureNetworkHint')}</p>
+          <p className="q-field-hint">{t('replaySampleRateHint')}</p>
         </div>
-      ) : null}
+        <div className="q-field">
+          <Label htmlFor="replay-min-duration">{t('replayMinDurationSetting')}</Label>
+          <FormSelect
+            id="replay-min-duration"
+            className="q-select-narrow"
+            value={String(config.minDurationSeconds ?? 0)}
+            onChange={(value) => update({ minDurationSeconds: Number(value) })}
+            options={MIN_DURATION_OPTIONS.map((seconds) => ({
+              value: String(seconds),
+              label: seconds ? t('replayMinDurationSeconds').replace('{n}', String(seconds)) : t('replayMinDurationNone'),
+            }))}
+          />
+          <p className="q-field-hint">{t('replayMinDurationHint')}</p>
+        </div>
+        <SettingSwitch
+          id="replay-capture-console"
+          label={t('replayCaptureConsole')}
+          hint={t('replayCaptureConsoleHint')}
+          checked={config.captureConsole === true}
+          onCheckedChange={(captureConsole) => update({ captureConsole })}
+        />
+        <SettingSwitch
+          id="replay-capture-network"
+          label={t('replayCaptureNetwork')}
+          hint={t('replayCaptureNetworkHint')}
+          checked={config.captureNetwork === true}
+          onCheckedChange={(captureNetwork) => update({ captureNetwork })}
+        />
+      </div>
 
-      {step === 2 ? (
-        <>
-          <label className="field field-inline">
-            <input
-              type="checkbox"
-              checked={config.maskInputs !== false}
-              onChange={(e) => update({ maskInputs: e.target.checked })}
-            />
-            {t('replayMaskInputs')}
-          </label>
-          <p className="field-hint">{t('replayMaskInputsHint')}</p>
-          <label className="field field-inline">
-            <input
-              type="checkbox"
-              checked={config.maskAllText === true}
-              onChange={(e) => update({ maskAllText: e.target.checked })}
-            />
-            {t('replayMaskAllText')}
-          </label>
-          <div className="field">
-            <Label htmlFor="replay-mask-selectors">{t('replayMaskSelectors')}</Label>
-            <Textarea
-              id="replay-mask-selectors"
-              className="textarea-mono"
-              rows={3}
-              value={config.maskSelectors ?? ''}
-              onChange={(e) => update({ maskSelectors: e.target.value })}
-              placeholder=".customer-name, [data-pii]"
-            />
-            <p className="field-hint">{t('replayMaskSelectorsHint')}</p>
-          </div>
-          <div className="field">
-            <Label htmlFor="replay-block-selectors">{t('replayBlockSelectors')}</Label>
-            <Textarea
-              id="replay-block-selectors"
-              className="textarea-mono"
-              rows={4}
-              value={config.blockSelectors ?? ''}
-              onChange={(e) => update({ blockSelectors: e.target.value })}
-              placeholder=".secret, #payment-form, [data-private]"
-            />
-            <p className="field-hint">
-              {t('replayBlockSelectorsHint')}
-            </p>
-          </div>
-        </>
-      ) : null}
+      <div className="q-subsection">
+        <h3 className="q-subsection-title">{t('replayWizardStep3')}</h3>
+        <SettingSwitch
+          id="replay-mask-inputs"
+          label={t('replayMaskInputs')}
+          hint={t('replayMaskInputsHint')}
+          checked={config.maskInputs !== false}
+          onCheckedChange={(maskInputs) => update({ maskInputs })}
+        />
+        <SettingSwitch
+          id="replay-mask-all-text"
+          label={t('replayMaskAllText')}
+          checked={config.maskAllText === true}
+          onCheckedChange={(maskAllText) => update({ maskAllText })}
+        />
+        <div className="q-field">
+          <Label htmlFor="replay-mask-selectors">{t('replayMaskSelectors')}</Label>
+          <Textarea
+            id="replay-mask-selectors"
+            className="q-textarea-mono"
+            rows={2}
+            value={config.maskSelectors ?? ''}
+            onChange={(e) => update({ maskSelectors: e.target.value })}
+            placeholder=".customer-name, [data-pii]"
+          />
+          <p className="q-field-hint">{t('replayMaskSelectorsHint')}</p>
+        </div>
+        <div className="q-field">
+          <Label htmlFor="replay-block-selectors">{t('replayBlockSelectors')}</Label>
+          <Textarea
+            id="replay-block-selectors"
+            className="q-textarea-mono"
+            rows={2}
+            value={config.blockSelectors ?? ''}
+            onChange={(e) => update({ blockSelectors: e.target.value })}
+            placeholder=".secret, #payment-form, [data-private]"
+          />
+          <p className="q-field-hint">{t('replayBlockSelectorsHint')}</p>
+        </div>
+      </div>
 
-      <div className="mt-4">
-        <Button type="button" variant="ghost" size="sm" onClick={() => setShowAdvanced((v) => !v)}>
+      <div className="q-subsection">
+        <Button type="button" variant="ghost" size="sm" className="self-start" onClick={() => setShowAdvanced((v) => !v)}>
           {showAdvanced ? t('replayHideAdvanced') : t('replayShowAdvanced')}
         </Button>
         {showAdvanced ? (
-          <div className="field mt-2">
-            <Label>{t('replayConfigJson')}</Label>
+          <div className="q-field">
+            <Label htmlFor="replay-config-json">{t('replayConfigJson')}</Label>
             <Textarea
-              className="textarea-mono"
+              id="replay-config-json"
+              className="q-textarea-mono"
               value={advancedJson}
               onChange={(e) => setAdvancedJson(e.target.value)}
               rows={6}
             />
-            {jsonError ? <p className="text-danger">{jsonError}</p> : null}
-            <Button type="button" variant="secondary" size="sm" onClick={applyAdvancedJson} className="mt-2 self-start">
+            {jsonError ? <p className="q-form-error">{jsonError}</p> : null}
+            <Button type="button" variant="outline" size="sm" onClick={applyAdvancedJson} className="self-start">
               {t('applyJson')}
             </Button>
           </div>

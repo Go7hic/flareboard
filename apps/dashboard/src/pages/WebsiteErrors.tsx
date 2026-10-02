@@ -1,78 +1,75 @@
-import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
-import { AlertTriangle, ExternalLink } from 'lucide-react';
+import { useMemo, useState, type MouseEvent } from 'react';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { BellRing, Bug, FileCode2, MoreHorizontal } from 'lucide-react';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
-import { MasterDetailSidePane, MasterDetailTableLayout } from '../components/master-detail';
-import { Page, PageBody } from '../components/Page';
-import { PageHeader } from '../components/PageHeader';
-import { SegmentTabs } from '../components/SegmentTabs';
-import { StatCard } from '../components/ui/stat-card';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Checkbox } from '../components/ui/checkbox';
 import { ErrorIssueStatusBadge } from '../components/ErrorIssueStatusBadge';
 import { ErrorIssueTrend } from '../components/ErrorIssueTrend';
-import { api, API_URL, type ErrorAlertRule, type ErrorEventsResponse, type ErrorSourceMap } from '../lib/api';
-import { formatDateOnly, formatDateTime, formatNumber, formatPercent } from '../lib/format';
+import { KpiCell, KpiStrip, KpiStripSkeleton } from '../components/KpiStrip';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
+import { SectionCard } from '../components/SectionCard';
+import { useConfirm } from '../components/ConfirmDialog';
+import { Button } from '../components/ui/button';
+import { Checkbox } from '../components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu';
+import { Skeleton } from '../components/ui/skeleton';
+import { ErrorAlertRulesSheet } from '../components/quality/ErrorAlertRulesSheet';
+import { ErrorOccurrencesChart, errorSeverity, severityVar } from '../components/quality/ErrorOccurrencesChart';
+import { ErrorSourceMapsSheet } from '../components/quality/ErrorSourceMapsSheet';
+import { FilterSelect } from '../components/quality/FilterSelect';
+import { RelativeTime } from '../components/quality/RelativeTime';
+import { TableSkeleton } from '../components/quality/TableSkeleton';
+import {
+  api,
+  type ErrorEventsResponse,
+  type ErrorIssue,
+  type ErrorIssueStatus,
+  type WebsiteStats,
+} from '../lib/api';
+import { formatNumber, formatPercent, shortId } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
-import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
 
-function formatTime(value: number | null | undefined) {
-  return formatDateTime(value);
-}
+type StatusFilter = 'all' | 'open' | 'regressed' | 'resolved' | 'ignored';
 
-function shortText(value: string | null | undefined, fallback = '-') {
+/** The API returns at most this many issues (top by occurrences). */
+const ISSUE_LIMIT = 25;
+const EVENTS_PREVIEW = 10;
+
+function shortText(value: string | null | undefined, fallback = '-', max = 140) {
   const text = value?.trim();
   if (!text) return fallback;
-  return text.length > 120 ? `${text.slice(0, 117)}...` : text;
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
-function formatDate(value: string) {
-  return formatDateOnly(`${value}T00:00:00Z`);
+function stop(event: MouseEvent) {
+  event.stopPropagation();
 }
-
-type ErrorIssueStatusFilter = 'all' | 'open' | 'regressed' | 'resolved' | 'ignored';
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-const ERROR_SECONDARY_TABS = ['events', 'source-maps', 'alerts'] as const;
-type ErrorSecondaryTab = (typeof ERROR_SECONDARY_TABS)[number];
 
 export default function WebsiteErrorsPage() {
   const confirm = useConfirm();
-  const { websiteId } = useParams<{ websiteId: string }>();
+  const navigate = useNavigate();
+  const { websiteId = '' } = useParams<{ websiteId: string }>();
   const queryClient = useQueryClient();
   const { canEdit, viewOnly } = useWebsitePermissions(websiteId, 'errors');
   const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
-  const [expandedIssue, setExpandedIssue] = useState<string | null>(null);
   const [selectedIssues, setSelectedIssues] = useState<string[]>([]);
   const [mergeTarget, setMergeTarget] = useState('');
   const [releaseFilter, setReleaseFilter] = useState('');
   const [environmentFilter, setEnvironmentFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState<ErrorIssueStatusFilter>('open');
-  const [secondaryTab, setSecondaryTab] = useState<ErrorSecondaryTab>('events');
-  const [sourceMapDraft, setSourceMapDraft] = useState({ release: '', file: '', content: '' });
-  const [alertDraft, setAlertDraft] = useState({
-    name: '',
-    threshold: 5,
-    windowMinutes: 10,
-    severity: '',
-    release: '',
-    environment: '',
-    channel: 'record' as ErrorAlertRule['channel'],
-    target: '',
-    notifyRegressions: true,
-  });
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('open');
+  const [sheet, setSheet] = useState<'source-maps' | 'alerts' | null>(null);
+  const [showAllEvents, setShowAllEvents] = useState(false);
 
   const errorsQs = useMemo(() => {
     const params = new URLSearchParams(rangeQs);
@@ -85,7 +82,16 @@ export default function WebsiteErrorsPage() {
   const errorsQuery = useQuery({
     queryKey: ['errors', websiteId, range, releaseFilter, environmentFilter, statusFilter],
     enabled: Boolean(websiteId),
+    placeholderData: keepPreviousData,
     queryFn: () => api<ErrorEventsResponse>(`/api/websites/${websiteId}/errors?${errorsQs}`),
+  });
+
+  // Sessions in the range (all of them), for the share that saw no error.
+  const totalsQuery = useQuery({
+    queryKey: ['website-stats', websiteId, rangeQs],
+    enabled: Boolean(websiteId),
+    placeholderData: keepPreviousData,
+    queryFn: () => api<WebsiteStats>(`/api/websites/${websiteId}/stats?${rangeQs}`),
   });
 
   const updateIssueMutation = useMutation({
@@ -96,80 +102,8 @@ export default function WebsiteErrorsPage() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['errors', websiteId] });
+      queryClient.invalidateQueries({ queryKey: ['error-issue', websiteId] });
     },
-  });
-
-  const sourceMapsQuery = useQuery({
-    queryKey: ['error-source-maps', websiteId, releaseFilter],
-    enabled: Boolean(websiteId) && secondaryTab === 'source-maps',
-    queryFn: () => {
-      const params = releaseFilter ? `?release=${encodeURIComponent(releaseFilter)}` : '';
-      return api<{ sourceMaps: ErrorSourceMap[] }>(`/api/websites/${websiteId}/errors/source-maps${params}`);
-    },
-  });
-
-  const alertRulesQuery = useQuery({
-    queryKey: ['error-alert-rules', websiteId],
-    enabled: Boolean(websiteId) && secondaryTab === 'alerts',
-    queryFn: () => api<{ alertRules: ErrorAlertRule[] }>(`/api/websites/${websiteId}/errors/alerts`),
-  });
-
-  const uploadSourceMapMutation = useMutation({
-    mutationFn: () =>
-      api<ErrorSourceMap>(`/api/websites/${websiteId}/errors/source-maps`, {
-        method: 'POST',
-        body: JSON.stringify({
-          release: sourceMapDraft.release.trim(),
-          file: sourceMapDraft.file.trim(),
-          content: sourceMapDraft.content,
-        }),
-      }),
-    onSuccess: () => {
-      setSourceMapDraft({ release: '', file: '', content: '' });
-      queryClient.invalidateQueries({ queryKey: ['error-source-maps', websiteId] });
-    },
-  });
-
-  const createAlertMutation = useMutation({
-    mutationFn: () =>
-      api<ErrorAlertRule>(`/api/websites/${websiteId}/errors/alerts`, {
-        method: 'POST',
-        body: JSON.stringify({
-          name: alertDraft.name.trim(),
-          threshold: Number(alertDraft.threshold),
-          windowMinutes: Number(alertDraft.windowMinutes),
-          severity: alertDraft.severity || null,
-          release: alertDraft.release.trim() || null,
-          environment: alertDraft.environment.trim() || null,
-          channel: alertDraft.channel,
-          target: alertDraft.target.trim() || null,
-          notifyRegressions: alertDraft.notifyRegressions,
-          enabled: true,
-        }),
-      }),
-    onSuccess: () => {
-      setAlertDraft({
-        name: '',
-        threshold: 5,
-        windowMinutes: 10,
-        severity: '',
-        release: '',
-        environment: '',
-        channel: 'record',
-        target: '',
-        notifyRegressions: true,
-      });
-      queryClient.invalidateQueries({ queryKey: ['error-alert-rules', websiteId] });
-    },
-  });
-
-  const updateAlertMutation = useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Partial<ErrorAlertRule> }) =>
-      api<ErrorAlertRule>(`/api/websites/${websiteId}/errors/alerts/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(patch),
-      }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['error-alert-rules', websiteId] }),
   });
 
   const mergeMutation = useMutation({
@@ -178,44 +112,30 @@ export default function WebsiteErrorsPage() {
         method: 'POST',
         body: JSON.stringify({ targetFingerprint: target, sourceFingerprints: sources }),
       }),
-    onSuccess: (_data, { target }) => {
+    onSuccess: () => {
       setSelectedIssues([]);
       setMergeTarget('');
-      setExpandedIssue(target);
       queryClient.invalidateQueries({ queryKey: ['errors', websiteId] });
       queryClient.invalidateQueries({ queryKey: ['error-issue', websiteId] });
     },
   });
 
-  const deleteSourceMapMutation = useMutation({
-    mutationFn: (id: string) => api(`/api/websites/${websiteId}/errors/source-maps/${id}`, { method: 'DELETE' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['error-source-maps', websiteId] }),
-  });
-
-  const deleteAlertMutation = useMutation({
-    mutationFn: (id: string) => api(`/api/websites/${websiteId}/errors/alerts/${id}`, { method: 'DELETE' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['error-alert-rules', websiteId] }),
-  });
-
-  const rows = errorsQuery.data?.errors ?? [];
-  const issues = errorsQuery.data?.issues ?? [];
-  const stats = errorsQuery.data?.stats;
-  const topRelease = useMemo(() => stats?.releases?.[0], [stats?.releases]);
-  const trendRows = stats?.trend ?? [];
-  const severityRows = stats?.severities ?? [];
+  const data = errorsQuery.data;
+  const stats = data?.stats;
+  const issues = useMemo(() => data?.issues ?? [], [data?.issues]);
+  const events = data?.errors ?? [];
   const releaseOptions = useMemo(() => {
-    const values = new Set(stats?.releases?.map((release) => release.release) ?? []);
+    const values = new Set(stats?.releases?.map((row) => row.release) ?? []);
     if (releaseFilter) values.add(releaseFilter);
-    return [...values];
+    return [...values].map((value) => ({ value, label: value }));
   }, [releaseFilter, stats?.releases]);
   const environmentOptions = useMemo(() => {
-    const values = new Set(stats?.environments?.map((environment) => environment.environment) ?? []);
+    const values = new Set(stats?.environments?.map((row) => row.environment) ?? []);
     if (environmentFilter) values.add(environmentFilter);
-    return [...values];
+    return [...values].map((value) => ({ value, label: value }));
   }, [environmentFilter, stats?.environments]);
-  const hasErrorFilters = Boolean(releaseFilter || environmentFilter || statusFilter !== 'open');
-  const selectedIssue = issues.find((issue) => issue.fingerprint === expandedIssue) ?? issues[0];
-  const sourceMaps = sourceMapsQuery.data?.sourceMaps ?? [];
+  const hasFilters = Boolean(releaseFilter || environmentFilter || statusFilter !== 'open');
+
   // Selection only covers issues still on screen (filters or range may have changed).
   const selectedVisible = selectedIssues.filter((fingerprint) => issues.some((issue) => issue.fingerprint === fingerprint));
   const effectiveMergeTarget = selectedVisible.includes(mergeTarget) ? mergeTarget : (selectedVisible[0] ?? '');
@@ -223,766 +143,459 @@ export default function WebsiteErrorsPage() {
     setSelectedIssues((prev) =>
       checked ? [...new Set([...prev, fingerprint])] : prev.filter((value) => value !== fingerprint),
     );
-  const issueTitle = (fingerprint: string) => {
-    const issue = issues.find((item) => item.fingerprint === fingerprint);
-    return shortText(issue?.message, fingerprint);
-  };
-  const alertRules = alertRulesQuery.data?.alertRules ?? [];
+  const allSelected = issues.length > 0 && selectedVisible.length === issues.length;
+  const issueTitle = (fingerprint: string) =>
+    shortText(issues.find((item) => item.fingerprint === fingerprint)?.message, fingerprint, 60);
+  const issueHref = (fingerprint: string) => `/websites/${websiteId}/errors/issues/${encodeURIComponent(fingerprint)}`;
+
+  const statusOptions: Array<{ value: StatusFilter; label: string }> = [
+    { value: 'open', label: t('errorIssueStatus_open') },
+    { value: 'regressed', label: t('errorIssueStatus_regressed') },
+    { value: 'resolved', label: t('errorIssueStatus_resolved') },
+    { value: 'ignored', label: t('errorIssueStatus_ignored') },
+    { value: 'all', label: t('allStatuses') },
+  ];
+
+  const toolbar = (
+    <div className="q-toolbar">
+      <FilterSelect
+        label={t('errorFilterStatus')}
+        value={statusFilter}
+        active={statusFilter !== 'open'}
+        onChange={(value) => setStatusFilter((value || 'open') as StatusFilter)}
+        options={statusOptions}
+      />
+      <FilterSelect
+        label={t('errorFilterRelease')}
+        value={releaseFilter}
+        onChange={setReleaseFilter}
+        allLabel={t('allReleases')}
+        options={releaseOptions}
+      />
+      <FilterSelect
+        label={t('errorFilterEnvironment')}
+        value={environmentFilter}
+        onChange={setEnvironmentFilter}
+        allLabel={t('allEnvironments')}
+        options={environmentOptions}
+      />
+      {hasFilters ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            setReleaseFilter('');
+            setEnvironmentFilter('');
+            setStatusFilter('open');
+          }}
+        >
+          {t('reset')}
+        </Button>
+      ) : null}
+      {errorsQuery.isFetching && data ? <span className="q-toolbar-meta">{t('loading')}</span> : null}
+    </div>
+  );
+
+  const loadingFallback = (
+    <div className="stack">
+      <KpiStripSkeleton cells={4} />
+      <SectionCard title={t('qualityOccurrences')}>
+        <Skeleton className="h-[200px] w-full" />
+      </SectionCard>
+      <SectionCard flush title={t('errorIssues')}>
+        <TableSkeleton rows={5} columns={5} />
+      </SectionCard>
+    </div>
+  );
 
   return (
-    <Page className="page-errors">
+    <Page className="q-page q-page--errors">
       <PageHeader
         title={t('errors')}
-        lead={t('errorsLead')}
+        lead={t('qualityErrorsLead')}
         actions={
-          <div className="stats-header-row">
-            <div className="stats-header-controls">
-              <select
-                className="select errors-filter-select"
-                value={releaseFilter}
-                onChange={(event) => setReleaseFilter(event.target.value)}
-                aria-label={t('errorFilterRelease')}
-              >
-                <option value="">{t('allReleases')}</option>
-                {releaseOptions.map((release) => (
-                  <option key={release} value={release}>
-                    {release}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="select errors-filter-select"
-                value={environmentFilter}
-                onChange={(event) => setEnvironmentFilter(event.target.value)}
-                aria-label={t('errorFilterEnvironment')}
-              >
-                <option value="">{t('allEnvironments')}</option>
-                {environmentOptions.map((environment) => (
-                  <option key={environment} value={environment}>
-                    {environment}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="select errors-filter-select"
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as ErrorIssueStatusFilter)}
-                aria-label={t('errorFilterStatus')}
-              >
-                <option value="open">{t('errorIssueStatus_open')}</option>
-                <option value="all">{t('allStatuses')}</option>
-                <option value="regressed">{t('errorIssueStatus_regressed')}</option>
-                <option value="resolved">{t('errorIssueStatus_resolved')}</option>
-                <option value="ignored">{t('errorIssueStatus_ignored')}</option>
-              </select>
-              {hasErrorFilters ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setReleaseFilter('');
-                    setEnvironmentFilter('');
-                    setStatusFilter('open');
-                  }}
-                >
-                  {t('reset')}
-                </Button>
-              ) : null}
-              <DateRangePicker value={range} onChange={setRange} popover timezone={timezone} />
-            </div>
+          <div className="q-header-actions">
+            <Button type="button" variant="outline" size="sm" onClick={() => setSheet('source-maps')}>
+              <FileCode2 aria-hidden />
+              {t('errorsTabSourceMaps')}
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setSheet('alerts')}>
+              <BellRing aria-hidden />
+              {t('errorsTabAlerts')}
+            </Button>
+            <DateRangePicker value={range} onChange={setRange} popover timezone={timezone} />
           </div>
         }
+        toolbar={toolbar}
       />
 
-      <PageBody>
-      {viewOnly ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
+      <PageBody className="stack">
+        {viewOnly ? <p className="q-view-only">{t('viewOnlyHint')}</p> : null}
 
-      <DataViewState
-        loading={errorsQuery.isLoading && !errorsQuery.data}
-        error={errorsQuery.isError ? errorsQuery.error : null}
-        onRetry={() => errorsQuery.refetch()}
-        loadingFallback={
-          <>
-            <section className="analytics-hero-stats section-gap">
-              <div className="skeleton" style={{ height: '5.5rem' }} />
-            </section>
-            <section className="panel section-gap">
-              <div className="skeleton" style={{ height: '14rem' }} />
-            </section>
-          </>
-        }
-      >
-        <section className="analytics-hero-stats section-gap">
-          <StatCard label={t('errorsTotal')} value={formatNumber(stats?.errors ?? 0)} />
-          <StatCard label={t('errorsAffectedUsers')} value={formatNumber(stats?.users ?? 0)} />
-          <StatCard label={t('errorsAffectedSessions')} value={formatNumber(stats?.sessions ?? 0)} />
-          <StatCard
-            label={t('errorsLastSeen')}
-            value={formatTime(stats?.lastSeenAt)}
-            hint={topRelease ? `${t('errorsTopRelease')}: ${topRelease.release}` : undefined}
-          />
-        </section>
-
-        {(trendRows.length || severityRows.length) ? (
-          <section className="panel section-gap page-errors-insights">
-            <div className="error-insights-grid">
-              <div>
-                <header className="compact-panel-header">
-                  <h2 className="section-title">{t('errorsTrend')}</h2>
-                  <p className="text-muted">{t('errorsTrendLead')}</p>
-                </header>
-                <div className="table-scroll">
-                  <table className="data-table errors-table">
-                    <thead>
-                      <tr>
-                        <th>{t('date')}</th>
-                        <th>{t('errors')}</th>
-                        <th>{t('sessions')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {trendRows.map((row) => (
-                        <tr key={row.date}>
-                          <td>{formatDate(row.date)}</td>
-                          <td>{formatNumber(row.errors)}</td>
-                          <td>{formatNumber(row.sessions)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div className="detail-section error-severity-panel">
-                <header className="compact-panel-header">
-                  <h2 className="section-title">{t('errorsSeverityBreakdown')}</h2>
-                  <p className="text-muted">{t('errorsSeverityBreakdownLead')}</p>
-                </header>
-                <div className="breakdown-list">
-                  {severityRows.map((row) => {
-                    const share = stats?.errors ? Math.round((row.errors / stats.errors) * 100) : 0;
-                    return (
-                      <div key={row.severity} className="breakdown-row">
-                        <div className="breakdown-meta">
-                          <strong>{row.severity}</strong>
-                          <span className="text-muted">
-                            {formatNumber(row.errors)} ({formatPercent(share)})
-                          </span>
-                        </div>
-                        <div className="breakdown-track" aria-hidden>
-                          <span style={{ width: `${share}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </section>
-        ) : null}
-
-        <section
-          className={
-            issues.length ? 'panel section-gap page-errors-hero' : 'section-gap page-errors-hero page-errors-hero-empty'
-          }
+        <DataViewState
+          loading={errorsQuery.isLoading && !data}
+          error={errorsQuery.isError && !data ? errorsQuery.error : null}
+          onRetry={() => errorsQuery.refetch()}
+          loadingFallback={loadingFallback}
         >
-          <header className="panel-header">
-            <div>
-              <h2 className="section-title">{t('errorIssues')}</h2>
-              <p className="text-muted">{t('errorIssuesLead')}</p>
-            </div>
-          </header>
+          {stats ? (
+            <>
+              <ErrorsKpiStrip
+                stats={stats}
+                issues={issues}
+                totalSessions={totalsQuery.data?.visitors.value}
+              />
 
-          {issues.length && canEdit ? (
-            <div className="error-merge-bar" aria-live="polite">
-              {selectedVisible.length >= 2 ? (
+              {stats.errors === 0 ? (
+                <EmptyState
+                  variant="rich"
+                  icon={<Bug />}
+                  title={hasFilters ? t('errorIssuesEmptyTitle') : t('errorsEmptyTitle')}
+                  description={hasFilters ? t('qualityErrorsEmptyFiltered') : t('errorsEmptyBody')}
+                />
+              ) : (
                 <>
-                  <span className="text-muted">
-                    {formatNumber(selectedVisible.length)} {t('errorIssueSelected')}
-                  </span>
-                  <Label htmlFor="error-merge-target">{t('errorIssueMergeInto')}</Label>
-                  <select
-                    id="error-merge-target"
-                    className="select error-merge-target"
-                    value={effectiveMergeTarget}
-                    onChange={(event) => setMergeTarget(event.target.value)}
-                  >
-                    {selectedVisible.map((fingerprint) => (
-                      <option key={fingerprint} value={fingerprint}>
-                        {issueTitle(fingerprint)}
-                      </option>
-                    ))}
-                  </select>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="primary"
-                    disabled={mergeMutation.isPending}
-                    onClick={() => {
-                      const target = effectiveMergeTarget;
-                      const sources = selectedVisible.filter((fingerprint) => fingerprint !== target);
-                      confirm({
-                        title: t('errorIssueMergeTitle'),
-                        description: `${t('errorIssueMergeInto')}: ${issueTitle(target)}. ${t('errorIssueMergeBody')}`,
-                        confirmLabel: t('errorIssueMerge'),
-                        onConfirm: () => mergeMutation.mutate({ target, sources }),
-                      });
-                    }}
-                  >
-                    {t('errorIssueMerge')}
-                  </Button>
-                  <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedIssues([])}>
-                    {t('reset')}
-                  </Button>
-                </>
-              ) : (
-                <span className="text-muted">{t('errorIssueMergeHint')}</span>
-              )}
-            </div>
-          ) : null}
+                  <ErrorOccurrencesChart issues={issues} stats={stats} range={range} timezone={timezone} />
 
-          {issues.length ? (
-            <MasterDetailTableLayout
-              primary={
-                <div className="table-scroll">
-                  <table className="data-table errors-table">
-                    <thead>
-                      <tr>
-                        {canEdit ? (
-                          <th className="error-select-col">
-                            <span className="sr-only">{t('errorIssueSelect')}</span>
-                          </th>
-                        ) : null}
-                        <th>{t('issue')}</th>
-                        <th>{t('events')}</th>
-                        <th>{t('users')}</th>
-                        <th>{t('sessions')}</th>
-                        <th>{t('trend')}</th>
-                        <th>{t('status')}</th>
-                        <th>{t('firstSeen')}</th>
-                        <th>{t('lastSeen')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {issues.map((issue) => (
-                        <tr
-                          key={issue.fingerprint}
-                          className={issue.fingerprint === selectedIssue?.fingerprint ? 'active-row' : undefined}
-                        >
-                          {canEdit ? (
-                            <td className="error-select-col">
-                              <Checkbox
-                                checked={selectedVisible.includes(issue.fingerprint)}
-                                onCheckedChange={(checked) => toggleIssueSelection(issue.fingerprint, checked === true)}
-                                aria-label={`${t('errorIssueSelect')}: ${shortText(issue.message, issue.fingerprint)}`}
-                              />
-                            </td>
-                          ) : null}
-                          <td>
-                            <button
-                              type="button"
-                              className="error-issue-button"
-                              onClick={() => setExpandedIssue(issue.fingerprint)}
-                            >
-                              <span className="errors-name-cell">
-                                <AlertTriangle size={16} strokeWidth={2} aria-hidden />
-                                <span>
-                                  <span className="errors-message">
-                                    {shortText(issue.message, t('unknown'))}
-                                  </span>
-                                  <span className="text-muted">
-                                    {shortText(issue.name, t('errorNameFallback'))}
-                                    {issue.mergedCount ? ` · +${formatNumber(issue.mergedCount)} ${t('errorIssueMergedCount')}` : ''}
-                                  </span>
-                                </span>
-                              </span>
-                            </button>
-                          </td>
-                          <td>{formatNumber(issue.events)}</td>
-                          <td>{formatNumber(issue.users)}</td>
-                          <td>{formatNumber(issue.sessions)}</td>
-                          <td>
-                            <ErrorIssueTrend values={issue.trend} label={t('errorIssueTrend')} />
-                          </td>
-                          <td>
-                            <ErrorIssueStatusBadge status={issue.status} />
-                          </td>
-                          <td>{formatTime(issue.firstSeenAt)}</td>
-                          <td>{formatTime(issue.lastSeenAt)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              }
-              side={
-                selectedIssue ? (
-                  <MasterDetailSidePane
-                    title={t('errorRecentSamples')}
-                    description={
-                      <>
-                        {t('errorIssueCurrentStatus')}: {t(`errorIssueStatus_${selectedIssue.status}`)}
-                      </>
-                    }
+                  <SectionCard
+                    flush
+                    title={t('errorIssues')}
+                    description={canEdit ? t('qualityIssuesLeadEdit') : t('qualityIssuesLead')}
                     actions={
-                      <div className="error-issue-actions">
-                        {(['open', 'resolved', 'ignored'] as const).map((status) => (
-                          <Button
-                            key={status}
-                            type="button"
-                            size="sm"
-                            variant={status === selectedIssue.status ? 'default' : 'outline'}
-                            aria-pressed={status === selectedIssue.status}
-                            disabled={updateIssueMutation.isPending || !canEdit}
-                            onClick={() => updateIssueMutation.mutate({ fingerprint: selectedIssue.fingerprint, status })}
-                          >
-                            {t(`errorIssueAction_${status}`)}
-                          </Button>
-                        ))}
-                      </div>
-                    }
-                  >
-                    <Link
-                      to={`/websites/${websiteId}/errors/issues/${encodeURIComponent(selectedIssue.fingerprint)}`}
-                      className="inline-link"
-                    >
-                      {t('errorIssueViewIssue')}
-                      <ExternalLink size={12} strokeWidth={2} aria-hidden />
-                    </Link>
-                    {selectedIssue.note ? <p className="workflow-action-note">{selectedIssue.note}</p> : null}
-                    <div className="error-sample-list">
-                      {selectedIssue.samples.map((sample) => (
-                        <div key={sample.id} className="error-sample-item">
-                          <div>
-                            <strong>{sample.urlPath || '/'}</strong>
-                            <p className="text-muted">{formatTime(sample.createdAt)}</p>
-                          </div>
-                          <Link to={`/websites/${websiteId}/sessions/${sample.sessionId}`} className="inline-link">
-                            {sample.sessionId.slice(0, 8)}
-                            <ExternalLink size={12} strokeWidth={2} aria-hidden />
-                          </Link>
-                          <Link to={`/websites/${websiteId}/errors/${sample.id}`} className="inline-link">
-                            {t('viewError')}
-                            <ExternalLink size={12} strokeWidth={2} aria-hidden />
-                          </Link>
-                        </div>
-                      ))}
-                    </div>
-                  </MasterDetailSidePane>
-                ) : null
-              }
-            />
-          ) : (
-            <EmptyState title={t('errorIssuesEmptyTitle')} description={t('errorIssuesEmptyBody')} />
-          )}
-        </section>
-      </DataViewState>
-
-      <section className="page-errors-secondary section-gap" aria-labelledby="errors-secondary-title">
-        <div className="page-errors-secondary-head">
-          <div>
-            <h2 id="errors-secondary-title" className="section-title">
-              {t('overviewMore')}
-            </h2>
-            <p className="text-muted">{t('errorsSecondaryLead')}</p>
-          </div>
-          <SegmentTabs
-            aria-label={t('overviewMore')}
-            value={secondaryTab}
-            onChange={(id) => setSecondaryTab(id as ErrorSecondaryTab)}
-            tabs={[
-              { id: 'events', label: t('errorsTabEvents') },
-              { id: 'source-maps', label: t('errorsTabSourceMaps') },
-              { id: 'alerts', label: t('errorsTabAlerts') },
-            ]}
-          />
-        </div>
-
-        {secondaryTab === 'events' ? (
-          <DataViewState
-            loading={errorsQuery.isLoading && !errorsQuery.data}
-            error={errorsQuery.isError ? errorsQuery.error : null}
-            onRetry={() => errorsQuery.refetch()}
-          >
-            <section className="section-gap">
-              <header className="panel-header">
-                <div>
-                  <h3 className="section-title">{t('errorsRecent')}</h3>
-                  <p className="text-muted">{t('errorsLead')}</p>
-                </div>
-              </header>
-
-              {rows.length ? (
-                <div className="table-scroll">
-                  <table className="data-table errors-table">
-                    <thead>
-                      <tr>
-                        <th>{t('error')}</th>
-                        <th>{t('page')}</th>
-                        <th>{t('session')}</th>
-                        <th>{t('release')}</th>
-                        <th>{t('environment')}</th>
-                        <th>{t('when')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((row) => (
-                        <tr key={row.id}>
-                          <td>
-                            <div className="errors-name-cell">
-                              <AlertTriangle size={16} strokeWidth={2} aria-hidden />
-                              <div>
-                                <div className="errors-message">{shortText(row.message ?? row.eventName, t('unknown'))}</div>
-                                <div className="text-muted">{shortText(row.name, t('errorNameFallback'))}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="mono">{row.urlPath || '/'}</td>
-                          <td>
-                            <Link to={`/websites/${websiteId}/sessions/${row.sessionId}`} className="inline-link">
-                              {row.sessionId.slice(0, 8)}
-                              <ExternalLink size={12} strokeWidth={2} aria-hidden />
-                            </Link>
-                          </td>
-                          <td>{shortText(row.release)}</td>
-                          <td>{shortText(row.environment)}</td>
-                          <td>
-                            <div className="error-row-actions">
-                              <span>{formatTime(row.createdAt)}</span>
-                              <Link to={`/websites/${websiteId}/errors/${row.id}`} className="inline-link">
-                                {t('viewError')}
-                                <ExternalLink size={12} strokeWidth={2} aria-hidden />
-                              </Link>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <EmptyState title={t('errorsEmptyTitle')} description={t('errorsEmptyBody')} />
-              )}
-            </section>
-          </DataViewState>
-        ) : null}
-
-        {secondaryTab === 'source-maps' ? (
-          <DataViewState
-            loading={sourceMapsQuery.isLoading && !sourceMapsQuery.data}
-            error={sourceMapsQuery.isError ? sourceMapsQuery.error : null}
-            onRetry={() => sourceMapsQuery.refetch()}
-          >
-            <section className="section-gap">
-              <header className="panel-header">
-                <div>
-                  <h3 className="section-title">{t('errorSourceMaps')}</h3>
-                  <p className="text-muted">{t('errorSourceMapsLead')}</p>
-                  <p className="text-muted error-source-map-ci">
-                    {t('errorSourceMapCiHint')}{' '}
-                    <code className="mono">POST {API_URL || ''}/api/websites/{websiteId}/errors/source-maps</code>
-                  </p>
-                </div>
-              </header>
-              {canEdit ? (
-                <div className="panel-form">
-                  <div className="field">
-                    <Label htmlFor="source-map-release">{t('errorSourceMapRelease')}</Label>
-                    <Input
-                      id="source-map-release"
-                      value={sourceMapDraft.release}
-                      onChange={(event) => setSourceMapDraft((prev) => ({ ...prev, release: event.target.value }))}
-                    />
-                  </div>
-                  <div className="field">
-                    <Label htmlFor="source-map-file">{t('errorSourceMapFile')}</Label>
-                    <Input
-                      id="source-map-file"
-                      value={sourceMapDraft.file}
-                      placeholder="assets/app.js.map"
-                      onChange={(event) => setSourceMapDraft((prev) => ({ ...prev, file: event.target.value }))}
-                    />
-                  </div>
-                  <div className="field feature-flag-description-field">
-                    <Label htmlFor="source-map-content">{t('errorSourceMapContent')}</Label>
-                    <textarea
-                      id="source-map-content"
-                      className="textarea"
-                      value={sourceMapDraft.content}
-                      onChange={(event) => setSourceMapDraft((prev) => ({ ...prev, content: event.target.value }))}
-                    />
-                  </div>
-                  <div className="form-actions">
-                    <Button
-                      type="button"
-                      variant="primary"
-                      disabled={
-                        !sourceMapDraft.release.trim() ||
-                        !sourceMapDraft.file.trim() ||
-                        !sourceMapDraft.content.trim() ||
-                        uploadSourceMapMutation.isPending
-                      }
-                      onClick={() => uploadSourceMapMutation.mutate()}
-                    >
-                      {uploadSourceMapMutation.isPending ? t('saving') : t('errorSourceMapUpload')}
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-              {sourceMaps.length ? (
-                <div className="table-scroll">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>{t('errorSourceMapRelease')}</th>
-                        <th>{t('errorSourceMapFile')}</th>
-                        <th>{t('errorSourceMapSize')}</th>
-                        <th>{t('created')}</th>
-                        {canEdit ? <th className="cohorts-actions-col">{t('actions')}</th> : null}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sourceMaps.map((item) => (
-                        <tr key={item.id}>
-                          <td>{item.release}</td>
-                          <td className="mono">{item.file}</td>
-                          <td className="text-muted">{formatBytes(item.size)}</td>
-                          <td className="text-muted">{formatTime(item.updatedAt ?? item.createdAt)}</td>
-                          {canEdit ? (
-                            <td className="cohorts-actions-col">
+                      canEdit && selectedVisible.length ? (
+                        <div className="q-merge-bar" aria-live="polite">
+                          <span className="q-merge-count">
+                            {t('qualitySelectedCount').replace('{count}', formatNumber(selectedVisible.length))}
+                          </span>
+                          {selectedVisible.length >= 2 ? (
+                            <>
+                              <FilterSelect
+                                label={t('errorIssueMergeInto')}
+                                value={effectiveMergeTarget}
+                                active
+                                onChange={setMergeTarget}
+                                options={selectedVisible.map((fingerprint) => ({
+                                  value: fingerprint,
+                                  label: `${t('errorIssueMergeInto')} ${issueTitle(fingerprint)}`,
+                                }))}
+                              />
                               <Button
                                 type="button"
-                                variant="destructive-ghost"
                                 size="sm"
-                                disabled={deleteSourceMapMutation.isPending}
-                                onClick={() =>
+                                variant="primary"
+                                disabled={mergeMutation.isPending}
+                                onClick={() => {
+                                  const target = effectiveMergeTarget;
+                                  const sources = selectedVisible.filter((fingerprint) => fingerprint !== target);
                                   confirm({
-                                    title: deleteTitle(`${item.release} · ${item.file}`),
-                                    onConfirm: () => deleteSourceMapMutation.mutate(item.id),
-                                  })
-                                }
+                                    title: t('errorIssueMergeTitle'),
+                                    description: `${t('errorIssueMergeInto')}: ${issueTitle(target)}. ${t('errorIssueMergeBody')}`,
+                                    confirmLabel: t('errorIssueMerge'),
+                                    onConfirm: () => mergeMutation.mutate({ target, sources }),
+                                  });
+                                }}
                               >
-                                {t('delete')}
+                                {t('errorIssueMerge')}
                               </Button>
-                            </td>
-                          ) : null}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <EmptyState title={t('noSourceMaps')} description={t('errorSourceMapsLead')} />
-              )}
-            </section>
-          </DataViewState>
-        ) : null}
-
-        {secondaryTab === 'alerts' ? (
-          <DataViewState
-            loading={alertRulesQuery.isLoading && !alertRulesQuery.data}
-            error={alertRulesQuery.isError ? alertRulesQuery.error : null}
-            onRetry={() => alertRulesQuery.refetch()}
-          >
-            <section className="section-gap">
-              <header className="panel-header">
-                <div>
-                  <h3 className="section-title">{t('errorAlertRules')}</h3>
-                  <p className="text-muted">{t('errorAlertRulesLead')}</p>
-                </div>
-              </header>
-              {canEdit ? (
-                <div className="panel-form">
-                  <div className="field">
-                    <Label htmlFor="error-alert-name">{t('alertRuleName')}</Label>
-                    <Input
-                      id="error-alert-name"
-                      value={alertDraft.name}
-                      onChange={(event) => setAlertDraft((prev) => ({ ...prev, name: event.target.value }))}
-                    />
-                  </div>
-                  <div className="field">
-                    <Label htmlFor="error-alert-threshold">{t('alertRuleThreshold')}</Label>
-                    <Input
-                      id="error-alert-threshold"
-                      type="number"
-                      min={1}
-                      value={alertDraft.threshold}
-                      onChange={(event) => setAlertDraft((prev) => ({ ...prev, threshold: Number(event.target.value) }))}
-                    />
-                  </div>
-                  <div className="field">
-                    <Label htmlFor="error-alert-window">{t('alertRuleWindow')}</Label>
-                    <Input
-                      id="error-alert-window"
-                      type="number"
-                      min={1}
-                      value={alertDraft.windowMinutes}
-                      onChange={(event) =>
-                        setAlertDraft((prev) => ({ ...prev, windowMinutes: Number(event.target.value) }))
-                      }
-                    />
-                  </div>
-                  <div className="field">
-                    <Label htmlFor="error-alert-severity">{t('errorAlertSeverity')}</Label>
-                    <select
-                      id="error-alert-severity"
-                      className="select"
-                      value={alertDraft.severity}
-                      onChange={(event) => setAlertDraft((prev) => ({ ...prev, severity: event.target.value }))}
-                    >
-                      <option value="">{t('all')}</option>
-                      <option value="fatal">fatal</option>
-                      <option value="error">error</option>
-                      <option value="warning">warning</option>
-                      <option value="info">info</option>
-                    </select>
-                  </div>
-                  <div className="field">
-                    <Label htmlFor="error-alert-release">{t('release')}</Label>
-                    <Input
-                      id="error-alert-release"
-                      value={alertDraft.release}
-                      onChange={(event) => setAlertDraft((prev) => ({ ...prev, release: event.target.value }))}
-                    />
-                  </div>
-                  <div className="field">
-                    <Label htmlFor="error-alert-environment">{t('environment')}</Label>
-                    <Input
-                      id="error-alert-environment"
-                      value={alertDraft.environment}
-                      onChange={(event) => setAlertDraft((prev) => ({ ...prev, environment: event.target.value }))}
-                    />
-                  </div>
-                  <div className="field">
-                    <Label htmlFor="error-alert-channel">{t('alertRuleChannel')}</Label>
-                    <select
-                      id="error-alert-channel"
-                      className="select"
-                      value={alertDraft.channel}
-                      onChange={(event) =>
-                        setAlertDraft((prev) => ({
-                          ...prev,
-                          channel: event.target.value as ErrorAlertRule['channel'],
-                        }))
-                      }
-                    >
-                      <option value="record">{t('alertRuleChannel_record')}</option>
-                      <option value="email">{t('alertRuleChannel_email')}</option>
-                      <option value="webhook">{t('alertRuleChannel_webhook')}</option>
-                    </select>
-                  </div>
-                  {alertDraft.channel !== 'record' ? (
-                    <div className="field">
-                      <Label htmlFor="error-alert-target">{t('alertRuleTarget')}</Label>
-                      <Input
-                        id="error-alert-target"
-                        value={alertDraft.target}
-                        placeholder={
-                          alertDraft.channel === 'email' ? 'ops@example.com' : 'https://hooks.example.com/alerts'
-                        }
-                        onChange={(event) => setAlertDraft((prev) => ({ ...prev, target: event.target.value }))}
-                      />
-                    </div>
-                  ) : null}
-                  <label className="error-alert-regressions-field" htmlFor="error-alert-regressions">
-                    <Checkbox
-                      id="error-alert-regressions"
-                      checked={alertDraft.notifyRegressions}
-                      onCheckedChange={(checked) => setAlertDraft((prev) => ({ ...prev, notifyRegressions: checked === true }))}
-                    />
-                    <span>{t('errorAlertNotifyRegressions')}</span>
-                  </label>
-                  <div className="form-actions">
-                    <Button
-                      type="button"
-                      variant="primary"
-                      disabled={!alertDraft.name.trim() || createAlertMutation.isPending}
-                      onClick={() => createAlertMutation.mutate()}
-                    >
-                      {createAlertMutation.isPending ? t('saving') : t('createAlertRule')}
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-              {alertRules.length ? (
-                <div className="table-scroll">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>{t('alertRuleName')}</th>
-                        <th>{t('alertRuleThreshold')}</th>
-                        <th>{t('alertRuleWindow')}</th>
-                        <th>{t('errorAlertSeverity')}</th>
-                        <th>{t('alertRuleChannel')}</th>
-                        <th>{t('errorAlertRegressionsColumn')}</th>
-                        <th>{t('status')}</th>
-                        <th className="cohorts-actions-col">{t('actions')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {alertRules.map((rule) => (
-                        <tr key={rule.id}>
-                          <td>{rule.name}</td>
-                          <td>{rule.threshold}</td>
-                          <td>{rule.windowMinutes}</td>
-                          <td>{rule.severity ?? '-'}</td>
-                          <td>
-                            {t(`alertRuleChannel_${rule.channel}`)}
-                            {rule.target ? <div className="text-muted mono">{rule.target}</div> : null}
-                          </td>
-                          <td>
-                            {canEdit ? (
-                              <Checkbox
-                                checked={rule.notifyRegressions}
-                                aria-label={`${t('errorAlertNotifyRegressions')}: ${rule.name}`}
-                                onCheckedChange={(checked) =>
-                                  updateAlertMutation.mutate({ id: rule.id, patch: { notifyRegressions: checked === true } })
-                                }
+                            </>
+                          ) : (
+                            <span className="q-merge-hint">{t('errorIssueMergeHint')}</span>
+                          )}
+                          <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedIssues([])}>
+                            {t('qualityClearSelection')}
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="q-card-count">
+                          {issues.length >= ISSUE_LIMIT
+                            ? t('qualityTopIssues').replace('{count}', formatNumber(ISSUE_LIMIT))
+                            : t('qualityIssueCount').replace('{count}', formatNumber(issues.length))}
+                        </span>
+                      )
+                    }
+                  >
+                    {issues.length ? (
+                      <div className="table-scroll">
+                        <table className="data-table data-table--interactive q-issues-table">
+                          <thead>
+                            <tr>
+                              {canEdit ? (
+                                <th className="q-col-check">
+                                  <Checkbox
+                                    checked={allSelected}
+                                    onCheckedChange={(checked) =>
+                                      setSelectedIssues(checked === true ? issues.map((issue) => issue.fingerprint) : [])
+                                    }
+                                    aria-label={t('qualitySelectAll')}
+                                  />
+                                </th>
+                              ) : null}
+                              <th>{t('issue')}</th>
+                              <th>{t('status')}</th>
+                              <th className="num">{t('qualityOccurrences')}</th>
+                              <th className="num">{t('users')}</th>
+                              <th>{t('lastSeen')}</th>
+                              {canEdit ? (
+                                <th className="q-col-actions">
+                                  <span className="sr-only">{t('actions')}</span>
+                                </th>
+                              ) : null}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {issues.map((issue) => (
+                              <IssueRow
+                                key={issue.fingerprint}
+                                issue={issue}
+                                href={issueHref(issue.fingerprint)}
+                                canEdit={canEdit}
+                                selected={selectedVisible.includes(issue.fingerprint)}
+                                onSelect={(checked) => toggleIssueSelection(issue.fingerprint, checked)}
+                                onOpen={() => navigate(issueHref(issue.fingerprint))}
+                                statusPending={updateIssueMutation.isPending}
+                                onStatus={(status) => updateIssueMutation.mutate({ fingerprint: issue.fingerprint, status })}
                               />
-                            ) : rule.notifyRegressions ? (
-                              t('enabled')
-                            ) : (
-                              t('disabled')
-                            )}
-                          </td>
-                          <td>{rule.enabled ? t('enabled') : t('disabled')}</td>
-                          <td className="cohorts-actions-col">
-                            {canEdit ? (
-                              <div className="cohorts-row-actions">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => updateAlertMutation.mutate({ id: rule.id, patch: { enabled: !rule.enabled } })}
-                                >
-                                  {rule.enabled ? t('disable') : t('enable')}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="destructive-ghost"
-                                  size="sm"
-                                  onClick={() => confirm({ title: deleteTitle(rule.name), onConfirm: () => deleteAlertMutation.mutate(rule.id) })}
-                                >
-                                  {t('delete')}
-                                </Button>
-                              </div>
-                            ) : null}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <EmptyState title={t('noErrorAlertRules')} description={t('errorAlertRulesLead')} />
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <EmptyState icon={<Bug />} title={t('errorIssuesEmptyTitle')} description={t('qualityErrorsEmptyFiltered')} />
+                    )}
+                  </SectionCard>
+
+                  {events.length ? (
+                    <SectionCard
+                      flush
+                      title={t('errorsRecent')}
+                      description={t('qualityRecentErrorsLead')}
+                      footer={
+                        events.length > EVENTS_PREVIEW ? (
+                          <button type="button" className="card-footer-link" onClick={() => setShowAllEvents((value) => !value)}>
+                            {showAllEvents
+                              ? t('qualityShowFewer')
+                              : t('qualityShowAll').replace('{count}', formatNumber(events.length))}
+                          </button>
+                        ) : undefined
+                      }
+                    >
+                      <div className="table-scroll">
+                        <table className="data-table data-table--interactive q-events-table">
+                          <thead>
+                            <tr>
+                              <th>{t('error')}</th>
+                              <th>{t('page')}</th>
+                              <th>{t('release')}</th>
+                              <th>{t('session')}</th>
+                              <th>{t('when')}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(showAllEvents ? events : events.slice(0, EVENTS_PREVIEW)).map((row) => {
+                              const href = `/websites/${websiteId}/errors/${row.id}`;
+                              const severity = errorSeverity(row.severity);
+                              return (
+                                <tr key={row.id} onClick={() => navigate(href)}>
+                                  <td>
+                                    <div className="q-issue">
+                                      <span className="q-sev-dot" style={{ background: severityVar(severity) }} title={severity} aria-hidden />
+                                      <div className="q-issue-copy">
+                                        <Link to={href} className="q-issue-title" onClick={stop}>
+                                          {shortText(row.message ?? row.eventName, t('unknown'))}
+                                        </Link>
+                                        <span className="q-issue-meta">
+                                          {severity !== 'error' ? <span className="q-issue-sev">{severity}</span> : null}
+                                          <span>{shortText(row.name, t('errorNameFallback'), 60)}</span>
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="mono q-col-path" title={row.urlPath || '/'}>
+                                    {row.urlPath || '/'}
+                                  </td>
+                                  <td className="q-col-muted">
+                                    {row.release ?? '-'}
+                                    {row.environment ? <span className="q-cell-sub">{row.environment}</span> : null}
+                                  </td>
+                                  <td>
+                                    <Link
+                                      to={`/websites/${websiteId}/sessions/${row.sessionId}`}
+                                      className="q-id-link"
+                                      onClick={stop}
+                                      title={row.sessionId}
+                                    >
+                                      {shortId(row.sessionId)}
+                                    </Link>
+                                  </td>
+                                  <td className="q-col-when">
+                                    <RelativeTime value={row.createdAt} />
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </SectionCard>
+                  ) : null}
+                </>
               )}
-            </section>
-          </DataViewState>
-        ) : null}
-      </section>
+            </>
+          ) : null}
+        </DataViewState>
       </PageBody>
+
+      <ErrorSourceMapsSheet
+        websiteId={websiteId}
+        canEdit={canEdit}
+        release={releaseFilter}
+        open={sheet === 'source-maps'}
+        onOpenChange={(open) => setSheet(open ? 'source-maps' : null)}
+      />
+      <ErrorAlertRulesSheet
+        websiteId={websiteId}
+        canEdit={canEdit}
+        open={sheet === 'alerts'}
+        onOpenChange={(open) => setSheet(open ? 'alerts' : null)}
+      />
     </Page>
+  );
+}
+
+function ErrorsKpiStrip({
+  stats,
+  issues,
+  totalSessions,
+}: {
+  stats: ErrorEventsResponse['stats'];
+  issues: ErrorIssue[];
+  totalSessions: number | undefined;
+}) {
+  const regressed = issues.filter((issue) => issue.status === 'regressed').length;
+  const errorFree =
+    totalSessions && totalSessions > 0 ? Math.max(0, ((totalSessions - stats.sessions) / totalSessions) * 100) : undefined;
+  const lastSeen = stats.lastSeenAt ? <RelativeTime value={stats.lastSeenAt} /> : null;
+  return (
+    <KpiStrip columns={4}>
+      <KpiCell
+        label={t('errorIssues')}
+        value={issues.length >= ISSUE_LIMIT ? `${ISSUE_LIMIT}+` : formatNumber(issues.length)}
+        hint={regressed ? t('qualityRegressedCount').replace('{count}', formatNumber(regressed)) : undefined}
+      />
+      <KpiCell
+        label={t('qualityOccurrences')}
+        value={formatNumber(stats.errors)}
+        hint={lastSeen ? <>{t('qualityLastSeenHint')} {lastSeen}</> : undefined}
+      />
+      <KpiCell
+        label={t('errorsAffectedSessions')}
+        value={formatNumber(stats.sessions)}
+        hint={t('qualityUsersCount').replace('{count}', formatNumber(stats.users))}
+      />
+      <KpiCell
+        label={t('qualityErrorFreeSessions')}
+        value={errorFree === undefined ? '-' : formatPercent(errorFree, { digits: errorFree >= 99 && errorFree < 100 ? 2 : 1 })}
+        hint={
+          totalSessions !== undefined
+            ? t('qualityOfSessions').replace('{count}', formatNumber(totalSessions))
+            : undefined
+        }
+      />
+    </KpiStrip>
+  );
+}
+
+function IssueRow({
+  issue,
+  href,
+  canEdit,
+  selected,
+  onSelect,
+  onOpen,
+  statusPending,
+  onStatus,
+}: {
+  issue: ErrorIssue;
+  href: string;
+  canEdit: boolean;
+  selected: boolean;
+  onSelect: (checked: boolean) => void;
+  onOpen: () => void;
+  statusPending: boolean;
+  onStatus: (status: 'open' | 'resolved' | 'ignored') => void;
+}) {
+  const severity = errorSeverity(issue.severity);
+  const location = issue.samples[0]?.urlPath;
+  const actions: Array<'open' | 'resolved' | 'ignored'> = (['resolved', 'ignored', 'open'] as const).filter(
+    (status) => status !== (issue.status === 'regressed' ? 'open' : (issue.status as ErrorIssueStatus)),
+  );
+  return (
+    <tr className={selected ? 'is-selected' : undefined} onClick={onOpen}>
+      {canEdit ? (
+        <td className="q-col-check" onClick={stop}>
+          <Checkbox
+            checked={selected}
+            onCheckedChange={(checked) => onSelect(checked === true)}
+            aria-label={`${t('errorIssueSelect')}: ${shortText(issue.message, issue.fingerprint, 60)}`}
+          />
+        </td>
+      ) : null}
+      <td className="q-col-issue">
+        <div className="q-issue">
+          <span className="q-sev-dot" style={{ background: severityVar(severity) }} title={severity} aria-hidden />
+          <div className="q-issue-copy">
+            <Link to={href} className="q-issue-title" onClick={stop} title={issue.message ?? undefined}>
+              {shortText(issue.message, t('unknown'))}
+            </Link>
+            <span className="q-issue-meta">
+              {severity !== 'error' ? <span className="q-issue-sev">{severity}</span> : null}
+              <span className="q-issue-name">{issue.name ?? t('errorNameFallback')}</span>
+              {location ? (
+                <span className="mono q-issue-location" title={location}>
+                  {location}
+                </span>
+              ) : null}
+              {issue.mergedCount ? (
+                <span>{t('qualityMergedCount').replace('{count}', formatNumber(issue.mergedCount))}</span>
+              ) : null}
+            </span>
+          </div>
+        </div>
+      </td>
+      <td>
+        <ErrorIssueStatusBadge status={issue.status} />
+      </td>
+      <td className="num">
+        <span className="q-occ">
+          <ErrorIssueTrend values={issue.trend} label={t('errorIssueTrend')} />
+          <span className="q-occ-value">{formatNumber(issue.events)}</span>
+        </span>
+      </td>
+      <td className="num">{formatNumber(issue.users)}</td>
+      <td className="q-col-when">
+        <RelativeTime value={issue.lastSeenAt} />
+      </td>
+      {canEdit ? (
+        <td className="q-col-actions" onClick={stop}>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={<Button type="button" variant="ghost" size="icon-sm" aria-label={`${t('actions')}: ${shortText(issue.message, '', 40)}`} />}
+            >
+              <MoreHorizontal aria-hidden />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-40">
+              {actions.map((status) => (
+                <DropdownMenuItem key={status} disabled={statusPending} onClick={() => onStatus(status)}>
+                  {t(`errorIssueAction_${status}`)}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={onOpen}>{t('errorIssueViewIssue')}</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </td>
+      ) : null}
+    </tr>
   );
 }

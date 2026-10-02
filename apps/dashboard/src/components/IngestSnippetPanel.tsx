@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Activity } from 'lucide-react';
 import { Button } from './ui/button';
-import { Badge } from './ui/badge';
-import { Separator } from './ui/separator';
+import { SectionCard } from './SectionCard';
+import { StatusBadge } from './StatusBadge';
 import { ProjectKeyField, useProjectKey } from './ProjectKeyField';
+import { CodeBlock } from './quality/CodeBlock';
+import { PageTabs } from './quality/PageTabs';
 import { api, INGEST_URL, INGEST_URL_FOR_DOCS, type TrackingStatus } from '../lib/api';
 import { formatDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
@@ -11,40 +14,8 @@ import { t } from '../lib/i18n';
 // The UMD build defines window.rrweb. dist/rrweb.min.js is an ES module and fails in a classic script tag.
 const RRWEB_CDN = 'https://cdn.jsdelivr.net/npm/rrweb@2/umd/rrweb.min.js';
 
-const NEW_SITE_MS = 30 * 60 * 1000;
-const STORAGE_PREFIX = 'flareboard.embed-expanded.';
-
 type TestState = 'idle' | 'testing' | 'success' | 'waiting' | 'failed';
-
-function storageKey(websiteId: string) {
-  return `${STORAGE_PREFIX}${websiteId}`;
-}
-
-function isRecentlyCreated(createdAt?: string | number): boolean {
-  if (createdAt == null) return false;
-  const ts = typeof createdAt === 'number' ? createdAt : Date.parse(String(createdAt));
-  if (!Number.isFinite(ts)) return false;
-  return Date.now() - ts < NEW_SITE_MS;
-}
-
-function readStoredExpanded(websiteId: string): boolean | null {
-  const v = localStorage.getItem(storageKey(websiteId));
-  if (v === '1') return true;
-  if (v === '0') return false;
-  return null;
-}
-
-function shouldStartExpanded(
-  websiteId: string,
-  createdAt: string | number | undefined,
-  setup: boolean,
-): boolean {
-  if (setup) return true;
-  if (isRecentlyCreated(createdAt)) return true;
-  const stored = readStoredExpanded(websiteId);
-  if (stored !== null) return stored;
-  return false;
-}
+type SnippetTab = 'api' | 'options' | 'npm' | 'posthog' | 'declarative' | 'replay';
 
 async function checkScriptReachable(): Promise<boolean> {
   try {
@@ -55,25 +26,29 @@ async function checkScriptReachable(): Promise<boolean> {
   }
 }
 
+/**
+ * Tracking code card of the website settings: the script tag with copy and a live "test
+ * tracking" check, then the other ways to send data (API calls, script options, npm, PostHog
+ * SDKs, declarative events, session replay) as tabs. `?setup=1` (new websites) scrolls here.
+ */
 export function IngestSnippetPanel({
   websiteId,
-  createdAt,
   replayEnabled,
+  id,
 }: {
   websiteId: string;
-  createdAt?: string | number;
   replayEnabled?: boolean;
+  id?: string;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const setup = searchParams.get('setup') === '1';
-
-  const [open, setOpen] = useState(() => shouldStartExpanded(websiteId, createdAt, setup));
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [tab, setTab] = useState<SnippetTab>('api');
   const [testState, setTestState] = useState<TestState>('idle');
   const [testDetail, setTestDetail] = useState<string | null>(null);
 
   const mainSnippet = useMemo(
-    () =>
-      `<script defer src="${INGEST_URL}/script.js" data-website-id="${websiteId}"></script>`,
+    () => `<script defer src="${INGEST_URL}/script.js" data-website-id="${websiteId}"></script>`,
     [websiteId],
   );
 
@@ -188,18 +163,14 @@ posthog.capture(distinct_id='user_123', event='subscription_renewed', properties
 <button data-flareboard-event="signup" data-flareboard-event-plan="pro">Sign up</button>
 <!-- Umami-compatible: data-umami-event="signup" data-umami-event-plan="pro" -->`;
 
+  // New websites land here with ?setup=1: bring the snippet into view, then drop the flag.
   useEffect(() => {
     if (!setup) return;
-    setOpen(true);
+    cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     const next = new URLSearchParams(searchParams);
     next.delete('setup');
     setSearchParams(next, { replace: true });
   }, [setup, searchParams, setSearchParams]);
-
-  function onToggle(next: boolean) {
-    setOpen(next);
-    localStorage.setItem(storageKey(websiteId), next ? '1' : '0');
-  }
 
   async function runTest() {
     setTestState('testing');
@@ -220,149 +191,143 @@ posthog.capture(distinct_id='user_123', event='subscription_renewed', properties
         setTestState('success');
         setTestDetail(
           data.lastEventAt
-            ? t('trackingTestSuccessWithTime').replace(
-                '{time}',
-                formatDateTime(data.lastEventAt),
-              )
+            ? t('trackingTestSuccessWithTime').replace('{time}', formatDateTime(data.lastEventAt))
             : t('trackingTestSuccess'),
         );
         return;
       }
 
-      if (data.pageviews24h > 0) {
-        setTestState('waiting');
-        setTestDetail(t('trackingTestWaitingStale'));
-        return;
-      }
-
       setTestState('waiting');
-      setTestDetail(t('trackingTestWaiting'));
+      setTestDetail(data.pageviews24h > 0 ? t('trackingTestWaitingStale') : t('trackingTestWaiting'));
     } catch (err) {
       setTestState('failed');
       setTestDetail((err as Error).message || t('trackingTestFailed'));
     }
   }
 
-  const statusClass =
-    testState === 'success'
-      ? 'text-success'
-      : testState === 'waiting'
-        ? 'text-muted'
-        : testState === 'failed'
-          ? 'text-danger'
-          : '';
+  const testBadge =
+    testState === 'success' ? (
+      <StatusBadge tone="success">{t('trackingTestOk')}</StatusBadge>
+    ) : testState === 'waiting' ? (
+      <StatusBadge tone="warning">{t('trackingTestPending')}</StatusBadge>
+    ) : testState === 'failed' ? (
+      <StatusBadge tone="danger">{t('trackingTestError')}</StatusBadge>
+    ) : null;
 
   return (
-    <details
-      className="panel snippet-panel snippet-panel-collapsible"
-      open={open}
-      onToggle={(e) => onToggle((e.target as HTMLDetailsElement).open)}
-    >
-      <summary className="snippet-panel-summary">
-        <span className="snippet-panel-label">{t('ingestSnippet')}</span>
-        <span className="snippet-panel-toggle">{open ? t('hideEmbedCode') : t('showEmbedCode')}</span>
-      </summary>
-      <div className="snippet-panel-body">
-        {!INGEST_URL ? (
-          <p className="text-danger" role="alert">
-            {t('ingestUrlMissing')}
-          </p>
-        ) : null}
-        <pre className="code-block snippet-code">{mainSnippet}</pre>
-        <details className="snippet-advanced">
-          <summary>{t('embedAdvanced')}</summary>
-          <pre className="code-block snippet-code">{advancedSnippet}</pre>
-        </details>
-        <details className="snippet-advanced">
-          <summary>{t('embedOptions')}</summary>
-          <p className="section-lead snippet-replay-lead">{t('embedOptionsLead')}</p>
-          <pre className="code-block snippet-code">{optionsSnippet}</pre>
-          <ul className="list-plain">
-            {(
-              [
-                ['data-autocapture', 'embedOptionAutocapture'],
-                ['data-pageleave', 'embedOptionPageleave'],
-                ['data-persistence', 'embedOptionPersistence'],
-                ['data-respect-dnt', 'embedOptionRespectDnt'],
-                ['data-fb-no-capture', 'embedOptionNoCapture'],
-              ] as const
-            ).map(([name, key]) => (
-              <li key={name} className="field-hint">
-                <code>{name}</code> — {t(key)}
-              </li>
-            ))}
-          </ul>
-        </details>
-        <details className="snippet-advanced">
-          <summary>{t('embedNpmTitle')}</summary>
-          <p className="section-lead snippet-replay-lead">{t('embedNpmLead')}</p>
-          <pre className="code-block snippet-code">{npmSnippet}</pre>
-        </details>
-        <details className="snippet-advanced">
-          <summary>{t('posthogSdks')}</summary>
-          <p className="section-lead snippet-replay-lead">{t('posthogSdksLead')}</p>
-          <ProjectKeyField websiteId={websiteId} />
-          <p className="text-sm text-[var(--text-muted)] mb-2">posthog-js</p>
-          <pre className="code-block snippet-code">{posthogSnippets.js}</pre>
-          <p className="text-sm text-[var(--text-muted)] mb-2">posthog-node</p>
-          <pre className="code-block snippet-code">{posthogSnippets.node}</pre>
-          <p className="text-sm text-[var(--text-muted)] mb-2">posthog-python</p>
-          <pre className="code-block snippet-code">{posthogSnippets.python}</pre>
-          <p className="field-hint">{t('posthogSdksLimits')}</p>
-        </details>
-        <details className="snippet-advanced">
-          <summary>{t('declarativeEvents')}</summary>
-          <p className="section-lead snippet-replay-lead">{t('declarativeEventsLead')}</p>
-          <pre className="code-block snippet-code">{declarativeSnippet}</pre>
-        </details>
-
-        <Separator className="my-4" />
-
-        <section className="snippet-replay-section" aria-labelledby={`replay-embed-${websiteId}`}>
-          <div className="flex flex-wrap items-center gap-2 mb-2">
-            <h3 id={`replay-embed-${websiteId}`} className="snippet-replay-title m-0">
-              {t('replayEmbedTitle')}
-            </h3>
-            {!replayEnabled ? (
-              <Badge variant="warning">{t('replayEmbedRequiresSettings')}</Badge>
-            ) : null}
-          </div>
-          <p className="section-lead snippet-replay-lead">{t('replayEmbedLead')}</p>
-          <p className="text-sm text-[var(--text-muted)] mb-3">{t('replayEmbedScriptsNote')}</p>
-          <pre className="code-block snippet-code">{replaySnippet}</pre>
-          {!replayEnabled ? (
-            <p className="mt-3 mb-0 text-sm">
-              <Button asChild variant="secondary" size="sm">
-                <Link to={`/websites/${websiteId}/settings`}>{t('goToReplaySettings')}</Link>
-              </Button>
-            </p>
-          ) : null}
-        </section>
-
-        <div className="snippet-panel-actions">
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={testState === 'testing'}
-            onClick={() => void runTest()}
-          >
+    <div ref={cardRef} id={id} className="q-anchor">
+      <SectionCard
+        title={t('qualityTrackingCode')}
+        description={t('qualityTrackingCodeLead')}
+        actions={
+          <Button type="button" variant="outline" size="sm" disabled={testState === 'testing'} onClick={() => void runTest()}>
+            <Activity aria-hidden />
             {testState === 'testing' ? t('trackingTestRunning') : t('testTracking')}
           </Button>
-          {testState !== 'idle' ? (
-            <p className={`snippet-test-status ${statusClass}`} role="status">
-              {testState === 'success'
-                ? t('trackingTestOk')
-                : testState === 'waiting'
-                  ? t('trackingTestPending')
-                  : testState === 'failed'
-                    ? t('trackingTestError')
-                    : null}
-              {testDetail ? ` — ${testDetail}` : null}
+        }
+      >
+        <div className="q-snippet">
+          {!INGEST_URL ? (
+            <p className="q-form-error" role="alert">
+              {t('ingestUrlMissing')}
             </p>
           ) : null}
+          <CodeBlock code={mainSnippet} wrap />
+          {testState !== 'idle' && testState !== 'testing' ? (
+            <p className="q-test-status" role="status">
+              {testBadge}
+              {testDetail ? <span>{testDetail}</span> : null}
+            </p>
+          ) : null}
+
+          <div className="q-snippet-more">
+            <PageTabs
+              label={t('qualityMoreWaysToSend')}
+              value={tab}
+              onChange={setTab}
+              tabs={[
+                { id: 'api', label: t('embedAdvanced') },
+                { id: 'options', label: t('embedOptions') },
+                { id: 'npm', label: t('embedNpmTitle') },
+                { id: 'posthog', label: t('posthogSdks') },
+                { id: 'declarative', label: t('declarativeEvents') },
+                { id: 'replay', label: t('replayEmbedTitle') },
+              ]}
+            />
+            <div className="q-snippet-panel">
+              {tab === 'api' ? <CodeBlock code={advancedSnippet} maxHeight="22rem" /> : null}
+              {tab === 'options' ? (
+                <>
+                  <p className="q-field-hint">{t('embedOptionsLead')}</p>
+                  <CodeBlock code={optionsSnippet} />
+                  <dl className="kv-list kv-list--compact q-kv-narrow">
+                    {(
+                      [
+                        ['data-autocapture', 'embedOptionAutocapture'],
+                        ['data-pageleave', 'embedOptionPageleave'],
+                        ['data-persistence', 'embedOptionPersistence'],
+                        ['data-respect-dnt', 'embedOptionRespectDnt'],
+                        ['data-fb-no-capture', 'embedOptionNoCapture'],
+                      ] as const
+                    ).map(([name, key]) => (
+                      <Fragment key={name}>
+                        <dt className="mono">{name}</dt>
+                        <dd>{t(key)}</dd>
+                      </Fragment>
+                    ))}
+                  </dl>
+                </>
+              ) : null}
+              {tab === 'npm' ? (
+                <>
+                  <p className="q-field-hint">{t('embedNpmLead')}</p>
+                  <CodeBlock code={npmSnippet} maxHeight="22rem" />
+                </>
+              ) : null}
+              {tab === 'posthog' ? (
+                <>
+                  <p className="q-field-hint">{t('posthogSdksLead')}</p>
+                  <ProjectKeyField websiteId={websiteId} />
+                  <CodeBlock caption="posthog-js" code={posthogSnippets.js} />
+                  <CodeBlock caption="posthog-node" code={posthogSnippets.node} />
+                  <CodeBlock caption="posthog-python" code={posthogSnippets.python} />
+                  <p className="q-field-hint">{t('posthogSdksLimits')}</p>
+                </>
+              ) : null}
+              {tab === 'declarative' ? (
+                <>
+                  <p className="q-field-hint">{t('declarativeEventsLead')}</p>
+                  <CodeBlock code={declarativeSnippet} />
+                </>
+              ) : null}
+              {tab === 'replay' ? (
+                <>
+                  <p className="q-field-hint">
+                    {!replayEnabled ? (
+                      <StatusBadge tone="warning" className="q-inline-badge">
+                        {t('replayEmbedRequiresSettings')}
+                      </StatusBadge>
+                    ) : null}
+                    {t('replayEmbedLead')} {t('replayEmbedScriptsNote')}
+                  </p>
+                  <CodeBlock code={replaySnippet} />
+                  {!replayEnabled ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="self-start"
+                      onClick={() => document.getElementById('settings-replay')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                    >
+                      {t('goToReplaySettings')}
+                    </Button>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+          </div>
         </div>
-      </div>
-    </details>
+      </SectionCard>
+    </div>
   );
 }

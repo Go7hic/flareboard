@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react';
+import { ChevronRight } from 'lucide-react';
+import { StatusBadge } from '../StatusBadge';
 import { Button } from '../ui/button';
+import { CopyButton } from '../quality/CopyButton';
 import { t } from '../../lib/i18n';
+import { cn } from '../../lib/utils';
 
 /** Characters rendered before "Show all"; stored content is capped at 32 KB anyway. */
 const PREVIEW_CHARS = 4000;
@@ -53,14 +57,14 @@ function parse(value: string): { json: unknown; ok: boolean } {
   }
 }
 
-function LongText({ text }: { text: string }) {
+function LongText({ text, className }: { text: string; className?: string }) {
   const [expanded, setExpanded] = useState(false);
   const long = text.length > PREVIEW_CHARS;
   return (
     <>
-      <pre className="llm-content-pre">{long && !expanded ? `${text.slice(0, PREVIEW_CHARS)}…` : text}</pre>
+      <pre className={cn('q-ai-pre', className)}>{long && !expanded ? `${text.slice(0, PREVIEW_CHARS)}…` : text}</pre>
       {long ? (
-        <Button type="button" variant="ghost" size="sm" onClick={() => setExpanded((open) => !open)}>
+        <Button type="button" variant="ghost" size="sm" className="q-ai-more" onClick={() => setExpanded((open) => !open)}>
           {expanded ? t('aiShowLess') : t('aiShowAll')}
         </Button>
       ) : null}
@@ -69,8 +73,9 @@ function LongText({ text }: { text: string }) {
 }
 
 /**
- * Prompt / response viewer: chat messages as a list, other JSON pretty-printed, plain text as
- * is; collapsible, with a raw view and a marker when the stored payload was cut at 32 KB.
+ * Prompt / response viewer: chat messages as a list (role, then text), other JSON pretty-printed,
+ * plain text as is. A section of its card (no box of its own): a header row that collapses it,
+ * with a raw/formatted toggle, copy, and a marker when the stored payload was cut at 32 KB.
  */
 export function AiContentViewer({
   label,
@@ -85,49 +90,60 @@ export function AiContentViewer({
   omitted?: boolean;
   defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
   const [raw, setRaw] = useState(false);
   const body = useMemo(() => (value && truncated ? value.slice(0, value.indexOf(TRUNCATION_MARKER)) : value), [value, truncated]);
   const parsed = useMemo(() => (body ? parse(body) : { json: null, ok: false }), [body]);
   const chat = useMemo(() => (parsed.ok ? asChat(parsed.json) : null), [parsed]);
 
   return (
-    <details className="llm-content" open={defaultOpen || undefined}>
-      <summary className="llm-content-summary">
-        <span className="llm-content-label">{label}</span>
-        {truncated ? <span className="badge">{t('aiContentTruncated')}</span> : null}
-        {value && parsed.ok ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="ml-auto"
-            onClick={(event) => {
-              event.preventDefault();
-              setRaw((current) => !current);
-            }}
-          >
-            {raw ? t('aiFormattedView') : t('aiRawView')}
-          </Button>
+    <section className="q-ai-content">
+      <div className="q-ai-content-head">
+        <button type="button" className="q-ai-content-toggle" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+          <ChevronRight className={cn('q-stack-chevron', open && 'is-open')} size={14} strokeWidth={2} aria-hidden />
+          <span className="q-detail-section-title">{label}</span>
+        </button>
+        {truncated ? (
+          <StatusBadge tone="warning" dot={false}>
+            {t('aiContentTruncated')}
+          </StatusBadge>
         ) : null}
-      </summary>
-      <div className="llm-content-body">
-        {!value ? (
-          <p className="text-muted">{omitted ? t('aiContentOmitted') : t('aiContentEmpty')}</p>
-        ) : raw || !parsed.ok ? (
-          <LongText text={raw ? value : (body ?? '')} />
-        ) : chat ? (
-          <ol className="llm-chat">
-            {chat.map((message, index) => (
-              <li key={index} className="llm-chat-message">
-                <span className="badge llm-chat-role">{message.role}</span>
-                <LongText text={message.content} />
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <LongText text={typeof parsed.json === 'string' ? parsed.json : JSON.stringify(parsed.json, null, 2)} />
-        )}
+        {value ? (
+          <span className="q-ai-content-actions">
+            {parsed.ok ? (
+              <div className="segmented" role="group" aria-label={label}>
+                <button type="button" aria-pressed={!raw} onClick={() => setRaw(false)}>
+                  {t('aiFormattedView')}
+                </button>
+                <button type="button" aria-pressed={raw} onClick={() => setRaw(true)}>
+                  {t('aiRawView')}
+                </button>
+              </div>
+            ) : null}
+            <CopyButton value={value} iconOnly size="xs" />
+          </span>
+        ) : null}
       </div>
-    </details>
+      {open ? (
+        <div className="q-ai-content-body">
+          {!value ? (
+            <p className="q-muted-line">{omitted ? t('aiContentOmitted') : t('aiContentEmpty')}</p>
+          ) : raw || !parsed.ok ? (
+            <LongText text={raw ? value : (body ?? '')} />
+          ) : chat ? (
+            <ol className="q-ai-chat">
+              {chat.map((message, index) => (
+                <li key={index} className="q-ai-chat-message">
+                  <span className="q-ai-chat-role">{message.role}</span>
+                  <LongText text={message.content} className="is-plain" />
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <LongText text={typeof parsed.json === 'string' ? parsed.json : JSON.stringify(parsed.json, null, 2)} />
+          )}
+        </div>
+      ) : null}
+    </section>
   );
 }

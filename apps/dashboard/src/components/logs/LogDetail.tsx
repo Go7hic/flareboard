@@ -1,13 +1,15 @@
+import { Fragment } from 'react';
 import { Link } from 'react-router-dom';
-import { ExternalLink, Filter, GitBranch, X } from 'lucide-react';
+import { Filter, GitBranch, PlayCircle } from 'lucide-react';
 import type { LogAttributeFilter, LogEvent } from '../../lib/api';
 import { t } from '../../lib/i18n';
+import { KvList } from '../KvList';
+import { CodeBlock } from '../quality/CodeBlock';
 import { Button } from '../ui/button';
-import { MasterDetailSidePane } from '../master-detail';
 import { attributeValueText } from './log-filters';
-import { formatLogTime, LevelBadge } from './LogTable';
+import { formatLogTime } from './LogTable';
 
-/** Key/value rows with a "filter on this" action per row. */
+/** Key/value rows (mono) with a "filter on this value" action per row. */
 export function AttributeTable({
   values,
   onFilter,
@@ -20,51 +22,54 @@ export function AttributeTable({
   const entries = Object.entries(values ?? {});
   if (!entries.length) return null;
   return (
-    <section className="log-detail-section">
-      <h4 className="log-detail-heading">{label}</h4>
-      <table className="data-table log-attr-table">
-        <tbody>
-          {entries.map(([key, value]) => (
-            <tr key={key}>
-              <th scope="row" className="mono">
+    <section className="q-detail-section">
+      <h4 className="q-detail-section-title">{label}</h4>
+      <dl className="kv-list kv-list--compact q-attr-list">
+        {entries.map(([key, value]) => {
+          const text = attributeValueText(value);
+          return (
+            <Fragment key={key}>
+              <dt className="mono" title={key}>
                 {key}
-              </th>
-              <td className="mono log-attr-value">{attributeValueText(value)}</td>
-              {onFilter ? (
-                <td className="log-attr-action">
+              </dt>
+              <dd>
+                <span className="mono q-attr-value">{text}</span>
+                {onFilter ? (
                   <Button
                     type="button"
                     variant="ghost"
-                    size="sm"
+                    size="icon-xs"
+                    className="q-attr-filter"
                     aria-label={`${t('logsFilterOnAttribute')}: ${key}`}
                     title={t('logsFilterOnAttribute')}
-                    onClick={() => onFilter({ key, value: attributeValueText(value) })}
+                    onClick={() => onFilter({ key, value: text })}
                   >
-                    <Filter size={14} strokeWidth={2} aria-hidden />
+                    <Filter aria-hidden />
                   </Button>
-                </td>
-              ) : null}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                ) : null}
+              </dd>
+            </Fragment>
+          );
+        })}
+      </dl>
     </section>
   );
 }
 
-/** Log line detail: fields, links to its trace and session (with replay), attributes. */
+/**
+ * Log line detail without its container (the page puts it in a side pane or a sheet): the
+ * message, links to its trace and session (with replay), its fields and attributes.
+ */
 export function LogDetail({
   log,
   websiteId,
   timezone,
-  onClose,
   onOpenTrace,
   onFilterAttribute,
 }: {
   log: LogEvent;
   websiteId: string;
   timezone?: string;
-  onClose: () => void;
   onOpenTrace: (traceId: string) => void;
   onFilterAttribute: (filter: LogAttributeFilter) => void;
 }) {
@@ -92,49 +97,38 @@ export function LogDetail({
       : log.attributes;
 
   return (
-    <MasterDetailSidePane
-      className="log-detail"
-      title={
-        <span className="log-detail-title">
-          <LevelBadge level={log.level} /> {t('logsDetail')}
-        </span>
-      }
-      actions={
-        <Button type="button" variant="ghost" size="sm" onClick={onClose} aria-label={t('close')}>
-          <X size={16} strokeWidth={2} aria-hidden />
-        </Button>
-      }
-    >
-      <pre className="log-detail-body">{log.message ?? '-'}</pre>
+    <div className="q-log-detail">
+      <CodeBlock code={log.message ?? '-'} wrap maxHeight="14rem" />
 
-      <div className="log-detail-actions">
-        {log.traceId ? (
-          <Button type="button" variant="secondary" size="sm" onClick={() => onOpenTrace(log.traceId!)}>
-            <GitBranch size={14} strokeWidth={2} aria-hidden />
-            {t('logsViewTrace')}
-          </Button>
-        ) : null}
-        {log.sessionId ? (
-          <Link className="inline-link" to={`/websites/${websiteId}/sessions/${encodeURIComponent(log.sessionId)}`}>
-            {t('logsOpenSession')}
-            <ExternalLink size={12} strokeWidth={2} aria-hidden />
-          </Link>
-        ) : null}
-      </div>
+      {log.traceId || log.sessionId ? (
+        <div className="q-log-detail-actions">
+          {log.traceId ? (
+            <Button type="button" variant="outline" size="sm" onClick={() => onOpenTrace(log.traceId!)}>
+              <GitBranch aria-hidden />
+              {t('logsViewTrace')}
+            </Button>
+          ) : null}
+          {log.sessionId ? (
+            <Button asChild variant="outline" size="sm">
+              <Link to={`/websites/${websiteId}/sessions/${encodeURIComponent(log.sessionId)}`}>
+                <PlayCircle aria-hidden />
+                {t('logsOpenSession')}
+              </Link>
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
-      <dl className="log-detail-fields">
-        {fields
+      <KvList
+        compact
+        className="q-kv-narrow q-kv-mono"
+        items={fields
           .filter(([, value]) => value)
-          .map(([label, value]) => (
-            <div key={label} className="log-detail-field">
-              <dt className="text-muted">{label}</dt>
-              <dd className="mono">{value}</dd>
-            </div>
-          ))}
-      </dl>
+          .map(([label, value]) => ({ key: label, label, value }))}
+      />
 
       <AttributeTable label={t('logsAttributes')} values={attributes} onFilter={onFilterAttribute} />
       <AttributeTable label={t('logsResource')} values={log.resource} onFilter={onFilterAttribute} />
-    </MasterDetailSidePane>
+    </div>
   );
 }

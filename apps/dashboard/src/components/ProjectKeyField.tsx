@@ -1,10 +1,12 @@
-import { useEffect, useId, useState } from 'react';
+import { useId } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { RefreshCw } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Skeleton } from './ui/skeleton';
 import { useConfirm } from './ConfirmDialog';
+import { CopyButton } from './quality/CopyButton';
 import { api } from '../lib/api';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
@@ -25,37 +27,19 @@ export function useProjectKey(websiteId: string) {
 }
 
 /** Read-only project key with copy and, for people who can edit the website, rotate. */
-export function ProjectKeyField({ websiteId }: { websiteId: string }) {
+export function ProjectKeyField({ websiteId, hideLabel = false }: { websiteId: string; hideLabel?: boolean }) {
   const inputId = useId();
   const confirm = useConfirm();
   const queryClient = useQueryClient();
   const keyQuery = useProjectKey(websiteId);
   const { canEdit: canRotate } = useWebsitePermissions(websiteId);
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (!copied) return;
-    const timer = window.setTimeout(() => setCopied(false), 2000);
-    return () => window.clearTimeout(timer);
-  }, [copied]);
 
   const rotateMutation = useMutation({
     mutationFn: () => api<ProjectKey>(`/api/websites/${websiteId}/project-key/rotate`, { method: 'POST' }),
     onSuccess: (data) => {
       queryClient.setQueryData(projectKeyQueryKey(websiteId), data);
-      setCopied(false);
     },
   });
-
-  async function copy() {
-    if (!keyQuery.data) return;
-    try {
-      await navigator.clipboard.writeText(keyQuery.data.key);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
-  }
 
   function rotate() {
     confirm({
@@ -67,31 +51,32 @@ export function ProjectKeyField({ websiteId }: { websiteId: string }) {
   }
 
   return (
-    <div className="field">
-      <Label htmlFor={inputId}>{t('projectKey')}</Label>
-      {keyQuery.isLoading ? <Skeleton className="h-8 w-full" /> : null}
-      {keyQuery.error ? <p className="text-danger">{(keyQuery.error as Error).message}</p> : null}
+    <div className="q-field">
+      <Label htmlFor={inputId} className={hideLabel ? 'sr-only' : undefined}>
+        {t('projectKey')}
+      </Label>
+      {keyQuery.isLoading ? <Skeleton className="h-10 w-full" /> : null}
+      {keyQuery.error ? <p className="q-form-error">{(keyQuery.error as Error).message}</p> : null}
       {keyQuery.data ? (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="q-key-row">
           <Input
             id={inputId}
             readOnly
             value={keyQuery.data.key}
-            className="font-mono min-w-0 flex-1 basis-64"
+            className="q-key-input"
             onFocus={(e) => e.currentTarget.select()}
           />
-          <Button type="button" variant="secondary" onClick={() => void copy()}>
-            {copied ? t('copied') : t('copyToClipboard')}
-          </Button>
+          <CopyButton value={keyQuery.data.key} variant="outline" size="default" />
           {canRotate ? (
             <Button type="button" variant="outline" disabled={rotateMutation.isPending} onClick={rotate}>
+              <RefreshCw aria-hidden />
               {t('projectKeyRotate')}
             </Button>
           ) : null}
         </div>
       ) : null}
-      {rotateMutation.error ? <p className="text-danger">{(rotateMutation.error as Error).message}</p> : null}
-      <p className="field-hint">{t('projectKeyHint')}</p>
+      {rotateMutation.error ? <p className="q-form-error">{(rotateMutation.error as Error).message}</p> : null}
+      <p className="q-field-hint">{t('projectKeyHint')}</p>
     </div>
   );
 }

@@ -99,3 +99,19 @@ export function filtersToSaved(filters: LogFilterState): LogSavedFilter['filters
     attributes: filters.attributes.length ? filters.attributes : undefined,
   };
 }
+
+/** One-line summary of saved filters / alert conditions: `error · service=api · "timeout"`. */
+export function describeSavedFilter(filters: LogSavedFilter['filters']) {
+  const parts = [
+    filters.level,
+    filters.service && `service=${filters.service}`,
+    filters.environment && `env=${filters.environment}`,
+    filters.release && `release=${filters.release}`,
+    filters.source,
+    filters.search && `"${filters.search}"`,
+    filters.traceId && `trace=${filters.traceId.slice(0, 12)}`,
+    filters.sessionId && `session=${filters.sessionId.slice(0, 12)}`,
+    ...(filters.attributes ?? []).map(attributeLabel),
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : '-';
+}

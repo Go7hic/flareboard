@@ -1,7 +1,17 @@
 import type { Replayer as RrwebReplayer } from 'rrweb';
 import { Pause, Play, RotateCcw } from 'lucide-react';
-import { type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type MutableRefObject,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Button } from './ui/button';
+import { Switch } from './ui/switch';
 import { SegmentTabs } from './SegmentTabs';
 import { t } from '../lib/i18n';
 import {
@@ -32,7 +42,8 @@ function isTypingTarget(target: EventTarget | null) {
  * rrweb replay with our own controls: play / pause, scrubber with inactive stretches and event
  * markers, speed, skip inactivity, keyboard shortcuts, and a timeline of console, network, page
  * and analytics entries that follows playback. `actions` renders extra buttons next to the
- * controls with the current playhead (e.g. copy link at this time).
+ * controls with the current playhead (e.g. copy link at this time); `playheadRef` exposes the
+ * playhead to controls outside the player without re-rendering them while it plays.
  */
 export function ReplayPlayer({
   events,
@@ -40,12 +51,14 @@ export function ReplayPlayer({
   initialOffsetMs = 0,
   autoPlay = false,
   actions,
+  playheadRef,
 }: {
   events: unknown[];
   analytics?: AnalyticsEvent[];
   initialOffsetMs?: number;
   autoPlay?: boolean;
   actions?: (currentMs: number) => ReactNode;
+  playheadRef?: MutableRefObject<number>;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const scrubberRef = useRef<HTMLDivElement>(null);
@@ -140,6 +153,10 @@ export function ReplayPlayer({
       setSkipping(false);
     };
   }, [events, bounds.totalMs]);
+
+  useEffect(() => {
+    if (playheadRef) playheadRef.current = currentMs;
+  }, [currentMs, playheadRef]);
 
   useEffect(() => {
     replayerRef.current?.setConfig({ speed });
@@ -257,15 +274,15 @@ export function ReplayPlayer({
   const progress = Math.min(100, (currentMs / total) * 100);
 
   return (
-    <div className="replay-player">
+    <div className="replay-player behavior-player">
       <div className="replay-player-main">
         <div ref={stageRef} className="replay-stage" onClick={ready ? toggle : undefined} />
-        {failed ? <p className="text-danger">{t('replayPlayerFailed')}</p> : null}
-        <div className="replay-controls">
+        {failed ? <p className="text-danger behavior-player-error">{t('replayPlayerFailed')}</p> : null}
+        <div className="replay-controls behavior-player-controls">
           <Button
             type="button"
-            variant="ghost"
-            size="sm"
+            variant="outline"
+            size="icon-sm"
             onClick={toggle}
             disabled={!ready}
             aria-label={playing ? t('replayPause') : t('replayPlay')}
@@ -321,7 +338,7 @@ export function ReplayPlayer({
             <span className="replay-scrubber-thumb" style={{ left: `${progress}%` }} />
           </div>
           <select
-            className="select replay-speed"
+            className="behavior-player-speed"
             value={String(speed)}
             onChange={(event) => setSpeed(Number(event.target.value))}
             aria-label={t('replaySpeed')}
@@ -333,18 +350,15 @@ export function ReplayPlayer({
               </option>
             ))}
           </select>
-          <label className="replay-skip" title={`${t('replaySkipInactivity')} (S)`}>
-            <input type="checkbox" checked={skipInactive} onChange={(event) => setSkipInactive(event.target.checked)} />
-            {t('replaySkipInactivity')}
+          <label className="behavior-player-skip" title={`${t('replaySkipInactivity')} (S)`}>
+            <Switch size="sm" checked={skipInactive} onCheckedChange={(checked) => setSkipInactive(checked)} />
+            {skipping ? t('replaySkipping') : t('replaySkipInactivity')}
           </label>
           {actions ? <div className="replay-actions">{actions(currentMs)}</div> : null}
         </div>
-        <p className="replay-shortcuts field-hint">
-          {skipping ? <strong>{t('replaySkipping')} · </strong> : null}
-          {t('replayShortcutsHint')}
-        </p>
+        <p className="replay-shortcuts behavior-player-shortcuts">{t('replayShortcutsHint')}</p>
       </div>
-      <aside className="replay-timeline" aria-label={t('replayTimeline')}>
+      <aside className="replay-timeline behavior-player-timeline" aria-label={t('replayTimeline')}>
         <SegmentTabs tabs={tabs} value={filter} onChange={(id) => setFilter(id as TimelineFilter)} aria-label={t('replayTimeline')} />
         {visible.length ? (
           <ol ref={listRef} className="replay-timeline-list">

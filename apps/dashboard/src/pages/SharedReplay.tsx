@@ -1,13 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link2, VideoOff } from 'lucide-react';
 import { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { BrandLogo } from '../components/BrandLogo';
 import { EmptyState } from '../components/EmptyState';
 import { ReplayPlayer } from '../components/ReplayPlayer';
 import { Button } from '../components/ui/button';
+import { Skeleton } from '../components/ui/skeleton';
 import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { API_URL } from '../lib/api';
-import { formatDateTime, formatDurationMs } from '../lib/format';
+import { formatDateTime, formatDurationMs, formatShortDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
 import { linkAtTime, parseStartParam } from '../lib/replay-timeline';
 
@@ -50,58 +52,71 @@ export default function SharedReplay() {
     }
   }
 
-  if (isLoading) {
-    return (
-      <div className="shared-replay-page">
-        <div className="skeleton" style={{ width: '40%', height: '2rem' }} />
-      </div>
-    );
-  }
-
-  if (error || !data) {
-    return (
-      <div className="shared-replay-page">
-        <EmptyState
-          variant="rich"
-          tone="danger"
-          title={t('replayShareUnavailable')}
-          description={t('replayShareUnavailableBody')}
-        />
-      </div>
-    );
-  }
-
   return (
-    <div className="shared-replay-page">
-      <header className="shared-replay-header">
-        <div>
-          <div className="shell-brand share-public-brand">
-            <BrandLogo />
-          </div>
-          <h1 className="page-title">
-            <WebsiteNameLabel name={data.website.name} domain={data.website.domain ?? undefined} faviconSize={22} />
-          </h1>
-          <p className="page-subtitle">
-            {t('sessionReplay')} · {formatDateTime(data.startedAt)} · {formatDurationMs(data.durationMs)}
-            {data.expiresAt ? ` · ${t('replayShareExpiresAt')} ${formatDateTime(data.expiresAt)}` : ''}
-          </p>
-        </div>
+    <div className="behavior-shared">
+      <header className="behavior-shared-top">
+        <a className="behavior-shared-brand" href="/" aria-label="Flareboard">
+          <BrandLogo size={22} />
+        </a>
+        <span className="behavior-shared-tag">{t('behaviorSharedReplayTag')}</span>
       </header>
-      {data.events.length ? (
-        <section className="panel">
-          <ReplayPlayer
-            events={data.events}
-            initialOffsetMs={startMs}
-            actions={(currentMs) => (
-              <Button type="button" variant="secondary" size="sm" onClick={() => void copyAt(currentMs)}>
-                {copied ? t('copied') : t('replayCopyLinkAtTime')}
-              </Button>
-            )}
+
+      <main className="behavior-shared-main">
+        {isLoading ? (
+          <div className="stack" aria-busy>
+            <Skeleton className="h-7 w-64" />
+            <Skeleton className="h-4 w-80" />
+            <Skeleton className="behavior-shared-stage-skeleton w-full" />
+          </div>
+        ) : error || !data ? (
+          <EmptyState
+            variant="rich"
+            tone="danger"
+            icon={<VideoOff strokeWidth={2} />}
+            title={t('replayShareUnavailable')}
+            description={t('replayShareUnavailableBody')}
           />
-        </section>
-      ) : (
-        <p className="text-muted">{t('noReplayEvents')}</p>
-      )}
+        ) : (
+          <>
+            <div className="behavior-shared-head">
+              <h1 className="page-title">
+                <WebsiteNameLabel name={data.website.name} domain={data.website.domain ?? undefined} faviconSize={22} />
+              </h1>
+              <div className="meta-line">
+                <span>{t('sessionReplay')}</span>
+                <span title={formatDateTime(data.startedAt)}>{formatShortDateTime(data.startedAt)}</span>
+                <span>{formatDurationMs(data.durationMs)}</span>
+                {data.expiresAt ? (
+                  <span title={formatDateTime(data.expiresAt)}>
+                    {t('behaviorSharedExpires').replace('{date}', formatShortDateTime(data.expiresAt))}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            {data.events.length ? (
+              <section className="panel behavior-player-host">
+                <ReplayPlayer
+                  events={data.events}
+                  initialOffsetMs={startMs}
+                  actions={(currentMs) => (
+                    <Button type="button" variant="outline" size="sm" onClick={() => void copyAt(currentMs)}>
+                      <Link2 aria-hidden />
+                      {copied ? t('copied') : t('replayCopyLinkAtTime')}
+                    </Button>
+                  )}
+                />
+              </section>
+            ) : (
+              <EmptyState
+                variant="rich"
+                icon={<VideoOff strokeWidth={2} />}
+                title={t('behaviorReplayNoEvents')}
+                description={t('noReplayEvents')}
+              />
+            )}
+          </>
+        )}
+      </main>
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { EventCatalogPicker } from './EventCatalogPicker';
 import { ModalDialog } from './ModalDialog';
+import { Segmented } from './behavior/QueryCard';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -13,56 +15,68 @@ export type GoalConfigRow = {
   period: 'daily' | 'weekly' | 'monthly';
 };
 
+/** What the dialog edits: a new goal (optionally for a known event) or an existing one. */
+export type GoalFormState = { mode: 'create'; prefillEvent?: string } | { mode: 'edit'; goal: GoalConfigRow };
+
 type WebsiteWithGoals = Website & {
   goalConfig?: { goals: GoalConfigRow[] };
 };
 
+const PERIODS: GoalConfigRow['period'][] = ['daily', 'weekly', 'monthly'];
+
+/** Create / edit a goal (event + target + reset period). `state` null keeps it closed. */
 export function GoalFormDialog({
-  open,
+  state,
   onClose,
   websiteId,
-  editGoal,
 }: {
-  open: boolean;
+  state: GoalFormState | null;
   onClose: () => void;
   websiteId: string;
-  editGoal?: GoalConfigRow | null;
+}) {
+  if (!state) return null;
+  // Keyed so every opening starts from the goal's values with a fresh save state.
+  const key = state.mode === 'edit' ? `edit:${state.goal.event}` : `create:${state.prefillEvent ?? ''}`;
+  return <GoalFormDialogBody key={key} state={state} onClose={onClose} websiteId={websiteId} />;
+}
+
+function GoalFormDialogBody({
+  state,
+  onClose,
+  websiteId,
+}: {
+  state: GoalFormState;
+  onClose: () => void;
+  websiteId: string;
 }) {
   const queryClient = useQueryClient();
-  const isEdit = Boolean(editGoal);
-  const [eventName, setEventName] = useState('');
-  const [target, setTarget] = useState('');
-  const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
+  const editGoal = state.mode === 'edit' ? state.goal : null;
+  const [eventName, setEventName] = useState(() =>
+    state.mode === 'edit' ? state.goal.event : (state.prefillEvent ?? ''),
+  );
+  const [target, setTarget] = useState(() => (state.mode === 'edit' ? String(state.goal.target) : ''));
+  const [period, setPeriod] = useState<GoalConfigRow['period']>(() =>
+    state.mode === 'edit' ? state.goal.period || 'monthly' : 'monthly',
+  );
 
   const websiteQuery = useQuery({
     queryKey: ['website', websiteId],
-    enabled: open && Boolean(websiteId),
+    enabled: Boolean(websiteId),
     queryFn: () => api<WebsiteWithGoals>(`/api/websites/${websiteId}`),
   });
 
-  useEffect(() => {
-    if (!open) return;
-    if (editGoal) {
-      setEventName(editGoal.event);
-      setTarget(String(editGoal.target));
-      setPeriod(editGoal.period || 'monthly');
-      return;
-    }
-    setEventName('');
-    setTarget('');
-    setPeriod('monthly');
-  }, [open, editGoal]);
+  const existing = websiteQuery.data?.goalConfig?.goals ?? [];
+  const trimmed = eventName.trim();
+  const replacesExisting = !editGoal && trimmed.length > 0 && existing.some((goal) => goal.event === trimmed);
 
   const saveMutation = useMutation({
     mutationFn: () => {
-      const trimmed = eventName.trim();
       const targetNum = parseInt(target, 10);
       if (!trimmed || !targetNum || targetNum < 1) throw new Error(t('goalInvalid'));
-      const existing = websiteQuery.data?.goalConfig?.goals ?? [];
       const nextGoal: GoalConfigRow = { event: trimmed, target: targetNum, period };
-      const goals = isEdit
-        ? existing.map((g) => (g.event === editGoal!.event ? nextGoal : g))
-        : [...existing.filter((g) => g.event !== trimmed), nextGoal];
+      const goals = editGoal
+        ? existing.map((goal) => (goal.event === editGoal.event ? nextGoal : goal))
+        : [...existing.filter((goal) => goal.event !== trimmed), nextGoal];
       return api(`/api/websites/${websiteId}`, {
         method: 'PATCH',
         body: JSON.stringify({ goalConfig: { goals } }),
@@ -71,70 +85,92 @@ export function GoalFormDialog({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['website', websiteId] });
       queryClient.invalidateQueries({ queryKey: ['reports-goal', websiteId] });
+      queryClient.invalidateQueries({ queryKey: ['goal-conversions', websiteId] });
       onClose();
     },
   });
 
-  if (!open) return null;
-
   const targetNum = parseInt(target, 10);
-  const canSave =
-    eventName.trim().length > 0 && targetNum >= 1 && !saveMutation.isPending && !websiteQuery.isLoading;
+  const canSave = trimmed.length > 0 && targetNum >= 1 && !saveMutation.isPending && !websiteQuery.isLoading;
+  const title = editGoal ? t('goalEdit') : t('createGoal');
 
   return (
-    <ModalDialog className="goal-dialog" aria-label={isEdit ? t('goalEdit') : t('createGoal')} onClose={onClose}>
-      <header className="dialog-header">
-        <h2 className="dialog-title">{isEdit ? t('goalEdit') : t('createGoal')}</h2>
-      </header>
+    <ModalDialog className="behavior-goal-dialog" aria-label={title} onClose={onClose}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (canSave) saveMutation.mutate();
+        }}
+      >
+        <header className="dialog-header">
+          <h2 className="dialog-title">{title}</h2>
+          <p className="dialog-description">{t('behaviorGoalDialogLead')}</p>
+        </header>
 
-      <div className="dialog-body">
-        <div className="field">
-          <Label htmlFor="goal-dialog-event">{t('goalEventName')}</Label>
-          <Input
-            id="goal-dialog-event"
-            value={eventName}
-            onChange={(e) => setEventName(e.target.value)}
-            placeholder="signup"
-            disabled={isEdit}
-            autoFocus={!isEdit}
-          />
+        <div className="dialog-body">
+          <div className="field">
+            <Label htmlFor="goal-dialog-event">{t('goalEventName')}</Label>
+            {editGoal ? (
+              <p className="behavior-goal-dialog-event" id="goal-dialog-event">
+                {editGoal.event}
+              </p>
+            ) : (
+              <EventCatalogPicker
+                mode="single"
+                id="goal-dialog-event"
+                websiteId={websiteId}
+                value={eventName}
+                onChange={setEventName}
+                placeholder={t('behaviorGoalEventPlaceholder')}
+                aria-label={t('goalEventName')}
+              />
+            )}
+            {replacesExisting ? <p className="field-hint">{t('behaviorGoalReplaces')}</p> : null}
+          </div>
+
+          <div className="behavior-goal-dialog-row">
+            <div className="field">
+              <Label htmlFor="goal-dialog-target">{t('goalTarget')}</Label>
+              <Input
+                id="goal-dialog-target"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                value={target}
+                placeholder="100"
+                onChange={(event) => setTarget(event.target.value)}
+                autoFocus={Boolean(editGoal)}
+              />
+            </div>
+
+            <div className="field">
+              <span className="field-label">{t('behaviorGoalResets')}</span>
+              <Segmented
+                value={period}
+                onChange={setPeriod}
+                label={t('behaviorGoalResets')}
+                options={PERIODS.map((value) => ({ value, label: t(`goalPeriod_${value}`) }))}
+              />
+            </div>
+          </div>
+          <p className="field-hint behavior-goal-dialog-hint">{t(`behaviorGoalPeriodHint_${period}`)}</p>
+
+          {saveMutation.error ? (
+            <p className="text-danger behavior-goal-dialog-error" role="alert">
+              {(saveMutation.error as Error).message}
+            </p>
+          ) : null}
         </div>
 
-        <div className="field">
-          <Label htmlFor="goal-dialog-target">{t('goalTarget')}</Label>
-          <Input
-            id="goal-dialog-target"
-            type="number"
-            min={1}
-            value={target}
-            onChange={(e) => setTarget(e.target.value)}
-            autoFocus={isEdit}
-          />
-        </div>
-
-        <div className="field">
-          <Label htmlFor="goal-dialog-period">{t('goalPeriodUsed')}</Label>
-          <select
-            id="goal-dialog-period"
-            className="select"
-            value={period}
-            onChange={(e) => setPeriod(e.target.value as GoalConfigRow['period'])}
-          >
-            <option value="daily">{t('goalPeriod_daily')}</option>
-            <option value="weekly">{t('goalPeriod_weekly')}</option>
-            <option value="monthly">{t('goalPeriod_monthly')}</option>
-          </select>
-        </div>
-      </div>
-
-      <footer className="dialog-footer">
-        <Button type="button" variant="ghost" onClick={onClose} disabled={saveMutation.isPending}>
-          {t('cancel')}
-        </Button>
-        <Button type="button" variant="primary" disabled={!canSave} onClick={() => saveMutation.mutate()}>
-          {t('save')}
-        </Button>
-      </footer>
+        <footer className="dialog-footer">
+          <Button type="button" variant="ghost" onClick={onClose} disabled={saveMutation.isPending}>
+            {t('cancel')}
+          </Button>
+          <Button type="submit" variant="primary" disabled={!canSave}>
+            {saveMutation.isPending ? t('saving') : editGoal ? t('save') : t('createGoal')}
+          </Button>
+        </footer>
+      </form>
     </ModalDialog>
   );
 }

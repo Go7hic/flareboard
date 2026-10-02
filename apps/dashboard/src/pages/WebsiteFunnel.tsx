@@ -1,23 +1,28 @@
-import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { Filter } from 'lucide-react';
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Bar, BarChart } from 'recharts';
 import type { PropertyFilter } from '@flareboard/shared/insight-query';
-import { AnalyticsChart } from '../components/AnalyticsChart';
 import { DataViewState } from '../components/DataViewState';
+import { EmptyState } from '../components/EmptyState';
 import { EventCatalogPicker } from '../components/EventCatalogPicker';
 import { formatDurationShort } from '../components/InsightResultView';
-import { PropertyFilterBuilder } from '../components/PropertyFilterBuilder';
-import { WebsiteReportControls } from '../components/WebsiteReportControls';
-import { Label } from '../components/ui/label';
-import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
-import { api, type EventCatalogResponse } from '../lib/api';
-import { formatNumber, formatPercent } from '../lib/format';
-import { t } from '../lib/i18n';
-import { useChartColors } from '../lib/useChartColors';
-import { reportFiltersParam } from '../lib/websiteReportApi';
+import { KpiCell, KpiStrip, KpiStripSkeleton } from '../components/KpiStrip';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
+import { PropertyFilterBuilder } from '../components/PropertyFilterBuilder';
+import { SectionCard } from '../components/SectionCard';
+import { WebsiteReportControls } from '../components/WebsiteReportControls';
+import { FunnelSteps } from '../components/behavior/FunnelSteps';
+import { InlineSelect, QueryCard, QueryRow } from '../components/behavior/QueryCard';
+import { formatRate } from '../components/behavior/format';
+import { Skeleton } from '../components/ui/skeleton';
+import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
+import { api, type EventCatalogResponse } from '../lib/api';
+import { formatNumber } from '../lib/format';
+import { t } from '../lib/i18n';
+import { cn } from '../lib/utils';
+import { reportFiltersParam } from '../lib/websiteReportApi';
 
 type FunnelResponse = {
   steps: Array<{
@@ -53,7 +58,6 @@ function defaultFunnelSteps(events: EventCatalogResponse['events'] | undefined):
 }
 
 export default function WebsiteFunnelPage() {
-  const chartColors = useChartColors();
   const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl, timezone, rangeQs } =
     useWebsiteReportContext('30d');
   const [searchParams] = useSearchParams();
@@ -86,22 +90,28 @@ export default function WebsiteFunnelPage() {
     enabled: Boolean(websiteId) && funnelSteps.length > 0,
     queryFn: () =>
       api<FunnelResponse>(reportUrl('funnel', `&steps=${encodeURIComponent(funnelStepsParam)}${optionsQs}${filtersQs}`)),
+    // Editing a step or an option keeps the last result on screen (dimmed) until the new one lands.
+    placeholderData: keepPreviousData,
   });
 
-  const funnelChartData = useMemo(
-    () => (funnelQuery.data?.steps ?? []).map((s) => ({ name: s.step, count: s.count })),
-    [funnelQuery.data?.steps],
-  );
+  const steps = funnelQuery.data?.steps ?? [];
+  const funnelHasData = steps.some((step) => step.count > 0);
+  const unitLabel = countBy === 'person' ? t('insightCountPeople') : t('insightCountSessions');
+  const waitingForDefaults = editedSteps === null && catalogQuery.isLoading;
+  const first = steps[0];
+  const last = steps[steps.length - 1];
+  const overall = first && last && first.count > 0 ? (last.count / first.count) * 100 : null;
 
-  const funnelHasData = useMemo(
-    () => (funnelQuery.data?.steps ?? []).some((s) => s.count > 0),
-    [funnelQuery.data?.steps],
-  );
+  const resultDescription = `${t(order === 'strict' ? 'behaviorFunnelSummaryStrict' : 'behaviorFunnelSummaryAny').replace(
+    '{unit}',
+    unitLabel,
+  )} · ${windowLabel(windowMs)}`;
 
   return (
     <Page className="page-funnel">
       <PageHeader
         title={t('funnel')}
+        lead={t('behaviorFunnelLead')}
         actions={
           <WebsiteReportControls
             range={range}
@@ -114,11 +124,9 @@ export default function WebsiteFunnelPage() {
         }
       />
 
-      <PageBody>
-      <section className="panel section-gap">
-        <div className="panel-form funnel-form">
-          <div className="field funnel-form-row">
-            <Label htmlFor="funnel-steps">{t('insightSteps')}</Label>
+      <PageBody className="stack">
+        <QueryCard className="behavior-funnel-query" label={t('insightSteps')}>
+          <QueryRow label={t('insightSteps')} htmlFor="funnel-steps">
             <EventCatalogPicker
               mode="multi"
               id="funnel-steps"
@@ -128,114 +136,109 @@ export default function WebsiteFunnelPage() {
               placeholder={t('funnelStepsPlaceholder')}
               aria-label={t('funnel')}
             />
-          </div>
-          <div className="field">
-            <Label htmlFor="funnel-count-by">{t('insightCountBy')}</Label>
-            <select
-              id="funnel-count-by"
-              className="select"
+          </QueryRow>
+          <QueryRow label={t('behaviorQueryOptions')}>
+            <InlineSelect
+              label={t('insightCountBy')}
               value={countBy}
-              onChange={(event) => setCountBy(event.target.value as 'session' | 'person')}
-            >
-              <option value="session">{t('insightCountSessions')}</option>
-              <option value="person">{t('insightCountPeople')}</option>
-            </select>
-          </div>
-          <div className="field">
-            <Label htmlFor="funnel-order">{t('insightStepOrder')}</Label>
-            <select
-              id="funnel-order"
-              className="select"
+              onChange={(value) => setCountBy(value as 'session' | 'person')}
+              options={[
+                { value: 'session', label: t('insightCountSessions') },
+                { value: 'person', label: t('insightCountPeople') },
+              ]}
+            />
+            <InlineSelect
+              label={t('insightStepOrder')}
               value={order}
-              onChange={(event) => setOrder(event.target.value as 'strict' | 'any')}
-            >
-              <option value="strict">{t('insightOrderStrict')}</option>
-              <option value="any">{t('insightOrderAny')}</option>
-            </select>
-          </div>
-          <div className="field">
-            <Label htmlFor="funnel-window">{t('insightConversionWindow')}</Label>
-            <select
-              id="funnel-window"
-              className="select"
-              value={windowMs}
-              onChange={(event) => setWindowMs(Number(event.target.value))}
-            >
-              {WINDOW_OPTIONS.map((ms) => (
-                <option key={ms} value={ms}>
-                  {windowLabel(ms)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field funnel-form-row">
-            <Label>{t('insightFilters')}</Label>
+              onChange={(value) => setOrder(value as 'strict' | 'any')}
+              options={[
+                { value: 'strict', label: t('insightOrderStrict') },
+                { value: 'any', label: t('insightOrderAny') },
+              ]}
+            />
+            <InlineSelect
+              label={t('insightConversionWindow')}
+              value={String(windowMs)}
+              onChange={(value) => setWindowMs(Number(value))}
+              options={WINDOW_OPTIONS.map((ms) => ({ value: String(ms), label: windowLabel(ms) }))}
+            />
+          </QueryRow>
+          <QueryRow label={t('insightFilters')}>
             <PropertyFilterBuilder websiteId={websiteId} rangeQs={rangeQs} value={filters} onChange={setFilters} />
-          </div>
-        </div>
-      </section>
-      <div className="section-gap">
-        <DataViewState
-          loading={funnelQuery.isLoading || (editedSteps === null && catalogQuery.isLoading)}
-          error={funnelQuery.isError ? funnelQuery.error : null}
-          onRetry={() => funnelQuery.refetch()}
-          isEmpty={!funnelQuery.isLoading && (funnelChartData.length === 0 || !funnelHasData)}
-          emptyTitle={funnelSteps.length === 0 ? t('funnelNoStepsTitle') : t('noDataInPeriod')}
-          emptyDescription={
-            funnelSteps.length === 0
-              ? t('funnelNoStepsHint')
-              : funnelChartData.length > 0
-                ? t('funnelNoDataHint')
-                : t('noDataInPeriodHint')
-          }
-        >
-          <>
-            <div className="chart-wrap chart-wrap-compact">
-              <AnalyticsChart
-                Chart={BarChart}
-                data={funnelChartData}
-                layout="vertical"
-                margin={{ left: 8, right: 16 }}
-                grid={{ horizontal: false }}
-                xAxis={{ type: 'number' }}
-                yAxis={{ type: 'category', dataKey: 'name', width: 100 }}
-              >
-                <Bar dataKey="count" fill={chartColors.accent} radius={[0, 4, 4, 0]} />
-              </AnalyticsChart>
-            </div>
-            <div className="table-scroll">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>{t('insightStep')}</th>
-                    <th className="num">{countBy === 'person' ? t('insightCountPeople') : t('insightCountSessions')}</th>
-                    <th className="num">{t('insightStepConversion')}</th>
-                    <th className="num">{t('insightAvgTimeToConvert')}</th>
-                    <th className="num">{t('insightMedianTimeToConvert')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(funnelQuery.data?.steps ?? []).map((s, index) => (
-                    <tr key={`${s.step}-${index}`}>
-                      <td>{s.step}</td>
-                      <td className="num">{formatNumber(s.count)}</td>
-                      <td className="num">{formatPercent(s.rate)}</td>
-                      <td className="num">{index === 0 ? '-' : formatDurationShort(s.avgTimeToConvertMs)}</td>
-                      <td className="num">{index === 0 ? '-' : formatDurationShort(s.medianTimeToConvertMs)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {funnelQuery.data ? (
-              <p className="text-muted reports-funnel-conversion">
-                {t('overallConversion')}: {formatPercent(funnelQuery.data.conversion)}
-              </p>
-            ) : null}
-          </>
-        </DataViewState>
-      </div>
+          </QueryRow>
+        </QueryCard>
+
+        {funnelSteps.length === 0 && !waitingForDefaults ? (
+          <EmptyState
+            variant="rich"
+            icon={<Filter strokeWidth={2} />}
+            title={t('funnelNoStepsTitle')}
+            description={t('funnelNoStepsHint')}
+          />
+        ) : (
+          <SectionCard
+            title={t('behaviorFunnelResultTitle')}
+            description={resultDescription}
+            className={cn('behavior-funnel-card', funnelQuery.isPlaceholderData && 'behavior-refetching')}
+          >
+            <DataViewState
+              loading={(funnelQuery.isLoading && !funnelQuery.data) || waitingForDefaults}
+              error={funnelQuery.isError ? funnelQuery.error : null}
+              onRetry={() => funnelQuery.refetch()}
+              loadingFallback={<FunnelSkeleton />}
+              isEmpty={!funnelHasData}
+              emptyTitle={t('noDataInPeriod')}
+              emptyDescription={steps.length > 0 ? t('funnelNoDataHint') : t('noDataInPeriodHint')}
+            >
+              <div className="stack">
+                <KpiStrip inline columns={4}>
+                  <KpiCell
+                    label={t('overallConversion')}
+                    value={formatRate(overall)}
+                    hint={steps.length > 1 ? t('behaviorFunnelStepsN').replace('{n}', String(steps.length)) : undefined}
+                  />
+                  <KpiCell
+                    label={t('behaviorFunnelEntered')}
+                    value={formatNumber(first?.count)}
+                    hint={unitLabel}
+                  />
+                  <KpiCell
+                    label={t('behaviorFunnelCompleted')}
+                    value={formatNumber(last?.count)}
+                    hint={unitLabel}
+                  />
+                  <KpiCell
+                    label={t('insightMedianTimeToConvert')}
+                    value={steps.length > 1 && last?.medianTimeToConvertMs != null ? formatDurationShort(last.medianTimeToConvertMs) : '—'}
+                    hint={
+                      steps.length > 1 && last?.avgTimeToConvertMs != null
+                        ? `${t('behaviorFunnelAverage')} ${formatDurationShort(last.avgTimeToConvertMs)}`
+                        : undefined
+                    }
+                  />
+                </KpiStrip>
+                <FunnelSteps steps={steps} unitLabel={unitLabel} />
+              </div>
+            </DataViewState>
+          </SectionCard>
+        )}
       </PageBody>
     </Page>
+  );
+}
+
+function FunnelSkeleton() {
+  return (
+    <div className="stack" aria-hidden>
+      <KpiStripSkeleton cells={4} inline />
+      <div className="behavior-funnel-skeleton">
+        {[100, 62, 38].map((width) => (
+          <div key={width} className="behavior-funnel-skeleton-row">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-3.5" style={{ width: `${width}%` }} />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

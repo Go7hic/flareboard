@@ -1,1 +1,2035 @@
 /* Console v2 page styles: product pages. See docs/dashboard-design-system.md. */
+
+/*
+ * Feature flags, experiments, surveys and workflows share one master–detail anatomy:
+ * list card (search, count, rows) beside a detail card (header, inline KPI strip, underline
+ * tabs, hairline sections). Everything is scoped to .product-page or .product-dialog.
+ */
+
+:root {
+  /* Neutral "other / rest" share in split bars (a 7th variant, unassigned weight). */
+  --product-other: var(--geist-gray-500);
+  /* Diverging pair for ordered shares (NPS, sentiment): cool positive, warm negative. */
+  --product-positive: var(--chart-1);
+  --product-negative: var(--chart-2);
+  --product-neutral: var(--geist-gray-400);
+}
+
+.product-view-only {
+  margin: 0 0 1rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.product-footnote {
+  margin: 1rem 0 0;
+  max-width: 96ch;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ── List card ─────────────────────────────────────────────────────────────── */
+
+.product-page .master-detail-list-head .cohorts-search-wrap {
+  max-width: none;
+  flex: none;
+}
+
+.product-page .master-detail-list-head .cohorts-search {
+  height: 2.25rem;
+}
+
+.product-list-summary {
+  margin: 0;
+  padding: 0 0.15rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.product-page .master-detail-list-subtitle .mono {
+  font-size: 0.72rem;
+}
+
+.product-list-empty {
+  padding: 2rem 1rem;
+}
+
+/* ── Detail card ───────────────────────────────────────────────────────────── */
+
+.product-page .master-detail-pane {
+  --pane-pad: 1.25rem;
+  padding: var(--pane-pad);
+  /* Layout inside the detail follows the card's width, not the viewport's (list beside it). */
+  container-type: inline-size;
+}
+
+.product-page .master-detail-pane-head {
+  margin-bottom: 1rem;
+}
+
+.product-page .master-detail-pane-head .master-detail-pane-meta {
+  margin-top: 0.45rem;
+  row-gap: 0.4rem;
+}
+
+.product-page .master-detail-pane-head p.text-muted {
+  margin-top: 0.5rem;
+  max-width: 72ch;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.product-meta-key {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.product-meta-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.product-meta-link:hover {
+  color: var(--link);
+}
+
+.product-meta-link svg {
+  width: 0.8rem;
+  height: 0.8rem;
+  color: var(--text-muted);
+}
+
+.product-inline-error {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+}
+
+/* Inline KPI strip runs edge to edge inside the detail card; text aligns with the padding. */
+.product-page .master-detail-pane .kpi-strip--inline {
+  margin: 0 calc(var(--pane-pad) * -1);
+}
+
+.product-page .master-detail-pane .kpi-strip--inline .kpi-cell {
+  padding: 0.85rem var(--pane-pad) 0.9rem;
+}
+
+.product-page .master-detail-pane .kpi-hint time {
+  color: inherit;
+}
+
+/* Underline tabs (ui/tabs line variant) with a hairline across the card. */
+.product-tabs {
+  flex-direction: column;
+  gap: 0;
+  margin-top: 0.25rem;
+}
+
+.product-tabs .product-tabs-list {
+  display: flex;
+  justify-content: flex-start;
+  gap: 1.25rem;
+  width: auto;
+  height: auto;
+  margin: 0 calc(var(--pane-pad, 1.25rem) * -1);
+  padding: 0 var(--pane-pad, 1.25rem);
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.product-tabs .product-tabs-list::-webkit-scrollbar {
+  display: none;
+}
+
+.product-tabs .product-tabs-trigger {
+  flex: none;
+  height: auto;
+  padding: 0.7rem 0 0.65rem;
+  border: 0;
+  border-radius: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  box-shadow: none;
+}
+
+.product-tabs .product-tabs-trigger:hover,
+.product-tabs .product-tabs-trigger[data-active],
+.product-tabs .product-tabs-trigger[aria-selected='true'] {
+  color: var(--text);
+  background: transparent;
+}
+
+/* ui/tabs keys its indicator off data-horizontal, which Base UI does not set: draw it here. */
+.product-tabs .product-tabs-trigger::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 -1px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--geist-gray-1000);
+  opacity: 0;
+}
+
+.product-tabs .product-tabs-trigger[data-active]::after,
+.product-tabs .product-tabs-trigger[aria-selected='true']::after {
+  opacity: 1;
+}
+
+.product-tabs .product-tabs-trigger:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.product-tab-panel {
+  min-width: 0;
+  font-size: inherit;
+}
+
+/* ── Sections inside a detail card ─────────────────────────────────────────── */
+
+.product-section {
+  margin: 0 calc(var(--pane-pad, 1.25rem) * -1);
+  padding: 1.25rem var(--pane-pad, 1.25rem) 0;
+  min-width: 0;
+}
+
+.product-section + .product-section {
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.product-tab-panel > .product-callout:first-child {
+  margin-top: 1.25rem;
+}
+
+.product-tab-panel > .product-callout + .product-section {
+  padding-top: 1rem;
+}
+
+.product-section > .product-section-head {
+  margin-bottom: 0.85rem;
+}
+
+.product-section > * + :not(.product-section-head) {
+  margin-top: 0.85rem;
+}
+
+.product-section > .product-section-head + * {
+  margin-top: 0;
+}
+
+.product-subtitle {
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.product-muted-line {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.product-note {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.product-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem 1.5rem;
+}
+
+@container (max-width: 560px) {
+  .product-two-col {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.product-chart {
+  margin: 0 -0.25rem;
+}
+
+.product-chart-empty {
+  padding: 1.5rem 0;
+}
+
+/* ── Callout (decision, alerts) ────────────────────────────────────────────── */
+
+.product-callout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.5rem 0.75rem;
+  margin: 1rem 0 0;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.product-callout--success {
+  background: color-mix(in srgb, var(--success) 8%, transparent);
+}
+
+.product-callout--warning {
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+}
+
+.product-callout--danger {
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.product-callout-icon {
+  display: inline-flex;
+  flex: none;
+  margin-top: 0.1rem;
+  color: var(--text-muted);
+}
+
+.product-callout-icon svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.product-callout--success .product-callout-icon {
+  color: var(--geist-green-900);
+}
+
+.product-callout--warning .product-callout-icon {
+  color: var(--geist-amber-900);
+}
+
+.product-callout--danger .product-callout-icon {
+  color: var(--geist-red-900);
+}
+
+.product-callout-copy {
+  min-width: 0;
+}
+
+.product-callout-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.product-callout-body {
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.product-callout-body .product-badges {
+  margin-top: 0.5rem;
+}
+
+.product-callout-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  align-self: center;
+}
+
+@container (max-width: 600px) {
+  .product-callout {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .product-callout-actions {
+    grid-column: 2;
+    align-self: start;
+  }
+}
+
+.product-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+/* ── Split bar, meter, series keys ─────────────────────────────────────────── */
+
+.product-split {
+  display: grid;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.product-split-bar {
+  display: flex;
+  gap: 2px;
+  height: 0.75rem;
+  min-width: 0;
+}
+
+.product-split-segment {
+  flex-basis: 0;
+  min-width: 3px;
+  background: var(--split-color);
+}
+
+.product-split-segment:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.product-split-segment:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.product-split-segment:only-child {
+  border-radius: 4px;
+}
+
+.product-split-empty {
+  flex: 1;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+}
+
+.product-split-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8125rem;
+}
+
+.product-split-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.product-split-key {
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 2px;
+  background: var(--split-color);
+}
+
+.product-split-label {
+  color: var(--text);
+}
+
+.product-split-label.mono {
+  font-size: 0.78rem;
+}
+
+.product-split-share {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.product-split-detail {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.product-meter {
+  position: relative;
+  display: inline-block;
+  width: 5rem;
+  height: 0.375rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--meter-color, var(--chart-1)) 16%, transparent);
+  vertical-align: middle;
+}
+
+.product-meter-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--meter-color, var(--chart-1));
+}
+
+.product-series-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.product-series-cell .chart-legend-key.is-box {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+
+/* ── Tables inside detail cards ────────────────────────────────────────────── */
+
+.product-page .product-table {
+  min-width: 34rem;
+  font-size: 0.8125rem;
+}
+
+.product-page .product-table th {
+  height: 2.25rem;
+  padding-top: 0;
+  padding-bottom: 0;
+  background: transparent;
+}
+
+.product-page .product-table td {
+  height: 2.75rem;
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+}
+
+.product-page .product-table td.mono,
+.product-page .product-table .mono {
+  font-size: 0.78rem;
+}
+
+.product-nowrap {
+  white-space: nowrap;
+}
+
+.product-path-cell {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-cell-sub {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.product-id-link {
+  color: var(--link);
+  text-decoration: none;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.product-id-link:hover {
+  text-decoration: underline;
+}
+
+.product-json {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  max-height: 16rem;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+.product-payload-list {
+  margin-top: 0.25rem;
+}
+
+/* ── Condition chips ───────────────────────────────────────────────────────── */
+
+.product-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.product-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+  min-height: 1.625rem;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.product-chip-field {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.product-chip-subject {
+  margin-left: 0.3rem;
+  font-weight: 400;
+  font-size: 0.74rem;
+}
+
+.product-chip-op {
+  color: var(--text-muted);
+}
+
+.product-chip-value {
+  color: var(--text);
+}
+
+.product-chip-value.mono {
+  font-size: 0.74rem;
+}
+
+.product-chip-join {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.product-chips-empty {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+/* ── Flag condition groups (read-only) ─────────────────────────────────────── */
+
+.product-groups {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.product-group {
+  display: grid;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.product-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.product-group-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.6rem;
+  min-width: 0;
+}
+
+.product-group-name-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.product-group-description {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.product-group-rollout {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.8125rem;
+}
+
+.product-group-percent {
+  min-width: 2.75rem;
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.product-group-rollout-label {
+  color: var(--text-muted);
+}
+
+.product-group-served {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.product-group-served .mono {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+/* "or" between condition groups: a hairline with the word on it. */
+.product-or {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.9rem 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.product-or::before,
+.product-or::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--border);
+}
+
+.product-or > span {
+  flex: none;
+}
+
+.product-rollout-input .product-number-input {
+  width: 4.25rem;
+}
+
+/* ── Inline controls ───────────────────────────────────────────────────────── */
+
+.product-inline-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.product-inline-field .select {
+  width: auto;
+  height: 2rem;
+  font-size: 0.8125rem;
+}
+
+.product-number-input {
+  width: 4.5rem;
+  height: 2rem;
+  padding-right: 0.35rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Timeline (flag history) ───────────────────────────────────────────────── */
+
+.product-timeline {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.product-timeline-item {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.product-timeline-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.product-timeline-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+  font-size: 0.8125rem;
+}
+
+.product-timeline-who {
+  font-weight: 500;
+}
+
+.product-timeline-when {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.product-timeline-skeleton {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.product-disclosure > summary {
+  cursor: pointer;
+  width: fit-content;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.product-disclosure > summary:hover {
+  color: var(--text);
+}
+
+.product-disclosure[open] > summary {
+  margin-bottom: 0.5rem;
+}
+
+.product-diff {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+}
+
+.product-diff-field {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.product-diff-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.product-diff-label {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+@media (max-width: 720px) {
+  .product-diff-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.product-pager {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.product-pager-label {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Evaluate / test forms inside a detail tab ─────────────────────────────── */
+
+.product-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem 1rem;
+  min-width: 0;
+}
+
+.product-form-grid > .field,
+.product-field {
+  margin-bottom: 0;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.product-form-wide {
+  grid-column: 1 / -1;
+}
+
+.product-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.product-form-actions .text-danger {
+  font-size: 0.8125rem;
+}
+
+.product-evaluate-result {
+  padding-top: 0.25rem;
+}
+
+@media (max-width: 640px) {
+  .product-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ── Skeleton in the master–detail shape ───────────────────────────────────── */
+
+.product-skeleton-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.product-skeleton-copy {
+  display: grid;
+  gap: 0.4rem;
+  flex: 1 1 auto;
+}
+
+.product-skeleton-pane {
+  --pane-pad: 1.25rem;
+}
+
+.product-skeleton-kpis {
+  margin-top: 1.25rem;
+}
+
+/* ── Dialog forms (flag editor, experiment, survey builder, workflow editor) ── */
+
+.product-dialog {
+  width: min(720px, 100%);
+}
+
+.product-dialog--wide {
+  width: min(820px, 100%);
+}
+
+.product-form {
+  gap: 1.25rem;
+}
+
+.product-form-section {
+  display: grid;
+  gap: 0.85rem;
+  min-width: 0;
+  margin: 0 -1.5rem;
+  padding: 1.25rem 1.5rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.product-form-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.product-form-section-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.product-form-section-lead {
+  margin: 0.2rem 0 0;
+  max-width: 64ch;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.product-form-errors {
+  margin: 0;
+  padding: 0.75rem 1rem 0.75rem 2rem;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--geist-red-900);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+.product-code-input {
+  min-height: 5.5rem;
+  font-size: 0.78rem;
+}
+
+.product-dialog .select,
+.product-dialog [data-slot='input']:not(.product-number-input) {
+  height: 2.25rem;
+  font-size: 0.8125rem;
+}
+
+.product-dialog-footer-start {
+  margin-right: auto;
+}
+
+/* Flag editor: condition groups as left-railed blocks separated by "or". */
+.product-groups-edit {
+  display: grid;
+  min-width: 0;
+}
+
+.product-group-rail {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--border-strong);
+}
+
+.product-group-edit-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.product-group-edit-title {
+  flex: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.product-dialog .product-group-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 2rem;
+}
+
+.product-cond-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.product-cond {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.product-cond-joiner {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.product-cond-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.product-cond-row > .select,
+.product-cond-row > input,
+.product-cond-row > [data-slot='input'] {
+  flex: 1 1 8rem;
+  width: auto;
+  min-width: 0;
+}
+
+.product-group-edit-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.25rem;
+}
+
+.product-variant-edit-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.product-variant-edit-head,
+.product-variant-edit-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) 6rem 1.75rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.product-variant-edit-head {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.product-variant-edit {
+  display: grid;
+  gap: 0.4rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.product-variant-edit:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.product-variant-key {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.product-variant-key [data-slot='input'] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.product-variant-edit .product-disclosure {
+  padding-left: 1rem;
+}
+
+@media (max-width: 720px) {
+  .product-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .product-cond {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .product-variant-edit-head {
+    display: none;
+  }
+
+  .product-variant-edit-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+/* ── Shared bits added by experiments / surveys / workflows ────────────────── */
+
+.product-kpi-gap {
+  margin-top: 1rem;
+  transition: opacity var(--transition);
+}
+
+.product-page .master-detail-pane > .product-kpi-gap:first-child,
+.product-page .master-detail-pane > .product-kpi-gap:first-of-type {
+  margin-top: 0;
+}
+
+.product-toolbar + .product-kpi-gap {
+  margin-top: 0;
+}
+
+.is-refreshing {
+  opacity: 0.6;
+}
+
+.product-kpi-note {
+  margin-top: 0.6rem;
+}
+
+.product-tab-count {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0 0.4rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.35rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.product-copy-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.product-copy-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+}
+
+.product-copy-done {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.product-table-skeleton {
+  display: grid;
+  gap: 0.5rem;
+}
+
+/* One filter row inside a detail card (survey responses, workflow runs). */
+.product-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  margin: 0 0 1rem;
+}
+
+.product-section > .product-toolbar {
+  margin-bottom: 0.25rem;
+}
+
+.product-toolbar .segmented > button {
+  height: 1.75rem;
+}
+
+.product-toolbar .product-toolbar-select {
+  width: auto;
+  min-width: 8.5rem;
+  height: 2rem;
+  font-size: 0.8125rem;
+}
+
+.product-toolbar .product-toolbar-search {
+  flex: 1 1 11rem;
+  max-width: 17rem;
+}
+
+.product-toolbar .product-toolbar-search .cohorts-search {
+  height: 2rem;
+  font-size: 0.8125rem;
+}
+
+.product-toolbar .product-toolbar-input {
+  width: 9rem;
+  height: 2rem;
+  font-size: 0.78rem;
+}
+
+.product-toolbar-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.product-toolbar-date [data-slot='input'] {
+  width: 9.5rem;
+  height: 2rem;
+  font-size: 0.8125rem;
+}
+
+@media (max-width: 640px) {
+  .product-toolbar .product-toolbar-select {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: 0;
+  }
+
+  .product-toolbar .product-toolbar-search {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .product-toolbar .product-toolbar-input {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+  }
+
+  .product-toolbar .toolbar-spacer {
+    display: none;
+  }
+
+  .product-toolbar-date {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: 0;
+  }
+
+  .product-toolbar-date [data-slot='input'] {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* ── Experiments ───────────────────────────────────────────────────────────── */
+
+.product-results-loading {
+  margin-top: 1rem;
+}
+
+.product-callout-error {
+  margin: 0.4rem 0 0;
+  font-size: 0.8125rem;
+}
+
+.product-metric-list {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.product-metric {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.product-metric-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.product-metric-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.product-lift-cell {
+  font-weight: 500;
+}
+
+.product-interval-cell {
+  min-width: 9.5rem;
+}
+
+.product-lift {
+  --lift-color: var(--product-neutral);
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 9rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+}
+
+.product-lift--positive {
+  --lift-color: var(--success);
+}
+
+.product-lift--negative {
+  --lift-color: var(--danger);
+}
+
+.product-lift-zero {
+  position: absolute;
+  left: 50%;
+  top: -3px;
+  bottom: -3px;
+  width: 1px;
+  background: var(--border-strong);
+}
+
+.product-lift-range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--lift-color) 40%, transparent);
+}
+
+.product-lift-point {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--lift-color);
+  box-shadow: 0 0 0 2px var(--bg-elevated);
+}
+
+/* Experiment dialog metric rows. */
+.product-metric-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.product-metric-row > .field {
+  flex: 1 1 11rem;
+}
+
+.product-metric-row .product-metric-remove {
+  flex: none;
+  margin-bottom: 0.25rem;
+}
+
+.product-metric-row + .product-metric-row {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.product-mde-field {
+  max-width: 28rem;
+}
+
+/* ── Surveys ───────────────────────────────────────────────────────────────── */
+
+.product-score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.product-score strong {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.product-answer-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.product-answer-list li {
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.product-answer-list li:first-child {
+  border-top: 0;
+  padding-top: 0.15rem;
+}
+
+.product-answer-list p {
+  margin: 0 0 0.2rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.product-answer-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.product-qa {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.product-qa dt {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.product-qa dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.product-page .product-responses-table td {
+  vertical-align: top;
+  padding-top: 0.7rem;
+  padding-bottom: 0.7rem;
+}
+
+.product-responses-table td:nth-child(3) {
+  min-width: 16rem;
+}
+
+.product-badges--nowrap {
+  flex-wrap: nowrap;
+}
+
+/* Survey builder: form column beside a sticky widget preview. */
+.product-dialog--builder {
+  width: min(1120px, 100%);
+}
+
+.product-dialog--narrow {
+  width: min(560px, 100%);
+}
+
+.product-survey-builder {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(17rem, 21rem);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.product-survey-builder-main {
+  display: grid;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.product-survey-builder-main > .product-form-section {
+  margin: 0;
+  padding: 1.25rem 0 0;
+}
+
+.product-survey-preview {
+  position: sticky;
+  top: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.product-survey-preview-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+@media (max-width: 900px) {
+  .product-survey-builder {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .product-survey-preview {
+    position: static;
+  }
+}
+
+.product-question-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.product-question {
+  display: grid;
+  gap: 0.85rem;
+  min-width: 0;
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--border-strong);
+}
+
+.product-question-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.product-question-number {
+  padding: 0.2rem 0.5rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.product-question-number:hover {
+  background: var(--row-hover);
+}
+
+.product-dialog .product-question-type.select {
+  width: auto;
+  height: 2rem;
+}
+
+.product-question-tools {
+  display: inline-flex;
+  gap: 0.15rem;
+  margin-left: auto;
+}
+
+.product-check-cell {
+  align-self: end;
+  min-height: 2.25rem;
+}
+
+.product-branching {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.product-branching-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.75rem;
+}
+
+.product-branching-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.product-branching-hint {
+  flex: 1 1 12rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.product-branch-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8125rem;
+}
+
+.product-dialog .product-branch-row > .select {
+  flex: 1 1 8rem;
+  width: auto;
+  min-width: 0;
+  height: 2rem;
+}
+
+.product-branch-word {
+  color: var(--text-muted);
+}
+
+.product-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.product-add-row-label {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+/* "New survey" first step: template choices. */
+.product-template-grid {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.product-template {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.product-template:hover {
+  border-color: var(--border-strong);
+  background: var(--row-hover);
+}
+
+.product-template:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.product-template-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}
+
+.product-template-icon svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.product-template-copy {
+  display: grid;
+  gap: 0.15rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.product-template-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.product-template-body {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.product-template-chevron {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  color: var(--text-muted);
+}
+
+/* ── Workflows ─────────────────────────────────────────────────────────────── */
+
+.product-flow {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.product-flow-node,
+.product-step-edit {
+  position: relative;
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  column-gap: 0.85rem;
+  padding-bottom: 1.25rem;
+}
+
+.product-flow-node:last-child,
+.product-step-edit:last-child {
+  padding-bottom: 0;
+}
+
+/* Connector from one node's icon to the next. */
+.product-flow-node:not(:last-child)::before,
+.product-step-edit:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: calc(1rem - 0.5px);
+  top: 2.25rem;
+  bottom: 0.25rem;
+  width: 1px;
+  background: var(--border-strong);
+}
+
+.product-flow-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+}
+
+.product-flow-icon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.product-flow-node--trigger .product-flow-icon {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+.product-flow-node--end .product-flow-icon {
+  border-style: solid;
+  background: transparent;
+}
+
+.product-flow-copy {
+  display: grid;
+  align-content: start;
+  gap: 0.35rem;
+  min-width: 0;
+  padding-top: 0.1rem;
+}
+
+.product-flow-node--end .product-flow-copy {
+  padding-top: 0.4rem;
+}
+
+.product-flow-kind {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.product-flow-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.product-flow-event {
+  padding: 0.05rem 0.4rem;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  font-size: 0.78rem;
+}
+
+.product-flow-method {
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.product-flow-url {
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.product-flow-note {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.product-flow-quote {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.product-flow-muted {
+  color: var(--text-muted);
+}
+
+.product-secret {
+  display: block;
+  margin-top: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.product-secret-preview {
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  font-size: 0.78rem;
+  color: var(--text);
+}
+
+.product-page .product-table .product-expand-cell {
+  width: 2.25rem;
+  padding-right: 0;
+}
+
+.product-error-cell {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-runs-table tr.is-expanded > td {
+  border-bottom-color: transparent;
+}
+
+.product-page .product-table .product-subrow > td {
+  padding: 0.25rem 0.75rem 0.85rem 2.25rem;
+  background: color-mix(in srgb, var(--bg-subtle) 50%, var(--bg-elevated));
+}
+
+.product-page .product-attempts {
+  min-width: 40rem;
+  font-size: 0.78rem;
+}
+
+.product-page .product-attempts th,
+.product-page .product-attempts td {
+  height: auto;
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+  background: transparent;
+}
+
+.product-step-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.product-step-cell svg {
+  flex: none;
+  width: 0.9rem;
+  height: 0.9rem;
+  color: var(--text-muted);
+}
+
+.product-test-steps {
+  display: grid;
+  margin: 0.85rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.product-test-step {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.product-test-step:last-child {
+  padding-bottom: 0;
+}
+
+.product-test-step-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+/* Workflow editor: steps on the same rail as the flow diagram. */
+.product-step-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.product-step-edit-body {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.product-step-edit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 2rem;
+}
+
+.product-step-edit-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.product-step-edit-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.product-inline-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.product-inline-word {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.product-dialog .product-inline-select {
+  width: auto;
+}
+
+.product-placeholders {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--border);
+}
+
+.product-placeholder-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.product-placeholder {
+  padding: 0.15rem 0.45rem;
+  border: 0;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.product-placeholder:hover {
+  background: var(--row-hover);
+}
+
+.product-placeholder:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+@media (max-width: 640px) {
+  .product-page .master-detail-pane {
+    --pane-pad: 1rem;
+  }
+
+  .product-page .master-detail-pane-actions {
+    width: 100%;
+  }
+}
+
+.product-show-all {
+  margin-top: 0.25rem;
+}
+
+.product-show-all svg.is-flipped {
+  transform: rotate(180deg);
+}
+
+.product-type-chip {
+  display: inline-block;
+  margin-right: 0.4rem;
+  padding: 0 0.35rem;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1.15rem;
+}
+
+/* Same column grid in every metric table of an experiment, so values line up across metrics. */
+.product-page .product-metric-table {
+  table-layout: fixed;
+  min-width: 40rem;
+}
+
+.product-metric-table .product-col-variant { width: 20%; }
+.product-metric-table .product-col-users { width: 12%; }
+.product-metric-table .product-col-value { width: 15%; }
+.product-metric-table .product-col-lift { width: 14%; }
+.product-metric-table .product-col-interval { width: 23%; }
+.product-metric-table .product-col-significance { width: 16%; }
+
+.product-metric-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

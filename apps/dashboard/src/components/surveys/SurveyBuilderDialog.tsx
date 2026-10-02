@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, Copy, Plus, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronRight, Copy, FilePlus, Gauge, MessageSquareText, Plus, Smile, Trash2, X } from 'lucide-react';
 import {
   isChoiceQuestion,
   surveyAccents,
@@ -18,7 +18,8 @@ import {
   type SurveyQuestionType,
   type SurveyRatingScale,
 } from '@flareboard/shared/survey-flow';
-import { ResourceEditDialog } from '../ResourceEditDialog';
+import { ModalDialog } from '../ModalDialog';
+import { FormErrors, FormSection } from '../product/ProductForm';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -394,9 +395,12 @@ function BranchingEditor({
   const canBranchOnAnswer = Boolean(range) || isChoiceQuestion(question);
 
   return (
-    <div className="survey-branching">
-      <div className="survey-branching-head">
-        <span className="stat-label">{t('surveyBranching')}</span>
+    <div className="product-branching">
+      <div className="product-branching-head">
+        <span className="product-branching-title">{t('surveyBranching')}</span>
+        <span className="product-branching-hint">
+          {question.branching.length ? t('surveyBranchOtherwise') : t('surveyBranchNone')}
+        </span>
         <Button
           type="button"
           variant="ghost"
@@ -409,8 +413,8 @@ function BranchingEditor({
         </Button>
       </div>
       {question.branching.map((rule, ruleIndex) => (
-        <div key={ruleIndex} className="survey-branch-row">
-          <span className="text-muted">{t('surveyBranchIf')}</span>
+        <div key={ruleIndex} className="product-branch-row">
+          <span className="product-branch-word">{t('surveyBranchIf')}</span>
           <select
             className="select"
             aria-label={t('surveyBranchCondition')}
@@ -428,8 +432,8 @@ function BranchingEditor({
           </select>
           {rule.when.type === 'range' && range ? (
             <>
-              <input
-                className="input survey-branch-number"
+              <Input
+                className="product-number-input"
                 type="number"
                 min={range.min}
                 max={range.max}
@@ -442,9 +446,9 @@ function BranchingEditor({
                   })
                 }
               />
-              <span className="text-muted">–</span>
-              <input
-                className="input survey-branch-number"
+              <span className="product-branch-word">–</span>
+              <Input
+                className="product-number-input"
                 type="number"
                 min={range.min}
                 max={range.max}
@@ -476,7 +480,7 @@ function BranchingEditor({
               ) : null}
             </select>
           ) : null}
-          <span className="text-muted">→</span>
+          <span className="product-branch-word">→</span>
           <select
             className="select"
             aria-label={t('surveyBranchTarget')}
@@ -502,9 +506,6 @@ function BranchingEditor({
           </Button>
         </div>
       ))}
-      <p className="text-muted survey-branching-hint">
-        {question.branching.length ? t('surveyBranchOtherwise') : t('surveyBranchNone')}
-      </p>
     </div>
   );
 }
@@ -535,13 +536,13 @@ function QuestionEditor({
   const idPrefix = `survey-q-${question.key}`;
   const patch = (partial: Partial<QuestionDraft>) => onChange({ ...question, ...partial } as QuestionDraft);
   return (
-    <div className="survey-question-card">
-      <div className="survey-question-head">
-        <button type="button" className="survey-question-number" onClick={onPreview} title={t('surveyPreviewQuestion')}>
+    <div className="product-question">
+      <div className="product-question-head">
+        <button type="button" className="product-question-number" onClick={onPreview} title={t('surveyPreviewQuestion')}>
           {t('surveyQuestionNumber').replace('{n}', String(index + 1))}
         </button>
         <select
-          className="select survey-question-type"
+          className="select product-question-type"
           aria-label={t('surveyType')}
           value={question.type}
           onChange={(event) => onChange(convertQuestion(question, event.target.value as SurveyQuestionType))}
@@ -552,7 +553,7 @@ function QuestionEditor({
             </option>
           ))}
         </select>
-        <div className="survey-question-tools">
+        <div className="product-question-tools">
           <Button type="button" variant="ghost" size="icon-sm" aria-label={t('surveyMoveUp')} disabled={index === 0} onClick={() => onMove(-1)}>
             <ArrowUp size={14} strokeWidth={2} aria-hidden />
           </Button>
@@ -589,8 +590,8 @@ function QuestionEditor({
         </div>
       </div>
 
-      <div className="survey-builder-grid">
-        <div className="field survey-builder-wide">
+      <div className="product-form-grid">
+        <div className="field product-field product-form-wide">
           <Label htmlFor={`${idPrefix}-text`}>{t('surveyQuestion')}</Label>
           <Input
             id={`${idPrefix}-text`}
@@ -600,7 +601,7 @@ function QuestionEditor({
             onChange={(event) => patch({ question: event.target.value })}
           />
         </div>
-        <div className="field survey-builder-wide">
+        <div className="field product-field product-form-wide">
           <Label htmlFor={`${idPrefix}-description`}>{t('surveyQuestionDescription')}</Label>
           <Input
             id={`${idPrefix}-description`}
@@ -611,7 +612,7 @@ function QuestionEditor({
         </div>
 
         {question.type === 'open' ? (
-          <div className="field survey-builder-wide">
+          <div className="field product-field product-form-wide">
             <Label htmlFor={`${idPrefix}-placeholder`}>{t('surveyPlaceholderLabel')}</Label>
             <Input
               id={`${idPrefix}-placeholder`}
@@ -624,7 +625,7 @@ function QuestionEditor({
 
         {question.type === 'rating' ? (
           <>
-            <div className="field">
+            <div className="field product-field">
               <Label htmlFor={`${idPrefix}-scale`}>{t('surveyRatingScale')}</Label>
               <select
                 id={`${idPrefix}-scale`}
@@ -643,7 +644,7 @@ function QuestionEditor({
                 ))}
               </select>
             </div>
-            <div className="field">
+            <div className="field product-field">
               <Label htmlFor={`${idPrefix}-low`}>{t('surveyLowerLabel')}</Label>
               <Input
                 id={`${idPrefix}-low`}
@@ -652,7 +653,7 @@ function QuestionEditor({
                 onChange={(event) => patch({ lowerLabel: event.target.value } as Partial<QuestionDraft>)}
               />
             </div>
-            <div className="field">
+            <div className="field product-field">
               <Label htmlFor={`${idPrefix}-high`}>{t('surveyUpperLabel')}</Label>
               <Input
                 id={`${idPrefix}-high`}
@@ -666,7 +667,7 @@ function QuestionEditor({
 
         {question.type === 'single_choice' || question.type === 'multiple_choice' ? (
           <>
-            <div className="field survey-builder-wide">
+            <div className="field product-field product-form-wide">
               <Label htmlFor={`${idPrefix}-options`}>{t('surveyOptions')}</Label>
               <Textarea
                 id={`${idPrefix}-options`}
@@ -677,7 +678,7 @@ function QuestionEditor({
                 }
               />
             </div>
-            <label className="checkbox-row survey-builder-wide">
+            <label className="checkbox-row product-form-wide">
               <input
                 type="checkbox"
                 checked={question.hasOther}
@@ -689,11 +690,12 @@ function QuestionEditor({
         ) : null}
 
         {question.type === 'link' ? (
-          <div className="field survey-builder-wide">
+          <div className="field product-field product-form-wide">
             <Label htmlFor={`${idPrefix}-url`}>{t('surveyLinkUrl')}</Label>
             <Input
               id={`${idPrefix}-url`}
               type="url"
+              className="mono"
               value={question.url}
               maxLength={1000}
               placeholder="https://"
@@ -702,7 +704,7 @@ function QuestionEditor({
           </div>
         ) : null}
 
-        <div className="field">
+        <div className="field product-field">
           <Label htmlFor={`${idPrefix}-button`}>{t('surveyButtonText')}</Label>
           <Input
             id={`${idPrefix}-button`}
@@ -713,7 +715,7 @@ function QuestionEditor({
           />
         </div>
         {question.type !== 'link' ? (
-          <label className="checkbox-row survey-builder-inline-check">
+          <label className="checkbox-row product-check-cell">
             <input type="checkbox" checked={question.optional} onChange={(event) => patch({ optional: event.target.checked })} />
             <span>{t('surveyOptionalQuestion')}</span>
           </label>
@@ -739,9 +741,41 @@ export function hostedSurveyUrl(survey: { id?: string; slug?: string | null }) {
   return key ? `${window.location.origin}/s/${encodeURIComponent(key)}` : '';
 }
 
+const TEMPLATES: SurveyTemplateKey[] = ['nps', 'csat', 'feedback', 'blank'];
+
+const TEMPLATE_ICONS: Record<SurveyTemplateKey, typeof Gauge> = {
+  blank: FilePlus,
+  nps: Gauge,
+  csat: Smile,
+  feedback: MessageSquareText,
+};
+
+/** First step of "New survey": pick a template (or blank) before the builder opens. */
+function TemplatePicker({ onPick }: { onPick: (template: SurveyTemplateKey) => void }) {
+  return (
+    <div className="product-template-grid" role="list">
+      {TEMPLATES.map((template) => {
+        const Icon = TEMPLATE_ICONS[template];
+        return (
+          <button key={template} type="button" role="listitem" className="product-template" onClick={() => onPick(template)}>
+            <span className="product-template-icon" aria-hidden>
+              <Icon strokeWidth={2} />
+            </span>
+            <span className="product-template-copy">
+              <span className="product-template-title">{t(`surveyTemplateTitle_${template}`)}</span>
+              <span className="product-template-body">{t(`surveyTemplateBody_${template}`)}</span>
+            </span>
+            <ChevronRight className="product-template-chevron" strokeWidth={2} aria-hidden />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function SurveyBuilderDialog({
   survey,
-  template = 'blank',
+  template,
   saving,
   error,
   onClose,
@@ -749,15 +783,18 @@ export function SurveyBuilderDialog({
 }: {
   /** Null creates a new survey. */
   survey: Survey | null;
+  /** Starting point for a new survey; omitted shows the template step first. */
   template?: SurveyTemplateKey;
   saving: boolean;
   error: Error | null;
   onClose: () => void;
   onSave: (body: SurveyBody) => void;
 }) {
-  const [draft, setDraft] = useState<SurveyDraft>(() => draftFromSurvey(survey, template));
+  const [step, setStep] = useState<'template' | 'build'>(survey || template ? 'build' : 'template');
+  const [draft, setDraft] = useState<SurveyDraft>(() => draftFromSurvey(survey, template ?? 'blank'));
   const [previewIndex, setPreviewIndex] = useState<number | undefined>(undefined);
   const [copied, setCopied] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
   const theme = useResolvedTheme();
   const { body, errors } = useMemo(() => buildBody(draft), [draft]);
   const previewQuestions = useMemo(() => questionsFromDraft(draft.questions), [draft.questions]);
@@ -798,374 +835,389 @@ export function SurveyBuilderDialog({
   const hostedUrl = hostedSurveyUrl({ id: survey?.id, slug: draft.slug.trim().toLowerCase() || null });
   const title = survey ? t('surveyEdit') : t('createSurvey');
 
-  return (
-    <ResourceEditDialog
-      title={title}
-      ariaLabel={title}
-      panelClassName="survey-builder-dialog"
-      bodyClassName="survey-builder"
-      saving={saving}
-      error={error}
-      canSave={Boolean(body) && !saving}
-      onClose={onClose}
-      onSave={() => body && onSave(body)}
-    >
-      <div className="survey-builder-main">
-        <div className="survey-builder-grid">
-          <div className="field">
-            <Label htmlFor="survey-builder-name">{t('name')}</Label>
-            <Input
-              id="survey-builder-name"
-              value={draft.name}
-              maxLength={120}
-              placeholder={t('surveyNamePlaceholder')}
-              onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
-            />
-          </div>
-          <label className="checkbox-row survey-builder-inline-check">
-            <input
-              type="checkbox"
-              checked={draft.enabled}
-              onChange={(event) => setDraft((prev) => ({ ...prev, enabled: event.target.checked }))}
-            />
-            <span>{t('surveyEnabledLabel')}</span>
-          </label>
+  if (step === 'template') {
+    return (
+      <ModalDialog className="product-dialog product-dialog--narrow" aria-label={title} onClose={onClose}>
+        <header className="dialog-header">
+          <h2 className="dialog-title">{title}</h2>
+          <p className="dialog-description">{t('surveyStartFromLead')}</p>
+        </header>
+        <div className="dialog-body">
+          <TemplatePicker
+            onPick={(key) => {
+              setDraft(draftFromSurvey(null, key));
+              setStep('build');
+            }}
+          />
         </div>
+        <footer className="dialog-footer">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            {t('cancel')}
+          </Button>
+        </footer>
+      </ModalDialog>
+    );
+  }
 
-        <section className="flag-editor-section">
-          <header className="flag-editor-section-head">
-            <div>
-              <h3 className="flag-editor-section-title">{t('surveyQuestions')}</h3>
-              <p className="text-muted">{t('surveyQuestionsLead')}</p>
-            </div>
-          </header>
-          {draft.questions.map((question, index) => (
-            <QuestionEditor
-              key={question.key}
-              question={question}
-              index={index}
-              questions={draft.questions}
-              onChange={(next) => updateQuestion(question.key, next)}
-              onMove={(delta) => moveQuestion(index, delta)}
-              onRemove={() => removeQuestion(index)}
-              onDuplicate={() =>
-                setDraft((prev) => {
-                  const copy = toDraft({ ...questionsFromDraft([question])[0], id: randomId(), branching: [] });
-                  const questions = [...prev.questions];
-                  questions.splice(index + 1, 0, copy);
-                  return { ...prev, questions };
-                })
-              }
-              onPreview={() => setPreviewIndex(index)}
-            />
-          ))}
-          <div className="survey-add-question">
-            <span className="text-muted">{t('surveyAddQuestion')}</span>
-            {QUESTION_TYPES.map((type) => (
-              <Button
-                key={type}
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={draft.questions.length >= SURVEY_MAX_QUESTIONS}
-                onClick={() => addQuestion(type)}
-              >
-                <Plus size={14} strokeWidth={2} aria-hidden />
-                {questionTypeLabel(type)}
-              </Button>
-            ))}
-          </div>
-        </section>
-
-        <section className="flag-editor-section">
-          <header className="flag-editor-section-head">
-            <div>
-              <h3 className="flag-editor-section-title">{t('surveyTargeting')}</h3>
-              <p className="text-muted">{t('surveyTargetingLead')}</p>
-            </div>
-          </header>
-          <div className="survey-builder-grid">
-            <div className="field">
-              <Label htmlFor="survey-builder-path">{t('surveyTriggerPath')}</Label>
+  return (
+    <ModalDialog className="product-dialog product-dialog--builder" aria-label={title} onClose={onClose}>
+      <header className="dialog-header">
+        <h2 className="dialog-title">{title}</h2>
+      </header>
+      <div className="dialog-body product-form product-survey-builder">
+        <div className="product-survey-builder-main">
+          <div className="product-form-grid">
+            <div className="field product-field">
+              <Label htmlFor="survey-builder-name">{t('name')}</Label>
               <Input
-                id="survey-builder-path"
-                value={draft.triggerPath}
-                placeholder="/pricing"
-                onChange={(event) => setDraft((prev) => ({ ...prev, triggerPath: event.target.value }))}
+                id="survey-builder-name"
+                value={draft.name}
+                maxLength={120}
+                placeholder={t('surveyNamePlaceholder')}
+                onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
               />
             </div>
-            <div className="field">
-              <Label htmlFor="survey-builder-event">{t('surveyTriggerEvent')}</Label>
-              <Input
-                id="survey-builder-event"
-                value={draft.triggerEvent}
-                placeholder="checkout_started"
-                onChange={(event) => setDraft((prev) => ({ ...prev, triggerEvent: event.target.value }))}
-              />
-            </div>
-            <div className="field">
-              <Label htmlFor="survey-builder-delay">{t('surveyDisplayDelay')}</Label>
-              <Input
-                id="survey-builder-delay"
-                type="number"
-                min={0}
-                max={60}
-                value={draft.displayDelaySeconds}
-                onChange={(event) => setDraft((prev) => ({ ...prev, displayDelaySeconds: event.target.value }))}
-              />
-            </div>
-            <div className="field">
-              <Label htmlFor="survey-builder-sample">{t('surveySampleRate')}</Label>
-              <Input
-                id="survey-builder-sample"
-                type="number"
-                min={0}
-                max={100}
-                value={draft.sampleRate}
-                onChange={(event) => setDraft((prev) => ({ ...prev, sampleRate: event.target.value }))}
-              />
-            </div>
-            <div className="field">
-              <Label htmlFor="survey-builder-repeat">{t('surveyFrequency')}</Label>
-              <select
-                id="survey-builder-repeat"
-                className="select"
-                value={draft.repeatMode}
-                onChange={(event) => setDraft((prev) => ({ ...prev, repeatMode: event.target.value as RepeatMode }))}
-              >
-                <option value="once">{t('surveyFrequencyOnce')}</option>
-                <option value="interval">{t('surveyFrequencyInterval')}</option>
-              </select>
-            </div>
-            {draft.repeatMode === 'interval' ? (
-              <div className="field">
-                <Label htmlFor="survey-builder-repeat-days">{t('surveyRepeatDays')}</Label>
-                <Input
-                  id="survey-builder-repeat-days"
-                  type="number"
-                  min={1}
-                  max={365}
-                  value={draft.repeatIntervalDays}
-                  onChange={(event) => setDraft((prev) => ({ ...prev, repeatIntervalDays: event.target.value }))}
-                />
-              </div>
-            ) : null}
-            <div className="field">
-              <Label htmlFor="survey-builder-limit">{t('surveyResponseLimit')}</Label>
-              <Input
-                id="survey-builder-limit"
-                type="number"
-                min={1}
-                value={draft.responseLimit}
-                placeholder={t('surveyNoLimit')}
-                onChange={(event) => setDraft((prev) => ({ ...prev, responseLimit: event.target.value }))}
-              />
-            </div>
-            <div className="field">
-              <Label htmlFor="survey-builder-start">{t('surveyStartsAt')}</Label>
-              <Input
-                id="survey-builder-start"
-                type="datetime-local"
-                value={draft.startsAt}
-                onChange={(event) => setDraft((prev) => ({ ...prev, startsAt: event.target.value }))}
-              />
-            </div>
-            <div className="field">
-              <Label htmlFor="survey-builder-end">{t('surveyEndsAt')}</Label>
-              <Input
-                id="survey-builder-end"
-                type="datetime-local"
-                value={draft.endsAt}
-                onChange={(event) => setDraft((prev) => ({ ...prev, endsAt: event.target.value }))}
-              />
-            </div>
-            <div className="field survey-builder-wide">
-              <Label htmlFor="survey-builder-rules">{t('surveyDisplayRules')}</Label>
-              <Textarea
-                id="survey-builder-rules"
-                value={draft.displayRulesText}
-                placeholder={t('surveyDisplayRulesPlaceholder')}
-                onChange={(event) => setDraft((prev) => ({ ...prev, displayRulesText: event.target.value }))}
-              />
-              <p className="text-muted">
-                {t('surveyDisplayRulesHint').replace('{count}', String(parseDisplayRules(draft.displayRulesText).length))}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section className="flag-editor-section">
-          <header className="flag-editor-section-head">
-            <div>
-              <h3 className="flag-editor-section-title">{t('surveyHosted')}</h3>
-              <p className="text-muted">{t('surveyHostedLead')}</p>
-            </div>
-          </header>
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={draft.hostedEnabled}
-              onChange={(event) => setDraft((prev) => ({ ...prev, hostedEnabled: event.target.checked }))}
-            />
-            <span>{t('surveyHostedEnable')}</span>
-          </label>
-          {draft.hostedEnabled ? (
-            <div className="survey-builder-grid">
-              <div className="field">
-                <Label htmlFor="survey-builder-slug">{t('surveySlug')}</Label>
-                <Input
-                  id="survey-builder-slug"
-                  className="mono"
-                  value={draft.slug}
-                  maxLength={64}
-                  placeholder="beta-feedback"
-                  onChange={(event) => setDraft((prev) => ({ ...prev, slug: event.target.value }))}
-                />
-              </div>
-              <div className="field">
-                <span className="stat-label">{t('surveyHostedLink')}</span>
-                {hostedUrl ? (
-                  <div className="survey-hosted-link">
-                    <code className="mono">{hostedUrl}</code>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={t('copyToClipboard')}
-                      onClick={() => {
-                        void navigator.clipboard?.writeText(hostedUrl).then(() => {
-                          setCopied(true);
-                          setTimeout(() => setCopied(false), 1500);
-                        });
-                      }}
-                    >
-                      <Copy size={14} strokeWidth={2} aria-hidden />
-                    </Button>
-                    {copied ? <span className="text-muted">{t('copied')}</span> : null}
-                  </div>
-                ) : (
-                  <p className="text-muted">{t('surveyHostedAfterSave')}</p>
-                )}
-              </div>
-            </div>
-          ) : null}
-        </section>
-
-        <section className="flag-editor-section">
-          <header className="flag-editor-section-head">
-            <div>
-              <h3 className="flag-editor-section-title">{t('surveyAppearance')}</h3>
-              <p className="text-muted">{t('surveyAppearanceLead')}</p>
-            </div>
-          </header>
-          <div className="survey-builder-grid">
-            <div className="field">
-              <Label htmlFor="survey-builder-position">{t('surveyPosition')}</Label>
-              <select
-                id="survey-builder-position"
-                className="select"
-                value={draft.appearance.position}
-                onChange={(event) => setAppearance({ position: event.target.value as SurveyAppearance['position'] })}
-              >
-                {surveyPositions.map((position) => (
-                  <option key={position} value={position}>
-                    {t(`surveyPosition_${position.replace('-', '_')}`)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <Label htmlFor="survey-builder-theme">{t('surveyColorScheme')}</Label>
-              <select
-                id="survey-builder-theme"
-                className="select"
-                value={draft.appearance.theme}
-                onChange={(event) => setAppearance({ theme: event.target.value as SurveyAppearance['theme'] })}
-              >
-                {surveyColorSchemes.map((scheme) => (
-                  <option key={scheme} value={scheme}>
-                    {t(`surveyColorScheme_${scheme}`)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field survey-builder-wide">
-              <span className="stat-label">{t('surveyAccent')}</span>
-              <div className="survey-accent-list" role="radiogroup" aria-label={t('surveyAccent')}>
-                {surveyAccents.map((accent) => (
-                  <button
-                    key={accent}
-                    type="button"
-                    role="radio"
-                    aria-checked={draft.appearance.accent === accent}
-                    className={`survey-accent-option${draft.appearance.accent === accent ? ' is-selected' : ''}`}
-                    onClick={() => setAppearance({ accent })}
-                  >
-                    <span className="survey-accent-dot" data-accent={accent} aria-hidden />
-                    {t(`surveyAccent_${accent}`)}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="field">
-              <Label htmlFor="survey-builder-submit">{t('surveySubmitText')}</Label>
-              <Input
-                id="survey-builder-submit"
-                value={draft.appearance.submitText}
-                maxLength={40}
-                placeholder={t('surveyWidgetSubmit')}
-                onChange={(event) => setAppearance({ submitText: event.target.value })}
-              />
-            </div>
-            <label className="checkbox-row survey-builder-inline-check">
+            <label className="checkbox-row product-check-cell">
               <input
                 type="checkbox"
-                checked={draft.appearance.showThankYou}
-                onChange={(event) => setAppearance({ showThankYou: event.target.checked })}
+                checked={draft.enabled}
+                onChange={(event) => setDraft((prev) => ({ ...prev, enabled: event.target.checked }))}
               />
-              <span>{t('surveyShowThankYou')}</span>
+              <span>{t('surveyEnabledLabel')}</span>
             </label>
-            {draft.appearance.showThankYou ? (
-              <div className="field survey-builder-wide">
-                <Label htmlFor="survey-builder-thanks">{t('surveyThankYouMessage')}</Label>
+          </div>
+
+          <FormSection title={t('surveyQuestions')} lead={t('surveyQuestionsLead')}>
+            <div className="product-question-list">
+              {draft.questions.map((question, index) => (
+                <QuestionEditor
+                  key={question.key}
+                  question={question}
+                  index={index}
+                  questions={draft.questions}
+                  onChange={(next) => updateQuestion(question.key, next)}
+                  onMove={(delta) => moveQuestion(index, delta)}
+                  onRemove={() => removeQuestion(index)}
+                  onDuplicate={() =>
+                    setDraft((prev) => {
+                      const copy = toDraft({ ...questionsFromDraft([question])[0], id: randomId(), branching: [] });
+                      const questions = [...prev.questions];
+                      questions.splice(index + 1, 0, copy);
+                      return { ...prev, questions };
+                    })
+                  }
+                  onPreview={() => setPreviewIndex(index)}
+                />
+              ))}
+            </div>
+            <div className="product-add-row">
+              <span className="product-add-row-label">{t('surveyAddQuestion')}</span>
+              {QUESTION_TYPES.map((type) => (
+                <Button
+                  key={type}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={draft.questions.length >= SURVEY_MAX_QUESTIONS}
+                  onClick={() => addQuestion(type)}
+                >
+                  <Plus size={14} strokeWidth={2} aria-hidden />
+                  {questionTypeLabel(type)}
+                </Button>
+              ))}
+            </div>
+          </FormSection>
+
+          <FormSection title={t('surveyTargeting')} lead={t('surveyTargetingLead')}>
+            <div className="product-form-grid">
+              <div className="field product-field">
+                <Label htmlFor="survey-builder-path">{t('surveyTriggerPath')}</Label>
                 <Input
-                  id="survey-builder-thanks"
-                  value={draft.appearance.thankYouMessage}
-                  maxLength={200}
-                  placeholder={t('surveyThankYouDefault')}
-                  onChange={(event) => setAppearance({ thankYouMessage: event.target.value })}
+                  id="survey-builder-path"
+                  className="mono"
+                  value={draft.triggerPath}
+                  placeholder="/pricing"
+                  onChange={(event) => setDraft((prev) => ({ ...prev, triggerPath: event.target.value }))}
                 />
               </div>
+              <div className="field product-field">
+                <Label htmlFor="survey-builder-event">{t('surveyTriggerEvent')}</Label>
+                <Input
+                  id="survey-builder-event"
+                  className="mono"
+                  value={draft.triggerEvent}
+                  placeholder="checkout_started"
+                  onChange={(event) => setDraft((prev) => ({ ...prev, triggerEvent: event.target.value }))}
+                />
+              </div>
+              <div className="field product-field">
+                <Label htmlFor="survey-builder-delay">{t('surveyDisplayDelay')}</Label>
+                <Input
+                  id="survey-builder-delay"
+                  type="number"
+                  min={0}
+                  max={60}
+                  value={draft.displayDelaySeconds}
+                  onChange={(event) => setDraft((prev) => ({ ...prev, displayDelaySeconds: event.target.value }))}
+                />
+              </div>
+              <div className="field product-field">
+                <Label htmlFor="survey-builder-sample">{t('surveySampleRate')}</Label>
+                <Input
+                  id="survey-builder-sample"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={draft.sampleRate}
+                  onChange={(event) => setDraft((prev) => ({ ...prev, sampleRate: event.target.value }))}
+                />
+              </div>
+              <div className="field product-field">
+                <Label htmlFor="survey-builder-repeat">{t('surveyFrequency')}</Label>
+                <select
+                  id="survey-builder-repeat"
+                  className="select"
+                  value={draft.repeatMode}
+                  onChange={(event) => setDraft((prev) => ({ ...prev, repeatMode: event.target.value as RepeatMode }))}
+                >
+                  <option value="once">{t('surveyFrequencyOnce')}</option>
+                  <option value="interval">{t('surveyFrequencyInterval')}</option>
+                </select>
+              </div>
+              {draft.repeatMode === 'interval' ? (
+                <div className="field product-field">
+                  <Label htmlFor="survey-builder-repeat-days">{t('surveyRepeatDays')}</Label>
+                  <Input
+                    id="survey-builder-repeat-days"
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={draft.repeatIntervalDays}
+                    onChange={(event) => setDraft((prev) => ({ ...prev, repeatIntervalDays: event.target.value }))}
+                  />
+                </div>
+              ) : null}
+              <div className="field product-field">
+                <Label htmlFor="survey-builder-limit">{t('surveyResponseLimit')}</Label>
+                <Input
+                  id="survey-builder-limit"
+                  type="number"
+                  min={1}
+                  value={draft.responseLimit}
+                  placeholder={t('surveyNoLimit')}
+                  onChange={(event) => setDraft((prev) => ({ ...prev, responseLimit: event.target.value }))}
+                />
+              </div>
+              <div className="field product-field">
+                <Label htmlFor="survey-builder-start">{t('surveyStartsAt')}</Label>
+                <Input
+                  id="survey-builder-start"
+                  type="datetime-local"
+                  value={draft.startsAt}
+                  onChange={(event) => setDraft((prev) => ({ ...prev, startsAt: event.target.value }))}
+                />
+              </div>
+              <div className="field product-field">
+                <Label htmlFor="survey-builder-end">{t('surveyEndsAt')}</Label>
+                <Input
+                  id="survey-builder-end"
+                  type="datetime-local"
+                  value={draft.endsAt}
+                  onChange={(event) => setDraft((prev) => ({ ...prev, endsAt: event.target.value }))}
+                />
+              </div>
+              <div className="field product-field product-form-wide">
+                <Label htmlFor="survey-builder-rules">{t('surveyDisplayRules')}</Label>
+                <Textarea
+                  id="survey-builder-rules"
+                  className="mono product-code-input"
+                  value={draft.displayRulesText}
+                  placeholder={t('surveyDisplayRulesPlaceholder')}
+                  onChange={(event) => setDraft((prev) => ({ ...prev, displayRulesText: event.target.value }))}
+                />
+                <p className="field-hint">
+                  {t('surveyDisplayRulesHint').replace('{count}', String(parseDisplayRules(draft.displayRulesText).length))}
+                </p>
+              </div>
+            </div>
+          </FormSection>
+
+          <FormSection title={t('surveyHosted')} lead={t('surveyHostedLead')}>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={draft.hostedEnabled}
+                onChange={(event) => setDraft((prev) => ({ ...prev, hostedEnabled: event.target.checked }))}
+              />
+              <span>{t('surveyHostedEnable')}</span>
+            </label>
+            {draft.hostedEnabled ? (
+              <div className="product-form-grid">
+                <div className="field product-field">
+                  <Label htmlFor="survey-builder-slug">{t('surveySlug')}</Label>
+                  <Input
+                    id="survey-builder-slug"
+                    className="mono"
+                    value={draft.slug}
+                    maxLength={64}
+                    placeholder="beta-feedback"
+                    onChange={(event) => setDraft((prev) => ({ ...prev, slug: event.target.value }))}
+                  />
+                </div>
+                <div className="field product-field">
+                  <span className="field-label">{t('surveyHostedLink')}</span>
+                  {hostedUrl ? (
+                    <div className="product-copy-row">
+                      <code className="mono product-copy-value">{hostedUrl}</code>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={t('copyToClipboard')}
+                        onClick={() => {
+                          void navigator.clipboard?.writeText(hostedUrl).then(() => {
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 1500);
+                          });
+                        }}
+                      >
+                        <Copy size={14} strokeWidth={2} aria-hidden />
+                      </Button>
+                      {copied ? <span className="product-copy-done">{t('copied')}</span> : null}
+                    </div>
+                  ) : (
+                    <p className="field-hint">{t('surveyHostedAfterSave')}</p>
+                  )}
+                </div>
+              </div>
             ) : null}
-          </div>
-        </section>
+          </FormSection>
 
-        {errors.length ? (
-          <ul className="flag-editor-errors text-danger">
-            {[...new Set(errors)].map((message) => (
-              <li key={message}>{message}</li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
+          <FormSection title={t('surveyAppearance')} lead={t('surveyAppearanceLead')}>
+            <div className="product-form-grid">
+              <div className="field product-field">
+                <Label htmlFor="survey-builder-position">{t('surveyPosition')}</Label>
+                <select
+                  id="survey-builder-position"
+                  className="select"
+                  value={draft.appearance.position}
+                  onChange={(event) => setAppearance({ position: event.target.value as SurveyAppearance['position'] })}
+                >
+                  {surveyPositions.map((position) => (
+                    <option key={position} value={position}>
+                      {t(`surveyPosition_${position.replace('-', '_')}`)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field product-field">
+                <Label htmlFor="survey-builder-theme">{t('surveyColorScheme')}</Label>
+                <select
+                  id="survey-builder-theme"
+                  className="select"
+                  value={draft.appearance.theme}
+                  onChange={(event) => setAppearance({ theme: event.target.value as SurveyAppearance['theme'] })}
+                >
+                  {surveyColorSchemes.map((scheme) => (
+                    <option key={scheme} value={scheme}>
+                      {t(`surveyColorScheme_${scheme}`)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field product-field product-form-wide">
+                <span className="field-label">{t('surveyAccent')}</span>
+                <div className="survey-accent-list" role="radiogroup" aria-label={t('surveyAccent')}>
+                  {surveyAccents.map((accent) => (
+                    <button
+                      key={accent}
+                      type="button"
+                      role="radio"
+                      aria-checked={draft.appearance.accent === accent}
+                      className={`survey-accent-option${draft.appearance.accent === accent ? ' is-selected' : ''}`}
+                      onClick={() => setAppearance({ accent })}
+                    >
+                      <span className="survey-accent-dot" data-accent={accent} aria-hidden />
+                      {t(`surveyAccent_${accent}`)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="field product-field">
+                <Label htmlFor="survey-builder-submit">{t('surveySubmitText')}</Label>
+                <Input
+                  id="survey-builder-submit"
+                  value={draft.appearance.submitText}
+                  maxLength={40}
+                  placeholder={t('surveyWidgetSubmit')}
+                  onChange={(event) => setAppearance({ submitText: event.target.value })}
+                />
+              </div>
+              <label className="checkbox-row product-check-cell">
+                <input
+                  type="checkbox"
+                  checked={draft.appearance.showThankYou}
+                  onChange={(event) => setAppearance({ showThankYou: event.target.checked })}
+                />
+                <span>{t('surveyShowThankYou')}</span>
+              </label>
+              {draft.appearance.showThankYou ? (
+                <div className="field product-field product-form-wide">
+                  <Label htmlFor="survey-builder-thanks">{t('surveyThankYouMessage')}</Label>
+                  <Input
+                    id="survey-builder-thanks"
+                    value={draft.appearance.thankYouMessage}
+                    maxLength={200}
+                    placeholder={t('surveyThankYouDefault')}
+                    onChange={(event) => setAppearance({ thankYouMessage: event.target.value })}
+                  />
+                </div>
+              ) : null}
+            </div>
+          </FormSection>
 
-      <aside className="survey-builder-preview" aria-label={t('surveyPreview')}>
-        <span className="stat-label">{t('surveyPreview')}</span>
-        <div className={`survey-preview-stage survey-preview-stage--${draft.appearance.position}`}>
-          {previewQuestions.some((question) => question.question) ? (
-            <SurveyRenderer
-              preview
-              questions={previewQuestions}
-              appearance={draft.appearance}
-              scheme={theme}
-              focusIndex={previewIndex}
-            />
-          ) : (
-            <p className="text-muted survey-preview-empty">{t('surveyPreviewEmpty')}</p>
-          )}
+          {showErrors ? <FormErrors errors={errors} /> : null}
+          {error ? (
+            <p className="text-danger" role="alert">
+              {error.message}
+            </p>
+          ) : null}
         </div>
-        <p className="text-muted">{t('surveyPreviewHint')}</p>
-      </aside>
-    </ResourceEditDialog>
+
+        <aside className="product-survey-preview" aria-label={t('surveyPreview')}>
+          <span className="product-survey-preview-label">{t('surveyPreview')}</span>
+          <div className={`survey-preview-stage survey-preview-stage--${draft.appearance.position}`}>
+            {previewQuestions.some((question) => question.question) ? (
+              <SurveyRenderer
+                preview
+                questions={previewQuestions}
+                appearance={draft.appearance}
+                scheme={theme}
+                focusIndex={previewIndex}
+              />
+            ) : (
+              <p className="text-muted survey-preview-empty">{t('surveyPreviewEmpty')}</p>
+            )}
+          </div>
+          <p className="product-note">{t('surveyPreviewHint')}</p>
+        </aside>
+      </div>
+      <footer className="dialog-footer">
+        <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
+          {t('cancel')}
+        </Button>
+        <Button
+          type="button"
+          variant="primary"
+          disabled={saving}
+          onClick={() => {
+            if (body) onSave(body);
+            else setShowErrors(true);
+          }}
+        >
+          {saving ? t('saving') : survey ? t('save') : t('createSurvey')}
+        </Button>
+      </footer>
+    </ModalDialog>
   );
 }

@@ -1,86 +1,240 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { ExternalLink, MessageSquareText, Plus } from 'lucide-react';
+import { Copy, ExternalLink, MessageSquareText, Pencil, Plus, Power, Trash2 } from 'lucide-react';
+import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
+import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
-import {
-  MasterDetailLayout,
-  MasterDetailListItem,
-  MasterDetailPane,
-  useMasterDetailSelection,
-} from '../components/master-detail';
+import { KvList, type KvItem } from '../components/KvList';
+import { MasterDetailLayout, MasterDetailListItem, MasterDetailPane } from '../components/master-detail';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
-import { Button } from '../components/ui/button';
+import { countMeta, tf } from '../components/product/format';
+import { ProductListHeader, ProductMasterDetailSkeleton, ProductNoMatches } from '../components/product/ProductList';
+import { ProductSection } from '../components/product/ProductSection';
+import { ShortDate } from '../components/product/ProductTime';
+import { surveyKind, surveyKindLabel, surveyStatus } from '../components/product/status';
+import { StatusBadge } from '../components/StatusBadge';
 import {
   hostedSurveyUrl,
   questionTypeLabel,
   SurveyBuilderDialog,
   type SurveyBody,
-  type SurveyTemplateKey,
 } from '../components/surveys/SurveyBuilderDialog';
 import { SurveyResults } from '../components/surveys/SurveyResults';
+import { Button } from '../components/ui/button';
 import { api, type Survey } from '../lib/api';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
-import { formatDateTime, formatNumber } from '../lib/format';
-import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
 
-const TEMPLATES: SurveyTemplateKey[] = ['blank', 'nps', 'csat', 'feedback'];
-
-type BuilderState = { survey: Survey | null; template: SurveyTemplateKey } | null;
-
-function surveyStatus(survey: Survey, now: number) {
-  if (!survey.enabled) return t('disabled');
-  if (survey.startsAt != null && now < survey.startsAt) return t('surveyStatusScheduled');
-  if (survey.endsAt != null && now >= survey.endsAt) return t('surveyStatusEnded');
-  if (survey.responseLimit != null && (survey.summary?.responses ?? 0) >= survey.responseLimit) {
-    return t('surveyStatusLimitReached');
-  }
-  return t('enabled');
+/** "NPS · 3 questions" */
+function surveySubtitle(survey: Survey) {
+  const kind = surveyKindLabel(surveyKind(survey.questions));
+  return survey.questions.length > 1
+    ? `${kind} · ${t('surveyQuestionCount').replace('{count}', String(survey.questions.length))}`
+    : kind;
 }
 
-function SurveyOverview({ survey }: { survey: Survey }) {
-  const hostedUrl = survey.hostedEnabled ? hostedSurveyUrl(survey) : '';
-  const facts: Array<[string, string]> = [
-    [t('surveyQuestions'), survey.questions.map((question) => questionTypeLabel(question.type)).join(' → ')],
-  ];
-  if (survey.triggerPath) facts.push([t('surveyTriggerPath'), survey.triggerPath]);
-  if (survey.triggerEvent) facts.push([t('surveyTriggerEvent'), survey.triggerEvent]);
-  if (survey.displayDelaySeconds) facts.push([t('surveyDisplayDelay'), `${survey.displayDelaySeconds}s`]);
-  if (survey.displayRules?.length) facts.push([t('surveyDisplayRules'), String(survey.displayRules.length)]);
-  if (survey.sampleRate < 100) facts.push([t('surveySampleRate'), `${survey.sampleRate}%`]);
-  facts.push([
-    t('surveyFrequency'),
-    survey.repeatIntervalDays
-      ? t('surveyRepeatEvery').replace('{days}', String(survey.repeatIntervalDays))
-      : t('surveyFrequencyOnce'),
-  ]);
-  if (survey.responseLimit != null) facts.push([t('surveyResponseLimit'), formatNumber(survey.responseLimit)]);
-  if (survey.startsAt != null) facts.push([t('surveyStartsAt'), formatDateTime(survey.startsAt)]);
-  if (survey.endsAt != null) facts.push([t('surveyEndsAt'), formatDateTime(survey.endsAt)]);
+/** List subtitle: the survey type as a chip, then the question count. */
+function SurveyListSubtitle({ survey }: { survey: Survey }) {
   return (
     <>
-      <dl className="survey-overview">
-        {facts.map(([label, value]) => (
-          <div key={label}>
-            <dt className="text-muted">{label}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
-      </dl>
-      {hostedUrl ? (
-        <p className="survey-hosted-link">
-          <span className="text-muted">{t('surveyHostedLink')}</span>
-          <a className="inline-link mono" href={hostedUrl} target="_blank" rel="noopener noreferrer">
-            {hostedUrl}
-            <ExternalLink size={12} strokeWidth={2} aria-hidden />
-          </a>
-        </p>
-      ) : null}
+      <span className="product-type-chip">{surveyKindLabel(surveyKind(survey.questions))}</span>
+      {survey.questions.length > 1 ? t('surveyQuestionCount').replace('{count}', String(survey.questions.length)) : null}
     </>
   );
 }
+
+function HostedLink({ survey }: { survey: Survey }) {
+  const [copied, setCopied] = useState(false);
+  const url = hostedSurveyUrl(survey);
+  if (!url) return null;
+  return (
+    <span className="product-copy-row">
+      <a className="product-id-link mono product-copy-value" href={url} target="_blank" rel="noopener noreferrer">
+        {url}
+      </a>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={t('copyToClipboard')}
+        onClick={() => {
+          void navigator.clipboard?.writeText(url).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          });
+        }}
+      >
+        <Copy size={14} strokeWidth={2} aria-hidden />
+      </Button>
+      {copied ? <span className="product-copy-done">{t('copied')}</span> : null}
+    </span>
+  );
+}
+
+/** Setup tab: where and how often the survey shows, as label / value rows. */
+function SurveySetup({ survey }: { survey: Survey }) {
+  const items: KvItem[] = [
+    {
+      key: 'questions',
+      label: t('surveyQuestions'),
+      value: survey.questions.map((question) => questionTypeLabel(question.type)).join(' → '),
+    },
+    {
+      key: 'trigger-path',
+      label: t('surveyTriggerPath'),
+      value: survey.triggerPath ? <span className="mono">{survey.triggerPath}</span> : t('productSurveyAnyPage'),
+    },
+    {
+      key: 'trigger-event',
+      label: t('surveyTriggerEvent'),
+      value: survey.triggerEvent ? <span className="mono">{survey.triggerEvent}</span> : t('productSurveyOnPageView'),
+    },
+    {
+      key: 'delay',
+      label: t('productSurveyDelay'),
+      value: survey.displayDelaySeconds
+        ? tf('productSeconds', { count: formatNumber(survey.displayDelaySeconds) })
+        : t('productSurveyNoDelay'),
+    },
+    {
+      key: 'rules',
+      label: t('surveyDisplayRules'),
+      value: survey.displayRules?.length ? (
+        <span className="product-chips">
+          {survey.displayRules.map((rule, index) => (
+            <span key={index} className="product-chip mono">
+              {`${rule.key ? `${rule.field}.${rule.key}` : rule.field} ${rule.operator} ${rule.value}`.trim()}
+            </span>
+          ))}
+        </span>
+      ) : (
+        t('productNone')
+      ),
+    },
+    { key: 'sample', label: t('surveySampleRate'), value: `${survey.sampleRate}%` },
+    {
+      key: 'frequency',
+      label: t('surveyFrequency'),
+      value: survey.repeatIntervalDays
+        ? t('surveyRepeatEvery').replace('{days}', String(survey.repeatIntervalDays))
+        : t('surveyFrequencyOnce'),
+    },
+    {
+      key: 'limit',
+      label: t('surveyResponseLimit'),
+      value: survey.responseLimit != null ? formatNumber(survey.responseLimit) : t('surveyNoLimit'),
+    },
+    {
+      key: 'schedule',
+      label: t('productSurveySchedule'),
+      value:
+        survey.startsAt != null || survey.endsAt != null ? (
+          <>
+            {survey.startsAt != null ? <ShortDate value={survey.startsAt} withTime /> : t('productSurveyNow')}
+            {' – '}
+            {survey.endsAt != null ? <ShortDate value={survey.endsAt} withTime /> : t('productSurveyNoEnd')}
+          </>
+        ) : (
+          t('productSurveyAlways')
+        ),
+    },
+    {
+      key: 'hosted',
+      label: t('surveyHostedLink'),
+      value: survey.hostedEnabled ? <HostedLink survey={survey} /> : t('productSurveyHostedOff'),
+    },
+  ];
+  return (
+    <ProductSection title={t('productSurveySetupTitle')} description={t('surveyTargetingLead')}>
+      <KvList items={items} />
+    </ProductSection>
+  );
+}
+
+function SurveyDetail({
+  websiteId,
+  survey,
+  canEdit,
+  now,
+  toggling,
+  error,
+  onToggle,
+  onEdit,
+  onDelete,
+}: {
+  websiteId: string;
+  survey: Survey;
+  canEdit: boolean;
+  now: number;
+  toggling: boolean;
+  error: Error | null;
+  onToggle: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const status = surveyStatus(survey, now);
+  const hostedUrl = survey.hostedEnabled ? hostedSurveyUrl(survey) : '';
+  return (
+    <MasterDetailPane
+      title={survey.name}
+      meta={
+        <>
+          <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+          <span>{surveySubtitle(survey)}</span>
+          {survey.hostedEnabled ? <span>{t('surveySourceHosted')}</span> : null}
+          {survey.createdAt ? (
+            <span>
+              {t('created')} <ShortDate value={survey.createdAt} />
+            </span>
+          ) : null}
+        </>
+      }
+      actions={
+        <>
+          {hostedUrl ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              render={<a href={hostedUrl} target="_blank" rel="noopener noreferrer" />}
+            >
+              <ExternalLink strokeWidth={2} aria-hidden />
+              {t('productSurveyOpenHosted')}
+            </Button>
+          ) : null}
+          {canEdit ? (
+            <>
+              <Button type="button" variant="outline" size="sm" onClick={onEdit}>
+                <Pencil strokeWidth={2} aria-hidden />
+                {t('edit')}
+              </Button>
+              <Button type="button" variant="outline" size="sm" disabled={toggling} onClick={onToggle}>
+                <Power strokeWidth={2} aria-hidden />
+                {survey.enabled ? t('disable') : t('enable')}
+              </Button>
+              <Button type="button" variant="destructive-ghost" size="sm" onClick={onDelete}>
+                <Trash2 strokeWidth={2} aria-hidden />
+                {t('delete')}
+              </Button>
+            </>
+          ) : null}
+        </>
+      }
+    >
+      {error ? (
+        <p className="text-danger product-inline-error" role="alert">
+          {error.message}
+        </p>
+      ) : null}
+      <SurveyResults websiteId={websiteId} survey={survey} setup={<SurveySetup survey={survey} />} />
+    </MasterDetailPane>
+  );
+}
+
+type BuilderState = { survey: Survey | null } | null;
 
 export default function WebsiteSurveysPage() {
   const confirm = useConfirm();
@@ -89,6 +243,7 @@ export default function WebsiteSurveysPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [builder, setBuilder] = useState<BuilderState>(null);
+  const [search, setSearch] = useState('');
   const now = useMemo(() => Date.now(), []);
 
   const surveysQuery = useQuery({
@@ -97,45 +252,35 @@ export default function WebsiteSurveysPage() {
     queryFn: () => api<Survey[]>(`/api/websites/${websiteId}/surveys`),
   });
   const surveys = useMemo(() => surveysQuery.data ?? [], [surveysQuery.data]);
-  const { selectedId: selectedSurveyId, setSelectedId: setSelectedSurveyId, selectedItem: selectedSurvey } =
-    useMasterDetailSelection(surveys, (survey) => survey.id);
+  const rows = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return surveys;
+    return surveys.filter(
+      (survey) =>
+        survey.name.toLowerCase().includes(needle) ||
+        survey.questions.some((question) => question.question.toLowerCase().includes(needle)),
+    );
+  }, [surveys, search]);
+  const requestedId = searchParams.get('survey');
+  const selected = rows.find((survey) => survey.id === requestedId) ?? rows[0] ?? null;
+  const active = surveys.filter((survey) => surveyStatus(survey, now).tone === 'success').length;
 
-  useEffect(() => {
-    if (!surveys.length) {
-      setSelectedSurveyId(null);
-      return;
-    }
-    const requestedSurveyId = searchParams.get('survey');
-    if (requestedSurveyId && surveys.some((survey) => survey.id === requestedSurveyId)) {
-      setSelectedSurveyId(requestedSurveyId);
-      return;
-    }
-    if (!selectedSurveyId || !surveys.some((survey) => survey.id === selectedSurveyId)) {
-      const nextSurveyId = surveys[0].id;
-      setSelectedSurveyId(nextSurveyId);
-      setSearchParams(
-        (current) => {
-          const next = new URLSearchParams(current);
-          next.set('survey', nextSurveyId);
-          return next;
-        },
-        { replace: true },
-      );
-    }
-  }, [searchParams, selectedSurveyId, setSearchParams, setSelectedSurveyId, surveys]);
-
-  function selectSurvey(id: string) {
-    setSelectedSurveyId(id);
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      next.set('survey', id);
-      return next;
-    });
+  function selectSurvey(id: string, replace = false) {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.set('survey', id);
+        return next;
+      },
+      { replace },
+    );
   }
 
   function invalidate() {
-    queryClient.invalidateQueries({ queryKey: ['surveys', websiteId] });
-    queryClient.invalidateQueries({ queryKey: ['survey-responses', websiteId] });
+    return Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['surveys', websiteId] }),
+      queryClient.invalidateQueries({ queryKey: ['survey-responses', websiteId] }),
+    ]);
   }
 
   const saveMutation = useMutation({
@@ -146,8 +291,9 @@ export default function WebsiteSurveysPage() {
       }),
     onSuccess: (survey) => {
       setBuilder(null);
-      invalidate();
-      selectSurvey(survey.id);
+      setSearch('');
+      void invalidate();
+      selectSurvey(survey.id, true);
     },
   });
 
@@ -157,139 +303,126 @@ export default function WebsiteSurveysPage() {
         method: 'PATCH',
         body: JSON.stringify({ enabled: !survey.enabled }),
       }),
-    onSuccess: invalidate,
+    // Pending until the list has refetched, so the toggle cannot fire twice on stale data.
+    onSuccess: () => invalidate(),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api(`/api/websites/${websiteId}/surveys/${id}`, { method: 'DELETE' }),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      void invalidate();
+    },
   });
 
+  const createButton = canEdit ? (
+    <Button
+      type="button"
+      variant="primary"
+      onClick={() => {
+        saveMutation.reset();
+        setBuilder({ survey: null });
+      }}
+    >
+      <Plus strokeWidth={2} aria-hidden />
+      {t('createSurvey')}
+    </Button>
+  ) : null;
+
   return (
-    <Page className="page-surveys">
-      <PageHeader
-        title={t('surveys')}
-        lead={t('surveysLead')}
-        actions={
-          canEdit ? (
-            <Button type="button" variant="primary" onClick={() => setBuilder({ survey: null, template: 'blank' })}>
-              <Plus size={14} strokeWidth={2} aria-hidden />
-              {t('createSurvey')}
-            </Button>
-          ) : null
-        }
-      />
+    <Page className="page-surveys product-page">
+      <PageHeader title={t('surveys')} lead={t('surveysLead')} actions={createButton} />
 
       <PageBody>
-        {viewOnly ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
+        {viewOnly ? <p className="product-view-only">{t('viewOnlyHint')}</p> : null}
 
-        {canEdit ? (
-          <section className="panel section-gap survey-templates">
-            <div>
-              <h2 className="section-title experiment-title">{t('surveyStartFrom')}</h2>
-              <p className="text-muted">{t('surveyStartFromLead')}</p>
-            </div>
-            <div className="survey-template-list">
-              {TEMPLATES.map((template) => (
-                <button
-                  key={template}
-                  type="button"
-                  className="survey-template-card"
-                  onClick={() => setBuilder({ survey: null, template })}
-                >
-                  <strong>{t(`surveyTemplateTitle_${template}`)}</strong>
-                  <span className="text-muted">{t(`surveyTemplateBody_${template}`)}</span>
-                </button>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        <section className="section-gap">
-          {surveysQuery.isLoading ? (
-            <div className="skeleton skeleton-block" aria-busy />
-          ) : surveys.length ? (
+        <DataViewState
+          loading={surveysQuery.isLoading}
+          loadingFallback={<ProductMasterDetailSkeleton rows={3} />}
+          error={surveysQuery.isError ? surveysQuery.error : null}
+          onRetry={() => surveysQuery.refetch()}
+        >
+          {surveys.length ? (
             <MasterDetailLayout
-              list={surveys.map((survey) => (
-                <MasterDetailListItem
-                  key={survey.id}
-                  selected={survey.id === selectedSurveyId}
-                  onSelect={() => selectSurvey(survey.id)}
-                  icon={<MessageSquareText size={16} strokeWidth={2} aria-hidden />}
-                  title={survey.name}
-                  subtitle={
-                    survey.questions.length > 1
-                      ? t('surveyQuestionCount').replace('{count}', String(survey.questions.length))
-                      : survey.question
-                  }
-                  meta={
-                    <>
-                      <span className="badge">{surveyStatus(survey, now)}</span>
-                      {survey.hostedEnabled ? <span className="badge">{t('surveySourceHosted')}</span> : null}
-                      <span className="text-muted">
-                        {formatNumber(survey.summary?.responses ?? 0)} {t('surveyResponses')}
-                      </span>
-                    </>
-                  }
+              listHeader={
+                <ProductListHeader
+                  search={search}
+                  onSearch={setSearch}
+                  placeholder={t('productSurveySearch')}
+                  summary={tf('productSurveyListSummary', {
+                    count: formatNumber(surveys.length),
+                    active: formatNumber(active),
+                  })}
                 />
-              ))}
+              }
+              list={
+                rows.length ? (
+                  rows.map((survey) => {
+                    const status = surveyStatus(survey, now);
+                    const responses = countMeta(t('productResponsesCount'), survey.summary?.responses ?? 0);
+                    return (
+                      <MasterDetailListItem
+                        key={survey.id}
+                        selected={survey.id === selected?.id}
+                        onSelect={() => selectSurvey(survey.id)}
+                        title={survey.name}
+                        subtitle={<SurveyListSubtitle survey={survey} />}
+                        meta={
+                          <>
+                            <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+                            <span title={responses.title}>{responses.text}</span>
+                          </>
+                        }
+                      />
+                    );
+                  })
+                ) : (
+                  <ProductNoMatches query={search} onClear={() => setSearch('')} />
+                )
+              }
               detail={
-                selectedSurvey && websiteId ? (
-                  <MasterDetailPane
-                    title={selectedSurvey.name}
-                    description={<SurveyOverview survey={selectedSurvey} />}
-                    actions={
-                      canEdit ? (
-                        <div className="cohorts-row-actions">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            disabled={toggleMutation.isPending}
-                            onClick={() => toggleMutation.mutate(selectedSurvey)}
-                          >
-                            {selectedSurvey.enabled ? t('disable') : t('enable')}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setBuilder({ survey: selectedSurvey, template: 'blank' })}
-                          >
-                            {t('edit')}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="destructive-ghost"
-                            size="sm"
-                            onClick={() =>
-                              confirm({
-                                title: deleteTitle(selectedSurvey.name),
-                                description: t('surveyDeleteHint'),
-                                onConfirm: () => deleteMutation.mutate(selectedSurvey.id),
-                              })
-                            }
-                          >
-                            {t('delete')}
-                          </Button>
-                        </div>
-                      ) : null
+                selected && websiteId ? (
+                  <SurveyDetail
+                    key={selected.id}
+                    websiteId={websiteId}
+                    survey={selected}
+                    canEdit={canEdit}
+                    now={now}
+                    toggling={toggleMutation.isPending}
+                    error={(toggleMutation.error ?? deleteMutation.error) as Error | null}
+                    onToggle={() => toggleMutation.mutate(selected)}
+                    onEdit={() => {
+                      saveMutation.reset();
+                      setBuilder({ survey: selected });
+                    }}
+                    onDelete={() =>
+                      confirm({
+                        title: deleteTitle(selected.name),
+                        description: t('surveyDeleteHint'),
+                        onConfirm: () => deleteMutation.mutate(selected.id),
+                      })
                     }
-                  >
-                    <SurveyResults websiteId={websiteId} survey={selectedSurvey} />
-                  </MasterDetailPane>
-                ) : null
+                  />
+                ) : (
+                  <div className="master-detail-pane">
+                    <EmptyState icon={<MessageSquareText strokeWidth={2} />} title={t('productSelectSurvey')} />
+                  </div>
+                )
               }
             />
           ) : (
-            <EmptyState title={t('surveysEmptyTitle')} description={t('surveysEmptyBody')} />
+            <EmptyState
+              variant="rich"
+              icon={<MessageSquareText strokeWidth={2} />}
+              title={t('surveysEmptyTitle')}
+              description={t('surveysEmptyBody')}
+              action={createButton}
+            />
           )}
-        </section>
+        </DataViewState>
 
         {builder ? (
           <SurveyBuilderDialog
             survey={builder.survey}
-            template={builder.template}
             saving={saveMutation.isPending}
             error={saveMutation.error as Error | null}
             onClose={() => {

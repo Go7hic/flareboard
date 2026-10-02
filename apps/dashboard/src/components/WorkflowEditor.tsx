@@ -1,5 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, Plus, X } from 'lucide-react';
+import { EventCatalogPicker } from './EventCatalogPicker';
+import { FormErrors, FormSection } from './product/ProductForm';
+import { StepIcon } from './product/WorkflowFlow';
 import { ResourceEditDialog } from './ResourceEditDialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -258,7 +261,7 @@ export function WorkflowConditionRow({
   onRemove: () => void;
 }) {
   return (
-    <div className="flag-condition-row">
+    <div className="product-cond-row">
       <select
         className="select"
         aria-label={t('featureFlagConditionField')}
@@ -273,6 +276,7 @@ export function WorkflowConditionRow({
       </select>
       {KEYED_FIELDS.has(condition.field) ? (
         <Input
+          className="mono"
           aria-label={t('featureFlagConditionKey')}
           placeholder={t('featureFlagConditionKey')}
           value={condition.key}
@@ -316,13 +320,11 @@ function ConditionList({
   emptyLabel: string;
 }) {
   return (
-    <div className="flag-condition-list">
+    <div className="product-cond-list">
       {conditions.length ? (
         conditions.map((condition, index) => (
-          <div key={condition.uid} className="flag-condition">
-            <span className="flag-condition-joiner text-muted">
-              {index === 0 ? t('featureFlagWhere') : t('featureFlagAnd')}
-            </span>
+          <div key={condition.uid} className="product-cond">
+            <span className="product-cond-joiner">{index === 0 ? t('featureFlagWhere') : t('featureFlagAnd')}</span>
             <WorkflowConditionRow
               condition={condition}
               onChange={(next) => onChange(conditions.map((item) => (item.uid === condition.uid ? next : item)))}
@@ -331,7 +333,7 @@ function ConditionList({
           </div>
         ))
       ) : (
-        <p className="text-muted">{emptyLabel}</p>
+        <p className="product-muted-line">{emptyLabel}</p>
       )}
       <div>
         <Button
@@ -355,14 +357,14 @@ type FocusTarget = { element: TemplateField; apply: (value: string) => void };
 /** Clicking a placeholder inserts it at the cursor of the template field that was focused last. */
 function PlaceholderHelper({ target }: { target: React.MutableRefObject<FocusTarget | null> }) {
   return (
-    <div className="workflow-placeholders">
-      <p className="text-muted">{t('workflowPlaceholdersHint')}</p>
-      <div className="workflow-placeholder-list">
+    <div className="product-placeholders">
+      <p className="product-form-section-lead">{t('workflowPlaceholdersHint')}</p>
+      <div className="product-placeholder-list">
         {WORKFLOW_PLACEHOLDERS.map((placeholder) => (
           <button
             key={placeholder}
             type="button"
-            className="workflow-placeholder mono"
+            className="product-placeholder mono"
             // Keep focus in the template field so the cursor position survives.
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => {
@@ -406,18 +408,18 @@ function StepEditor({
 
   if (step.type === 'delay') {
     return (
-      <div className="flag-condition-row">
-        <span className="text-muted">{t('workflowDelayWait')}</span>
+      <div className="product-inline-row">
+        <span className="product-inline-word">{t('workflowDelayWait')}</span>
         <Input
           aria-label={t('workflowDelayAmount')}
           type="number"
           min={1}
-          className="workflow-delay-input"
+          className="product-number-input"
           value={step.amount}
           onChange={(event) => onChange({ ...step, amount: event.target.value })}
         />
         <select
-          className="select workflow-delay-unit"
+          className="select product-inline-select"
           aria-label={t('workflowDelayUnit')}
           value={step.unit}
           onChange={(event) => onChange({ ...step, unit: event.target.value as DelayUnit })}
@@ -432,7 +434,7 @@ function StepEditor({
   if (step.type === 'condition') {
     return (
       <>
-        <p className="text-muted">{t('workflowConditionStepLead')}</p>
+        <p className="product-form-section-lead">{t('workflowConditionStepLead')}</p>
         <ConditionList
           conditions={step.conditions}
           emptyLabel={t('workflowConditionStepEmpty')}
@@ -444,8 +446,8 @@ function StepEditor({
   if (step.type === 'webhook') {
     const hasBody = step.method !== 'GET' && step.method !== 'DELETE';
     return (
-      <div className="flag-editor-grid">
-        <div className="field">
+      <div className="product-form-grid product-webhook-grid">
+        <div className="field product-field">
           <Label htmlFor={`${prefix}-method`}>{t('workflowWebhookMethod')}</Label>
           <select
             id={`${prefix}-method`}
@@ -460,7 +462,7 @@ function StepEditor({
             ))}
           </select>
         </div>
-        <div className="field">
+        <div className="field product-field">
           <Label htmlFor={`${prefix}-url`}>{t('workflowWebhookUrl')}</Label>
           <Input
             id={`${prefix}-url`}
@@ -470,11 +472,12 @@ function StepEditor({
             onChange={(event) => onChange({ ...step, url: event.target.value })}
           />
         </div>
-        <div className="field flag-editor-wide">
+        <div className="field product-field product-form-wide">
           <span className="field-label">{t('workflowWebhookHeaders')}</span>
           {step.headers.map((header) => (
-            <div key={header.uid} className="flag-condition-row">
+            <div key={header.uid} className="product-cond-row">
               <Input
+                className="mono"
                 aria-label={t('workflowHeaderName')}
                 placeholder="Authorization"
                 value={header.key}
@@ -486,6 +489,7 @@ function StepEditor({
                 }
               />
               <Input
+                className="mono"
                 aria-label={t('workflowHeaderValue')}
                 placeholder="Bearer …"
                 value={header.value}
@@ -527,18 +531,18 @@ function StepEditor({
           </div>
         </div>
         {hasBody ? (
-          <div className="field flag-editor-wide">
+          <div className="field product-field product-form-wide">
             <Label htmlFor={`${prefix}-body`}>{t('workflowWebhookBody')}</Label>
             <Textarea
               id={`${prefix}-body`}
-              className="mono flag-payload-input"
+              className="mono product-code-input"
               spellCheck={false}
               value={step.body}
               placeholder={'{"event": "{{event.name}}", "email": "{{person.properties.email}}"}'}
               {...track((body) => onChange({ ...step, body }))}
               onChange={(event) => onChange({ ...step, body: event.target.value })}
             />
-            <p className="text-muted">{t('workflowWebhookBodyHint')}</p>
+            <p className="field-hint">{t('workflowWebhookBodyHint')}</p>
           </div>
         ) : null}
       </div>
@@ -546,8 +550,8 @@ function StepEditor({
   }
   if (step.type === 'email') {
     return (
-      <div className="flag-editor-grid">
-        <div className="field flag-editor-wide">
+      <div className="product-form-grid">
+        <div className="field product-field product-form-wide">
           <Label htmlFor={`${prefix}-to`}>{t('workflowEmailRecipient')}</Label>
           <Input
             id={`${prefix}-to`}
@@ -556,7 +560,7 @@ function StepEditor({
             onChange={(event) => onChange({ ...step, to: event.target.value })}
           />
         </div>
-        <div className="field flag-editor-wide">
+        <div className="field product-field product-form-wide">
           <Label htmlFor={`${prefix}-subject`}>{t('workflowEmailSubject')}</Label>
           <Input
             id={`${prefix}-subject`}
@@ -566,7 +570,7 @@ function StepEditor({
             onChange={(event) => onChange({ ...step, subject: event.target.value })}
           />
         </div>
-        <div className="field flag-editor-wide">
+        <div className="field product-field product-form-wide">
           <Label htmlFor={`${prefix}-body`}>{t('workflowEmailBody')}</Label>
           <Textarea
             id={`${prefix}-body`}
@@ -581,8 +585,8 @@ function StepEditor({
     );
   }
   return (
-    <div className="flag-editor-grid">
-      <div className="field flag-editor-wide">
+    <div className="product-form-grid">
+      <div className="field product-field product-form-wide">
         <Label htmlFor={`${prefix}-url`}>{t('workflowSlackUrl')}</Label>
         <Input
           id={`${prefix}-url`}
@@ -592,7 +596,7 @@ function StepEditor({
           onChange={(event) => onChange({ ...step, webhookUrl: event.target.value })}
         />
       </div>
-      <div className="field flag-editor-wide">
+      <div className="field product-field product-form-wide">
         <Label htmlFor={`${prefix}-message`}>{t('workflowSlackMessage')}</Label>
         <Textarea
           id={`${prefix}-message`}
@@ -607,12 +611,15 @@ function StepEditor({
 }
 
 export function WorkflowEditorDialog({
+  websiteId,
   workflow,
   saving,
   error,
   onClose,
   onSave,
 }: {
+  /** Enables the event picker for the trigger. */
+  websiteId?: string;
   /** Null creates a new workflow. */
   workflow: Workflow | null;
   saving: boolean;
@@ -639,23 +646,26 @@ export function WorkflowEditorDialog({
   }
 
   const title = workflow ? t('workflowEdit') : t('createWorkflow');
+  const hasTemplates = draft.steps.some((step) => step.type === 'webhook' || step.type === 'email' || step.type === 'slack');
   return (
     <ResourceEditDialog
       title={title}
+      description={workflow ? undefined : t('productWorkflowCreateLead')}
       ariaLabel={title}
-      panelClassName="feature-flag-dialog"
-      bodyClassName="flag-editor"
+      panelClassName="product-dialog product-dialog--wide"
+      bodyClassName="product-form"
       saving={saving}
       error={error}
       canSave={!saving}
+      saveLabel={workflow ? undefined : t('createWorkflow')}
       onClose={onClose}
       onSave={() => {
         if (body) onSave(body);
         else setShowErrors(true);
       }}
     >
-      <div className="flag-editor-grid">
-        <div className="field">
+      <div className="product-form-grid">
+        <div className="field product-field">
           <Label htmlFor="workflow-editor-name">{t('name')}</Label>
           <Input
             id="workflow-editor-name"
@@ -664,17 +674,28 @@ export function WorkflowEditorDialog({
             onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
           />
         </div>
-        <div className="field">
+        <div className="field product-field">
           <Label htmlFor="workflow-editor-trigger">{t('workflowTriggerEvent')}</Label>
-          <Input
-            id="workflow-editor-trigger"
-            className="mono"
-            value={draft.triggerEvent}
-            placeholder="checkout_completed"
-            onChange={(event) => setDraft((prev) => ({ ...prev, triggerEvent: event.target.value }))}
-          />
+          {websiteId ? (
+            <EventCatalogPicker
+              mode="single"
+              websiteId={websiteId}
+              id="workflow-editor-trigger"
+              value={draft.triggerEvent}
+              placeholder="checkout_completed"
+              onChange={(triggerEvent) => setDraft((prev) => ({ ...prev, triggerEvent }))}
+            />
+          ) : (
+            <Input
+              id="workflow-editor-trigger"
+              className="mono"
+              value={draft.triggerEvent}
+              placeholder="checkout_completed"
+              onChange={(event) => setDraft((prev) => ({ ...prev, triggerEvent: event.target.value }))}
+            />
+          )}
         </div>
-        <div className="field flag-editor-wide">
+        <div className="field product-field product-form-wide">
           <Label htmlFor="workflow-editor-description">{t('description')}</Label>
           <Input
             id="workflow-editor-description"
@@ -683,7 +704,7 @@ export function WorkflowEditorDialog({
             onChange={(event) => setDraft((prev) => ({ ...prev, description: event.target.value }))}
           />
         </div>
-        <label className="checkbox-row flag-editor-wide">
+        <label className="checkbox-row product-form-wide">
           <input
             type="checkbox"
             checked={draft.enabled}
@@ -693,70 +714,65 @@ export function WorkflowEditorDialog({
         </label>
       </div>
 
-      <section className="flag-editor-section">
-        <header className="flag-editor-section-head">
-          <div>
-            <h3 className="flag-editor-section-title">{t('workflowTriggerFilters')}</h3>
-            <p className="text-muted">{t('workflowTriggerFiltersLead')}</p>
-          </div>
-        </header>
+      <FormSection title={t('workflowTriggerFilters')} lead={t('workflowTriggerFiltersLead')}>
         <ConditionList
           conditions={draft.filters}
           emptyLabel={t('workflowTriggerFiltersEmpty')}
           onChange={(filters) => setDraft((prev) => ({ ...prev, filters }))}
         />
-      </section>
+      </FormSection>
 
-      <section className="flag-editor-section">
-        <header className="flag-editor-section-head">
-          <div>
-            <h3 className="flag-editor-section-title">{t('workflowSteps')}</h3>
-            <p className="text-muted">{t('workflowStepsLead')}</p>
-          </div>
-        </header>
-        {draft.steps.length ? null : <p className="text-muted">{t('workflowStepsEmpty')}</p>}
-        {draft.steps.map((step, index) => (
-          <div key={step.uid} className="flag-group">
-            <div className="flag-group-head">
-              <strong>
-                {t('workflowStepN').replace('{n}', String(index + 1))} · {stepTypeLabel(step.type)}
-              </strong>
-              <div className="cohorts-row-actions">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={t('workflowMoveUp')}
-                  disabled={index === 0}
-                  onClick={() => moveStep(index, -1)}
-                >
-                  <ArrowUp size={14} strokeWidth={2} aria-hidden />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={t('workflowMoveDown')}
-                  disabled={index === draft.steps.length - 1}
-                  onClick={() => moveStep(index, 1)}
-                >
-                  <ArrowDown size={14} strokeWidth={2} aria-hidden />
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive-ghost"
-                  size="sm"
-                  onClick={() => setDraft((prev) => ({ ...prev, steps: prev.steps.filter((item) => item.uid !== step.uid) }))}
-                >
-                  {t('workflowRemoveStep')}
-                </Button>
+      <FormSection title={t('workflowSteps')} lead={t('workflowStepsLead')}>
+        {draft.steps.length ? null : <p className="product-muted-line">{t('workflowStepsEmpty')}</p>}
+        <ol className="product-step-list">
+          {draft.steps.map((step, index) => (
+            <li key={step.uid} className="product-step-edit">
+              <span className="product-flow-icon" aria-hidden>
+                <StepIcon type={step.type} />
+              </span>
+              <div className="product-step-edit-body">
+                <div className="product-step-edit-head">
+                  <span className="product-step-edit-title">
+                    {t('workflowStepN').replace('{n}', String(index + 1))} · {stepTypeLabel(step.type)}
+                  </span>
+                  <div className="product-step-edit-tools">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={t('workflowMoveUp')}
+                      disabled={index === 0}
+                      onClick={() => moveStep(index, -1)}
+                    >
+                      <ArrowUp size={14} strokeWidth={2} aria-hidden />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={t('workflowMoveDown')}
+                      disabled={index === draft.steps.length - 1}
+                      onClick={() => moveStep(index, 1)}
+                    >
+                      <ArrowDown size={14} strokeWidth={2} aria-hidden />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive-ghost"
+                      size="sm"
+                      onClick={() => setDraft((prev) => ({ ...prev, steps: prev.steps.filter((item) => item.uid !== step.uid) }))}
+                    >
+                      {t('workflowRemoveStep')}
+                    </Button>
+                  </div>
+                </div>
+                <StepEditor step={step} focusRef={focusRef} onChange={(next) => updateStep(step.uid, next)} />
               </div>
-            </div>
-            <StepEditor step={step} focusRef={focusRef} onChange={(next) => updateStep(step.uid, next)} />
-          </div>
-        ))}
-        <div className="workflow-add-steps">
-          <span className="text-muted">{t('workflowAddStep')}</span>
+            </li>
+          ))}
+        </ol>
+        <div className="product-add-row">
+          <span className="product-add-row-label">{t('workflowAddStep')}</span>
           {STEP_TYPES.map((type) => (
             <Button
               key={type}
@@ -766,21 +782,15 @@ export function WorkflowEditorDialog({
               disabled={draft.steps.length >= MAX_STEPS}
               onClick={() => setDraft((prev) => ({ ...prev, steps: [...prev.steps, emptyStep(type)] }))}
             >
-              <Plus size={14} strokeWidth={2} aria-hidden />
+              <StepIcon type={type} />
               {stepTypeLabel(type)}
             </Button>
           ))}
         </div>
-        <PlaceholderHelper target={focusRef} />
-      </section>
+        {hasTemplates ? <PlaceholderHelper target={focusRef} /> : null}
+      </FormSection>
 
-      {showErrors && errors.length ? (
-        <ul className="flag-editor-errors text-danger">
-          {errors.map((message) => (
-            <li key={message}>{message}</li>
-          ))}
-        </ul>
-      ) : null}
+      {showErrors ? <FormErrors errors={errors} /> : null}
     </ResourceEditDialog>
   );
 }

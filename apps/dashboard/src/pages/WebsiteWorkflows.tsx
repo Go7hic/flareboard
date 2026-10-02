@@ -1,37 +1,49 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ChevronDown, ChevronRight, ExternalLink, Plus, Workflow as WorkflowIcon } from 'lucide-react';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { Bar, BarChart } from 'recharts';
+import { Activity, ChevronDown, ChevronRight, KeyRound, Pencil, Plus, Power, Trash2, Workflow as WorkflowIcon } from 'lucide-react';
+import { AnalyticsChart } from '../components/AnalyticsChart';
+import { BreakdownList } from '../components/BreakdownList';
+import { ChartLegend } from '../components/ChartLegend';
+import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
+import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
-import {
-  MasterDetailLayout,
-  MasterDetailListItem,
-  MasterDetailPane,
-  useMasterDetailSelection,
-} from '../components/master-detail';
+import { KpiCell, KpiStrip } from '../components/KpiStrip';
+import { MasterDetailLayout, MasterDetailListItem, MasterDetailPane, ResourceSearchField } from '../components/master-detail';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
-import { SegmentTabs } from '../components/SegmentTabs';
+import { countMeta, formatShare, tf, utcDay } from '../components/product/format';
+import { ProductListHeader, ProductMasterDetailSkeleton, ProductNoMatches } from '../components/product/ProductList';
+import { ProductCallout, ProductNote, ProductSection } from '../components/product/ProductSection';
+import { ProductTabs } from '../components/product/ProductTabs';
+import { RelativeTime, ShortDate } from '../components/product/ProductTime';
+import { SessionLink } from '../components/product/SessionLink';
+import { runStatus, testStepStatus, workflowStatus } from '../components/product/status';
+import { StepIcon, WorkflowFlow } from '../components/product/WorkflowFlow';
+import { StatusBadge } from '../components/StatusBadge';
 import { WorkflowEditorDialog, stepTypeLabel, type WorkflowBody } from '../components/WorkflowEditor';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Skeleton } from '../components/ui/skeleton';
 import { Textarea } from '../components/ui/textarea';
 import {
   api,
   type Workflow,
-  type WorkflowCondition,
   type WorkflowExecutionDetail,
   type WorkflowExecutionsResponse,
   type WorkflowSampleEvent,
   type WorkflowStep,
   type WorkflowTestResult,
 } from '../lib/api';
+import { cssVarValue } from '../lib/chart-colors';
+import { STACK_MARK } from '../lib/chartMarks';
+import { formatNumber, formatShortDate, formatShortDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
+import { useChartColors } from '../lib/useChartColors';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
-import { formatDateTime, formatNumber } from '../lib/format';
-import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
 
 const DEFAULT_FILTERS = { status: '', from: '', to: '', q: '' };
 
@@ -48,45 +60,9 @@ const EXECUTION_STATUSES = [
   'cancelled',
 ] as const;
 
-type DetailTab = 'overview' | 'executions' | 'test';
+const IN_PROGRESS = ['queued', 'running', 'waiting', 'retrying'];
 
-const ATTEMPT_STATUSES = ['passed'];
-
-function statusLabel(status: string) {
-  if ((EXECUTION_STATUSES as readonly string[]).includes(status)) return t(`workflowExecutionStatus_${status}`);
-  if (ATTEMPT_STATUSES.includes(status)) return t(`workflowAttemptStatus_${status}`);
-  return status;
-}
-
-function statusBadgeClass(status: string) {
-  if (status === 'failed' || status === 'throttled') return 'badge workflow-status-danger';
-  if (status === 'success' || status === 'recorded' || status === 'passed' || status === 'sent') return 'badge workflow-status-success';
-  return 'badge';
-}
-
-function conditionText(condition: WorkflowCondition) {
-  const field = t(`featureFlagField_${condition.field}`);
-  const subject = condition.key ? `${field} ${condition.key}` : field;
-  const operator = t(`featureFlagOperator_${condition.operator}`);
-  return condition.operator === 'exists' || condition.operator === 'not_exists'
-    ? `${subject} ${operator}`
-    : `${subject} ${operator} “${condition.value}”`;
-}
-
-function stepSummary(step: WorkflowStep) {
-  switch (step.type) {
-    case 'delay':
-      return t('workflowStepSummary_delay').replace('{minutes}', formatNumber(step.minutes));
-    case 'condition':
-      return step.conditions.map(conditionText).join(` ${t('featureFlagAnd')} `);
-    case 'webhook':
-      return `${step.method} ${step.url}`;
-    case 'email':
-      return step.to;
-    case 'slack':
-      return t('workflowStepSummary_slack');
-  }
-}
+type DetailTab = 'overview' | 'runs' | 'test';
 
 /** Date input (yyyy-mm-dd, local) → epoch ms at local midnight; `endOfDay` gives the next midnight. */
 function dateInputToMs(value: string, endOfDay = false) {
@@ -96,42 +72,12 @@ function dateInputToMs(value: string, endOfDay = false) {
   return new Date(year, month - 1, day + (endOfDay ? 1 : 0)).getTime();
 }
 
-function WorkflowFlowSummary({ workflow }: { workflow: Workflow }) {
-  return (
-    <div className="detail-section">
-      <div className="panel-header compact-panel-header">
-        <div>
-          <h3 className="section-title experiment-title">{t('workflowFlow')}</h3>
-          {workflow.description ? <p className="text-muted">{workflow.description}</p> : null}
-        </div>
-      </div>
-      {!workflow.stepsValid ? <p className="text-danger">{t('workflowStepsInvalid')}</p> : null}
-      <ol className="workflow-flow">
-        <li className="workflow-flow-step">
-          <span className="workflow-flow-kind">{t('workflowTrigger')}</span>
-          <span>
-            <code>{workflow.triggerEvent}</code>
-            {workflow.filters.length ? ` · ${workflow.filters.map(conditionText).join(` ${t('featureFlagAnd')} `)}` : ''}
-          </span>
-        </li>
-        {workflow.steps.map((step, index) => (
-          <li key={step.id} className="workflow-flow-step">
-            <span className="workflow-flow-kind">
-              {index + 1}. {stepTypeLabel(step.type)}
-            </span>
-            <span className="workflow-flow-detail">{stepSummary(step)}</span>
-          </li>
-        ))}
-        {!workflow.steps.length ? (
-          <li className="workflow-flow-step">
-            <span className="workflow-flow-kind">{t('workflowRecordOnly')}</span>
-            <span className="text-muted">{t('workflowRecordOnlyLead')}</span>
-          </li>
-        ) : null}
-      </ol>
-    </div>
-  );
+function RunBadge({ status }: { status: string }) {
+  const info = runStatus(status);
+  return <StatusBadge tone={info.tone}>{info.label}</StatusBadge>;
 }
+
+/* ── Overview ──────────────────────────────────────────────────────────────── */
 
 function WorkflowSigningSecret({
   websiteId,
@@ -158,13 +104,11 @@ function WorkflowSigningSecret({
   });
   if (!workflow.steps.some((step) => step.type === 'webhook')) return null;
   return (
-    <div className="detail-section">
-      <div className="panel-header compact-panel-header">
-        <div>
-          <h3 className="section-title experiment-title">{t('workflowSigningSecret')}</h3>
-          <p className="text-muted">{t('workflowSigningSecretLead')}</p>
-        </div>
-        {canEdit ? (
+    <ProductSection
+      title={t('workflowSigningSecret')}
+      description={t('workflowSigningSecretLead')}
+      actions={
+        canEdit ? (
           <Button
             type="button"
             variant="outline"
@@ -179,24 +123,137 @@ function WorkflowSigningSecret({
               })
             }
           >
+            <KeyRound strokeWidth={2} aria-hidden />
             {t('workflowRotateSecret')}
           </Button>
-        ) : null}
-      </div>
+        ) : null
+      }
+    >
       {revealed ? (
-        <div className="workflow-secret-reveal">
-          <p>{t('workflowSigningSecretOnce')}</p>
-          <code className="workflow-secret-value">{revealed}</code>
-        </div>
+        <ProductCallout tone="warning" title={t('workflowSigningSecretOnce')} role="status">
+          <code className="product-secret">{revealed}</code>
+        </ProductCallout>
       ) : (
-        <p>
-          <code>{workflow.signingSecretPreview ?? '—'}</code>
+        <p className="product-muted-line">
+          <code className="mono product-secret-preview">{workflow.signingSecretPreview ?? '—'}</code>
+          {workflow.signingSecretRotatedAt ? (
+            <>
+              {' · '}
+              {t('productWorkflowRotated')} <ShortDate value={workflow.signingSecretRotatedAt} />
+            </>
+          ) : null}
         </p>
       )}
-      {rotate.error ? <p className="text-danger">{(rotate.error as Error).message}</p> : null}
-    </div>
+      {rotate.error ? <p className="text-danger product-inline-error">{(rotate.error as Error).message}</p> : null}
+    </ProductSection>
   );
 }
+
+function RunsChart({ workflow }: { workflow: Workflow }) {
+  const chartColors = useChartColors();
+  const trend = workflow.summary?.trend ?? [];
+  // Status colors (they mean good / bad): read on every render so a theme switch repaints.
+  const colors = {
+    success: cssVarValue('--success') || chartColors.accent,
+    other: cssVarValue('--product-other') || chartColors.muted,
+    failed: cssVarValue('--danger') || chartColors.accent,
+  };
+  const data = trend.map((row) => ({
+    x: formatShortDate(utcDay(row.date), { timeZone: 'UTC' }),
+    success: row.successes,
+    failed: row.failures,
+    other: Math.max(0, row.executions - row.successes - row.failures),
+  }));
+  const series = (
+    [
+      { key: 'success', label: t('productRunsSucceeded'), color: colors.success, css: 'var(--success)' },
+      { key: 'other', label: t('productRunsOther'), color: colors.other, css: 'var(--product-other)' },
+      { key: 'failed', label: t('productRunsFailed'), color: colors.failed, css: 'var(--danger)' },
+    ] as const
+  ).filter((item) => data.some((row) => row[item.key] > 0));
+  if (data.length < 2 || !series.length) return null;
+  return (
+    <ProductSection
+      title={t('productRunsPerDay')}
+      description={t('productRunsPerDayLead')}
+      actions={<ChartLegend items={series.map((item) => ({ label: item.label, color: item.css, shape: 'box' }))} />}
+    >
+      <div className="product-chart">
+        <AnalyticsChart
+          Chart={BarChart}
+          data={data}
+          responsive={{ height: 200 }}
+          xAxis={{ dataKey: 'x', interval: 'preserveStartEnd', minTickGap: 32 }}
+        >
+          {series.map((item, index) => (
+            <Bar
+              key={item.key}
+              dataKey={item.key}
+              name={item.label}
+              stackId="runs"
+              fill={item.color}
+              stroke={chartColors.panel}
+              strokeWidth={1}
+              {...STACK_MARK}
+              {...(index === series.length - 1 ? { radius: [4, 4, 0, 0] as [number, number, number, number] } : {})}
+            />
+          ))}
+        </AnalyticsChart>
+      </div>
+    </ProductSection>
+  );
+}
+
+function WorkflowOverview({
+  websiteId,
+  workflow,
+  canEdit,
+  revealed,
+  onRevealed,
+}: {
+  websiteId: string;
+  workflow: Workflow;
+  canEdit: boolean;
+  revealed: string | null;
+  onRevealed: (secret: string) => void;
+}) {
+  const statuses = workflow.summary?.statuses ?? [];
+  const maxStatus = Math.max(1, ...statuses.map((item) => item.executions));
+  return (
+    <>
+      <ProductSection title={t('workflowFlow')} description={t('productFlowLead')}>
+        {!workflow.stepsValid ? (
+          <ProductCallout tone="danger" title={t('workflowStepsInvalid')} role="alert" />
+        ) : null}
+        <WorkflowFlow workflow={workflow} />
+      </ProductSection>
+      <RunsChart workflow={workflow} />
+      {statuses.length ? (
+        <ProductSection title={t('workflowStatusBreakdown')} description={t('workflowStatusBreakdownLead')}>
+          <BreakdownList
+            labelHeader={t('status')}
+            columns={[{ label: t('productRuns') }, { label: t('productShare') }]}
+            items={statuses.map((item) => ({
+              id: item.status,
+              label: runStatus(item.status).label,
+              share: item.executions / maxStatus,
+              values: [formatNumber(item.executions), formatShare(item.percentage)],
+            }))}
+          />
+        </ProductSection>
+      ) : null}
+      <WorkflowSigningSecret
+        websiteId={websiteId}
+        workflow={workflow}
+        canEdit={canEdit}
+        revealed={revealed}
+        onRevealed={onRevealed}
+      />
+    </>
+  );
+}
+
+/* ── Runs ──────────────────────────────────────────────────────────────────── */
 
 function ExecutionAttempts({ websiteId, workflow, executionId }: { websiteId: string; workflow: Workflow; executionId: string }) {
   const detail = useQuery({
@@ -204,48 +261,53 @@ function ExecutionAttempts({ websiteId, workflow, executionId }: { websiteId: st
     queryFn: () =>
       api<WorkflowExecutionDetail>(`/api/websites/${websiteId}/workflows/${workflow.id}/executions/${executionId}`),
   });
-  if (detail.isLoading) return <p className="text-muted">{t('loading')}</p>;
+  if (detail.isLoading) return <Skeleton className="h-16 w-full" />;
   if (detail.error) return <p className="text-danger">{(detail.error as Error).message}</p>;
   const attempts = detail.data?.attempts ?? [];
-  if (!attempts.length) return <p className="text-muted">{t('workflowNoAttempts')}</p>;
+  if (!attempts.length) return <p className="product-muted-line">{t('workflowNoAttempts')}</p>;
   return (
-    <table className="data-table workflow-attempts">
+    <table className="data-table product-table product-attempts">
       <thead>
         <tr>
           <th>{t('workflowStep')}</th>
-          <th>{t('workflowAttempt')}</th>
+          <th className="num">{t('workflowAttempt')}</th>
           <th>{t('status')}</th>
-          <th>{t('workflowResponseCode')}</th>
+          <th className="num">{t('workflowResponseCode')}</th>
           <th>{t('workflowNextRetry')}</th>
           <th>{t('error')}</th>
-          <th>{t('created')}</th>
+          <th>{t('productTime')}</th>
         </tr>
       </thead>
       <tbody>
         {attempts.map((attempt) => (
           <tr key={attempt.id}>
             <td>
-              {attempt.stepIndex + 1}. {stepTypeLabel(attempt.stepType as WorkflowStep['type'])}
+              <span className="product-step-cell">
+                <StepIcon type={attempt.stepType as WorkflowStep['type']} />
+                {attempt.stepIndex + 1}. {stepTypeLabel(attempt.stepType as WorkflowStep['type'])}
+              </span>
             </td>
             <td className="num">{attempt.attempt}</td>
             <td>
-              <span className={statusBadgeClass(attempt.status)}>{statusLabel(attempt.status)}</span>
+              <RunBadge status={attempt.status} />
             </td>
             <td className="num">
               {attempt.responseCode ?? '—'}
-              {attempt.durationMs != null ? <span className="text-muted"> · {formatNumber(attempt.durationMs)} ms</span> : null}
+              {attempt.durationMs != null ? <span className="product-cell-sub">{formatNumber(attempt.durationMs)} ms</span> : null}
             </td>
-            <td className="text-muted">{attempt.nextRetryAt ? formatDateTime(attempt.nextRetryAt) : '—'}</td>
+            <td className="text-muted">{attempt.nextRetryAt ? <ShortDate value={attempt.nextRetryAt} withTime /> : '—'}</td>
             <td>
-              {attempt.error ?? '—'}
+              {attempt.error ?? <span className="text-muted">—</span>}
               {attempt.responseBody ? (
-                <details className="workflow-response">
+                <details className="product-disclosure">
                   <summary>{t('workflowResponseBody')}</summary>
-                  <pre className="flag-json">{attempt.responseBody}</pre>
+                  <pre className="product-json">{attempt.responseBody}</pre>
                 </details>
               ) : null}
             </td>
-            <td className="text-muted">{formatDateTime(attempt.createdAt)}</td>
+            <td className="text-muted product-nowrap">
+              <ShortDate value={attempt.createdAt} withTime />
+            </td>
           </tr>
         ))}
       </tbody>
@@ -253,7 +315,7 @@ function ExecutionAttempts({ websiteId, workflow, executionId }: { websiteId: st
   );
 }
 
-function WorkflowExecutionsPanel({ websiteId, workflow }: { websiteId: string; workflow: Workflow }) {
+function WorkflowRuns({ websiteId, workflow }: { websiteId: string; workflow: Workflow }) {
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [expanded, setExpanded] = useState<string | null>(null);
   const debouncedQ = useDebouncedValue(filters.q, 300);
@@ -273,90 +335,94 @@ function WorkflowExecutionsPanel({ websiteId, workflow }: { websiteId: string; w
         `/api/websites/${websiteId}/workflows/${workflow.id}/executions${query ? `?${query}` : ''}`,
       );
     },
+    placeholderData: keepPreviousData,
     refetchInterval: (query) =>
-      query.state.data?.executions.some((row) => ['queued', 'running', 'waiting', 'retrying'].includes(row.status))
-        ? 15_000
-        : false,
+      query.state.data?.executions.some((row) => IN_PROGRESS.includes(row.status)) ? 15_000 : false,
   });
   const executions = executionsQuery.data?.executions ?? [];
   const filtersActive = Boolean(filters.status || filters.from || filters.to || filters.q.trim());
 
   return (
-    <>
-      <div className="workflow-execution-filters">
-        <div className="field">
-          <Label htmlFor="workflow-filter-search">{t('workflowFilterSearch')}</Label>
+    <ProductSection title={t('productRunsTitle')} description={t('productRunsLead')}>
+      <div className="product-toolbar" role="group" aria-label={t('productRunsFilters')}>
+        <ResourceSearchField
+          className="product-toolbar-search"
+          value={filters.q}
+          onChange={(q) => setFilters((prev) => ({ ...prev, q }))}
+          placeholder={t('workflowFilterSearchPlaceholder')}
+          aria-label={t('workflowFilterSearch')}
+        />
+        <select
+          className="select product-toolbar-select"
+          aria-label={t('workflowFilterStatus')}
+          value={filters.status}
+          onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}
+        >
+          <option value="">{t('productRunsAllStatuses')}</option>
+          {EXECUTION_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {runStatus(status).label}
+            </option>
+          ))}
+        </select>
+        <label className="product-toolbar-date">
+          <span>{t('workflowFilterFrom')}</span>
           <Input
-            id="workflow-filter-search"
-            value={filters.q}
-            placeholder={t('workflowFilterSearchPlaceholder')}
-            onChange={(event) => setFilters((prev) => ({ ...prev, q: event.target.value }))}
-          />
-        </div>
-        <div className="field">
-          <Label htmlFor="workflow-filter-status">{t('workflowFilterStatus')}</Label>
-          <select
-            id="workflow-filter-status"
-            className="select"
-            value={filters.status}
-            onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}
-          >
-            <option value="">{t('all')}</option>
-            {EXECUTION_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {statusLabel(status)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <Label htmlFor="workflow-filter-from">{t('workflowFilterFrom')}</Label>
-          <Input
-            id="workflow-filter-from"
             type="date"
             value={filters.from}
             onChange={(event) => setFilters((prev) => ({ ...prev, from: event.target.value }))}
           />
-        </div>
-        <div className="field">
-          <Label htmlFor="workflow-filter-to">{t('workflowFilterTo')}</Label>
+        </label>
+        <label className="product-toolbar-date">
+          <span>{t('workflowFilterTo')}</span>
           <Input
-            id="workflow-filter-to"
             type="date"
             value={filters.to}
             onChange={(event) => setFilters((prev) => ({ ...prev, to: event.target.value }))}
           />
-        </div>
-        <Button type="button" variant="ghost" size="sm" disabled={!filtersActive} onClick={() => setFilters(DEFAULT_FILTERS)}>
-          {t('reset')}
-        </Button>
+        </label>
+        {filtersActive ? (
+          <Button type="button" variant="ghost" size="sm" onClick={() => setFilters(DEFAULT_FILTERS)}>
+            {t('reset')}
+          </Button>
+        ) : null}
       </div>
 
-      <div className="table-scroll">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th aria-label={t('workflowAttempts')} />
-              <th>{t('status')}</th>
-              <th>{t('workflowEvent')}</th>
-              <th>{t('session')}</th>
-              <th>{t('workflowAttempts')}</th>
-              <th>{t('error')}</th>
-              <th>{t('created')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {executions.length ? (
-              executions.map((execution) => {
+      {executionsQuery.isLoading && !executionsQuery.data ? (
+        <div className="product-table-skeleton" aria-busy>
+          {Array.from({ length: 5 }, (_, index) => (
+            <Skeleton key={index} className="h-9 w-full" />
+          ))}
+        </div>
+      ) : executionsQuery.isError && !executionsQuery.data ? (
+        <DataViewState error={executionsQuery.error as Error} onRetry={() => executionsQuery.refetch()}>
+          {null}
+        </DataViewState>
+      ) : executions.length ? (
+        <div className={executionsQuery.isFetching ? 'table-scroll is-refreshing' : 'table-scroll'}>
+          <table className="data-table product-table product-runs-table">
+            <thead>
+              <tr>
+                <th aria-label={t('workflowShowAttempts')} />
+                <th>{t('status')}</th>
+                <th>{t('workflowEvent')}</th>
+                <th>{t('session')}</th>
+                <th className="num">{t('workflowAttempts')}</th>
+                <th>{t('error')}</th>
+                <th>{t('productTime')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {executions.map((execution) => {
                 const open = expanded === execution.id;
                 return (
                   <Fragment key={execution.id}>
-                    <tr>
-                      <td>
+                    <tr className={open ? 'is-expanded' : undefined}>
+                      <td className="product-expand-cell">
                         <Button
                           type="button"
                           variant="ghost"
-                          size="icon-sm"
+                          size="icon-xs"
                           aria-expanded={open}
                           aria-label={t('workflowShowAttempts')}
                           onClick={() => setExpanded(open ? null : execution.id)}
@@ -369,36 +435,37 @@ function WorkflowExecutionsPanel({ websiteId, workflow }: { websiteId: string; w
                         </Button>
                       </td>
                       <td>
-                        <span className={statusBadgeClass(execution.status)}>{statusLabel(execution.status)}</span>
+                        <RunBadge status={execution.status} />
                         {execution.nextRetryAt && ['waiting', 'retrying'].includes(execution.status) ? (
-                          <p className="text-muted">
-                            {t('workflowResumesAt').replace('{time}', formatDateTime(execution.nextRetryAt))}
-                          </p>
+                          <span className="product-cell-sub">
+                            {t('workflowResumesAt').replace('{time}', formatShortDateTime(execution.nextRetryAt))}
+                          </span>
                         ) : null}
                       </td>
                       <td>
-                        {execution.eventName ?? '—'}
-                        {execution.distinctId ? <p className="text-muted mono">{execution.distinctId}</p> : null}
+                        <span className="mono">{execution.eventName ?? '—'}</span>
+                        {execution.distinctId ? (
+                          <span className="product-cell-sub mono" title={execution.distinctId}>
+                            {execution.distinctId}
+                          </span>
+                        ) : null}
                       </td>
                       <td>
-                        {execution.sessionId ? (
-                          <Link to={`/websites/${websiteId}/sessions/${execution.sessionId}`} className="inline-link">
-                            {execution.sessionId.slice(0, 8)}
-                            <ExternalLink size={12} strokeWidth={2} aria-hidden />
-                          </Link>
-                        ) : (
-                          <span className="text-muted">—</span>
-                        )}
+                        <SessionLink websiteId={websiteId} sessionId={execution.sessionId} />
                       </td>
                       <td className="num">
                         {formatNumber(execution.attempts)}
-                        {execution.responseCode ? <span className="text-muted"> · {execution.responseCode}</span> : null}
+                        {execution.responseCode ? <span className="product-cell-sub">{execution.responseCode}</span> : null}
                       </td>
-                      <td className="text-muted">{execution.error ?? '—'}</td>
-                      <td className="text-muted">{formatDateTime(execution.createdAt)}</td>
+                      <td className="product-error-cell" title={execution.error ?? undefined}>
+                        {execution.error ?? <span className="text-muted">—</span>}
+                      </td>
+                      <td className="text-muted product-nowrap">
+                        <ShortDate value={execution.createdAt} withTime />
+                      </td>
                     </tr>
                     {open ? (
-                      <tr className="workflow-attempts-row">
+                      <tr className="product-subrow">
                         <td colSpan={7}>
                           <ExecutionAttempts websiteId={websiteId} workflow={workflow} executionId={execution.id} />
                         </td>
@@ -406,20 +473,22 @@ function WorkflowExecutionsPanel({ websiteId, workflow }: { websiteId: string; w
                     ) : null}
                   </Fragment>
                 );
-              })
-            ) : (
-              <tr>
-                <td colSpan={7} className="text-muted">
-                  {executionsQuery.isLoading ? t('loading') : t('workflowNoExecutions')}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </>
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <EmptyState
+          icon={<Activity strokeWidth={2} />}
+          title={filtersActive ? t('productRunsNoMatches') : t('workflowNoExecutions')}
+          description={filtersActive ? t('productRunsNoMatchesHint') : tf('productRunsEmptyHint', { event: workflow.triggerEvent })}
+        />
+      )}
+    </ProductSection>
   );
 }
+
+/* ── Test ──────────────────────────────────────────────────────────────────── */
 
 type JsonCheck = { ok: true; value: Record<string, unknown> } | { ok: false };
 
@@ -432,6 +501,14 @@ function parseObject(text: string): JsonCheck {
       : { ok: false };
   } catch {
     return { ok: false };
+  }
+}
+
+function prettyJson(text: string) {
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  } catch {
+    return text;
   }
 }
 
@@ -481,115 +558,257 @@ function WorkflowTestPanel({ websiteId, workflow }: { websiteId: string; workflo
   const result = run.data;
 
   return (
-    <div className="detail-section">
-      <p className="text-muted">{t('workflowTestLead')}</p>
-      <div className="flag-editor-grid">
-        <div className="field">
-          <Label htmlFor="workflow-test-event">{t('workflowEvent')}</Label>
-          <Input id="workflow-test-event" className="mono" value={eventName} onChange={(event) => setEventName(event.target.value)} />
+    <>
+      <ProductSection
+        title={t('productTestTitle')}
+        description={t('workflowTestLead')}
+        actions={
+          <Button type="button" variant="outline" size="sm" disabled={sample.isPending} onClick={() => sample.mutate()}>
+            {t('workflowTestLoadLatest')}
+          </Button>
+        }
+      >
+        {sample.data && !sample.data.event ? <p className="product-muted-line">{t('workflowTestNoSample')}</p> : null}
+        <div className="product-form-grid">
+          <div className="field product-field">
+            <Label htmlFor="workflow-test-event">{t('workflowEvent')}</Label>
+            <Input id="workflow-test-event" className="mono" value={eventName} onChange={(event) => setEventName(event.target.value)} />
+          </div>
+          <div className="field product-field">
+            <Label htmlFor="workflow-test-url">{t('workflowTestUrl')}</Label>
+            <Input id="workflow-test-url" className="mono" value={url} onChange={(event) => setUrl(event.target.value)} />
+          </div>
+          <div className="field product-field product-form-wide">
+            <Label htmlFor="workflow-test-distinct">{t('workflowTestDistinctId')}</Label>
+            <Input
+              id="workflow-test-distinct"
+              className="mono"
+              value={distinctId}
+              placeholder={t('workflowTestDistinctIdPlaceholder')}
+              onChange={(event) => setDistinctId(event.target.value)}
+            />
+          </div>
+          <div className="field product-field">
+            <Label htmlFor="workflow-test-properties">{t('workflowTestProperties')}</Label>
+            <Textarea
+              id="workflow-test-properties"
+              className="mono product-code-input"
+              spellCheck={false}
+              value={propertiesText}
+              aria-invalid={!properties.ok}
+              onChange={(event) => setPropertiesText(event.target.value)}
+            />
+            {!properties.ok ? <p className="field-hint text-danger">{t('workflowTestJsonInvalid')}</p> : null}
+          </div>
+          <div className="field product-field">
+            <Label htmlFor="workflow-test-person">{t('workflowTestPersonProperties')}</Label>
+            <Textarea
+              id="workflow-test-person"
+              className="mono product-code-input"
+              spellCheck={false}
+              value={personText}
+              aria-invalid={!person.ok}
+              onChange={(event) => setPersonText(event.target.value)}
+            />
+            {!person.ok ? <p className="field-hint text-danger">{t('workflowTestJsonInvalid')}</p> : null}
+          </div>
         </div>
-        <div className="field">
-          <Label htmlFor="workflow-test-url">{t('workflowTestUrl')}</Label>
-          <Input id="workflow-test-url" className="mono" value={url} onChange={(event) => setUrl(event.target.value)} />
+        <div className="product-form-actions">
+          <Button type="button" variant="outline" disabled={!canRun} onClick={() => run.mutate(false)}>
+            {t('workflowTestPreview')}
+          </Button>
+          <Button type="button" variant="primary" disabled={!canRun || !hasActions} onClick={() => run.mutate(true)}>
+            {run.isPending ? t('saving') : t('workflowTestSend')}
+          </Button>
+          {run.error ? <span className="text-danger">{(run.error as Error).message}</span> : null}
         </div>
-        <div className="field flag-editor-wide">
-          <Label htmlFor="workflow-test-distinct">{t('workflowTestDistinctId')}</Label>
-          <Input
-            id="workflow-test-distinct"
-            className="mono"
-            value={distinctId}
-            placeholder={t('workflowTestDistinctIdPlaceholder')}
-            onChange={(event) => setDistinctId(event.target.value)}
-          />
-        </div>
-        <div className="field">
-          <Label htmlFor="workflow-test-properties">{t('workflowTestProperties')}</Label>
-          <Textarea
-            id="workflow-test-properties"
-            className="mono flag-payload-input"
-            spellCheck={false}
-            value={propertiesText}
-            aria-invalid={!properties.ok}
-            onChange={(event) => setPropertiesText(event.target.value)}
-          />
-          {!properties.ok ? <p className="text-danger">{t('workflowTestJsonInvalid')}</p> : null}
-        </div>
-        <div className="field">
-          <Label htmlFor="workflow-test-person">{t('workflowTestPersonProperties')}</Label>
-          <Textarea
-            id="workflow-test-person"
-            className="mono flag-payload-input"
-            spellCheck={false}
-            value={personText}
-            aria-invalid={!person.ok}
-            onChange={(event) => setPersonText(event.target.value)}
-          />
-          {!person.ok ? <p className="text-danger">{t('workflowTestJsonInvalid')}</p> : null}
-        </div>
-      </div>
-      <div className="form-actions workflow-test-actions">
-        <Button type="button" variant="ghost" size="sm" disabled={sample.isPending} onClick={() => sample.mutate()}>
-          {t('workflowTestLoadLatest')}
-        </Button>
-        <Button type="button" variant="outline" size="sm" disabled={!canRun} onClick={() => run.mutate(false)}>
-          {t('workflowTestPreview')}
-        </Button>
-        <Button type="button" variant="primary" size="sm" disabled={!canRun || !hasActions} onClick={() => run.mutate(true)}>
-          {run.isPending ? t('saving') : t('workflowTestSend')}
-        </Button>
-      </div>
-      {sample.data && !sample.data.event ? <p className="text-muted">{t('workflowTestNoSample')}</p> : null}
-      {run.error ? <p className="text-danger">{(run.error as Error).message}</p> : null}
+      </ProductSection>
       {result ? (
-        <div className="workflow-test-results">
-          <p className={result.matched ? 'text-muted' : 'text-danger'}>
-            {result.matched ? t('workflowTestMatched') : t('workflowTestNotMatched')}
-          </p>
-          {result.steps.map((step) => (
-            <div key={step.index} className="flag-group">
-              <div className="flag-group-head">
-                <strong>
-                  {t('workflowStepN').replace('{n}', String(step.index + 1))} · {stepTypeLabel(step.type)}
-                </strong>
-                <span className={statusBadgeClass(step.status)}>{t(`workflowTestStatus_${step.status}`)}</span>
-              </div>
-              {step.detail ? <p className="text-muted">{step.detail}</p> : null}
-              {step.error ? <p className="text-danger">{step.error}</p> : null}
-              {step.request ? (
-                step.request.type === 'email' ? (
-                  <pre className="flag-json">
-                    {`To: ${step.request.to.join(', ')}\nSubject: ${step.request.subject}\n\n${step.request.text}`}
-                  </pre>
-                ) : (
-                  <pre className="flag-json">
-                    {`${step.request.method} ${step.request.url}\n${step.request.headers
-                      .map((header) => `${header.key}: ${header.value}`)
-                      .join('\n')}${step.request.body ? `\n\n${prettyJson(step.request.body)}` : ''}`}
-                  </pre>
-                )
-              ) : null}
-              {step.response ? (
-                <>
-                  <p className="text-muted">
-                    {t('workflowResponseCode')}: {step.response.statusCode ?? '—'} · {formatNumber(step.response.durationMs)} ms
-                  </p>
-                  {step.response.body ? <pre className="flag-json">{step.response.body}</pre> : null}
-                </>
-              ) : null}
-            </div>
-          ))}
-        </div>
+        <ProductSection title={t('productTestResult')}>
+          <ProductCallout
+            tone={result.matched ? 'success' : 'warning'}
+            title={result.matched ? t('workflowTestMatched') : t('workflowTestNotMatched')}
+            role="status"
+          />
+          <ol className="product-test-steps">
+            {result.steps.map((step) => {
+              const status = testStepStatus(step.status);
+              return (
+                <li key={step.index} className="product-test-step">
+                  <div className="product-test-step-head">
+                    <span className="product-step-cell">
+                      <StepIcon type={step.type} />
+                      {t('workflowStepN').replace('{n}', String(step.index + 1))} · {stepTypeLabel(step.type)}
+                    </span>
+                    <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+                  </div>
+                  {step.detail ? <p className="product-muted-line">{step.detail}</p> : null}
+                  {step.error ? <p className="text-danger product-inline-error">{step.error}</p> : null}
+                  {step.request ? (
+                    step.request.type === 'email' ? (
+                      <pre className="product-json">
+                        {`To: ${step.request.to.join(', ')}\nSubject: ${step.request.subject}\n\n${step.request.text}`}
+                      </pre>
+                    ) : (
+                      <pre className="product-json">
+                        {`${step.request.method} ${step.request.url}\n${step.request.headers
+                          .map((header) => `${header.key}: ${header.value}`)
+                          .join('\n')}${step.request.body ? `\n\n${prettyJson(step.request.body)}` : ''}`}
+                      </pre>
+                    )
+                  ) : null}
+                  {step.response ? (
+                    <>
+                      <p className="product-muted-line">
+                        {t('workflowResponseCode')}: {step.response.statusCode ?? '—'} · {formatNumber(step.response.durationMs)} ms
+                      </p>
+                      {step.response.body ? <pre className="product-json">{step.response.body}</pre> : null}
+                    </>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+        </ProductSection>
       ) : null}
-    </div>
+    </>
   );
 }
 
-function prettyJson(text: string) {
-  try {
-    return JSON.stringify(JSON.parse(text), null, 2);
-  } catch {
-    return text;
-  }
+/* ── Detail and page ───────────────────────────────────────────────────────── */
+
+function WorkflowKpis({ workflow }: { workflow: Workflow }) {
+  const summary = workflow.summary;
+  const runs = summary?.executions ?? 0;
+  return (
+    <KpiStrip inline columns={4}>
+      <KpiCell
+        label={t('productRuns')}
+        value={formatNumber(runs)}
+        hint={summary?.inProgress ? tf('productRunsInProgress', { count: formatNumber(summary.inProgress) }) : undefined}
+      />
+      <KpiCell
+        label={t('workflowSuccessRate')}
+        value={runs ? formatShare(summary?.successRate ?? 0) : '–'}
+        hint={runs ? tf('productRunsSucceededCount', { count: formatNumber(summary?.successes ?? 0) }) : undefined}
+      />
+      <KpiCell
+        label={t('workflowFailures')}
+        value={formatNumber(summary?.failures ?? 0)}
+        hint={runs ? tf('productRunsShare', { share: formatShare(((summary?.failures ?? 0) / runs) * 100) }) : undefined}
+      />
+      <KpiCell
+        label={t('productLastRun')}
+        value={summary?.lastExecutionAt ? <RelativeTime value={summary.lastExecutionAt} /> : '–'}
+        hint={summary?.lastExecutionAt ? undefined : t('workflowNoExecutions')}
+      />
+    </KpiStrip>
+  );
+}
+
+function WorkflowDetail({
+  websiteId,
+  workflow,
+  canEdit,
+  toggling,
+  error,
+  revealed,
+  onRevealed,
+  onEdit,
+  onToggle,
+  onDelete,
+}: {
+  websiteId: string;
+  workflow: Workflow;
+  canEdit: boolean;
+  toggling: boolean;
+  error: Error | null;
+  revealed: string | null;
+  onRevealed: (secret: string) => void;
+  onEdit: () => void;
+  onToggle: () => void;
+  onDelete: () => void;
+}) {
+  const [tab, setTab] = useState<DetailTab>('overview');
+  const status = workflowStatus(workflow.enabled);
+  return (
+    <MasterDetailPane
+      title={workflow.name}
+      meta={
+        <>
+          <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+          <span className="mono product-meta-key">{workflow.triggerEvent}</span>
+          <span>{t('workflowStepCount').replace('{count}', formatNumber(workflow.steps.length))}</span>
+          {workflow.updatedAt ? (
+            <span>
+              {t('productUpdated')} <ShortDate value={workflow.updatedAt} />
+            </span>
+          ) : null}
+        </>
+      }
+      description={workflow.description || undefined}
+      actions={
+        canEdit ? (
+          <>
+            <Button type="button" variant="outline" size="sm" onClick={onEdit}>
+              <Pencil strokeWidth={2} aria-hidden />
+              {t('edit')}
+            </Button>
+            <Button type="button" variant="outline" size="sm" disabled={toggling} onClick={onToggle}>
+              <Power strokeWidth={2} aria-hidden />
+              {workflow.enabled ? t('disable') : t('enable')}
+            </Button>
+            <Button type="button" variant="destructive-ghost" size="sm" onClick={onDelete}>
+              <Trash2 strokeWidth={2} aria-hidden />
+              {t('delete')}
+            </Button>
+          </>
+        ) : null
+      }
+    >
+      {error ? (
+        <p className="text-danger product-inline-error" role="alert">
+          {error.message}
+        </p>
+      ) : null}
+      <WorkflowKpis workflow={workflow} />
+      <ProductTabs<DetailTab>
+        label={t('workflows')}
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          {
+            id: 'overview',
+            label: t('workflowTabOverview'),
+            content: (
+              <WorkflowOverview
+                websiteId={websiteId}
+                workflow={workflow}
+                canEdit={canEdit}
+                revealed={revealed}
+                onRevealed={onRevealed}
+              />
+            ),
+          },
+          {
+            id: 'runs',
+            label: (
+              <>
+                {t('productRunsTab')}
+                {workflow.summary?.executions ? (
+                  <span className="product-tab-count">
+                    {formatNumber(workflow.summary.executions, { compact: workflow.summary.executions >= 10_000 })}
+                  </span>
+                ) : null}
+              </>
+            ),
+            content: <WorkflowRuns websiteId={websiteId} workflow={workflow} />,
+          },
+          canEdit ? { id: 'test', label: t('workflowTabTest'), content: <WorkflowTestPanel websiteId={websiteId} workflow={workflow} /> } : null,
+        ]}
+      />
+    </MasterDetailPane>
+  );
 }
 
 export default function WebsiteWorkflowsPage() {
@@ -599,7 +818,7 @@ export default function WebsiteWorkflowsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [editor, setEditor] = useState<{ workflow: Workflow | null } | null>(null);
-  const [detailTab, setDetailTab] = useState<DetailTab>('overview');
+  const [search, setSearch] = useState('');
   /** Signing secret shown once, right after creation or rotation. */
   const [revealed, setRevealed] = useState<{ workflowId: string; secret: string } | null>(null);
 
@@ -609,12 +828,26 @@ export default function WebsiteWorkflowsPage() {
     queryFn: () => api<Workflow[]>(`/api/websites/${websiteId}/workflows`),
   });
 
-  const workflows = useMemo(() => workflowsQuery.data ?? [], [workflowsQuery.data]);
-  const { selectedId: selectedWorkflowId, setSelectedId: setSelectedWorkflowId, selectedItem: selectedWorkflow } =
-    useMasterDetailSelection(workflows, (workflow) => workflow.id);
+  // Enabled workflows first (stable otherwise), so the page opens on one that actually runs.
+  const workflows = useMemo(
+    () => [...(workflowsQuery.data ?? [])].sort((a, b) => Number(b.enabled) - Number(a.enabled)),
+    [workflowsQuery.data],
+  );
+  const rows = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return workflows;
+    return workflows.filter(
+      (workflow) =>
+        workflow.name.toLowerCase().includes(needle) ||
+        workflow.triggerEvent.toLowerCase().includes(needle) ||
+        (workflow.description ?? '').toLowerCase().includes(needle),
+    );
+  }, [workflows, search]);
+  const requestedId = searchParams.get('workflow');
+  const selected = rows.find((workflow) => workflow.id === requestedId) ?? rows[0] ?? null;
+  const enabledCount = workflows.filter((workflow) => workflow.enabled).length;
 
   function selectWorkflow(id: string, replace = false) {
-    setSelectedWorkflowId(id);
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);
@@ -625,26 +858,6 @@ export default function WebsiteWorkflowsPage() {
     );
   }
 
-  useEffect(() => {
-    if (!workflows.length) {
-      setSelectedWorkflowId(null);
-      return;
-    }
-    const requested = searchParams.get('workflow');
-    if (requested && workflows.some((workflow) => workflow.id === requested)) {
-      setSelectedWorkflowId(requested);
-      return;
-    }
-    if (!selectedWorkflowId || !workflows.some((workflow) => workflow.id === selectedWorkflowId)) {
-      selectWorkflow(workflows[0]!.id, true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, selectedWorkflowId, workflows]);
-
-  useEffect(() => {
-    setDetailTab('overview');
-  }, [selectedWorkflowId]);
-
   const saveMutation = useMutation({
     mutationFn: ({ id, body }: { id: string | null; body: WorkflowBody }) =>
       id
@@ -652,8 +865,9 @@ export default function WebsiteWorkflowsPage() {
         : api<Workflow>(`/api/websites/${websiteId}/workflows`, { method: 'POST', body: JSON.stringify(body) }),
     onSuccess: (workflow) => {
       setEditor(null);
+      setSearch('');
       if (workflow.signingSecret) setRevealed({ workflowId: workflow.id, secret: workflow.signingSecret });
-      selectWorkflow(workflow.id);
+      selectWorkflow(workflow.id, true);
       queryClient.invalidateQueries({ queryKey: ['workflows', websiteId] });
       queryClient.invalidateQueries({ queryKey: ['workflow-executions', websiteId] });
     },
@@ -676,230 +890,118 @@ export default function WebsiteWorkflowsPage() {
     },
   });
 
-  const summary = selectedWorkflow?.summary;
+  const createButton = canEdit ? (
+    <Button
+      type="button"
+      variant="primary"
+      onClick={() => {
+        saveMutation.reset();
+        setEditor({ workflow: null });
+      }}
+    >
+      <Plus strokeWidth={2} aria-hidden />
+      {t('createWorkflow')}
+    </Button>
+  ) : null;
 
   return (
-    <Page className="page-workflows">
-      <PageHeader
-        title={t('workflows')}
-        lead={t('workflowsLead')}
-        actions={
-          canEdit ? (
-            <Button
-              type="button"
-              variant="primary"
-              onClick={() => {
-                saveMutation.reset();
-                setEditor({ workflow: null });
-              }}
-            >
-              <Plus size={14} strokeWidth={2} aria-hidden />
-              {t('createWorkflow')}
-            </Button>
-          ) : null
-        }
-      />
+    <Page className="page-workflows product-page">
+      <PageHeader title={t('workflows')} lead={t('workflowsLead')} actions={createButton} />
 
       <PageBody>
-        {viewOnly ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
-        <p className="text-muted section-gap">{t('workflowLimitsNote')}</p>
+        {viewOnly ? <p className="product-view-only">{t('viewOnlyHint')}</p> : null}
 
-        <section className="section-gap">
-          {workflowsQuery.isLoading ? (
-            <div className="skeleton skeleton-block" aria-busy />
-          ) : workflows.length ? (
+        <DataViewState
+          loading={workflowsQuery.isLoading}
+          loadingFallback={<ProductMasterDetailSkeleton rows={3} />}
+          error={workflowsQuery.isError ? workflowsQuery.error : null}
+          onRetry={() => workflowsQuery.refetch()}
+        >
+          {workflows.length ? (
             <MasterDetailLayout
-              list={workflows.map((workflow) => (
-                <MasterDetailListItem
-                  key={workflow.id}
-                  selected={workflow.id === selectedWorkflowId}
-                  onSelect={() => selectWorkflow(workflow.id)}
-                  icon={<WorkflowIcon size={16} strokeWidth={2} aria-hidden />}
-                  title={workflow.name}
-                  subtitle={workflow.triggerEvent}
-                  meta={
-                    <>
-                      <span className="badge">{workflow.enabled ? t('enabled') : t('disabled')}</span>
-                      <span className="text-muted">
-                        {t('workflowStepCount').replace('{count}', formatNumber(workflow.steps.length))} ·{' '}
-                        {formatNumber(workflow.summary?.executions ?? 0)} {t('workflowExecutions')}
-                      </span>
-                    </>
-                  }
+              listHeader={
+                <ProductListHeader
+                  search={search}
+                  onSearch={setSearch}
+                  placeholder={t('productWorkflowSearch')}
+                  summary={tf('productWorkflowListSummary', {
+                    count: formatNumber(workflows.length),
+                    on: formatNumber(enabledCount),
+                  })}
                 />
-              ))}
+              }
+              list={
+                rows.length ? (
+                  rows.map((workflow) => {
+                    const status = workflowStatus(workflow.enabled);
+                    const runs = countMeta(t('productRunsCount'), workflow.summary?.executions ?? 0);
+                    return (
+                      <MasterDetailListItem
+                        key={workflow.id}
+                        selected={workflow.id === selected?.id}
+                        onSelect={() => selectWorkflow(workflow.id)}
+                        title={workflow.name}
+                        subtitle={<span className="mono">{workflow.triggerEvent}</span>}
+                        meta={
+                          <>
+                            <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+                            <span title={runs.title}>{runs.text}</span>
+                          </>
+                        }
+                      />
+                    );
+                  })
+                ) : (
+                  <ProductNoMatches query={search} onClear={() => setSearch('')} />
+                )
+              }
               detail={
-                selectedWorkflow && websiteId ? (
-                  <MasterDetailPane
-                    title={selectedWorkflow.name}
-                    description={
-                      <p className="text-muted">
-                        {t('workflowTriggerEvent')}: <code>{selectedWorkflow.triggerEvent}</code>
-                      </p>
+                selected && websiteId ? (
+                  <WorkflowDetail
+                    key={selected.id}
+                    websiteId={websiteId}
+                    workflow={selected}
+                    canEdit={canEdit}
+                    toggling={toggleMutation.isPending}
+                    error={(toggleMutation.error ?? deleteMutation.error) as Error | null}
+                    revealed={revealed?.workflowId === selected.id ? revealed.secret : null}
+                    onRevealed={(secret) => setRevealed({ workflowId: selected.id, secret })}
+                    onEdit={() => {
+                      saveMutation.reset();
+                      setEditor({ workflow: selected });
+                    }}
+                    onToggle={() => toggleMutation.mutate(selected)}
+                    onDelete={() =>
+                      confirm({
+                        title: deleteTitle(selected.name),
+                        description: t('workflowDeleteBody'),
+                        onConfirm: () => deleteMutation.mutate(selected.id),
+                      })
                     }
-                    actions={
-                      canEdit ? (
-                        <div className="cohorts-row-actions">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              saveMutation.reset();
-                              setEditor({ workflow: selectedWorkflow });
-                            }}
-                          >
-                            {t('edit')}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            disabled={toggleMutation.isPending}
-                            onClick={() => toggleMutation.mutate(selectedWorkflow)}
-                          >
-                            {selectedWorkflow.enabled ? t('disable') : t('enable')}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="destructive-ghost"
-                            size="sm"
-                            onClick={() =>
-                              confirm({
-                                title: deleteTitle(selectedWorkflow.name),
-                                description: t('workflowDeleteBody'),
-                                onConfirm: () => deleteMutation.mutate(selectedWorkflow.id),
-                              })
-                            }
-                          >
-                            {t('delete')}
-                          </Button>
-                        </div>
-                      ) : null
-                    }
-                  >
-                    {toggleMutation.error ? <p className="text-danger">{(toggleMutation.error as Error).message}</p> : null}
-                    {deleteMutation.error ? <p className="text-danger">{(deleteMutation.error as Error).message}</p> : null}
-                    <SegmentTabs
-                      className="flag-detail-tabs"
-                      aria-label={t('workflows')}
-                      value={detailTab}
-                      onChange={(id) => setDetailTab(id as DetailTab)}
-                      tabs={[
-                        { id: 'overview', label: t('workflowTabOverview') },
-                        { id: 'executions', label: t('workflowTabExecutions') },
-                        ...(canEdit ? [{ id: 'test', label: t('workflowTabTest') }] : []),
-                      ]}
-                    />
-
-                    {detailTab === 'overview' ? (
-                      <>
-                        <div className="detail-stats">
-                          <div>
-                            <span className="stat-label">{t('workflowExecutions')}</span>
-                            <strong className="stat-value">{formatNumber(summary?.executions ?? 0)}</strong>
-                          </div>
-                          <div>
-                            <span className="stat-label">{t('workflowInProgress')}</span>
-                            <strong className="stat-value">{formatNumber(summary?.inProgress ?? 0)}</strong>
-                          </div>
-                          <div>
-                            <span className="stat-label">{t('workflowFailures')}</span>
-                            <strong className="stat-value">{formatNumber(summary?.failures ?? 0)}</strong>
-                          </div>
-                          <div>
-                            <span className="stat-label">{t('workflowSuccessRate')}</span>
-                            <strong className="stat-value">{formatNumber(summary?.successRate ?? 0)}%</strong>
-                          </div>
-                          <div>
-                            <span className="stat-label">{t('workflowLastExecution')}</span>
-                            <strong className="stat-value">{formatDateTime(summary?.lastExecutionAt)}</strong>
-                          </div>
-                        </div>
-                        <WorkflowFlowSummary workflow={selectedWorkflow} />
-                        <WorkflowSigningSecret
-                          websiteId={websiteId}
-                          workflow={selectedWorkflow}
-                          canEdit={canEdit}
-                          revealed={revealed?.workflowId === selectedWorkflow.id ? revealed.secret : null}
-                          onRevealed={(secret) => setRevealed({ workflowId: selectedWorkflow.id, secret })}
-                        />
-                        {summary?.statuses?.length ? (
-                          <div className="detail-section">
-                            <div className="panel-header compact-panel-header">
-                              <div>
-                                <h3 className="section-title experiment-title">{t('workflowStatusBreakdown')}</h3>
-                                <p className="text-muted">{t('workflowStatusBreakdownLead')}</p>
-                              </div>
-                            </div>
-                            <div className="breakdown-list">
-                              {summary.statuses.map((item) => (
-                                <div key={item.status} className="breakdown-row">
-                                  <div className="breakdown-meta">
-                                    <strong>{statusLabel(item.status)}</strong>
-                                    <span className="text-muted">
-                                      {formatNumber(item.executions)} · {formatNumber(item.percentage)}%
-                                    </span>
-                                  </div>
-                                  <div className="breakdown-track" aria-hidden>
-                                    <span style={{ width: `${Math.min(100, item.percentage)}%` }} />
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : null}
-                        {summary?.trend?.length ? (
-                          <div className="detail-section">
-                            <div className="panel-header compact-panel-header">
-                              <div>
-                                <h3 className="section-title experiment-title">{t('workflowTrend')}</h3>
-                                <p className="text-muted">{t('workflowTrendLead')}</p>
-                              </div>
-                            </div>
-                            <div className="table-scroll">
-                              <table className="data-table">
-                                <thead>
-                                  <tr>
-                                    <th>{t('date')}</th>
-                                    <th>{t('workflowExecutions')}</th>
-                                    <th>{t('workflowFailures')}</th>
-                                    <th>{t('workflowSuccessRate')}</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {summary.trend.map((item) => (
-                                    <tr key={item.date}>
-                                      <td className="text-muted">{item.date}</td>
-                                      <td className="num">{formatNumber(item.executions)}</td>
-                                      <td className="num">{formatNumber(item.failures)}</td>
-                                      <td className="num">{formatNumber(item.successRate)}%</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        ) : null}
-                      </>
-                    ) : null}
-
-                    {detailTab === 'executions' ? (
-                      <WorkflowExecutionsPanel websiteId={websiteId} workflow={selectedWorkflow} />
-                    ) : null}
-                    {detailTab === 'test' && canEdit ? (
-                      <WorkflowTestPanel key={selectedWorkflow.id} websiteId={websiteId} workflow={selectedWorkflow} />
-                    ) : null}
-                  </MasterDetailPane>
-                ) : null
+                  />
+                ) : (
+                  <div className="master-detail-pane">
+                    <EmptyState icon={<WorkflowIcon strokeWidth={2} />} title={t('productSelectWorkflow')} />
+                  </div>
+                )
               }
             />
           ) : (
-            <EmptyState title={t('workflowsEmptyTitle')} description={t('workflowsEmptyBody')} />
+            <EmptyState
+              variant="rich"
+              icon={<WorkflowIcon strokeWidth={2} />}
+              title={t('workflowsEmptyTitle')}
+              description={t('workflowsEmptyBody')}
+              action={createButton}
+            />
           )}
-        </section>
+        </DataViewState>
+
+        <ProductNote className="product-footnote">{t('workflowLimitsNote')}</ProductNote>
+
         {canEdit && editor ? (
           <WorkflowEditorDialog
+            websiteId={websiteId}
             workflow={editor.workflow}
             saving={saveMutation.isPending}
             error={(saveMutation.error as Error | null) ?? null}

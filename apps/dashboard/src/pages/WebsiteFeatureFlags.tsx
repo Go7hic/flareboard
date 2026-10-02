@@ -1,101 +1,435 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ExternalLink, Flag } from 'lucide-react';
-import { EmptyState } from '../components/EmptyState';
-import {
-  MasterDetailLayout,
-  MasterDetailListItem,
-  MasterDetailPane,
-  ResourceSearchField,
-  useMasterDetailSelection,
-} from '../components/master-detail';
-import { Page, PageBody } from '../components/Page';
-import { PageHeader } from '../components/PageHeader';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { api, type FeatureFlag, type FeatureFlagEvaluateResult } from '../lib/api';
-import { t } from '../lib/i18n';
-import { useWebsitePermissions } from '../lib/useWebsitePermissions';
-import { formatDateOnly, formatDateTime, formatNumber, formatPercent } from '../lib/format';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { Area, AreaChart } from 'recharts';
+import { Activity, Flag, Pencil, Plus, Power, Trash2 } from 'lucide-react';
+import { AnalyticsChart } from '../components/AnalyticsChart';
+import { BreakdownList, type BreakdownItem } from '../components/BreakdownList';
 import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
+import { DataViewState } from '../components/DataViewState';
+import { EmptyState } from '../components/EmptyState';
 import {
   FeatureFlagConditionSummary,
   FeatureFlagEditorDialog,
   FeatureFlagHistory,
+  variantColor,
   type FeatureFlagBody,
 } from '../components/FeatureFlagEditor';
-import { SegmentTabs } from '../components/SegmentTabs';
+import { KpiCell, KpiStrip } from '../components/KpiStrip';
+import { MasterDetailLayout, MasterDetailListItem, MasterDetailPane } from '../components/master-detail';
+import { Page, PageBody } from '../components/Page';
+import { PageHeader } from '../components/PageHeader';
+import { FlagEvaluatePanel } from '../components/product/FlagEvaluatePanel';
+import { countMeta, formatShare, utcDay } from '../components/product/format';
+import { ProductListHeader, ProductMasterDetailSkeleton, ProductNoMatches } from '../components/product/ProductList';
+import { ProductCallout, ProductSection } from '../components/product/ProductSection';
+import { ProductTabs } from '../components/product/ProductTabs';
+import { RelativeTime, ShortDate } from '../components/product/ProductTime';
+import { SessionLink } from '../components/product/SessionLink';
+import { SeriesKey, SplitBar } from '../components/product/SplitBar';
+import { flagGroups, flagStatus } from '../components/product/status';
+import { StatusBadge } from '../components/StatusBadge';
+import { Button } from '../components/ui/button';
+import { api, type FeatureFlag } from '../lib/api';
+import { areaMark } from '../lib/chartMarks';
+import { formatNumber, formatShortDate } from '../lib/format';
+import { t } from '../lib/i18n';
+import { useChartColors } from '../lib/useChartColors';
+import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 
-type DetailTab = 'overview' | 'conditions' | 'history';
+type DetailTab = 'overview' | 'conditions' | 'test' | 'history';
 
-function formatDate(value: string | number | undefined) {
-  return formatDateOnly(value);
-}
-
-function formatTime(value: number | null | undefined) {
-  return formatDateTime(value);
-}
-
-function formatTrendDate(value: string | undefined) {
-  if (!value) return '-';
-  return formatDateOnly(`${value}T00:00:00Z`);
-}
-
-function featureFlagIssueLabel(issue: NonNullable<FeatureFlag['summary']>['health']['issues'][number]) {
-  if (issue === 'no_exposures') return t('featureFlagIssue_no_exposures');
-  if (issue === 'missing_variant_data') return t('featureFlagIssue_missing_variant_data');
-  return t('featureFlagIssue_traffic_concentrated');
-}
-
-function featureFlagHealthClass(status: NonNullable<FeatureFlag['summary']>['health']['status']) {
-  if (status === 'healthy') return 'badge experiment-diagnostic-success';
-  if (status === 'needs_attention') return 'badge experiment-diagnostic-warning';
-  return 'badge experiment-diagnostic-info';
-}
+type Summary = NonNullable<FeatureFlag['summary']>;
 
 /**
- * Inline rollout editor with a local draft so typing does not PATCH per
- * keystroke; the change is committed on blur or Enter, and only when the
- * value is valid (0-100) and actually different.
+ * Colors follow the variant, not its rank: configured variants keep their slot in the flag's
+ * order, and responses the flag does not configure (boolean flags) are ordered by name.
  */
-function FeatureFlagRolloutInput({
-  flag,
-  onCommit,
-}: {
-  flag: FeatureFlag;
-  onCommit: (rollout: number) => void;
-}) {
-  const [draft, setDraft] = useState(String(flag.rollout));
+function variantColorMap(flag: FeatureFlag) {
+  const keys = flag.variants.map((variant) => variant.key);
+  const observed = (flag.summary?.variants ?? [])
+    .map((row) => row.variant)
+    .filter((key) => !keys.includes(key))
+    .sort((a, b) => a.localeCompare(b));
+  return new Map([...keys, ...observed].map((key, index) => [key, variantColor(index)]));
+}
 
-  useEffect(() => {
-    setDraft(String(flag.rollout));
-  }, [flag.rollout]);
+function isUnknown(value: string | null | undefined) {
+  return !value || value === 'unknown';
+}
 
-  function commit() {
-    const next = Number(draft);
-    if (draft.trim() === '' || !Number.isFinite(next) || next < 0 || next > 100) {
-      setDraft(String(flag.rollout));
-      return;
-    }
-    if (next !== flag.rollout) onCommit(next);
+function flagIssueText(issue: Summary['health']['issues'][number], health: Summary['health']) {
+  if (issue === 'traffic_concentrated' && health.dominantVariant) {
+    return t('productFlagIssueConcentrated')
+      .replace('{variant}', health.dominantVariant)
+      .replace('{share}', formatShare(health.dominantShare ?? 0));
   }
+  return t(`featureFlagIssue_${issue}`);
+}
+
+function FlagListMeta({ flag }: { flag: FeatureFlag }) {
+  const status = flagStatus(flag);
+  const exposures = countMeta(t('productExposuresCount'), flag.summary?.exposures ?? 0);
+  return (
+    <>
+      <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+      <span title={exposures.title}>{exposures.text}</span>
+    </>
+  );
+}
+
+function FlagOverview({ websiteId, flag }: { websiteId: string; flag: FeatureFlag }) {
+  const chartColors = useChartColors();
+  const summary = flag.summary;
+  const colors = useMemo(() => variantColorMap(flag), [flag]);
+  const trend = useMemo(
+    () =>
+      (summary?.trend ?? []).map((row) => ({
+        x: formatShortDate(utcDay(row.date), { timeZone: 'UTC' }),
+        exposures: row.exposures,
+      })),
+    [summary?.trend],
+  );
+  const issues = summary?.health.status === 'needs_attention' ? summary.health.issues : [];
+  const variants = summary?.variants ?? [];
+  const configured = new Map(flag.variants.map((variant) => [variant.key, variant.weight]));
+  const releases = summary?.releases ?? [];
+  const environments = summary?.environments ?? [];
+  const contextKnown = [...releases.map((row) => row.release), ...environments.map((row) => row.environment)].some(
+    (value) => !isUnknown(value),
+  );
+  const recent = summary?.recent ?? [];
+  const showRelease = recent.some((row) => row.release);
+  const showEnvironment = recent.some((row) => row.environment);
+
+  const contextItems = (rows: Array<{ label: string; exposures: number; percentage: number }>): BreakdownItem[] => {
+    const max = Math.max(1, ...rows.map((row) => row.exposures));
+    return rows.map((row) => ({
+      id: row.label,
+      label: isUnknown(row.label) ? t('productNotReported') : row.label,
+      title: row.label,
+      mono: !isUnknown(row.label),
+      share: row.exposures / max,
+      values: [formatNumber(row.exposures), formatShare(row.percentage)],
+    }));
+  };
 
   return (
-    <input
-      className="input feature-flag-rollout-input"
-      type="number"
-      min={0}
-      max={100}
-      value={draft}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={commit}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') event.currentTarget.blur();
-      }}
-      aria-label={t('featureFlagRollout')}
-    />
+    <>
+      {issues.length && summary ? (
+        <ProductCallout tone="warning" title={t('featureFlagHealth_needs_attention')} role="status">
+          {issues.map((issue) => flagIssueText(issue, summary.health)).join(' ')}
+        </ProductCallout>
+      ) : null}
+
+      <ProductSection title={t('productExposuresPerDay')} description={t('productDaysUtc')}>
+        {trend.length > 1 ? (
+          <div className="product-chart">
+            <AnalyticsChart
+              Chart={AreaChart}
+              data={trend}
+              responsive={{ height: 200 }}
+              xAxis={{ dataKey: 'x', interval: 'preserveStartEnd', minTickGap: 32 }}
+            >
+              <Area
+                dataKey="exposures"
+                name={t('featureFlagExposures')}
+                stroke={chartColors.accent}
+                fill={chartColors.accent}
+                {...areaMark(chartColors.panel)}
+              />
+            </AnalyticsChart>
+          </div>
+        ) : (
+          <EmptyState
+            icon={<Activity strokeWidth={2} />}
+            title={t('featureFlagIssue_no_exposures')}
+            description={t('productFlagNoExposuresHint').replace('{key}', flag.key)}
+          />
+        )}
+      </ProductSection>
+
+      {variants.length ? (
+        <ProductSection
+          title={flag.variants.length ? t('productFlagObservedSplit') : t('productFlagResponses')}
+          description={flag.variants.length ? t('productFlagObservedSplitLead') : t('productFlagResponsesLead')}
+        >
+          <SplitBar
+            ariaLabel={t('productFlagObservedSplit')}
+            legend={false}
+            segments={variants.map((row) => ({
+              key: row.variant,
+              label: row.variant,
+              value: row.exposures,
+              color: colors.get(row.variant) ?? variantColor(-1),
+            }))}
+          />
+          <div className="table-scroll">
+            <table className="data-table product-table">
+              <thead>
+                <tr>
+                  <th>{t('variant')}</th>
+                  {flag.variants.length ? <th className="num">{t('productFlagWeight')}</th> : null}
+                  <th className="num">{t('featureFlagExposures')}</th>
+                  <th className="num">{t('sessions')}</th>
+                  <th className="num">{t('productShare')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {variants.map((row) => (
+                  <tr key={row.variant}>
+                    <td>
+                      <span className="product-series-cell">
+                        <SeriesKey color={colors.get(row.variant) ?? variantColor(-1)} />
+                        <span className="mono">{row.variant}</span>
+                      </span>
+                    </td>
+                    {flag.variants.length ? (
+                      <td className="num text-muted">
+                        {configured.has(row.variant) ? `${configured.get(row.variant)}%` : '–'}
+                      </td>
+                    ) : null}
+                    <td className="num">{formatNumber(row.exposures)}</td>
+                    <td className="num">{formatNumber(row.sessions)}</td>
+                    <td className="num">{formatShare(row.percentage)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </ProductSection>
+      ) : null}
+
+      {releases.length || environments.length ? (
+        contextKnown ? (
+          <ProductSection title={t('productFlagContext')} description={t('productFlagContextLead')}>
+            <div className="product-two-col">
+              <div>
+                <h4 className="product-subtitle">{t('featureFlagEvaluateRelease')}</h4>
+                <BreakdownList
+                  items={contextItems(releases.map((row) => ({ ...row, label: row.release })))}
+                  columns={[{ label: t('featureFlagExposures') }, { label: t('productShare') }]}
+                />
+              </div>
+              <div>
+                <h4 className="product-subtitle">{t('featureFlagEvaluateEnvironment')}</h4>
+                <BreakdownList
+                  items={contextItems(environments.map((row) => ({ ...row, label: row.environment })))}
+                  columns={[{ label: t('featureFlagExposures') }, { label: t('productShare') }]}
+                />
+              </div>
+            </div>
+          </ProductSection>
+        ) : (
+          <ProductSection title={t('productFlagContext')}>
+            <p className="product-muted-line">{t('productFlagContextNone')}</p>
+          </ProductSection>
+        )
+      ) : null}
+
+      {recent.length ? (
+        <ProductSection title={t('productRecentExposures')} description={t('productRecentExposuresLead')}>
+          <div className="table-scroll">
+            <table className="data-table product-table">
+              <thead>
+                <tr>
+                  <th>{t('productTime')}</th>
+                  <th>{t('variant')}</th>
+                  <th>{t('page')}</th>
+                  {showRelease ? <th>{t('featureFlagEvaluateRelease')}</th> : null}
+                  {showEnvironment ? <th>{t('featureFlagEvaluateEnvironment')}</th> : null}
+                  <th>{t('session')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recent.map((exposure) => {
+                  const variant = exposure.variant ?? t('featureFlagVariantControl');
+                  return (
+                    <tr key={exposure.id}>
+                      <td className="text-muted product-nowrap">
+                        <ShortDate value={exposure.createdAt} withTime />
+                      </td>
+                      <td>
+                        <span className="product-series-cell">
+                          <SeriesKey color={colors.get(variant) ?? variantColor(-1)} />
+                          <span className="mono">{variant}</span>
+                        </span>
+                      </td>
+                      <td className="mono product-path-cell">{exposure.urlPath || '/'}</td>
+                      {showRelease ? <td className="mono">{exposure.release ?? '–'}</td> : null}
+                      {showEnvironment ? <td className="mono">{exposure.environment ?? '–'}</td> : null}
+                      <td>
+                        <SessionLink websiteId={websiteId} sessionId={exposure.sessionId} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </ProductSection>
+      ) : null}
+    </>
+  );
+}
+
+function FlagKpis({ flag }: { flag: FeatureFlag }) {
+  const summary = flag.summary;
+  const groups = flagGroups(flag);
+  const single = groups.length === 1 ? groups[0]! : null;
+  const exposures = summary?.exposures ?? 0;
+  const sessions = summary?.sessions ?? 0;
+  return (
+    <KpiStrip inline columns={4}>
+      <KpiCell
+        label={t('featureFlagExposures')}
+        value={formatNumber(exposures)}
+        hint={
+          summary?.lastCalledAt ? (
+            <>
+              {t('productLastCall')} <RelativeTime value={summary.lastCalledAt} />
+            </>
+          ) : (
+            t('featureFlagIssue_no_exposures')
+          )
+        }
+      />
+      <KpiCell
+        label={t('sessions')}
+        value={formatNumber(sessions)}
+        hint={
+          sessions > 0
+            ? t('productPerSession').replace('{value}', formatNumber(exposures / sessions, { maximumFractionDigits: 2 }))
+            : undefined
+        }
+      />
+      <KpiCell
+        label={t('productRollout')}
+        value={single ? `${single.rollout}%` : t('featureFlagRolloutPerGroup')}
+        hint={
+          !flag.enabled
+            ? t('featureFlagReason_disabled')
+            : single
+              ? single.conditions.length
+                ? t('featureFlagOfMatching')
+                : t('productFlagEveryone')
+              : t('featureFlagGroupCount').replace('{count}', String(groups.length))
+        }
+      />
+      <KpiCell
+        label={t('featureFlagVariants')}
+        value={flag.variants.length ? formatNumber(flag.variants.length) : t('productFlagBoolean')}
+        hint={
+          flag.variants.length
+            ? flag.variants.map((variant) => `${variant.key} ${variant.weight}%`).join(' · ')
+            : t('productFlagBooleanHint')
+        }
+      />
+    </KpiStrip>
+  );
+}
+
+function FlagDetail({
+  websiteId,
+  flag,
+  canEdit,
+  onEdit,
+  onToggle,
+  onDelete,
+  onRolloutCommit,
+  toggling,
+  error,
+}: {
+  websiteId: string;
+  flag: FeatureFlag;
+  canEdit: boolean;
+  onEdit: () => void;
+  onToggle: () => void;
+  onDelete: () => void;
+  onRolloutCommit: (rollout: number) => void;
+  toggling: boolean;
+  error: Error | null;
+}) {
+  const [tab, setTab] = useState<DetailTab>('overview');
+  const status = flagStatus(flag);
+  const health = flag.summary?.health;
+  const groups = flagGroups(flag);
+
+  return (
+    <MasterDetailPane
+      title={flag.name}
+      meta={
+        <>
+          <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+          <span className="mono product-meta-key">{flag.key}</span>
+          {health?.status === 'needs_attention' ? (
+            <StatusBadge tone="warning">{t('featureFlagHealth_needs_attention')}</StatusBadge>
+          ) : null}
+          {flag.earlyAccess ? (
+            <StatusBadge tone="info" dot={false}>
+              {t('featureFlagEarlyAccess')}
+            </StatusBadge>
+          ) : null}
+          {flag.createdAt ? (
+            <span>
+              {t('created')} <ShortDate value={flag.createdAt} />
+            </span>
+          ) : null}
+          {flag.updatedAt ? (
+            <span>
+              {t('productUpdated')} <ShortDate value={flag.updatedAt} />
+            </span>
+          ) : null}
+        </>
+      }
+      description={flag.description || undefined}
+      actions={
+        canEdit ? (
+          <>
+            <Button type="button" variant="outline" size="sm" onClick={onEdit}>
+              <Pencil strokeWidth={2} aria-hidden />
+              {t('edit')}
+            </Button>
+            <Button type="button" variant="outline" size="sm" disabled={toggling} onClick={onToggle}>
+              <Power strokeWidth={2} aria-hidden />
+              {flag.enabled ? t('disable') : t('enable')}
+            </Button>
+            <Button type="button" variant="destructive-ghost" size="sm" onClick={onDelete}>
+              <Trash2 strokeWidth={2} aria-hidden />
+              {t('delete')}
+            </Button>
+          </>
+        ) : null
+      }
+    >
+      {error ? (
+        <p className="text-danger product-inline-error" role="alert">
+          {error.message}
+        </p>
+      ) : null}
+      <FlagKpis flag={flag} />
+      <ProductTabs<DetailTab>
+        label={t('featureFlag')}
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { id: 'overview', label: t('featureFlagTabOverview'), content: <FlagOverview websiteId={websiteId} flag={flag} /> },
+          {
+            id: 'conditions',
+            label: t('featureFlagReleaseConditions'),
+            content: (
+              <FeatureFlagConditionSummary
+                websiteId={websiteId}
+                flag={flag}
+                onRolloutCommit={canEdit && groups.length === 1 ? onRolloutCommit : undefined}
+              />
+            ),
+          },
+          { id: 'test', label: t('productTabTest'), content: <FlagEvaluatePanel websiteId={websiteId} flagKey={flag.key} /> },
+          { id: 'history', label: t('featureFlagTabHistory'), content: <FeatureFlagHistory websiteId={websiteId} flagId={flag.id} /> },
+        ]}
+      />
+    </MasterDetailPane>
   );
 }
 
@@ -108,65 +442,45 @@ export default function WebsiteFeatureFlagsPage() {
   const [search, setSearch] = useState('');
   /** null = closed, 'new' = create dialog, otherwise the flag being edited. */
   const [editor, setEditor] = useState<FeatureFlag | 'new' | null>(null);
-  const [detailTab, setDetailTab] = useState<DetailTab>('overview');
-  const [evaluateDraft, setEvaluateDraft] = useState({
-    key: '',
-    distinctId: '',
-    path: '',
-    environment: '',
-    release: '',
-  });
-  const [evaluateResult, setEvaluateResult] = useState<FeatureFlagEvaluateResult | null>(null);
+
   const flagsQuery = useQuery({
     queryKey: ['feature-flags', websiteId],
     enabled: Boolean(websiteId),
     queryFn: () => api<FeatureFlag[]>(`/api/websites/${websiteId}/feature-flags`),
   });
+  const flags = useMemo(() => flagsQuery.data ?? [], [flagsQuery.data]);
 
   const rows = useMemo(() => {
-    const all = flagsQuery.data ?? [];
     const needle = search.trim().toLowerCase();
-    if (!needle) return all;
-    return all.filter(
+    if (!needle) return flags;
+    return flags.filter(
       (flag) =>
         flag.key.toLowerCase().includes(needle) ||
         flag.name.toLowerCase().includes(needle) ||
         flag.description.toLowerCase().includes(needle),
     );
-  }, [flagsQuery.data, search]);
+  }, [flags, search]);
 
-  const {
-    selectedId: selectedFlagId,
-    setSelectedId: setSelectedFlagId,
-    selectedItem: selectedFlag,
-  } = useMasterDetailSelection(rows, (flag) => flag.id);
+  // Selection lives in the URL (?flag=key) so a flag can be linked; default to the first row.
+  const requestedKey = searchParams.get('flag');
+  const selectedFlag = rows.find((flag) => flag.key === requestedKey) ?? rows[0] ?? null;
 
-  useEffect(() => {
-    if (!rows.length) {
-      setSelectedFlagId(null);
-      return;
-    }
-    const requestedKey = searchParams.get('flag');
-    if (requestedKey) {
-      const match = rows.find((flag) => flag.key === requestedKey);
-      if (match) {
-        setSelectedFlagId(match.id);
-        return;
-      }
-    }
-    if (!selectedFlagId || !rows.some((flag) => flag.id === selectedFlagId)) {
-      const nextFlag = rows[0];
-      setSelectedFlagId(nextFlag.id);
-      setSearchParams(
-        (current) => {
-          const next = new URLSearchParams(current);
-          next.set('flag', nextFlag.key);
-          return next;
-        },
-        { replace: true },
-      );
-    }
-  }, [rows, searchParams, selectedFlagId, setSearchParams, setSelectedFlagId]);
+  function selectFlag(key: string, replace = false) {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.set('flag', key);
+        return next;
+      },
+      { replace },
+    );
+  }
+
+  const invalidate = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['feature-flags', websiteId] }),
+      queryClient.invalidateQueries({ queryKey: ['feature-flag-history', websiteId] }),
+    ]);
 
   const createMutation = useMutation({
     mutationFn: (body: FeatureFlagBody) =>
@@ -176,16 +490,9 @@ export default function WebsiteFeatureFlagsPage() {
       }),
     onSuccess: (flag) => {
       setEditor(null);
-      setSelectedFlagId(flag.id);
-      setSearchParams(
-        (current) => {
-          const next = new URLSearchParams(current);
-          next.set('flag', flag.key);
-          return next;
-        },
-        { replace: true },
-      );
-      queryClient.invalidateQueries({ queryKey: ['feature-flags', websiteId] });
+      setSearch('');
+      selectFlag(flag.key, true);
+      void invalidate();
     },
   });
 
@@ -195,483 +502,141 @@ export default function WebsiteFeatureFlagsPage() {
         method: 'PATCH',
         body: JSON.stringify(patch),
       }),
-    onSuccess: () => {
+    // Stays pending until the list has refetched, so Enable / Disable cannot fire twice on stale data.
+    onSuccess: (flag) => {
       setEditor(null);
-      queryClient.invalidateQueries({ queryKey: ['feature-flags', websiteId] });
-      queryClient.invalidateQueries({ queryKey: ['feature-flag-history', websiteId] });
+      if (flag?.key && requestedKey && flag.key !== requestedKey) selectFlag(flag.key, true);
+      return invalidate();
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) =>
-      api(`/api/websites/${websiteId}/feature-flags/${id}`, { method: 'DELETE' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feature-flags', websiteId] }),
-  });
-
-  const evaluateMutation = useMutation({
-    mutationFn: () =>
-      api<FeatureFlagEvaluateResult>(`/api/websites/${websiteId}/feature-flags/evaluate`, {
-        method: 'POST',
-        body: JSON.stringify({
-          key: evaluateDraft.key.trim(),
-          distinctId: evaluateDraft.distinctId.trim() || undefined,
-          path: evaluateDraft.path.trim() || undefined,
-          environment: evaluateDraft.environment.trim() || undefined,
-          release: evaluateDraft.release.trim() || undefined,
-        }),
-      }),
-    onSuccess: (result) => {
-      setEvaluateResult(result);
-      queryClient.invalidateQueries({ queryKey: ['feature-flags', websiteId] });
+    mutationFn: (id: string) => api(`/api/websites/${websiteId}/feature-flags/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void invalidate();
     },
   });
 
+  const enabledCount = flags.filter((flag) => flag.enabled).length;
+  const createButton = canEdit ? (
+    <Button type="button" variant="primary" onClick={() => setEditor('new')}>
+      <Plus strokeWidth={2} aria-hidden />
+      {t('createFeatureFlag')}
+    </Button>
+  ) : null;
+
   return (
-    <Page className="page-feature-flags">
-      <PageHeader
-        title={t('featureFlags')}
-        lead={t('featureFlagsLead')}
-        actions={
-          canEdit ? (
-            <Button type="button" variant="primary" onClick={() => setEditor('new')}>
-              {t('createFeatureFlag')}
-            </Button>
-          ) : null
-        }
-      />
+    <Page className="page-feature-flags product-page">
+      <PageHeader title={t('featureFlags')} lead={t('featureFlagsLead')} actions={createButton} />
 
       <PageBody>
+        {viewOnly ? <p className="product-view-only">{t('viewOnlyHint')}</p> : null}
 
-      {viewOnly ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
-
-      <section className="panel section-gap">
-        <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('featureFlagEvaluate')}</h2>
-            <p className="text-muted">{t('featureFlagEvaluateLead')}</p>
-          </div>
-        </header>
-        <div className="panel-form">
-          <div className="field">
-            <Label htmlFor="evaluate-key">{t('featureFlagEvaluateKey')}</Label>
-            <Input
-              id="evaluate-key"
-              value={evaluateDraft.key}
-              list="feature-flag-keys"
-              onChange={(event) => setEvaluateDraft((prev) => ({ ...prev, key: event.target.value }))}
-            />
-            <datalist id="feature-flag-keys">
-              {(flagsQuery.data ?? []).map((flag) => (
-                <option key={flag.id} value={flag.key} />
-              ))}
-            </datalist>
-          </div>
-          <div className="field">
-            <Label htmlFor="evaluate-distinct-id">{t('featureFlagEvaluateDistinctId')}</Label>
-            <Input
-              id="evaluate-distinct-id"
-              value={evaluateDraft.distinctId}
-              onChange={(event) => setEvaluateDraft((prev) => ({ ...prev, distinctId: event.target.value }))}
-            />
-          </div>
-          <div className="field">
-            <Label htmlFor="evaluate-path">{t('featureFlagEvaluatePath')}</Label>
-            <Input
-              id="evaluate-path"
-              value={evaluateDraft.path}
-              placeholder="/checkout"
-              onChange={(event) => setEvaluateDraft((prev) => ({ ...prev, path: event.target.value }))}
-            />
-          </div>
-          <div className="field">
-            <Label htmlFor="evaluate-environment">{t('featureFlagEvaluateEnvironment')}</Label>
-            <Input
-              id="evaluate-environment"
-              value={evaluateDraft.environment}
-              onChange={(event) => setEvaluateDraft((prev) => ({ ...prev, environment: event.target.value }))}
-            />
-          </div>
-          <div className="field">
-            <Label htmlFor="evaluate-release">{t('featureFlagEvaluateRelease')}</Label>
-            <Input
-              id="evaluate-release"
-              value={evaluateDraft.release}
-              onChange={(event) => setEvaluateDraft((prev) => ({ ...prev, release: event.target.value }))}
-            />
-          </div>
-          <div className="form-actions">
-            <Button
-              type="button"
-              variant="primary"
-              disabled={!evaluateDraft.key.trim() || evaluateMutation.isPending}
-              onClick={() => evaluateMutation.mutate()}
-            >
-              {evaluateMutation.isPending ? t('loading') : t('featureFlagRunEvaluate')}
-            </Button>
-          </div>
-        </div>
-        {evaluateMutation.error ? (
-          <p className="text-danger">{(evaluateMutation.error as Error).message}</p>
-        ) : null}
-        {evaluateResult ? (
-          <div className="workflow-action-note section-gap">
-            <strong>{t('featureFlagEvaluateResult')}</strong>
-            <div className="text-muted">
-              {evaluateResult.key} · {evaluateResult.variant ?? '-'} ·{' '}
-              {evaluateResult.enabled ? t('enabled') : t('disabled')}
-            </div>
-            <div className="text-muted">
-              {t('featureFlagEvaluateReason')}: {t(`featureFlagReason_${evaluateResult.reason}`)}
-              {typeof evaluateResult.conditionGroup === 'number'
-                ? ` · ${t('featureFlagGroupTitle').replace('{n}', String(evaluateResult.conditionGroup + 1))}`
-                : ''}
-            </div>
-            {evaluateResult.payload !== undefined && evaluateResult.payload !== null ? (
-              <pre className="flag-json">{JSON.stringify(evaluateResult.payload, null, 2)}</pre>
-            ) : null}
-          </div>
-        ) : null}
-      </section>
-
-      <section className="section-gap">
-        <header className="cohorts-panel-head">
-          <ResourceSearchField
-            value={search}
-            onChange={setSearch}
-            placeholder={t('featureFlagSearch')}
-            aria-label={t('featureFlagSearch')}
-          />
-        </header>
-
-        {flagsQuery.isLoading ? (
-          <div className="skeleton skeleton-block" aria-busy />
-        ) : rows.length ? (
-          <MasterDetailLayout
-            list={rows.map((flag) => (
-              <MasterDetailListItem
-                key={flag.id}
-                selected={flag.id === selectedFlagId}
-                onSelect={() => {
-                  setSelectedFlagId(flag.id);
-                  setSearchParams((current) => {
-                    const next = new URLSearchParams(current);
-                    next.set('flag', flag.key);
-                    return next;
-                  });
-                }}
-                icon={<Flag size={16} strokeWidth={2} aria-hidden />}
-                title={flag.name}
-                subtitle={flag.key}
-                meta={
-                  <>
-                    <span className="badge">{flag.enabled ? t('enabled') : t('disabled')}</span>
-                    {flag.summary?.health ? (
-                      <span className={featureFlagHealthClass(flag.summary.health.status)}>
-                        {t(`featureFlagHealth_${flag.summary.health.status}`)}
-                      </span>
-                    ) : null}
-                  </>
-                }
-              />
-            ))}
-            detail={
-              selectedFlag ? (
-                <MasterDetailPane
-                  title={selectedFlag.name}
-                  description={
-                    <>
-                      <p className="text-muted mono">{selectedFlag.key}</p>
-                      {selectedFlag.description ? (
-                        <p className="text-muted">{selectedFlag.description}</p>
-                      ) : null}
-                      {selectedFlag.variants.length ? (
-                        <div className="feature-flag-variants">
-                          {selectedFlag.variants.map((variant) => (
-                            <span key={variant.key} className="badge">
-                              {variant.key} · {variant.weight}%
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-                      <div className="feature-flag-variants">
-                        <span className="badge">
-                          {t('featureFlagGroupCount').replace('{count}', String(selectedFlag.conditionGroups.length))}
-                        </span>
-                        {selectedFlag.earlyAccess ? (
-                          <span className="badge">{t('featureFlagEarlyAccess')}</span>
-                        ) : null}
-                      </div>
-                    </>
-                  }
-                  actions={
-                    canEdit ? (
-                      <div className="cohorts-row-actions">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setEditor(selectedFlag)}
-                        >
-                          {t('edit')}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            updateMutation.mutate({
-                              id: selectedFlag.id,
-                              patch: { enabled: !selectedFlag.enabled },
-                            })
-                          }
-                        >
-                          {selectedFlag.enabled ? t('disable') : t('enable')}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="destructive-ghost"
-                          size="sm"
-                          onClick={() => confirm({ title: deleteTitle(selectedFlag.name), onConfirm: () => deleteMutation.mutate(selectedFlag.id) })}
-                        >
-                          {t('delete')}
-                        </Button>
-                      </div>
-                    ) : null
-                  }
-                >
-                  {deleteMutation.error ? (
-                    <p className="text-danger">{(deleteMutation.error as Error).message}</p>
-                  ) : null}
-                  {updateMutation.error && !editor ? (
-                    <p className="text-danger">{(updateMutation.error as Error).message}</p>
-                  ) : null}
-                  <SegmentTabs
-                    className="flag-detail-tabs"
-                    aria-label={t('featureFlag')}
-                    value={detailTab}
-                    onChange={(id) => setDetailTab(id as DetailTab)}
-                    tabs={[
-                      { id: 'overview', label: t('featureFlagTabOverview') },
-                      { id: 'conditions', label: t('featureFlagReleaseConditions') },
-                      { id: 'history', label: t('featureFlagTabHistory') },
-                    ]}
+        <DataViewState
+          loading={flagsQuery.isLoading}
+          loadingFallback={<ProductMasterDetailSkeleton />}
+          error={flagsQuery.isError ? flagsQuery.error : null}
+          onRetry={() => flagsQuery.refetch()}
+        >
+          {flags.length ? (
+            <MasterDetailLayout
+              listHeader={
+                <ProductListHeader
+                  search={search}
+                  onSearch={setSearch}
+                  placeholder={t('featureFlagSearch')}
+                  summary={t('productFlagListSummary')
+                    .replace('{count}', formatNumber(flags.length))
+                    .replace('{on}', formatNumber(enabledCount))}
+                />
+              }
+              list={
+                rows.length ? (
+                  rows.map((flag) => (
+                    <MasterDetailListItem
+                      key={flag.id}
+                      selected={flag.id === selectedFlag?.id}
+                      onSelect={() => selectFlag(flag.key)}
+                      title={flag.name}
+                      subtitle={<span className="mono">{flag.key}</span>}
+                      meta={<FlagListMeta flag={flag} />}
+                    />
+                  ))
+                ) : (
+                  <ProductNoMatches query={search} onClear={() => setSearch('')} />
+                )
+              }
+              detail={
+                selectedFlag && websiteId ? (
+                  <FlagDetail
+                    key={selectedFlag.id}
+                    websiteId={websiteId}
+                    flag={selectedFlag}
+                    canEdit={canEdit}
+                    toggling={updateMutation.isPending}
+                    error={((!editor && updateMutation.error) || deleteMutation.error) as Error | null}
+                    onEdit={() => {
+                      updateMutation.reset();
+                      setEditor(selectedFlag);
+                    }}
+                    onToggle={() => updateMutation.mutate({ id: selectedFlag.id, patch: { enabled: !selectedFlag.enabled } })}
+                    onDelete={() =>
+                      confirm({
+                        title: deleteTitle(selectedFlag.name),
+                        onConfirm: () => deleteMutation.mutate(selectedFlag.id),
+                      })
+                    }
+                    onRolloutCommit={(rollout) => {
+                      const group = selectedFlag.conditionGroups[0] ?? { conditions: selectedFlag.targetingRules ?? [] };
+                      updateMutation.mutate({
+                        id: selectedFlag.id,
+                        patch: {
+                          conditionGroups: [
+                            {
+                              ...group,
+                              conditions: group.conditions,
+                              rollout,
+                              variant: selectedFlag.conditionGroups[0]?.variant ?? null,
+                            },
+                          ],
+                        },
+                      });
+                    }}
                   />
-                  {detailTab === 'conditions' ? (
-                    <FeatureFlagConditionSummary websiteId={websiteId!} flag={selectedFlag} />
-                  ) : null}
-                  {detailTab === 'history' ? (
-                    <FeatureFlagHistory websiteId={websiteId!} flagId={selectedFlag.id} />
-                  ) : null}
-                  {detailTab === 'overview' ? (
-                  <>
-                  <div className="detail-stats">
-                    <div>
-                      <span className="stat-label">{t('featureFlagRollout')}</span>
-                      {canEdit && selectedFlag.conditionGroups.length === 1 ? (
-                        <FeatureFlagRolloutInput
-                          flag={selectedFlag}
-                          onCommit={(rollout) =>
-                            updateMutation.mutate({
-                              id: selectedFlag.id,
-                              patch: {
-                                conditionGroups: [{ ...selectedFlag.conditionGroups[0], rollout, variant: selectedFlag.conditionGroups[0].variant ?? null }],
-                              },
-                            })
-                          }
-                        />
-                      ) : (
-                        <strong className="stat-value">
-                          {selectedFlag.conditionGroups.length === 1
-                            ? `${selectedFlag.rollout}%`
-                            : t('featureFlagRolloutPerGroup')}
-                        </strong>
-                      )}
-                    </div>
-                    <div>
-                      <span className="stat-label">{t('featureFlagExposures')}</span>
-                      <strong className="stat-value">
-                        {formatNumber((selectedFlag.summary?.exposures ?? 0))}
-                      </strong>
-                    </div>
-                    <div>
-                      <span className="stat-label">{t('sessions')}</span>
-                      <strong className="stat-value">
-                        {formatNumber((selectedFlag.summary?.sessions ?? 0))}
-                      </strong>
-                    </div>
-                    <div>
-                      <span className="stat-label">{t('lastSeen')}</span>
-                      <strong className="stat-value">
-                        {formatTime(selectedFlag.summary?.lastCalledAt)}
-                      </strong>
-                    </div>
-                    <div>
-                      <span className="stat-label">{t('created')}</span>
-                      <strong className="stat-value">{formatDate(selectedFlag.createdAt)}</strong>
-                    </div>
+                ) : (
+                  <div className="master-detail-pane">
+                    <EmptyState icon={<Flag strokeWidth={2} />} title={t('productSelectFlag')} />
                   </div>
+                )
+              }
+            />
+          ) : (
+            <EmptyState
+              variant="rich"
+              icon={<Flag strokeWidth={2} />}
+              title={t('featureFlagsEmptyTitle')}
+              description={t('featureFlagsEmptyBody')}
+              action={createButton}
+            />
+          )}
+        </DataViewState>
 
-                  {selectedFlag.summary?.health ? (
-                    <div className="detail-section">
-                      <div className="panel-header compact-panel-header">
-                        <div>
-                          <h3 className="section-title experiment-title">{t('featureFlagHealth')}</h3>
-                        </div>
-                      </div>
-                      <div className="feature-flag-health">
-                        <span className={featureFlagHealthClass(selectedFlag.summary.health.status)}>
-                          {t(`featureFlagHealth_${selectedFlag.summary.health.status}`)}
-                        </span>
-                        {selectedFlag.summary.health.issues.length ? (
-                          <div className="feature-flag-health-issues">
-                            {selectedFlag.summary.health.issues.map((issue) => (
-                              <span key={issue} className="text-muted">
-                                {featureFlagIssueLabel(issue)}
-                              </span>
-                            ))}
-                          </div>
-                        ) : null}
-                        {selectedFlag.summary.health.dominantVariant ? (
-                          <div className="text-muted">
-                            {t('featureFlagDominantVariant')}: {selectedFlag.summary.health.dominantVariant} ·{' '}
-                            {formatNumber(selectedFlag.summary.health.dominantShare ?? 0)}%
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {selectedFlag.summary?.variants.length ? (
-                    <div className="detail-section">
-                      <div className="panel-header compact-panel-header">
-                        <div>
-                          <h3 className="section-title experiment-title">{t('featureFlagExposures')}</h3>
-                        </div>
-                      </div>
-                      <div className="feature-flag-exposure-bars">
-                        {selectedFlag.summary.variants.map((variant) => (
-                          <div key={variant.variant} className="feature-flag-exposure-row">
-                            <span className="text-muted">
-                              {variant.variant} · {formatNumber(variant.exposures)}
-                            </span>
-                            <span className="feature-flag-exposure-track" aria-hidden>
-                              <span style={{ width: `${Math.min(100, variant.percentage)}%` }} />
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {selectedFlag.summary?.trend.length ? (
-                    <div className="detail-section">
-                      <div className="panel-header compact-panel-header">
-                        <div>
-                          <h3 className="section-title experiment-title">{t('trend')}</h3>
-                        </div>
-                      </div>
-                      <p className="text-muted">
-                        {formatTrendDate(selectedFlag.summary.trend.slice(-1)[0]?.date)} ·{' '}
-                        {formatNumber(selectedFlag.summary.trend.slice(-1)[0]?.exposures)}{' '}
-                        {t('featureFlagExposures')}
-                      </p>
-                    </div>
-                  ) : null}
-
-                  {selectedFlag.summary?.releases.length ? (
-                    <div className="detail-section">
-                      <div className="panel-header compact-panel-header">
-                        <div>
-                          <h3 className="section-title experiment-title">{t('featureFlagEvaluateRelease')}</h3>
-                        </div>
-                      </div>
-                      <div className="feature-flag-variants">
-                        {selectedFlag.summary.releases.map((release) => (
-                          <span key={release.release} className="badge">
-                            {release.release} · {formatNumber(release.exposures)}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {selectedFlag.summary?.environments.length ? (
-                    <div className="detail-section">
-                      <div className="panel-header compact-panel-header">
-                        <div>
-                          <h3 className="section-title experiment-title">
-                            {t('featureFlagEvaluateEnvironment')}
-                          </h3>
-                        </div>
-                      </div>
-                      <div className="feature-flag-variants">
-                        {selectedFlag.summary.environments.map((environment) => (
-                          <span key={environment.environment} className="badge">
-                            {environment.environment} · {formatNumber(environment.exposures)}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {selectedFlag.summary?.recent.length ? (
-                    <div className="detail-section">
-                      <div className="panel-header compact-panel-header">
-                        <div>
-                          <h3 className="section-title experiment-title">{t('featureFlagExposures')}</h3>
-                        </div>
-                      </div>
-                      <div className="feature-flag-recent">
-                        {selectedFlag.summary.recent.map((exposure) => (
-                          <div key={exposure.id} className="feature-flag-recent-row">
-                            <span className="badge">{exposure.variant ?? t('featureFlagVariantControl')}</span>
-                            <span className="text-muted">{exposure.urlPath || '/'}</span>
-                            {exposure.release ? (
-                              <span className="text-muted">{exposure.release}</span>
-                            ) : null}
-                            {exposure.environment ? (
-                              <span className="text-muted">{exposure.environment}</span>
-                            ) : null}
-                            <Link
-                              to={`/websites/${websiteId}/sessions/${exposure.sessionId}`}
-                              className="inline-link"
-                            >
-                              {exposure.sessionId.slice(0, 8)}
-                              <ExternalLink size={12} strokeWidth={2} aria-hidden />
-                            </Link>
-                            <span className="text-muted">{formatTime(exposure.createdAt)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                  </>
-                  ) : null}
-                </MasterDetailPane>
-              ) : null
+        {editor && websiteId ? (
+          <FeatureFlagEditorDialog
+            websiteId={websiteId}
+            flag={editor === 'new' ? null : editor}
+            saving={editor === 'new' ? createMutation.isPending : updateMutation.isPending}
+            error={(editor === 'new' ? createMutation.error : updateMutation.error) as Error | null}
+            onClose={() => {
+              createMutation.reset();
+              updateMutation.reset();
+              setEditor(null);
+            }}
+            onSave={(body) =>
+              editor === 'new' ? createMutation.mutate(body) : updateMutation.mutate({ id: editor.id, patch: body })
             }
           />
-        ) : (
-          <EmptyState title={t('featureFlagsEmptyTitle')} description={t('featureFlagsEmptyBody')} />
-        )}
-      </section>
-
-      {editor ? (
-        <FeatureFlagEditorDialog
-          websiteId={websiteId!}
-          flag={editor === 'new' ? null : editor}
-          saving={editor === 'new' ? createMutation.isPending : updateMutation.isPending}
-          error={(editor === 'new' ? createMutation.error : updateMutation.error) as Error | null}
-          onClose={() => {
-            createMutation.reset();
-            updateMutation.reset();
-            setEditor(null);
-          }}
-          onSave={(body) =>
-            editor === 'new' ? createMutation.mutate(body) : updateMutation.mutate({ id: editor.id, patch: body })
-          }
-        />
-      ) : null}
+        ) : null}
       </PageBody>
     </Page>
   );

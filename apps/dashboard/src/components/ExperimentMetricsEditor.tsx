@@ -1,5 +1,6 @@
-import { Plus } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { EventCatalogPicker } from './EventCatalogPicker';
+import { FormSection } from './product/ProductForm';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -56,8 +57,8 @@ function MetricFields({
   onRemove?: () => void;
 }) {
   return (
-    <div className="experiment-metric-fields">
-      <div className="field">
+    <div className={onRemove ? 'product-metric-row has-remove' : 'product-metric-row'}>
+      <div className="field product-field">
         <Label htmlFor={`${idPrefix}-type`}>{t('experimentMetricTypeLabel')}</Label>
         <select
           id={`${idPrefix}-type`}
@@ -72,7 +73,7 @@ function MetricFields({
           ))}
         </select>
       </div>
-      <div className="field">
+      <div className="field product-field">
         <Label htmlFor={`${idPrefix}-event`}>{t('experimentMetricEvent')}</Label>
         <EventCatalogPicker
           mode="single"
@@ -84,10 +85,11 @@ function MetricFields({
         />
       </div>
       {isPropertyMetric(metric.type) ? (
-        <div className="field">
+        <div className="field product-field">
           <Label htmlFor={`${idPrefix}-property`}>{t('experimentMetricProperty')}</Label>
           <Input
             id={`${idPrefix}-property`}
+            className="mono"
             value={metric.property ?? ''}
             placeholder="revenue"
             onChange={(event) => onChange({ ...metric, property: event.target.value })}
@@ -95,16 +97,25 @@ function MetricFields({
         </div>
       ) : null}
       {onRemove ? (
-        <div className="experiment-metric-remove">
-          <Button type="button" variant="destructive-ghost" size="sm" onClick={onRemove}>
-            {t('remove')}
-          </Button>
-        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="product-metric-remove"
+          aria-label={t('remove')}
+          onClick={onRemove}
+        >
+          <X size={14} strokeWidth={2} aria-hidden />
+        </Button>
       ) : null}
     </div>
   );
 }
 
+/**
+ * Primary metric (with the minimum detectable effect that drives sample-size guidance) and up
+ * to five secondary metrics, as two sections of the experiment dialog.
+ */
 export function ExperimentMetricsEditor({
   websiteId,
   idPrefix,
@@ -125,12 +136,12 @@ export function ExperimentMetricsEditor({
   onSecondaryChange: (metrics: ExperimentMetric[]) => void;
   onMinimumDetectableEffectChange: (value: string) => void;
 }) {
+  const mdeInvalid = parseMdeInput(minimumDetectableEffect) === 'invalid';
   return (
-    <div className="experiment-metrics-editor">
-      <fieldset className="experiment-metric-group">
-        <legend className="experiment-metric-legend">{t('experimentPrimaryMetric')}</legend>
+    <>
+      <FormSection title={t('experimentPrimaryMetric')} lead={t('productExpPrimaryLead')}>
         <MetricFields websiteId={websiteId} idPrefix={`${idPrefix}-primary`} metric={primary} onChange={onPrimaryChange} />
-        <div className="field experiment-mde-field">
+        <div className="field product-field product-mde-field">
           <Label htmlFor={`${idPrefix}-mde`}>{t('experimentMdeLabel')}</Label>
           <Input
             id={`${idPrefix}-mde`}
@@ -141,18 +152,28 @@ export function ExperimentMetricsEditor({
             step={0.5}
             value={minimumDetectableEffect}
             placeholder={String(DEFAULT_MDE_PERCENT)}
+            aria-invalid={mdeInvalid || undefined}
             onChange={(event) => onMinimumDetectableEffectChange(event.target.value)}
           />
-          <p className="field-hint">{t('experimentMdeHint')}</p>
+          <p className={mdeInvalid ? 'field-hint text-danger' : 'field-hint'}>{t('experimentMdeHint')}</p>
         </div>
-      </fieldset>
-      <fieldset className="experiment-metric-group">
-        <legend className="experiment-metric-legend">
-          {t('experimentSecondaryMetrics')}{' '}
-          <span className="text-muted">
-            {secondary.length}/{MAX_SECONDARY_METRICS}
-          </span>
-        </legend>
+      </FormSection>
+      <FormSection
+        title={`${t('experimentSecondaryMetrics')} · ${secondary.length}/${MAX_SECONDARY_METRICS}`}
+        lead={t('productExpSecondaryLead')}
+        action={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={secondary.length >= MAX_SECONDARY_METRICS}
+            onClick={() => onSecondaryChange([...secondary, emptyMetric()])}
+          >
+            <Plus size={14} strokeWidth={2} aria-hidden />
+            {t('experimentAddSecondaryMetric')}
+          </Button>
+        }
+      >
         {secondary.map((metric, index) => (
           <MetricFields
             key={index}
@@ -163,20 +184,8 @@ export function ExperimentMetricsEditor({
             onRemove={() => onSecondaryChange(secondary.filter((_, i) => i !== index))}
           />
         ))}
-        <div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={secondary.length >= MAX_SECONDARY_METRICS}
-            onClick={() => onSecondaryChange([...secondary, emptyMetric()])}
-          >
-            <Plus size={14} strokeWidth={2} aria-hidden />
-            {t('experimentAddSecondaryMetric')}
-          </Button>
-        </div>
-      </fieldset>
-    </div>
+      </FormSection>
+    </>
   );
 }
 

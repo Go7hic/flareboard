@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { BellRing, History, Plus, Trash2 } from 'lucide-react';
 import type { InsightQuery } from '@flareboard/shared/insight-query';
 import { ModalDialog } from './ModalDialog';
 import { deleteTitle, useConfirm } from './ConfirmDialog';
-import { Badge } from './ui/badge';
+import { EmptyState } from './EmptyState';
+import { StatusBadge, type StatusTone } from './StatusBadge';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { Skeleton } from './ui/skeleton';
 import { Switch } from './ui/switch';
 import {
   api,
@@ -15,7 +18,7 @@ import {
   type InsightAlertCheck,
   type InsightAlertCondition,
 } from '../lib/api';
-import { formatDateTime, formatNumber } from '../lib/format';
+import { formatDateTime, formatNumber, formatShortDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
 
 const CONDITIONS: InsightAlertCondition[] = ['value_above', 'value_below', 'increase_above', 'decrease_above'];
@@ -45,13 +48,13 @@ function conditionText(alert: Pick<InsightAlert, 'condition' | 'threshold' | 'se
     .replace('{interval}', t(`insightAlertInterval_${alert.checkInterval}`));
 }
 
-function StateBadge({ alert }: { alert: InsightAlert }) {
-  if (!alert.enabled) return <Badge variant="outline">{t('insightAlertDisabled')}</Badge>;
-  if (alert.snoozedUntil && alert.snoozedUntil > Date.now()) return <Badge variant="secondary">{t('insightAlertSnoozed')}</Badge>;
-  if (alert.lastState === 'firing') return <Badge variant="destructive">{t('insightAlertFiring')}</Badge>;
-  if (alert.lastState === 'error') return <Badge variant="warning">{t('insightAlertErrored')}</Badge>;
-  if (alert.lastState === 'ok') return <Badge variant="outline">{t('insightAlertOk')}</Badge>;
-  return <Badge variant="outline">{t('insightAlertPending')}</Badge>;
+function alertState(alert: InsightAlert): { tone: StatusTone; label: string } {
+  if (!alert.enabled) return { tone: 'neutral', label: t('insightAlertDisabled') };
+  if (alert.snoozedUntil && alert.snoozedUntil > Date.now()) return { tone: 'neutral', label: t('insightAlertSnoozed') };
+  if (alert.lastState === 'firing') return { tone: 'danger', label: t('insightAlertFiring') };
+  if (alert.lastState === 'error') return { tone: 'warning', label: t('insightAlertErrored') };
+  if (alert.lastState === 'ok') return { tone: 'success', label: t('insightAlertOk') };
+  return { tone: 'neutral', label: t('insightAlertPending') };
 }
 
 function AlertHistory({ insightId, alertId }: { insightId: string; alertId: string }) {
@@ -60,11 +63,11 @@ function AlertHistory({ insightId, alertId }: { insightId: string; alertId: stri
     queryFn: () => api<{ checks: InsightAlertCheck[] }>(`/api/insights/${insightId}/alerts/${alertId}/history`),
   });
   const checks = history.data?.checks ?? [];
-  if (history.isLoading) return <div className="skeleton" style={{ height: '1.5rem' }} />;
-  if (!checks.length) return <p className="text-muted">{t('insightAlertNoChecks')}</p>;
+  if (history.isLoading) return <Skeleton className="h-16 w-full" />;
+  if (!checks.length) return <p className="ws-muted-line">{t('insightAlertNoChecks')}</p>;
   return (
-    <div className="table-scroll">
-      <table className="data-table insight-alert-history">
+    <div className="table-scroll ws-alert-history">
+      <table className="data-table">
         <thead>
           <tr>
             <th>{t('insightAlertInterval')}</th>
@@ -76,18 +79,24 @@ function AlertHistory({ insightId, alertId }: { insightId: string; alertId: stri
         <tbody>
           {checks.map((check) => (
             <tr key={check.id}>
-              <td>{formatDateTime(check.intervalStart)}</td>
-              <td className="num">{check.value == null ? '-' : formatNumber(check.value, { maximumFractionDigits: 2 })}</td>
+              <td className="ws-nowrap" title={formatDateTime(check.intervalStart)}>
+                {formatShortDateTime(check.intervalStart)}
+              </td>
+              <td className="num">{check.value == null ? '–' : formatNumber(check.value, { maximumFractionDigits: 2 })}</td>
               <td className="num">
-                {check.previousValue == null ? '-' : formatNumber(check.previousValue, { maximumFractionDigits: 2 })}
+                {check.previousValue == null ? '–' : formatNumber(check.previousValue, { maximumFractionDigits: 2 })}
               </td>
               <td>
-                {check.state === 'firing'
-                  ? `${t('insightAlertFiring')}${check.delivered ? ` · ${t('insightAlertDelivered')}` : ''}`
-                  : check.state === 'error'
-                    ? `${t('insightAlertErrored')}${check.error ? `: ${check.error}` : ''}`
-                    : t('insightAlertOk')}
-                {check.state === 'firing' && !check.delivered && check.error ? ` · ${check.error}` : ''}
+                {check.state === 'firing' ? (
+                  <StatusBadge tone="danger">
+                    {check.delivered ? `${t('insightAlertFiring')} · ${t('insightAlertDelivered')}` : t('insightAlertFiring')}
+                  </StatusBadge>
+                ) : check.state === 'error' ? (
+                  <StatusBadge tone="warning">{t('insightAlertErrored')}</StatusBadge>
+                ) : (
+                  <StatusBadge tone="success">{t('insightAlertOk')}</StatusBadge>
+                )}
+                {check.error ? <span className="ws-cell-sub">{check.error}</span> : null}
               </td>
             </tr>
           ))}
@@ -123,17 +132,17 @@ function AlertFormDialog({ insight, onClose }: { insight: Insight; onClose: () =
   });
 
   return (
-    <ModalDialog className="insight-alert-dialog" aria-label={t('insightAlertNew')} onClose={onClose}>
+    <ModalDialog className="ws-dialog--md" aria-label={t('insightAlertNew')} onClose={onClose}>
       <header className="dialog-header">
         <h2 className="dialog-title">{t('insightAlertNew')}</h2>
-        <p className="text-muted">{t('insightAlertLead')}</p>
+        <p>{t('insightAlertLead')}</p>
       </header>
       <div className="dialog-body">
         <div className="field">
           <Label htmlFor="alert-name">{t('name')}</Label>
           <Input id="alert-name" value={name} onChange={(event) => setName(event.target.value)} />
         </div>
-        <div className="insight-alert-grid">
+        <div className="ws-form-grid">
           <div className="field">
             <Label htmlFor="alert-series">{t('insightSeries')}</Label>
             <select id="alert-series" className="select" value={seriesKey} onChange={(event) => setSeriesKey(event.target.value)}>
@@ -208,8 +217,12 @@ function AlertFormDialog({ insight, onClose }: { insight: Insight; onClose: () =
             />
           </div>
         </div>
-        <p className="text-muted field-hint">{t('insightAlertEvaluationHint')}</p>
-        {createMutation.error ? <p className="text-danger">{(createMutation.error as Error).message}</p> : null}
+        <p className="field-hint">{t('insightAlertEvaluationHint')}</p>
+        {createMutation.error ? (
+          <p className="text-danger" role="alert">
+            {(createMutation.error as Error).message}
+          </p>
+        ) : null}
       </div>
       <footer className="dialog-footer">
         <Button type="button" variant="ghost" onClick={onClose}>
@@ -250,96 +263,112 @@ export function InsightAlertsPanel({ insight, canEdit }: { insight: Insight; can
   const alerts = alertsQuery.data?.alerts ?? [];
 
   return (
-    <section className="detail-section insight-alerts-panel">
-      <div className="panel-header compact-panel-header">
+    <section className="detail-section ws-alerts">
+      <div className="ws-result-toolbar">
         <div>
-          <h3 className="section-title">{t('insightAlerts')}</h3>
-          <p className="text-muted">{t('insightAlertsLead')}</p>
+          <h3 className="card-title">{t('insightAlerts')}</h3>
+          <p className="card-description">{t('insightAlertsLead')}</p>
         </div>
         {canEdit ? (
-          <Button type="button" variant="secondary" size="sm" onClick={() => setCreating(true)}>
+          <Button type="button" variant="outline" size="sm" onClick={() => setCreating(true)}>
+            <Plus aria-hidden />
             {t('insightAlertNew')}
           </Button>
         ) : null}
       </div>
-      {alertsQuery.isLoading ? <div className="skeleton" style={{ height: '2rem' }} /> : null}
-      {!alertsQuery.isLoading && !alerts.length ? <p className="text-muted">{t('insightAlertsEmpty')}</p> : null}
-      <ul className="list-plain insight-alert-list">
-        {alerts.map((alert) => {
-          const snoozed = Boolean(alert.snoozedUntil && alert.snoozedUntil > Date.now());
-          return (
-            <li key={alert.id} className="insight-alert-row">
-              <div className="insight-alert-row-head">
-                <div className="insight-alert-row-main">
-                  <span className="insight-alert-row-title">
-                    <strong>{alert.name}</strong> <StateBadge alert={alert} />
-                  </span>
-                  <span className="text-muted">
-                    {conditionText(alert)} · {alert.channel === 'email' ? t('email') : t('webhook')}: {alert.target}
-                  </span>
-                  {snoozed ? (
-                    <span className="text-muted">{t('insightAlertSnoozedUntil').replace('{date}', formatDateTime(alert.snoozedUntil))}</span>
-                  ) : null}
-                </div>
-                <div className="insight-alert-row-actions">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    aria-expanded={openHistory === alert.id}
-                    onClick={() => setOpenHistory(openHistory === alert.id ? null : alert.id)}
-                  >
-                    {t('insightAlertHistory')}
-                  </Button>
-                  {canEdit ? (
-                    <>
-                      {snoozed ? (
+      {alertsQuery.isLoading ? <Skeleton className="h-12 w-full" /> : null}
+      {!alertsQuery.isLoading && !alerts.length ? (
+        <EmptyState icon={<BellRing />} title={t('insightAlertsEmpty')} />
+      ) : null}
+      {alerts.length ? (
+        <ul className="ws-alert-list">
+          {alerts.map((alert) => {
+            const snoozed = Boolean(alert.snoozedUntil && alert.snoozedUntil > Date.now());
+            const state = alertState(alert);
+            return (
+              <li key={alert.id} className="ws-alert">
+                <div className="ws-alert-head">
+                  <div className="ws-alert-main">
+                    <span className="ws-alert-title">
+                      {alert.name}
+                      <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
+                    </span>
+                    <span className="ws-alert-meta">
+                      {conditionText(alert)} · {alert.channel === 'email' ? t('email') : t('webhook')}: {alert.target}
+                    </span>
+                    {snoozed ? (
+                      <span className="ws-alert-meta">
+                        {t('insightAlertSnoozedUntil').replace('{date}', formatShortDateTime(alert.snoozedUntil))}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="ws-alert-actions">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-expanded={openHistory === alert.id}
+                      onClick={() => setOpenHistory(openHistory === alert.id ? null : alert.id)}
+                    >
+                      <History aria-hidden />
+                      {t('insightAlertHistory')}
+                    </Button>
+                    {canEdit ? (
+                      <>
+                        {snoozed ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => patchMutation.mutate({ id: alert.id, patch: { snoozedUntil: null } })}
+                          >
+                            {t('insightAlertUnsnooze')}
+                          </Button>
+                        ) : (
+                          <select
+                            className="select ws-alert-snooze"
+                            aria-label={t('insightAlertSnooze')}
+                            value=""
+                            onChange={(event) => {
+                              const days = Number(event.target.value);
+                              if (days > 0) patchMutation.mutate({ id: alert.id, patch: { snoozedUntil: Date.now() + days * DAY } });
+                            }}
+                          >
+                            <option value="">{t('insightAlertSnooze')}</option>
+                            <option value="1">{t('insightAlertSnoozeDay')}</option>
+                            <option value="7">{t('insightAlertSnoozeWeek')}</option>
+                          </select>
+                        )}
+                        <Switch
+                          checked={alert.enabled}
+                          aria-label={t('insightAlertEnabled')}
+                          onCheckedChange={(checked) => patchMutation.mutate({ id: alert.id, patch: { enabled: checked } })}
+                        />
                         <Button
                           type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => patchMutation.mutate({ id: alert.id, patch: { snoozedUntil: null } })}
+                          variant="destructive-ghost"
+                          size="icon-sm"
+                          aria-label={t('delete')}
+                          title={t('delete')}
+                          onClick={() => confirm({ title: deleteTitle(alert.name), onConfirm: () => deleteMutation.mutate(alert.id) })}
                         >
-                          {t('insightAlertUnsnooze')}
+                          <Trash2 aria-hidden />
                         </Button>
-                      ) : (
-                        <select
-                          className="select insight-alert-snooze"
-                          aria-label={t('insightAlertSnooze')}
-                          value=""
-                          onChange={(event) => {
-                            const days = Number(event.target.value);
-                            if (days > 0) patchMutation.mutate({ id: alert.id, patch: { snoozedUntil: Date.now() + days * DAY } });
-                          }}
-                        >
-                          <option value="">{t('insightAlertSnooze')}</option>
-                          <option value="1">{t('insightAlertSnoozeDay')}</option>
-                          <option value="7">{t('insightAlertSnoozeWeek')}</option>
-                        </select>
-                      )}
-                      <Switch
-                        checked={alert.enabled}
-                        aria-label={t('insightAlertEnabled')}
-                        onCheckedChange={(checked) => patchMutation.mutate({ id: alert.id, patch: { enabled: checked } })}
-                      />
-                      <Button
-                        type="button"
-                        variant="destructive-ghost"
-                        size="sm"
-                        onClick={() => confirm({ title: deleteTitle(alert.name), onConfirm: () => deleteMutation.mutate(alert.id) })}
-                      >
-                        {t('delete')}
-                      </Button>
-                    </>
-                  ) : null}
+                      </>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-              {openHistory === alert.id ? <AlertHistory insightId={insight.id} alertId={alert.id} /> : null}
-            </li>
-          );
-        })}
-      </ul>
-      {patchMutation.error ? <p className="text-danger">{(patchMutation.error as Error).message}</p> : null}
+                {openHistory === alert.id ? <AlertHistory insightId={insight.id} alertId={alert.id} /> : null}
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+      {patchMutation.error ? (
+        <p className="text-danger" role="alert">
+          {(patchMutation.error as Error).message}
+        </p>
+      ) : null}
       {creating ? <AlertFormDialog insight={insight} onClose={() => setCreating(false)} /> : null}
     </section>
   );

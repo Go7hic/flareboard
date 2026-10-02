@@ -1,21 +1,42 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import {
+  ArrowRight,
+  ArrowUpRight,
+  CircleDollarSign,
+  FileText,
+  Flag,
+  Funnel,
+  Gauge,
+  Layers,
+  Megaphone,
+  Repeat,
+  Route,
+  Save,
+  Target,
+  UsersRound,
+  type LucideIcon,
+} from 'lucide-react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ConfirmDialog } from '../components/ConfirmDialog';
-import { DateRangePicker } from '../components/DateRangePicker';
+import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
 import { DataViewState } from '../components/DataViewState';
+import { DateRangePicker } from '../components/DateRangePicker';
+import { EmptyState } from '../components/EmptyState';
+import { ModalDialog } from '../components/ModalDialog';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
-import { ProductLineCrossLinks } from '../components/ProductLineCrossLinks';
+import { SectionCard } from '../components/SectionCard';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { EmptyState } from '../components/EmptyState';
+import { Skeleton } from '../components/ui/skeleton';
 import { api, type Website } from '../lib/api';
 import { isMetricTab } from '../lib/breakdown-dimensions';
 import { type DateRangePreset, presetToRange } from '../lib/dateRange';
 import { t } from '../lib/i18n';
 import { useDemoSession } from '../lib/useDemoSession';
+import { saveWebsiteRange, type StoredRange } from '../lib/websiteRangeStorage';
+import { pickWorkspaceWebsite, rememberWorkspaceWebsite } from '../components/workspace/workspaceWebsite';
 
 type SavedReport = {
   id: string;
@@ -33,44 +54,30 @@ type ReportTemplate = {
   defaultParameters: Record<string, unknown>;
 };
 
-const REPORT_HUB_SECTIONS = [
-  { id: 'funnel', labelKey: 'funnel' as const, route: 'funnel', descriptionKey: 'featFunnelBody' as const },
-  { id: 'retention', labelKey: 'retentionCohorts' as const, route: 'retention', descriptionKey: 'featRetentionBody' as const },
-  { id: 'journey', labelKey: 'userJourneys' as const, route: 'journeys', descriptionKey: 'featJourneysBody' as const },
-  { id: 'attribution', labelKey: 'attribution' as const, route: 'attribution', descriptionKey: 'featAttributionBody' as const },
-  { id: 'breakdown', labelKey: 'breakdownCountry' as const, route: 'breakdown', descriptionKey: 'featBreakdownBody' as const },
-  { id: 'performance', labelKey: 'webVitals' as const, route: 'performance', descriptionKey: 'featWebVitalsBody' as const },
-  { id: 'utm', labelKey: 'utmBreakdown' as const, route: 'utm', descriptionKey: 'featUtmBody' as const },
-  { id: 'revenue', labelKey: 'revenue' as const, route: 'revenue', descriptionKey: 'featRevenueBody' as const },
-  { id: 'cohorts', labelKey: 'cohorts' as const, route: 'cohorts', descriptionKey: 'featCohortsBody' as const },
-  { id: 'goals', labelKey: 'goals' as const, route: 'goals', descriptionKey: 'featGoalsBody' as const },
-] as const;
+type ReportKind = {
+  id: string;
+  route: string;
+  icon: LucideIcon;
+};
+
+/** Report types in gallery order; titles and one-line descriptions are `workspaceReport_<id>`. */
+const REPORT_KINDS: ReportKind[] = [
+  { id: 'funnel', route: 'funnel', icon: Funnel },
+  { id: 'retention', route: 'retention', icon: Repeat },
+  { id: 'journey', route: 'journeys', icon: Route },
+  { id: 'attribution', route: 'attribution', icon: Target },
+  { id: 'breakdown', route: 'breakdown', icon: Layers },
+  { id: 'performance', route: 'performance', icon: Gauge },
+  { id: 'utm', route: 'utm', icon: Megaphone },
+  { id: 'revenue', route: 'revenue', icon: CircleDollarSign },
+  { id: 'cohorts', route: 'cohorts', icon: UsersRound },
+  { id: 'goals', route: 'goals', icon: Flag },
+];
 
 function reportTypeLabel(type: string) {
-  switch (type) {
-    case 'funnel':
-      return t('funnel');
-    case 'retention':
-      return t('retention');
-    case 'journey':
-      return t('journey');
-    case 'attribution':
-      return t('attribution');
-    case 'breakdown':
-      return t('breakdownMetrics');
-    case 'performance':
-      return t('webVitals');
-    case 'utm':
-      return t('utmBreakdown');
-    case 'revenue':
-      return t('revenue');
-    case 'goals':
-      return t('goals');
-    case 'cohorts':
-      return t('cohorts');
-    default:
-      return type;
-  }
+  const key = `workspaceReport_${type}`;
+  const label = t(key);
+  return label === key ? type : label;
 }
 
 function reportDestination(
@@ -79,8 +86,8 @@ function reportDestination(
   parameters: Record<string, unknown> = {},
   segmentId = '',
 ) {
-  const section = REPORT_HUB_SECTIONS.find((item) => item.id === type);
-  const route = section?.route ?? type;
+  const kind = REPORT_KINDS.find((item) => item.id === type);
+  const route = kind?.route ?? type;
   const search = new URLSearchParams();
   const segment = typeof parameters.segmentId === 'string' ? parameters.segmentId : segmentId;
   if (segment) search.set('segmentId', segment);
@@ -109,14 +116,13 @@ function reportDestination(
 export default function ReportsPage() {
   // The read-only demo runs reports but cannot save them.
   const { isDemo } = useDemoSession();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [websiteId, setWebsiteId] = useState('');
   const [segmentId, setSegmentId] = useState('');
-  const [funnelSteps, setFunnelSteps] = useState('signup,purchase');
-  const [savedName, setSavedName] = useState('');
-  const [savedType, setSavedType] = useState('funnel');
-  const [range, setRange] = useState({
+  const [saving, setSaving] = useState(false);
+  const [range, setRange] = useState<StoredRange>({
     preset: '30d' as DateRangePreset,
     ...presetToRange('30d'),
   });
@@ -125,20 +131,15 @@ export default function ReportsPage() {
     queryKey: ['websites'],
     queryFn: () => api<Website[]>('/api/websites'),
   });
+  const websites = useMemo(() => websitesQuery.data ?? [], [websitesQuery.data]);
 
   useEffect(() => {
-    if (websitesQuery.data?.length && !websiteId) {
-      setWebsiteId(websitesQuery.data[0].id);
+    if (websites.length && !websites.some((site) => site.id === websiteId)) {
+      setWebsiteId(pickWorkspaceWebsite(websites));
     }
-  }, [websitesQuery.data, websiteId]);
+  }, [websites, websiteId]);
 
-  const websiteQuery = useQuery({
-    queryKey: ['website', websiteId],
-    enabled: Boolean(websiteId),
-    queryFn: () => api<Website>(`/api/websites/${websiteId}`),
-  });
-
-  const timezone = websiteQuery.data?.timezone ?? 'UTC';
+  const timezone = websites.find((site) => site.id === websiteId)?.timezone ?? 'UTC';
 
   useEffect(() => {
     setRange((prev) => {
@@ -152,254 +153,359 @@ export default function ReportsPage() {
     enabled: Boolean(websiteId),
     queryFn: () => api<Array<{ id: string; name: string }>>(`/api/websites/${websiteId}/segments`),
   });
+  const segments = segmentsQuery.data ?? [];
+
+  useEffect(() => {
+    // A segment belongs to one website.
+    setSegmentId('');
+  }, [websiteId]);
 
   const savedReportsQuery = useQuery({
     queryKey: ['saved-reports'],
     queryFn: () => api<SavedReport[]>('/api/reports'),
   });
 
-  const reportTemplatesQuery = useQuery({
-    queryKey: ['report-templates'],
-    queryFn: () => api<ReportTemplate[]>('/api/reports/templates'),
-  });
-
-  const saveReportMutation = useMutation({
-    mutationFn: () => {
-      if (!savedName.trim() || !websiteId) throw new Error(t('reportName'));
-      return api('/api/reports', {
-        method: 'POST',
-        body: JSON.stringify({
-          websiteId,
-          type: savedType,
-          name: savedName.trim(),
-          description: selectedTemplate?.description ?? '',
-          parameters: buildSavedReportParameters(savedType),
-        }),
-      });
-    },
-    onSuccess: () => {
-      setSavedName('');
-      queryClient.invalidateQueries({ queryKey: ['saved-reports'] });
-    },
-  });
-
-  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const deleteReportMutation = useMutation({
     mutationFn: (reportId: string) => api(`/api/reports/${reportId}`, { method: 'DELETE' }),
-    onSuccess: () => {
-      setPendingDelete(null);
-      queryClient.invalidateQueries({ queryKey: ['saved-reports'] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['saved-reports'] }),
   });
 
-  const noWebsite = !websitesQuery.isLoading && !(websitesQuery.data ?? []).length;
-  const reportTemplates = reportTemplatesQuery.data ?? [
-    { type: 'funnel', name: reportTypeLabel('funnel'), description: '', defaultParameters: {} },
-    { type: 'retention', name: reportTypeLabel('retention'), description: '', defaultParameters: {} },
-    { type: 'journey', name: reportTypeLabel('journey'), description: '', defaultParameters: {} },
-  ];
-  const selectedTemplate = reportTemplates.find((template) => template.type === savedType);
-  const savedReportsForWebsite = (savedReportsQuery.data ?? []).filter((r) => r.websiteId === websiteId);
+  const noWebsite = !websitesQuery.isLoading && !websites.length;
+  const savedReports = (savedReportsQuery.data ?? []).filter((report) => report.websiteId === websiteId);
 
-  const hubLinks = useMemo(
-    () =>
-      REPORT_HUB_SECTIONS.map((section) => ({
-        ...section,
-        to: websiteId ? reportDestination(websiteId, section.id, {}, segmentId) : '',
-      })),
-    [websiteId, segmentId],
-  );
-
-  function buildSavedReportParameters(type: string) {
-    const base = {
-      ...(selectedTemplate?.defaultParameters ?? {}),
-      segmentId: segmentId || null,
-    };
-    if (type === 'funnel') {
-      return { ...base, steps: funnelSteps.split(',').map((step) => step.trim()).filter(Boolean) };
-    }
-    if (type === 'attribution') {
-      return { ...base, model: 'last', attributionType: 'path', step: '/' };
-    }
-    if (type === 'breakdown') {
-      return { ...base, dimension: 'country' };
-    }
-    return base;
+  /** The chosen range follows the visitor into the report (website pages read it on open). */
+  function carryRange(targetWebsiteId: string) {
+    saveWebsiteRange(targetWebsiteId, range);
   }
 
-  function loadSavedReport(report: SavedReport) {
+  function openSavedReport(report: SavedReport) {
+    carryRange(report.websiteId);
     navigate(reportDestination(report.websiteId, report.type, report.parameters, segmentId));
   }
 
-  return (
-    <Page className="page-reports">
-      <PageHeader
-        title={t('reports')}
-        lead={t('reportsSubtitle')}
-        backTo="/websites"
-        backLabel={t('websites')}
-        meta={<ProductLineCrossLinks surface="reports" />}
-      />
-
-      <PageBody>
-      {noWebsite ? (
-        <EmptyState variant="rich" className="section-gap" title={t('noWebsites')} description={t('noWebsitesHint')} />
-      ) : (
-        <div className="reports-layout">
-          <aside className="reports-sidebar">
-            <section className="panel reports-sidebar-panel">
-              <h2 className="section-title">{t('reportConfig')}</h2>
-              <div className="field">
-                <Label>{t('dateRange')}</Label>
-                <DateRangePicker value={range} onChange={setRange} popover timezone={timezone} />
-              </div>
-              <div className="field">
-                <Label htmlFor="report-website">{t('website')}</Label>
-                <select
-                  id="report-website"
-                  className="select"
-                  value={websiteId}
-                  onChange={(e) => setWebsiteId(e.target.value)}
-                >
-                  {(websitesQuery.data ?? []).map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {(segmentsQuery.data ?? []).length ? (
-                <div className="field">
-                  <Label htmlFor="report-segment">{t('segment')}</Label>
-                  <select
-                    id="report-segment"
-                    className="select"
-                    value={segmentId}
-                    onChange={(e) => setSegmentId(e.target.value)}
-                  >
-                    <option value="">{t('allVisitors')}</option>
-                    {(segmentsQuery.data ?? []).map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
-
-              <h3 className="reports-sidebar-subtitle">{t('savedReports')}</h3>
-              {isDemo ? null : (
-                <form
-                  className="reports-sidebar-form"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    saveReportMutation.mutate();
-                  }}
-                >
-                  <Input
-                    placeholder={t('reportName')}
-                    value={savedName}
-                    onChange={(e) => setSavedName(e.target.value)}
-                  />
-                  <select className="select" value={savedType} onChange={(e) => setSavedType(e.target.value)}>
-                    {reportTemplates.map((template) => (
-                      <option key={template.type} value={template.type}>
-                        {template.name || reportTypeLabel(template.type)}
-                      </option>
-                    ))}
-                  </select>
-                  {selectedTemplate?.description ? (
-                    <p className="text-muted reports-template-desc">{selectedTemplate.description}</p>
-                  ) : null}
-                  {savedType === 'funnel' ? (
-                    <Input
-                      value={funnelSteps}
-                      onChange={(e) => setFunnelSteps(e.target.value)}
-                      placeholder={t('funnelStepsPlaceholder')}
-                      aria-label={t('funnel')}
-                    />
-                  ) : null}
-                  <Button type="submit" variant="primary" size="sm" disabled={saveReportMutation.isPending}>
-                    {t('save')}
-                  </Button>
-                </form>
-              )}
-              <div className="section-gap">
-                <DataViewState
-                  loading={savedReportsQuery.isLoading}
-                  isEmpty={!savedReportsQuery.isLoading && savedReportsForWebsite.length === 0}
-                  emptyTitle={t('noSavedReports')}
-                >
-                  <ul className="list-plain">
-                    {savedReportsForWebsite.map((r) => (
-                      <li key={r.id} className="list-item reports-saved-row">
-                        <div className="reports-saved-main">
-                          <strong>{r.name}</strong>
-                          <span className="badge">{reportTypeLabel(r.type)}</span>
-                          {r.parameterSummary?.length ? (
-                            <div className="reports-saved-summary">
-                              {r.parameterSummary.map((item) => (
-                                <span key={`${r.id}-${item.label}`} className="text-muted">
-                                  {item.label}: {item.value}
-                                </span>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => loadSavedReport(r)}>
-                          {t('load')}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="destructive-ghost"
-                          size="sm"
-                          disabled={deleteReportMutation.isPending}
-                          onClick={() => setPendingDelete({ id: r.id, name: r.name })}
-                        >
-                          {t('delete')}
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                </DataViewState>
-              </div>
-            </section>
-          </aside>
-
-          <div className="reports-main">
-            <section className="panel section-gap">
-              <h2 className="section-title">{t('reportSections')}</h2>
-              <p className="text-muted reports-meta">{t('reportsHubSectionsLead')}</p>
-            </section>
-            <div className="reports-hub-grid">
-              {hubLinks.map((section) => (
-                <section key={section.id} className="panel reports-hub-card">
-                  <h3 className="reports-hub-card-title">{t(section.labelKey)}</h3>
-                  <p className="text-muted reports-hub-card-desc">{t(section.descriptionKey)}</p>
-                  {websiteId ? (
-                    <Button variant="outline" size="sm" asChild>
-                      <Link to={section.to}>{t('overviewMore')}</Link>
-                    </Button>
-                  ) : (
-                    <Button variant="outline" size="sm" disabled>
-                      {t('overviewMore')}
-                    </Button>
-                  )}
-                </section>
-              ))}
-            </div>
-          </div>
-        </div>
+  const scopeControls = websites.length ? (
+    <div className="ws-header-controls">
+      <select
+        className="select ws-header-select"
+        aria-label={t('website')}
+        value={websiteId}
+        onChange={(event) => {
+          setWebsiteId(event.target.value);
+          rememberWorkspaceWebsite(event.target.value);
+        }}
+      >
+        {websites.map((site) => (
+          <option key={site.id} value={site.id}>
+            {site.name}
+          </option>
+        ))}
+      </select>
+      {segments.length ? (
+        <select
+          className="select ws-header-select"
+          aria-label={t('segment')}
+          value={segmentId}
+          onChange={(event) => setSegmentId(event.target.value)}
+        >
+          <option value="">{t('allVisitors')}</option>
+          {segments.map((segment) => (
+            <option key={segment.id} value={segment.id}>
+              {segment.name}
+            </option>
+          ))}
+        </select>
+      ) : null}
+      <DateRangePicker value={range} onChange={setRange} popover timezone={timezone} />
+      {isDemo ? null : (
+        <Button variant="primary" onClick={() => setSaving(true)} disabled={!websiteId}>
+          <Save aria-hidden />
+          {t('workspaceSaveReport')}
+        </Button>
       )}
+    </div>
+  ) : null;
+
+  return (
+    <Page className="ws-page-reports">
+      <PageHeader title={t('reports')} lead={t('workspaceReportsLead')} actions={scopeControls} />
+
+      <PageBody className="stack">
+        {noWebsite ? (
+          <EmptyState
+            variant="rich"
+            icon={<FileText />}
+            title={t('noWebsites')}
+            description={t('workspaceReportsNoWebsite')}
+            action={
+              <Button variant="primary" render={<Link to="/websites?new=1" />}>
+                {t('addWebsite')}
+              </Button>
+            }
+          />
+        ) : (
+          <>
+            <section aria-labelledby="ws-report-gallery">
+              <h2 id="ws-report-gallery" className="visually-hidden">
+                {t('workspaceReportGallery')}
+              </h2>
+              <ul className="ws-template-grid">
+                {REPORT_KINDS.map((kind) => {
+                  const Icon = kind.icon;
+                  const to = websiteId ? reportDestination(websiteId, kind.id, {}, segmentId) : '';
+                  const body = (
+                    <>
+                      <span className="ws-template-icon" aria-hidden>
+                        <Icon strokeWidth={2} />
+                      </span>
+                      <span className="ws-template-title">{reportTypeLabel(kind.id)}</span>
+                      <span className="ws-template-desc">{t(`workspaceReportDesc_${kind.id}`)}</span>
+                      <span className="ws-template-open">
+                        {t('workspaceOpenReport')}
+                        <ArrowRight aria-hidden />
+                      </span>
+                    </>
+                  );
+                  return (
+                    <li key={kind.id}>
+                      {websiteId ? (
+                        <Link to={to} className="ws-template-card" onClick={() => carryRange(websiteId)}>
+                          {body}
+                        </Link>
+                      ) : (
+                        <span className="ws-template-card is-disabled">{body}</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+
+            <SectionCard
+              flush
+              title={t('savedReports')}
+              description={t('workspaceSavedReportsLead')}
+              actions={
+                savedReports.length && !isDemo ? (
+                  <Button variant="outline" size="sm" onClick={() => setSaving(true)} disabled={!websiteId}>
+                    {t('workspaceSaveReport')}
+                  </Button>
+                ) : undefined
+              }
+            >
+              <DataViewState
+                loading={savedReportsQuery.isLoading}
+                error={savedReportsQuery.isError ? savedReportsQuery.error : null}
+                onRetry={() => savedReportsQuery.refetch()}
+                loadingFallback={
+                  <div className="ws-table-skeleton">
+                    <div className="ws-table-skeleton-row">
+                      <Skeleton className="h-4 w-48" />
+                      <Skeleton className="ml-auto h-4 w-20" />
+                    </div>
+                  </div>
+                }
+              >
+                {savedReports.length ? (
+                  <div className="table-scroll">
+                    <table className="data-table ws-saved-reports-table">
+                      <thead>
+                        <tr>
+                          <th>{t('name')}</th>
+                          <th>{t('type')}</th>
+                          <th>{t('workspaceReportDetails')}</th>
+                          <th className="ws-row-actions">
+                            <span className="visually-hidden">{t('actions')}</span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {savedReports.map((report) => (
+                          <tr key={report.id}>
+                            <td>
+                              <button type="button" className="ws-link-button" onClick={() => openSavedReport(report)}>
+                                {report.name}
+                              </button>
+                            </td>
+                            <td>
+                              <span className="ws-type-chip">{reportTypeLabel(report.type)}</span>
+                            </td>
+                            <td className="text-muted">
+                              {report.parameterSummary?.length
+                                ? report.parameterSummary.map((item) => `${item.label}: ${item.value}`).join(' · ')
+                                : '–'}
+                            </td>
+                            <td className="ws-row-actions">
+                              <Button type="button" variant="ghost" size="sm" onClick={() => openSavedReport(report)}>
+                                {t('boardOpen')}
+                                <ArrowUpRight aria-hidden />
+                              </Button>
+                              {isDemo ? null : (
+                                <Button
+                                  type="button"
+                                  variant="destructive-ghost"
+                                  size="sm"
+                                  disabled={deleteReportMutation.isPending}
+                                  onClick={() =>
+                                    confirm({
+                                      title: deleteTitle(report.name),
+                                      onConfirm: () => deleteReportMutation.mutate(report.id),
+                                    })
+                                  }
+                                >
+                                  {t('delete')}
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={<Save />}
+                    title={t('noSavedReports')}
+                    description={t('workspaceSavedReportsEmpty')}
+                    action={
+                      isDemo || !websiteId ? undefined : (
+                        <Button variant="outline" size="sm" onClick={() => setSaving(true)}>
+                          {t('workspaceSaveReport')}
+                        </Button>
+                      )
+                    }
+                  />
+                )}
+              </DataViewState>
+            </SectionCard>
+          </>
+        )}
       </PageBody>
-      <ConfirmDialog
-        open={pendingDelete !== null}
-        onOpenChange={(open) => !open && setPendingDelete(null)}
-        title={t('confirmDeleteTitle').replace('{name}', pendingDelete?.name ?? '')}
-        description={t('confirmDeleteBody')}
-        pending={deleteReportMutation.isPending}
-        onConfirm={() => pendingDelete && deleteReportMutation.mutate(pendingDelete.id)}
-      />
+
+      {saving && websiteId ? (
+        <SaveReportDialog
+          websiteId={websiteId}
+          websiteName={websites.find((site) => site.id === websiteId)?.name ?? ''}
+          segmentId={segmentId}
+          onClose={() => setSaving(false)}
+        />
+      ) : null}
     </Page>
+  );
+}
+
+function SaveReportDialog({
+  websiteId,
+  websiteName,
+  segmentId,
+  onClose,
+}: {
+  websiteId: string;
+  websiteName: string;
+  segmentId: string;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState('');
+  const [type, setType] = useState('funnel');
+  const [funnelSteps, setFunnelSteps] = useState('signup,purchase');
+
+  const templatesQuery = useQuery({
+    queryKey: ['report-templates'],
+    queryFn: () => api<ReportTemplate[]>('/api/reports/templates'),
+  });
+  const templates =
+    templatesQuery.data ??
+    REPORT_KINDS.slice(0, 3).map((kind) => ({ type: kind.id, name: kind.id, description: '', defaultParameters: {} }));
+  const selectedTemplate = templates.find((template) => template.type === type);
+
+  function buildParameters() {
+    const base = { ...(selectedTemplate?.defaultParameters ?? {}), segmentId: segmentId || null };
+    if (type === 'funnel') {
+      return { ...base, steps: funnelSteps.split(',').map((step) => step.trim()).filter(Boolean) };
+    }
+    if (type === 'attribution') return { ...base, model: 'last', attributionType: 'path', step: '/' };
+    if (type === 'breakdown') return { ...base, dimension: 'country' };
+    return base;
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      api('/api/reports', {
+        method: 'POST',
+        body: JSON.stringify({
+          websiteId,
+          type,
+          name: name.trim(),
+          description: selectedTemplate?.description ?? '',
+          parameters: buildParameters(),
+        }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-reports'] });
+      onClose();
+    },
+  });
+
+  function onSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (name.trim()) saveMutation.mutate();
+  }
+
+  return (
+    <ModalDialog className="ws-dialog--sm" aria-label={t('workspaceSaveReport')} onClose={onClose}>
+      <form onSubmit={onSubmit}>
+        <header className="dialog-header">
+          <h2 className="dialog-title">{t('workspaceSaveReport')}</h2>
+          <p>{t('workspaceSaveReportLead').replace('{website}', websiteName)}</p>
+        </header>
+        <div className="dialog-body">
+          <div className="field">
+            <Label htmlFor="save-report-name">{t('reportName')}</Label>
+            <Input id="save-report-name" value={name} onChange={(event) => setName(event.target.value)} autoFocus />
+          </div>
+          <div className="field">
+            <Label htmlFor="save-report-type">{t('type')}</Label>
+            <select
+              id="save-report-type"
+              className="select"
+              value={type}
+              onChange={(event) => setType(event.target.value)}
+            >
+              {templates.map((template) => (
+                <option key={template.type} value={template.type}>
+                  {reportTypeLabel(template.type)}
+                </option>
+              ))}
+            </select>
+            <p className="field-hint">{t(`workspaceReportDesc_${type}`)}</p>
+          </div>
+          {type === 'funnel' ? (
+            <div className="field">
+              <Label htmlFor="save-report-steps">{t('workspaceFunnelSteps')}</Label>
+              <Input
+                id="save-report-steps"
+                value={funnelSteps}
+                onChange={(event) => setFunnelSteps(event.target.value)}
+                placeholder="signup,purchase"
+              />
+              <p className="field-hint">{t('workspaceFunnelStepsHint')}</p>
+            </div>
+          ) : null}
+          {saveMutation.error ? (
+            <p className="text-danger" role="alert">
+              {(saveMutation.error as Error).message}
+            </p>
+          ) : null}
+        </div>
+        <footer className="dialog-footer">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            {t('cancel')}
+          </Button>
+          <Button type="submit" variant="primary" disabled={!name.trim() || saveMutation.isPending}>
+            {t('save')}
+          </Button>
+        </footer>
+      </form>
+    </ModalDialog>
   );
 }

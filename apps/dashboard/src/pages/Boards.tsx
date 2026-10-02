@@ -1,18 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { LayoutGrid, LayoutTemplate, Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BoardEditorForm } from '../components/BoardEditorForm';
-import { CollapsibleSection } from '../components/CollapsibleSection';
 import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
+import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
+import { ModalDialog } from '../components/ModalDialog';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
-import { ProductLineCrossLinks } from '../components/ProductLineCrossLinks';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
-import { emptyStatsWidgetDraft, parseBoardConfig } from '../lib/board-config';
+import { Skeleton } from '../components/ui/skeleton';
+import { pickWorkspaceWebsite, rememberWorkspaceWebsite } from '../components/workspace/workspaceWebsite';
+import { emptyStatsWidgetDraft, normalizeBoardWidgetWidth, parseBoardConfig, type BoardWidget } from '../lib/board-config';
 import { api, type Board, type BoardTemplateSummary, type Insight, type Website } from '../lib/api';
-import { formatDateTime } from '../lib/format';
+import { formatDateTime, formatNumber, formatRelativeTime } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useDemoSession } from '../lib/useDemoSession';
 
@@ -22,14 +25,42 @@ function templateText(key: string, fallback: string) {
   return value === key ? fallback : value;
 }
 
-function TemplateGallery({ websites }: { websites: Website[] }) {
+/** The board's widget layout in miniature (12 columns: small 4, medium 6, large 8, full 12). */
+function BoardLayoutPreview({ widgets }: { widgets: BoardWidget[] }) {
+  if (!widgets.length) {
+    return (
+      <div className="ws-board-preview is-empty" aria-hidden>
+        <span className="ws-board-preview-cell ws-board-preview-cell--full" />
+      </div>
+    );
+  }
+  return (
+    <div className="ws-board-preview" aria-hidden>
+      {widgets.slice(0, 9).map((widget, index) => (
+        <span
+          key={index}
+          className={`ws-board-preview-cell ws-board-preview-cell--${normalizeBoardWidgetWidth(widget.width)}${
+            widget.type === 'stats' ? ' is-stats' : ''
+          }`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function NewBoardDialog({
+  websites,
+  insights,
+  onClose,
+}: {
+  websites: Website[];
+  insights: Insight[];
+  onClose: () => void;
+}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [websiteId, setWebsiteId] = useState('');
-
-  useEffect(() => {
-    if (!websiteId && websites.length) setWebsiteId(websites[0]!.id);
-  }, [websiteId, websites]);
+  const [tab, setTab] = useState<'template' | 'blank'>(websites.length ? 'template' : 'blank');
+  const [websiteId, setWebsiteId] = useState(() => pickWorkspaceWebsite(websites));
 
   const templatesQuery = useQuery({
     queryKey: ['board-templates'],
@@ -37,7 +68,7 @@ function TemplateGallery({ websites }: { websites: Website[] }) {
     staleTime: Infinity,
   });
 
-  const createMutation = useMutation({
+  const fromTemplate = useMutation({
     mutationFn: (template: BoardTemplateSummary) =>
       api<Board>(`/api/boards/templates/${template.id}`, {
         method: 'POST',
@@ -57,61 +88,126 @@ function TemplateGallery({ websites }: { websites: Website[] }) {
     },
   });
 
-  if (!websites.length) return null;
+  const blank = useMutation({
+    mutationFn: (payload: { name: string; parameters: Record<string, unknown> }) =>
+      api<Board>('/api/boards', {
+        method: 'POST',
+        body: JSON.stringify({ type: 'dashboard', name: payload.name, description: '', parameters: payload.parameters }),
+      }),
+    onSuccess: (board) => {
+      queryClient.invalidateQueries({ queryKey: ['boards'] });
+      navigate(`/boards/${board.id}`);
+    },
+  });
 
   return (
-    <section className="panel board-templates">
-      <div className="panel-header compact-panel-header">
-        <div>
-          <h2 className="section-title">{t('boardTemplatesTitle')}</h2>
-          <p className="section-lead">{t('boardTemplatesLead')}</p>
+    <ModalDialog className="ws-dialog--lg" aria-label={t('newBoard')} onClose={onClose}>
+      <header className="dialog-header">
+        <h2 className="dialog-title">{t('newBoard')}</h2>
+        <p>{tab === 'template' ? t('boardTemplatesLead') : t('newBoardLead')}</p>
+        <div className="segmented ws-dialog-tabs" role="tablist" aria-label={t('newBoard')}>
+          <button type="button" role="tab" aria-selected={tab === 'template'} onClick={() => setTab('template')}>
+            {t('boardTemplatesTitle')}
+          </button>
+          <button type="button" role="tab" aria-selected={tab === 'blank'} onClick={() => setTab('blank')}>
+            {t('workspaceBlankBoard')}
+          </button>
         </div>
-        <div className="field board-templates-website">
-          <Label htmlFor="board-template-website">{t('website')}</Label>
-          <select
-            id="board-template-website"
-            className="select"
-            value={websiteId}
-            onChange={(event) => setWebsiteId(event.target.value)}
-          >
-            {websites.map((website) => (
-              <option key={website.id} value={website.id}>
-                {website.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-      <ul className="list-plain board-template-grid">
-        {(templatesQuery.data ?? []).map((template) => (
-          <li key={template.id} className="board-template-card">
-            <h3 className="board-card-title">{templateText(`boardTemplate_${template.id}`, template.name)}</h3>
-            <p className="text-muted">{templateText(`boardTemplateLead_${template.id}`, template.description)}</p>
-            <p className="text-muted board-template-widgets">
-              {template.widgets.map((widget) => templateText(`boardTemplateWidget_${widget.key}`, widget.name)).join(' · ')}
-            </p>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={!websiteId || createMutation.isPending}
-              onClick={() => createMutation.mutate(template)}
+      </header>
+
+      {tab === 'template' ? (
+        <>
+          <div className="dialog-body">
+            {websites.length ? (
+              <div className="field ws-field-inline">
+                <Label htmlFor="board-template-website">{t('website')}</Label>
+                <select
+                  id="board-template-website"
+                  className="select"
+                  value={websiteId}
+                  onChange={(event) => {
+                    setWebsiteId(event.target.value);
+                    rememberWorkspaceWebsite(event.target.value);
+                  }}
+                >
+                  {websites.map((website) => (
+                    <option key={website.id} value={website.id}>
+                      {website.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <p className="ws-muted-line">{t('boardNoWebsites')}</p>
+            )}
+            <DataViewState
+              loading={templatesQuery.isLoading}
+              error={templatesQuery.isError ? templatesQuery.error : null}
+              onRetry={() => templatesQuery.refetch()}
+              loadingFallback={<Skeleton className="h-40 w-full" />}
             >
-              {t('boardTemplateUse')}
+              <ul className="ws-dialog-list ws-template-options">
+                {(templatesQuery.data ?? []).map((template) => (
+                  <li key={template.id} className="ws-dialog-row ws-template-option">
+                    <span className="ws-template-option-icon" aria-hidden>
+                      <LayoutTemplate />
+                    </span>
+                    <div className="ws-dialog-row-main">
+                      <span className="ws-dialog-row-title">{templateText(`boardTemplate_${template.id}`, template.name)}</span>
+                      <span className="ws-dialog-row-meta">
+                        {templateText(`boardTemplateLead_${template.id}`, template.description)}
+                      </span>
+                      <span className="ws-template-option-widgets">
+                        {template.widgets.map((widget) => templateText(`boardTemplateWidget_${widget.key}`, widget.name)).join(' · ')}
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!websiteId || fromTemplate.isPending}
+                      onClick={() => fromTemplate.mutate(template)}
+                    >
+                      {t('boardTemplateUse')}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </DataViewState>
+            {fromTemplate.error ? (
+              <p className="text-danger" role="alert">
+                {(fromTemplate.error as Error).message}
+              </p>
+            ) : null}
+          </div>
+          <footer className="dialog-footer">
+            <Button type="button" variant="ghost" onClick={onClose}>
+              {t('cancel')}
             </Button>
-          </li>
-        ))}
-      </ul>
-      {createMutation.error ? <p className="text-danger">{(createMutation.error as Error).message}</p> : null}
-    </section>
+          </footer>
+        </>
+      ) : (
+        <BoardEditorForm
+          websites={websites}
+          insights={insights}
+          initialName=""
+          initialWidgets={[emptyStatsWidgetDraft()]}
+          initialRangePreset="7d"
+          submitLabel={t('createBoard')}
+          isPending={blank.isPending}
+          onSubmit={(payload) => blank.mutate(payload)}
+          onCancel={onClose}
+          error={blank.error ? (blank.error as Error).message : null}
+        />
+      )}
+    </ModalDialog>
   );
 }
 
 export default function BoardsPage() {
   const confirm = useConfirm();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [createFormKey, setCreateFormKey] = useState(0);
+  const [creating, setCreating] = useState(false);
   // The read-only demo browses boards but cannot create them.
   const { isDemo } = useDemoSession();
 
@@ -130,117 +226,102 @@ export default function BoardsPage() {
     queryFn: () => api<Insight[]>('/api/insights'),
   });
 
-  const createMutation = useMutation({
-    mutationFn: (payload: { name: string; parameters: Record<string, unknown> }) =>
-      api<Board>('/api/boards', {
-        method: 'POST',
-        body: JSON.stringify({
-          type: 'dashboard',
-          name: payload.name,
-          description: '',
-          parameters: payload.parameters,
-        }),
-      }),
-    onSuccess: (board) => {
-      setCreateFormKey((k) => k + 1);
-      queryClient.invalidateQueries({ queryKey: ['boards'] });
-      navigate(`/boards/${board.id}`);
-    },
-  });
-
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api(`/api/boards/${id}`, { method: 'DELETE' }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['boards'] }),
   });
 
-  const websites = websitesQuery.data ?? [];
   const boards = boardsQuery.data ?? [];
-  const insights = insightsQuery.data ?? [];
-  const hasBoards = boards.length > 0;
 
-  const editor = (
-    <>
-      <BoardEditorForm
-        key={`create-board-${createFormKey}`}
-        websites={websites}
-        insights={insights}
-        initialName=""
-        initialWidgets={[emptyStatsWidgetDraft()]}
-        initialRangePreset="7d"
-        submitLabel={t('createBoard')}
-        isPending={createMutation.isPending}
-        onSubmit={(payload) => createMutation.mutate(payload)}
-      />
-      {createMutation.error ? <p className="text-danger">{(createMutation.error as Error).message}</p> : null}
-    </>
+  const newButton = isDemo ? null : (
+    <Button variant="primary" onClick={() => setCreating(true)}>
+      <Plus aria-hidden />
+      {t('newBoard')}
+    </Button>
   );
 
   return (
-    <Page className="page-boards">
-      <PageHeader
-        title={t('boards')}
-        lead={t('boardsSubtitle')}
-        backTo="/websites"
-        backLabel={t('websites')}
-        meta={<ProductLineCrossLinks surface="boards" />}
-      />
+    <Page className="ws-page-boards">
+      <PageHeader title={t('boards')} lead={t('workspaceBoardsLead')} actions={boards.length ? newButton : null} />
 
-      <PageBody>
-        {isDemo ? null : <TemplateGallery websites={websites} />}
-
-        {isDemo ? null : hasBoards ? (
-          <CollapsibleSection title={t('collapseNewBoard')} summary={t('newBoardLead')}>
-            {editor}
-          </CollapsibleSection>
-        ) : (
-          <section className="panel section-gap">
-            <h2 className="section-title">{t('newBoard')}</h2>
-            <p className="section-lead">{t('newBoardLead')}</p>
-            {editor}
-          </section>
-        )}
-
-        <ul className="board-grid section-gap-lg">
-          {boards.map((board) => {
-            const config = parseBoardConfig(board.parameters);
-            return (
-              <li key={board.id} className="panel board-card">
-                <div className="board-card-header">
-                  <h3 className="board-card-title">
-                    <Link to={`/boards/${board.id}`}>{board.name}</Link>
-                  </h3>
-                  <div className="board-card-actions">
-                    <Button variant="secondary" size="sm" render={<Link to={`/boards/${board.id}`} />}>
-                      {t('boardOpen')}
-                    </Button>
-                    {board.canEdit ? (
+      <PageBody className="stack">
+        <DataViewState
+          loading={boardsQuery.isLoading}
+          error={boardsQuery.isError ? boardsQuery.error : null}
+          onRetry={() => boardsQuery.refetch()}
+          loadingFallback={
+            <div className="ws-board-grid" aria-hidden>
+              {[0, 1, 2].map((key) => (
+                <div key={key} className="ws-board-card">
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="mt-4 h-4 w-1/2" />
+                  <Skeleton className="mt-2 h-3 w-3/4" />
+                </div>
+              ))}
+            </div>
+          }
+        >
+          {boards.length ? (
+            <ul className="ws-board-grid">
+              {boards.map((board) => {
+                const config = parseBoardConfig(board.parameters);
+                return (
+                  <li key={board.id} className="ws-board-card">
+                    <BoardLayoutPreview widgets={config.widgets} />
+                    <h2 className="ws-board-card-title">
+                      <Link to={`/boards/${board.id}`} className="ws-stretched-link">
+                        {board.name}
+                      </Link>
+                    </h2>
+                    {board.description ? <p className="ws-board-card-desc">{board.description}</p> : null}
+                    <p className="meta-line ws-board-card-meta">
+                      <span>{t('boardWidgetCount').replace('{count}', formatNumber(config.widgets.length))}</span>
+                      <span>{t(`boardWidgetPeriod${config.rangePreset}`)}</span>
+                      {config.filters.length ? (
+                        <span>{t('boardFilterCount').replace('{count}', formatNumber(config.filters.length))}</span>
+                      ) : null}
+                      {board.updatedAt ? (
+                        <span title={formatDateTime(board.updatedAt)}>
+                          {t('workspaceUpdatedAgo').replace('{time}', formatRelativeTime(board.updatedAt))}
+                        </span>
+                      ) : null}
+                    </p>
+                    {board.canEdit && !isDemo ? (
                       <Button
                         type="button"
                         variant="destructive-ghost"
-                        size="sm"
+                        size="icon-sm"
+                        className="ws-board-card-delete"
+                        aria-label={`${t('delete')} · ${board.name}`}
+                        title={t('delete')}
                         onClick={() => confirm({ title: deleteTitle(board.name), onConfirm: () => deleteMutation.mutate(board.id) })}
                       >
-                        {t('delete')}
+                        <Trash2 aria-hidden />
                       </Button>
                     ) : null}
-                  </div>
-                </div>
-                {board.description ? <p className="text-muted board-card-description">{board.description}</p> : null}
-                <p className="text-muted board-card-meta">
-                  {t('boardWidgetCount').replace('{count}', String(config.widgets.length))}
-                  {' · '}
-                  {t(`boardWidgetPeriod${config.rangePreset}`)}
-                  {config.filters.length ? ` · ${t('boardFilterCount').replace('{count}', String(config.filters.length))}` : ''}
-                  {board.updatedAt ? ` · ${formatDateTime(board.updatedAt)}` : ''}
-                </p>
-              </li>
-            );
-          })}
-          {!boardsQuery.isLoading && !hasBoards ? (
-            <EmptyState as="li" variant="rich" title={t('noBoards')} description={t('noBoardsHint')} />
-          ) : null}
-        </ul>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <EmptyState
+              variant="rich"
+              icon={<LayoutGrid />}
+              title={t('noBoards')}
+              description={t('workspaceBoardsEmpty')}
+              action={newButton ?? undefined}
+            />
+          )}
+        </DataViewState>
       </PageBody>
+
+      {creating ? (
+        <NewBoardDialog
+          websites={websitesQuery.data ?? []}
+          insights={insightsQuery.data ?? []}
+          onClose={() => setCreating(false)}
+        />
+      ) : null}
     </Page>
   );
 }

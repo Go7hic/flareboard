@@ -1,22 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { History, Laptop, LogOut, Smartphone } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { AuditLogTable } from '../components/AuditLogTable';
 import { useConfirm } from '../components/ConfirmDialog';
+import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
+import { SectionCard } from '../components/SectionCard';
+import { StatusBadge } from '../components/StatusBadge';
 import { TwoFactorPanel } from '../components/TwoFactorPanel';
-import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Panel } from '../components/ui/panel';
 import { Skeleton } from '../components/ui/skeleton';
 import { api, type AuditLogPage, type MeResponse } from '../lib/api';
 import { signInMethodLabel } from '../lib/audit-labels';
-import { formatDateTime } from '../lib/format';
+import { formatDateTime, formatNumber, formatRelativeTime, formatShortDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
-import { formatRelativeTime } from '../lib/session-display';
 import { twoFactorErrorMessage } from '../lib/two-factor';
 
 type AccountSession = {
@@ -31,6 +32,9 @@ type AccountSession = {
 const SESSIONS_KEY = ['me-sessions'];
 const ACTIVITY_KEY = ['me-audit-log'];
 const MIN_PASSWORD_LENGTH = 6;
+/** Sessions shown before "Show all": the current device and the most recent others. */
+const SESSIONS_PREVIEW = 8;
+const ACTIVITY_PREVIEW = 12;
 
 export default function AccountSecurityPage() {
   const meQuery = useQuery({
@@ -41,14 +45,18 @@ export default function AccountSecurityPage() {
   const me = meQuery.data;
 
   return (
-    <Page className="page-account-security" variant="narrow">
+    <Page className="ws-page-security ws-page-settings">
       <PageHeader title={t('accountSecurity')} lead={t('accountSecurityLead')} />
       <PageBody>
-        <div className="flex flex-col gap-4">
+        <div className="ws-settings">
+          {meQuery.isLoading ? <Skeleton className="h-40 w-full" /> : null}
+          {meQuery.error ? (
+            <p className="text-danger" role="alert">
+              {(meQuery.error as Error).message}
+            </p>
+          ) : null}
           {me && me.passwordRequired !== false ? <PasswordPanel /> : null}
           {me ? <TwoFactorPanel username={me.username} passwordRequired={me.passwordRequired !== false} /> : null}
-          {meQuery.isLoading ? <Skeleton className="h-24 w-full" /> : null}
-          {meQuery.error ? <p className="text-danger">{(meQuery.error as Error).message}</p> : null}
           <SessionsPanel />
           <ActivityPanel />
         </div>
@@ -95,12 +103,8 @@ function PasswordPanel() {
   }
 
   return (
-    <Panel aria-labelledby="password-title">
-      <h2 id="password-title" className="section-title">
-        {t('securityPasswordTitle')}
-      </h2>
-      <p className="section-lead">{t('securityPasswordLead')}</p>
-      <form onSubmit={onSubmit} className="security-form">
+    <SectionCard title={t('securityPasswordTitle')} description={t('securityPasswordLead')}>
+      <form onSubmit={onSubmit} className="ws-settings-form">
         <div className="field">
           <Label htmlFor="security-current-password">{t('securityCurrentPassword')}</Label>
           <Input
@@ -111,54 +115,63 @@ function PasswordPanel() {
             autoComplete="current-password"
           />
         </div>
-        <div className="field">
-          <Label htmlFor="security-new-password">{t('newPassword')}</Label>
-          <Input
-            id="security-new-password"
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            autoComplete="new-password"
-            minLength={MIN_PASSWORD_LENGTH}
-            maxLength={100}
-            aria-invalid={tooShort || undefined}
-          />
-          {tooShort ? <p className="text-muted text-sm">{t('securityPasswordTooShort')}</p> : null}
-        </div>
-        <div className="field">
-          <Label htmlFor="security-confirm-password">{t('securityConfirmPassword')}</Label>
-          <Input
-            id="security-confirm-password"
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            autoComplete="new-password"
-            aria-invalid={mismatch || undefined}
-          />
-          {mismatch ? <p className="text-danger text-sm">{t('securityPasswordMismatch')}</p> : null}
+        <div className="ws-form-grid">
+          <div className="field">
+            <Label htmlFor="security-new-password">{t('newPassword')}</Label>
+            <Input
+              id="security-new-password"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              autoComplete="new-password"
+              minLength={MIN_PASSWORD_LENGTH}
+              maxLength={100}
+              aria-invalid={tooShort || undefined}
+            />
+            {tooShort ? <p className="field-hint">{t('securityPasswordTooShort')}</p> : null}
+          </div>
+          <div className="field">
+            <Label htmlFor="security-confirm-password">{t('securityConfirmPassword')}</Label>
+            <Input
+              id="security-confirm-password"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              autoComplete="new-password"
+              aria-invalid={mismatch || undefined}
+            />
+            {mismatch ? <p className="field-hint text-danger">{t('securityPasswordMismatch')}</p> : null}
+          </div>
         </div>
         {mutation.error ? (
           <p className="text-danger" role="alert">
             {twoFactorErrorMessage(mutation.error)}
           </p>
         ) : null}
-        {done ? (
-          <p className="text-muted" role="status">
-            {t('securityPasswordChanged')}
-          </p>
-        ) : null}
-        <Button type="submit" variant="primary" disabled={!canSubmit}>
-          {t('securityChangePassword')}
-        </Button>
+        <div className="ws-form-actions">
+          <Button type="submit" variant="primary" disabled={!canSubmit}>
+            {t('securityChangePassword')}
+          </Button>
+          {done ? (
+            <span className="ws-inline-status" role="status">
+              {t('securityPasswordChanged')}
+            </span>
+          ) : null}
+        </div>
       </form>
-    </Panel>
+    </SectionCard>
   );
+}
+
+function deviceIcon(device: string | null) {
+  return /iphone|android|mobile|ipad/i.test(device ?? '') ? Smartphone : Laptop;
 }
 
 function SessionsPanel() {
   const confirm = useConfirm();
   const queryClient = useQueryClient();
   const [revokedOthers, setRevokedOthers] = useState<number | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   const sessionsQuery = useQuery({
     queryKey: SESSIONS_KEY,
@@ -183,8 +196,12 @@ function SessionsPanel() {
     },
   });
 
-  const sessions = sessionsQuery.data ?? [];
+  // This device first, then by last activity.
+  const sessions = [...(sessionsQuery.data ?? [])].sort(
+    (a, b) => Number(b.current) - Number(a.current) || b.lastSeenAt - a.lastSeenAt,
+  );
   const others = sessions.filter((session) => !session.current);
+  const shown = showAll ? sessions : sessions.slice(0, SESSIONS_PREVIEW);
 
   function deviceLabel(session: AccountSession) {
     return session.device?.trim() || t('sessionUnknownDevice');
@@ -213,77 +230,104 @@ function SessionsPanel() {
   const mutationError = revokeMutation.error ?? revokeOthersMutation.error;
 
   return (
-    <Panel aria-labelledby="sessions-title">
-      <div className="security-panel-head">
-        <div>
-          <h2 id="sessions-title" className="section-title">
-            {t('sessionsTitle')}
-          </h2>
-          <p className="section-lead">{t('sessionsLead')}</p>
-        </div>
+    <SectionCard
+      flush
+      title={t('sessionsTitle')}
+      description={t('sessionsLead')}
+      actions={
         <Button
           type="button"
           variant="danger"
+          size="sm"
           disabled={!others.length || revokeOthersMutation.isPending}
           onClick={revokeOthers}
         >
+          <LogOut aria-hidden />
           {t('sessionRevokeOthers')}
         </Button>
-      </div>
-      {sessionsQuery.isLoading ? <Skeleton className="h-12 w-full" /> : null}
-      {sessionsQuery.error ? <p className="text-danger">{(sessionsQuery.error as Error).message}</p> : null}
+      }
+      footer={
+        sessions.length > SESSIONS_PREVIEW ? (
+          <>
+            <span>{t('workspaceSessionCount').replace('{count}', formatNumber(sessions.length))}</span>
+            <button type="button" className="card-footer-link" onClick={() => setShowAll((value) => !value)}>
+              {showAll ? t('workspaceShowFewer') : t('workspaceShowAll')}
+            </button>
+          </>
+        ) : undefined
+      }
+    >
       {revokedOthers !== null ? (
-        <p className="text-muted" role="status">
+        <p className="ws-card-status" role="status">
           {t('sessionRevokedOthers').replace('{count}', String(revokedOthers))}
         </p>
       ) : null}
-      {sessions.length ? (
-        <div className="table-scroll">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>{t('device')}</th>
-                <th>{t('sessionMethod')}</th>
-                <th>{t('sessionSignedIn')}</th>
-                <th>{t('sessionLastActive')}</th>
-                <th aria-label={t('sessionRevoke')} />
-              </tr>
-            </thead>
-            <tbody>
-              {sessions.map((session) => (
-                <tr key={session.id}>
-                  <td>
-                    <span className="flex flex-wrap items-center gap-2">
-                      {deviceLabel(session)}
-                      {session.current ? <Badge variant="secondary">{t('sessionThisDevice')}</Badge> : null}
-                    </span>
-                  </td>
-                  <td>{signInMethodLabel(session.method)}</td>
-                  <td className="text-muted whitespace-nowrap">{formatDateTime(session.createdAt)}</td>
-                  <td className="text-muted whitespace-nowrap" title={formatDateTime(session.lastSeenAt)}>
-                    {formatRelativeTime(Math.min(session.lastSeenAt, now), now)}
-                  </td>
-                  <td className="text-right">
-                    {session.current ? null : (
-                      <Button
-                        type="button"
-                        variant="destructive-ghost"
-                        size="sm"
-                        disabled={revokeMutation.isPending}
-                        onClick={() => revoke(session)}
-                      >
-                        {t('sessionRevoke')}
-                      </Button>
-                    )}
-                  </td>
+      <DataViewState
+        loading={sessionsQuery.isLoading}
+        error={sessionsQuery.isError ? sessionsQuery.error : null}
+        onRetry={() => sessionsQuery.refetch()}
+        loadingFallback={<Skeleton className="m-5 h-24" />}
+      >
+        {sessions.length ? (
+          <div className="table-scroll">
+            <table className="data-table ws-settings-table">
+              <thead>
+                <tr>
+                  <th>{t('device')}</th>
+                  <th>{t('sessionMethod')}</th>
+                  <th>{t('sessionSignedIn')}</th>
+                  <th>{t('sessionLastActive')}</th>
+                  <th className="ws-row-actions">
+                    <span className="visually-hidden">{t('sessionRevoke')}</span>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {shown.map((session) => {
+                  const Icon = deviceIcon(session.device);
+                  return (
+                    <tr key={session.id}>
+                      <td>
+                        <span className="ws-device">
+                          <Icon aria-hidden />
+                          {deviceLabel(session)}
+                          {session.current ? <StatusBadge tone="success">{t('sessionThisDevice')}</StatusBadge> : null}
+                        </span>
+                      </td>
+                      <td>{signInMethodLabel(session.method)}</td>
+                      <td className="text-muted ws-nowrap" title={formatDateTime(session.createdAt)}>
+                        {formatShortDateTime(session.createdAt)}
+                      </td>
+                      <td className="text-muted ws-nowrap" title={formatDateTime(session.lastSeenAt)}>
+                        {formatRelativeTime(session.lastSeenAt, { now })}
+                      </td>
+                      <td className="ws-row-actions">
+                        {session.current ? null : (
+                          <Button
+                            type="button"
+                            variant="destructive-ghost"
+                            size="sm"
+                            disabled={revokeMutation.isPending}
+                            onClick={() => revoke(session)}
+                          >
+                            {t('sessionRevoke')}
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </DataViewState>
+      {mutationError ? (
+        <p className="text-danger ws-card-status" role="alert">
+          {(mutationError as Error).message}
+        </p>
       ) : null}
-      {mutationError ? <p className="text-danger">{(mutationError as Error).message}</p> : null}
-    </Panel>
+    </SectionCard>
   );
 }
 
@@ -294,24 +338,43 @@ function ActivityPanel() {
   });
   const items = activityQuery.data?.items ?? [];
   const total = activityQuery.data?.total ?? 0;
+  const [showAll, setShowAll] = useState(false);
+  const shown = showAll ? items : items.slice(0, ACTIVITY_PREVIEW);
 
   return (
-    <Panel aria-labelledby="activity-title">
-      <h2 id="activity-title" className="section-title">
-        {t('accountActivity')}
-      </h2>
-      <p className="section-lead">{t('accountActivityLead')}</p>
-      {activityQuery.isLoading ? <Skeleton className="h-12 w-full" /> : null}
-      {activityQuery.error ? <p className="text-danger">{(activityQuery.error as Error).message}</p> : null}
-      {activityQuery.data && !items.length ? (
-        <EmptyState title={t('accountActivityEmpty')} description={t('accountActivityEmptyHint')} />
-      ) : null}
-      {items.length ? <AuditLogTable entries={items} /> : null}
-      {total > items.length ? (
-        <p className="text-muted text-sm mt-2">
-          {t('auditShowingLatest').replace('{count}', String(items.length)).replace('{total}', String(total))}
-        </p>
-      ) : null}
-    </Panel>
+    <SectionCard
+      flush
+      title={t('accountActivity')}
+      description={t('accountActivityLead')}
+      footer={
+        items.length > ACTIVITY_PREVIEW || total > items.length ? (
+          <>
+            <span>
+              {total > items.length
+                ? t('auditShowingLatest').replace('{count}', String(items.length)).replace('{total}', String(total))
+                : t('workspaceRowCount').replace('{count}', formatNumber(items.length))}
+            </span>
+            {items.length > ACTIVITY_PREVIEW ? (
+              <button type="button" className="card-footer-link" onClick={() => setShowAll((value) => !value)}>
+                {showAll ? t('workspaceShowFewer') : t('workspaceShowAll')}
+              </button>
+            ) : null}
+          </>
+        ) : undefined
+      }
+    >
+      <DataViewState
+        loading={activityQuery.isLoading}
+        error={activityQuery.isError ? activityQuery.error : null}
+        onRetry={() => activityQuery.refetch()}
+        loadingFallback={<Skeleton className="m-5 h-24" />}
+      >
+        {items.length ? (
+          <AuditLogTable entries={shown} />
+        ) : (
+          <EmptyState icon={<History />} title={t('accountActivityEmpty')} description={t('accountActivityEmptyHint')} />
+        )}
+      </DataViewState>
+    </SectionCard>
   );
 }

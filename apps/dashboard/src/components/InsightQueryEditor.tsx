@@ -1,5 +1,5 @@
-import { useId, useState } from 'react';
-import { X } from 'lucide-react';
+import { useId, useState, type ReactNode } from 'react';
+import { ListFilter, Plus, X } from 'lucide-react';
 import {
   FUNNEL_WINDOW_UNITS,
   INSIGHT_DIMENSIONS,
@@ -29,7 +29,37 @@ const LETTERS = 'ABCDE';
 
 type EventLike = InsightEvent | InsightSeries;
 
-/** Event / pageview picker with URL match and per-event property filters. */
+/** Labelled block of the query card (series, steps, filters…). */
+function Section({ label, children, htmlFor }: { label: ReactNode; children: ReactNode; htmlFor?: string }) {
+  return (
+    <div className="ws-q-section">
+      {htmlFor ? (
+        <Label htmlFor={htmlFor} className="ws-q-label">
+          {label}
+        </Label>
+      ) : (
+        <span className="ws-q-label">{label}</span>
+      )}
+      {children}
+    </div>
+  );
+}
+
+/** One option in the options grid under the series/steps. */
+function Option({ label, htmlFor, children, hint }: { label: ReactNode; htmlFor?: string; children: ReactNode; hint?: ReactNode }) {
+  return (
+    <div className="field ws-q-option">
+      {htmlFor ? <Label htmlFor={htmlFor}>{label}</Label> : <span className="field-label">{label}</span>}
+      {children}
+      {hint ? <p className="field-hint">{hint}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * Event / pageview picker with URL match and per-event property filters. `trailing` adds
+ * controls to the same row (the series math).
+ */
 function EventEditor<T extends EventLike>({
   websiteId,
   value,
@@ -37,6 +67,7 @@ function EventEditor<T extends EventLike>({
   rangeQs,
   allowAll = false,
   idPrefix,
+  trailing,
 }: {
   websiteId: string;
   value: T;
@@ -44,13 +75,15 @@ function EventEditor<T extends EventLike>({
   rangeQs: string;
   allowAll?: boolean;
   idPrefix: string;
+  trailing?: ReactNode;
 }) {
   const [showFilters, setShowFilters] = useState(Boolean(value.filters?.length));
+  const filterCount = value.filters?.length ?? 0;
   return (
-    <div className="insight-event-editor">
-      <div className="insight-event-row">
+    <div className="ws-q-event">
+      <div className="ws-q-controls">
         <select
-          className="select insight-event-kind"
+          className="select"
           aria-label={t('insightEventKind')}
           value={value.kind}
           onChange={(event) => {
@@ -67,7 +100,7 @@ function EventEditor<T extends EventLike>({
             mode="single"
             websiteId={websiteId}
             id={`${idPrefix}-event`}
-            className="insight-event-name"
+            className="ws-q-grow"
             value={value.event ?? ''}
             onChange={(name) => onChange({ ...value, event: name || null })}
             placeholder={t('insightAnyEventPlaceholder')}
@@ -77,7 +110,7 @@ function EventEditor<T extends EventLike>({
         {value.kind === 'pageview' ? (
           <>
             <select
-              className="select insight-url-match"
+              className="select"
               aria-label={t('insightUrlMatch')}
               value={value.url?.match ?? 'any'}
               onChange={(event) => {
@@ -96,7 +129,7 @@ function EventEditor<T extends EventLike>({
             {value.url ? (
               <Input
                 aria-label={t('insightUrlValue')}
-                className="insight-url-value"
+                className="ws-q-grow"
                 placeholder={value.url.match === 'regex' ? '^/blog/.*' : '/pricing'}
                 value={value.url.value}
                 onChange={(event) => onChange({ ...value, url: { match: value.url!.match, value: event.target.value } })}
@@ -104,19 +137,38 @@ function EventEditor<T extends EventLike>({
             ) : null}
           </>
         ) : null}
-        <Button type="button" variant="ghost" size="sm" onClick={() => setShowFilters((v) => !v)}>
-          {value.filters?.length ? `${t('insightWhere')} (${value.filters.length})` : t('insightWhere')}
+        {trailing}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="ws-q-where"
+          aria-expanded={showFilters}
+          onClick={() => setShowFilters((v) => !v)}
+        >
+          <ListFilter aria-hidden />
+          {filterCount ? `${t('insightWhere').replace(/…$/, '')} (${filterCount})` : t('insightWhere')}
         </Button>
       </div>
       {showFilters ? (
-        <PropertyFilterBuilder
-          websiteId={websiteId}
-          rangeQs={rangeQs}
-          value={value.filters ?? []}
-          onChange={(filters) => onChange({ ...value, filters })}
-        />
+        <div className="ws-q-filters">
+          <PropertyFilterBuilder
+            websiteId={websiteId}
+            rangeQs={rangeQs}
+            value={value.filters ?? []}
+            onChange={(filters) => onChange({ ...value, filters })}
+          />
+        </div>
       ) : null}
     </div>
+  );
+}
+
+function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <Button type="button" variant="ghost" size="icon-sm" className="ws-q-remove" aria-label={label} title={label} onClick={onClick}>
+      <X aria-hidden />
+    </Button>
   );
 }
 
@@ -136,7 +188,7 @@ function SeriesEditor({
   const numericKeys = usePropertyKeys(websiteId, 'event', rangeQs);
   const listId = useId();
   return (
-    <div className="insight-series-list">
+    <div className="ws-q-rows">
       <datalist id={listId}>
         {(numericKeys.data ?? [])
           .filter((row) => row.numeric)
@@ -145,71 +197,70 @@ function SeriesEditor({
           ))}
       </datalist>
       {series.map((item, index) => (
-        <div key={index} className="insight-series-item">
-          <span className="insight-series-letter" aria-hidden>
-            {LETTERS[index]}
-          </span>
-          <div className="insight-series-body">
-            <EventEditor
-              websiteId={websiteId}
-              rangeQs={rangeQs}
-              idPrefix={`series-${index}`}
-              value={item}
-              onChange={(next) => onChange(series.map((s, i) => (i === index ? next : s)))}
-            />
-            {max > 1 ? (
-              <div className="insight-event-row">
-                <select
-                  className="select"
-                  aria-label={t('insightMath')}
-                  value={item.math}
-                  onChange={(event) => {
-                    const math = event.target.value as InsightSeries['math'];
-                    onChange(series.map((s, i) => (i === index ? { ...s, math } : s)));
-                  }}
-                >
-                  {INSIGHT_MATHS.map((math) => (
-                    <option key={math} value={math}>
-                      {t(`insightMath_${math}`)}
-                    </option>
-                  ))}
-                </select>
-                {PROPERTY_MATHS.includes(item.math) ? (
-                  <Input
-                    aria-label={t('insightMathProperty')}
-                    placeholder={t('insightMathProperty')}
-                    list={listId}
-                    value={item.mathProperty ?? ''}
-                    onChange={(event) =>
-                      onChange(series.map((s, i) => (i === index ? { ...s, mathProperty: event.target.value } : s)))
-                    }
-                  />
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+        <div key={index} className="ws-q-row">
+          {max > 1 ? (
+            <span className="ws-q-letter" aria-hidden>
+              {LETTERS[index]}
+            </span>
+          ) : null}
+          <EventEditor
+            websiteId={websiteId}
+            rangeQs={rangeQs}
+            idPrefix={`series-${index}`}
+            value={item}
+            onChange={(next) => onChange(series.map((s, i) => (i === index ? next : s)))}
+            trailing={
+              max > 1 ? (
+                <>
+                  <select
+                    className="select"
+                    aria-label={t('insightMath')}
+                    value={item.math}
+                    onChange={(event) => {
+                      const math = event.target.value as InsightSeries['math'];
+                      onChange(series.map((s, i) => (i === index ? { ...s, math } : s)));
+                    }}
+                  >
+                    {INSIGHT_MATHS.map((math) => (
+                      <option key={math} value={math}>
+                        {t(`insightMath_${math}`)}
+                      </option>
+                    ))}
+                  </select>
+                  {PROPERTY_MATHS.includes(item.math) ? (
+                    <Input
+                      className="ws-q-property"
+                      aria-label={t('insightMathProperty')}
+                      placeholder={t('insightMathProperty')}
+                      list={listId}
+                      value={item.mathProperty ?? ''}
+                      onChange={(event) =>
+                        onChange(series.map((s, i) => (i === index ? { ...s, mathProperty: event.target.value } : s)))
+                      }
+                    />
+                  ) : null}
+                </>
+              ) : null
+            }
+          />
           {series.length > 1 ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              aria-label={t('insightRemoveSeries')}
-              onClick={() => onChange(series.filter((_, i) => i !== index))}
-            >
-              <X aria-hidden size={14} strokeWidth={2} />
-            </Button>
+            <RemoveButton label={t('insightRemoveSeries')} onClick={() => onChange(series.filter((_, i) => i !== index))} />
           ) : null}
         </div>
       ))}
       {series.length < max ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => onChange([...series, { kind: 'event', event: null, math: 'total' }])}
-        >
-          {t('insightAddSeries')}
-        </Button>
+        <div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="ws-q-add"
+            onClick={() => onChange([...series, { kind: 'event', event: null, math: 'total' }])}
+          >
+            <Plus aria-hidden />
+            {t('insightAddSeries')}
+          </Button>
+        </div>
       ) : null}
     </div>
   );
@@ -220,17 +271,20 @@ function BreakdownPicker({
   value,
   onChange,
   rangeQs,
+  id,
 }: {
   websiteId: string;
   value: InsightBreakdown | null | undefined;
   onChange: (next: InsightBreakdown | null) => void;
   rangeQs: string;
+  id: string;
 }) {
   const listId = useId();
   const keys = usePropertyKeys(websiteId, value?.type === 'person' ? 'person' : 'event', rangeQs);
   return (
-    <div className="insight-event-row">
+    <div className="ws-q-controls">
       <select
+        id={id}
         className="select"
         aria-label={t('insightBreakdown')}
         value={value?.type ?? 'none'}
@@ -261,6 +315,7 @@ function BreakdownPicker({
       ) : value ? (
         <>
           <Input
+            className="ws-q-grow"
             aria-label={t('propertyFilterKey')}
             placeholder={t('propertyFilterKeyPlaceholder')}
             list={listId}
@@ -280,13 +335,26 @@ function BreakdownPicker({
 
 function CountBySelect({ value, onChange, id }: { value: InsightQuery['countBy']; onChange: (v: 'person' | 'session') => void; id: string }) {
   return (
-    <div className="field">
-      <Label htmlFor={id}>{t('insightCountBy')}</Label>
+    <Option label={t('insightCountBy')} htmlFor={id}>
       <select id={id} className="select" value={value ?? 'person'} onChange={(event) => onChange(event.target.value as 'person' | 'session')}>
         <option value="person">{t('insightCountPeople')}</option>
         <option value="session">{t('insightCountSessions')}</option>
       </select>
-    </div>
+    </Option>
+  );
+}
+
+function IntervalSelect({ value, onChange, id }: { value: InsightQuery['interval']; onChange: (v: InsightQuery['interval']) => void; id: string }) {
+  return (
+    <Option label={t('insightInterval')} htmlFor={id}>
+      <select id={id} className="select" value={value ?? 'day'} onChange={(event) => onChange(event.target.value as InsightQuery['interval'])}>
+        {INSIGHT_INTERVALS.map((interval) => (
+          <option key={interval} value={interval}>
+            {t(`insightInterval_${interval}`)}
+          </option>
+        ))}
+      </select>
+    </Option>
   );
 }
 
@@ -311,6 +379,10 @@ export function insightQueryProblem(type: InsightType, query: InsightQuery): str
   return null;
 }
 
+/**
+ * The query part of the insight editor: series / steps / events first, then the options grid,
+ * then global filters. Compact controls (one query card, no nested boxes).
+ */
 export function InsightQueryEditor({
   websiteId,
   type,
@@ -335,28 +407,25 @@ export function InsightQueryEditor({
       ];
 
   const filtersSection = (
-    <div className="field insight-editor-section">
-      <Label>{t('insightFilters')}</Label>
+    <Section label={t('insightFilters')}>
       <PropertyFilterBuilder
         websiteId={websiteId}
         rangeQs={rangeQs}
         value={query.filters ?? []}
         onChange={(filters: PropertyFilter[]) => set({ filters })}
       />
-    </div>
+    </Section>
   );
 
   if (type === 'trend') {
     const formulaProblem = query.formula?.trim() ? parseFormula(query.formula, series.length) : null;
     return (
-      <div className="insight-editor">
-        <div className="field insight-editor-section">
-          <Label>{t('insightSeries')}</Label>
+      <div className="ws-q-editor">
+        <Section label={t('insightSeries')}>
           <SeriesEditor websiteId={websiteId} rangeQs={rangeQs} series={series} max={MAX_INSIGHT_SERIES} onChange={(next) => set({ series: next })} />
-        </div>
-        <div className="workflow-insights-grid">
-          <div className="field">
-            <Label htmlFor={`${id}-formula`}>{t('insightFormula')}</Label>
+        </Section>
+        <div className="ws-q-options">
+          <Option label={t('insightFormula')} htmlFor={`${id}-formula`} hint={t('insightFormulaHint')}>
             <Input
               id={`${id}-formula`}
               placeholder="A / B * 100"
@@ -364,33 +433,23 @@ export function InsightQueryEditor({
               onChange={(event) => set({ formula: event.target.value || null })}
               aria-invalid={formulaProblem && !formulaProblem.ok ? true : undefined}
             />
-            <p className="text-muted field-hint">{t('insightFormulaHint')}</p>
-          </div>
-          <div className="field">
-            <Label htmlFor={`${id}-interval`}>{t('insightInterval')}</Label>
-            <select
-              id={`${id}-interval`}
-              className="select"
-              value={query.interval ?? 'day'}
-              onChange={(event) => set({ interval: event.target.value as InsightQuery['interval'] })}
-            >
-              {INSIGHT_INTERVALS.map((interval) => (
-                <option key={interval} value={interval}>
-                  {t(`insightInterval_${interval}`)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <Label>{t('insightBreakdown')}</Label>
-            <BreakdownPicker websiteId={websiteId} rangeQs={rangeQs} value={query.breakdown} onChange={(breakdown) => set({ breakdown })} />
-          </div>
-          <div className="field insight-checkbox-field">
-            <label className="insight-checkbox-label">
+          </Option>
+          <IntervalSelect id={`${id}-interval`} value={query.interval} onChange={(interval) => set({ interval })} />
+          <Option label={t('insightBreakdown')} htmlFor={`${id}-breakdown`}>
+            <BreakdownPicker
+              id={`${id}-breakdown`}
+              websiteId={websiteId}
+              rangeQs={rangeQs}
+              value={query.breakdown}
+              onChange={(breakdown) => set({ breakdown })}
+            />
+          </Option>
+          <Option label={t('workspaceCompareLabel')}>
+            <label className="ws-q-check">
               <Checkbox checked={Boolean(query.compare)} onCheckedChange={(checked) => set({ compare: Boolean(checked) })} />
               {t('insightCompare')}
             </label>
-          </div>
+          </Option>
         </div>
         {filtersSection}
       </div>
@@ -403,59 +462,57 @@ export function InsightQueryEditor({
     const setFunnel = (patch: Partial<NonNullable<InsightQuery['funnel']>>) =>
       set({ funnel: { ...funnel, steps: funnel.steps?.length ? funnel.steps : steps, ...patch } });
     return (
-      <div className="insight-editor">
-        <div className="field insight-editor-section">
-          <Label>{t('insightSteps')}</Label>
-          <div className="insight-series-list">
+      <div className="ws-q-editor">
+        <Section label={t('insightSteps')}>
+          <div className="ws-q-rows">
             {steps.map((step, index) => (
-              <div key={index} className="insight-series-item">
-                <span className="insight-series-letter" aria-hidden>
+              <div key={index} className="ws-q-row">
+                <span className="ws-q-letter" aria-hidden>
                   {index + 1}
                 </span>
-                <div className="insight-series-body">
-                  <EventEditor
-                    websiteId={websiteId}
-                    rangeQs={rangeQs}
-                    idPrefix={`step-${index}`}
-                    value={step}
-                    onChange={(next) => setFunnel({ steps: steps.map((s, i) => (i === index ? next : s)) })}
-                  />
-                </div>
+                <EventEditor
+                  websiteId={websiteId}
+                  rangeQs={rangeQs}
+                  idPrefix={`step-${index}`}
+                  value={step}
+                  onChange={(next) => setFunnel({ steps: steps.map((s, i) => (i === index ? next : s)) })}
+                />
                 {steps.length > 2 ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    aria-label={t('insightRemoveStep')}
-                    onClick={() => setFunnel({ steps: steps.filter((_, i) => i !== index) })}
-                  >
-                    <X aria-hidden size={14} strokeWidth={2} />
-                  </Button>
+                  <RemoveButton label={t('insightRemoveStep')} onClick={() => setFunnel({ steps: steps.filter((_, i) => i !== index) })} />
                 ) : null}
               </div>
             ))}
             {steps.length < MAX_FUNNEL_STEPS ? (
-              <Button type="button" variant="ghost" size="sm" onClick={() => setFunnel({ steps: [...steps, { kind: 'event', event: null }] })}>
-                {t('insightAddStep')}
-              </Button>
+              <div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="ws-q-add"
+                  onClick={() => setFunnel({ steps: [...steps, { kind: 'event', event: null }] })}
+                >
+                  <Plus aria-hidden />
+                  {t('insightAddStep')}
+                </Button>
+              </div>
             ) : null}
           </div>
-        </div>
-        <div className="workflow-insights-grid">
-          <div className="field">
-            <Label htmlFor={`${id}-window`}>{t('insightConversionWindow')}</Label>
-            <div className="insight-event-row">
+        </Section>
+        <div className="ws-q-options">
+          <Option label={t('insightConversionWindow')} htmlFor={`${id}-window`}>
+            <div className="ws-q-controls ws-q-controls--nowrap">
               <Input
                 id={`${id}-window`}
                 type="number"
                 min={1}
+                className="ws-q-number"
                 value={String(window.value)}
                 onChange={(event) =>
                   setFunnel({ window: { ...window, value: Math.max(1, Math.floor(Number(event.target.value) || 1)) } })
                 }
               />
               <select
-                className="select"
+                className="select ws-q-grow"
                 aria-label={t('insightConversionWindowUnit')}
                 value={window.unit}
                 onChange={(event) => setFunnel({ window: { ...window, unit: event.target.value as typeof window.unit } })}
@@ -467,9 +524,8 @@ export function InsightQueryEditor({
                 ))}
               </select>
             </div>
-          </div>
-          <div className="field">
-            <Label htmlFor={`${id}-order`}>{t('insightStepOrder')}</Label>
+          </Option>
+          <Option label={t('insightStepOrder')} htmlFor={`${id}-order`}>
             <select
               id={`${id}-order`}
               className="select"
@@ -479,12 +535,17 @@ export function InsightQueryEditor({
               <option value="strict">{t('insightOrderStrict')}</option>
               <option value="any">{t('insightOrderAny')}</option>
             </select>
-          </div>
+          </Option>
           <CountBySelect id={`${id}-count`} value={query.countBy} onChange={(countBy) => set({ countBy })} />
-          <div className="field">
-            <Label>{t('insightBreakdown')}</Label>
-            <BreakdownPicker websiteId={websiteId} rangeQs={rangeQs} value={query.breakdown} onChange={(breakdown) => set({ breakdown })} />
-          </div>
+          <Option label={t('insightBreakdown')} htmlFor={`${id}-breakdown`}>
+            <BreakdownPicker
+              id={`${id}-breakdown`}
+              websiteId={websiteId}
+              rangeQs={rangeQs}
+              value={query.breakdown}
+              onChange={(breakdown) => set({ breakdown })}
+            />
+          </Option>
         </div>
         {filtersSection}
       </div>
@@ -498,18 +559,15 @@ export function InsightQueryEditor({
     const setRetention = (patch: Partial<NonNullable<InsightQuery['retention']>>) =>
       set({ retention: { startEvent, returnEvent, ...retention, ...patch } });
     return (
-      <div className="insight-editor">
-        <div className="field insight-editor-section">
-          <Label>{t('insightRetentionStart')}</Label>
+      <div className="ws-q-editor">
+        <Section label={t('insightRetentionStart')}>
           <EventEditor websiteId={websiteId} rangeQs={rangeQs} idPrefix="retention-start" value={startEvent} onChange={(next) => setRetention({ startEvent: next })} />
-        </div>
-        <div className="field insight-editor-section">
-          <Label>{t('insightRetentionReturn')}</Label>
+        </Section>
+        <Section label={t('insightRetentionReturn')}>
           <EventEditor websiteId={websiteId} rangeQs={rangeQs} idPrefix="retention-return" value={returnEvent} onChange={(next) => setRetention({ returnEvent: next })} />
-        </div>
-        <div className="workflow-insights-grid">
-          <div className="field">
-            <Label htmlFor={`${id}-period`}>{t('insightPeriod')}</Label>
+        </Section>
+        <div className="ws-q-options">
+          <Option label={t('insightPeriod')} htmlFor={`${id}-period`}>
             <select
               id={`${id}-period`}
               className="select"
@@ -520,9 +578,8 @@ export function InsightQueryEditor({
               <option value="week">{t('insightInterval_week')}</option>
               <option value="month">{t('insightInterval_month')}</option>
             </select>
-          </div>
-          <div className="field">
-            <Label htmlFor={`${id}-periods`}>{t('insightPeriods')}</Label>
+          </Option>
+          <Option label={t('insightPeriods')} htmlFor={`${id}-periods`}>
             <select
               id={`${id}-periods`}
               className="select"
@@ -535,7 +592,7 @@ export function InsightQueryEditor({
                 </option>
               ))}
             </select>
-          </div>
+          </Option>
           <CountBySelect id={`${id}-count`} value={query.countBy} onChange={(countBy) => set({ countBy })} />
         </div>
         {filtersSection}
@@ -545,34 +602,13 @@ export function InsightQueryEditor({
 
   if (type === 'lifecycle' || type === 'stickiness') {
     return (
-      <div className="insight-editor">
-        <div className="field insight-editor-section">
-          <Label>{t('event')}</Label>
-          <SeriesEditor
-            websiteId={websiteId}
-            rangeQs={rangeQs}
-            series={series.slice(0, 1)}
-            max={1}
-            onChange={(next) => set({ series: next })}
-          />
-        </div>
-        <div className="workflow-insights-grid">
+      <div className="ws-q-editor">
+        <Section label={t('event')}>
+          <SeriesEditor websiteId={websiteId} rangeQs={rangeQs} series={series.slice(0, 1)} max={1} onChange={(next) => set({ series: next })} />
+        </Section>
+        <div className="ws-q-options">
           {type === 'lifecycle' ? (
-            <div className="field">
-              <Label htmlFor={`${id}-interval`}>{t('insightInterval')}</Label>
-              <select
-                id={`${id}-interval`}
-                className="select"
-                value={query.interval ?? 'day'}
-                onChange={(event) => set({ interval: event.target.value as InsightQuery['interval'] })}
-              >
-                {INSIGHT_INTERVALS.map((interval) => (
-                  <option key={interval} value={interval}>
-                    {t(`insightInterval_${interval}`)}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <IntervalSelect id={`${id}-interval`} value={query.interval} onChange={(interval) => set({ interval })} />
           ) : null}
           <CountBySelect id={`${id}-count`} value={query.countBy} onChange={(countBy) => set({ countBy })} />
         </div>
@@ -583,15 +619,16 @@ export function InsightQueryEditor({
 
   if (type === 'path') {
     return (
-      <div className="insight-editor">
-        <div className="field">
-          <Label htmlFor={`${id}-path`}>{t('insightPathPrefix')}</Label>
-          <Input
-            id={`${id}-path`}
-            value={query.path?.steps?.[0] ?? ''}
-            onChange={(event) => set({ path: { ...query.path, steps: event.target.value.trim() ? [event.target.value] : [] } })}
-            placeholder="/pricing"
-          />
+      <div className="ws-q-editor">
+        <div className="ws-q-options">
+          <Option label={t('insightPathPrefix')} htmlFor={`${id}-path`}>
+            <Input
+              id={`${id}-path`}
+              value={query.path?.steps?.[0] ?? ''}
+              onChange={(event) => set({ path: { ...query.path, steps: event.target.value.trim() ? [event.target.value] : [] } })}
+              placeholder="/pricing"
+            />
+          </Option>
         </div>
         {filtersSection}
       </div>
@@ -599,23 +636,24 @@ export function InsightQueryEditor({
   }
 
   return (
-    <div className="insight-editor">
-      <div className="field">
-        <Label htmlFor={`${id}-dimension`}>{t('dimension')}</Label>
-        <select
-          id={`${id}-dimension`}
-          className="select"
-          value={query.table?.dimension ?? 'path'}
-          onChange={(event) =>
-            set({ table: { ...query.table, dimension: event.target.value as NonNullable<InsightQuery['table']>['dimension'] } })
-          }
-        >
-          <option value="path">{t('page')}</option>
-          <option value="event">{t('event')}</option>
-          <option value="browser">{t('browser')}</option>
-          <option value="country">{t('country')}</option>
-          <option value="channel">{t('overviewTabChannel')}</option>
-        </select>
+    <div className="ws-q-editor">
+      <div className="ws-q-options">
+        <Option label={t('dimension')} htmlFor={`${id}-dimension`}>
+          <select
+            id={`${id}-dimension`}
+            className="select"
+            value={query.table?.dimension ?? 'path'}
+            onChange={(event) =>
+              set({ table: { ...query.table, dimension: event.target.value as NonNullable<InsightQuery['table']>['dimension'] } })
+            }
+          >
+            <option value="path">{t('page')}</option>
+            <option value="event">{t('event')}</option>
+            <option value="browser">{t('browser')}</option>
+            <option value="country">{t('country')}</option>
+            <option value="channel">{t('overviewTabChannel')}</option>
+          </select>
+        </Option>
       </div>
     </div>
   );

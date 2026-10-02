@@ -1,7 +1,9 @@
 import { FormEvent, useState } from 'react';
+import { ArrowDown, ArrowUp, ChartLine, Globe, X } from 'lucide-react';
 import type { PropertyFilter } from '@flareboard/shared/insight-query';
 import { boardWidgetSizeLabel } from './BoardWidgets';
 import {
+  BOARD_RANGE_PRESET_OPTIONS,
   BOARD_WIDGET_SIZES,
   createBoardParameters,
   emptyInsightWidgetDraft,
@@ -31,12 +33,18 @@ type BoardEditorFormProps = {
   onSubmit: (payload: { name: string; parameters: Record<string, unknown> }) => void;
   onCancel?: () => void;
   isPending?: boolean;
+  /** Server error from the parent's mutation, shown above the footer. */
+  error?: string | null;
 };
 
 function websiteLabel(w: Website): string {
-  return w.domain ? `${w.name} (${w.domain})` : w.name;
+  return w.domain ? `${w.name} (${w.domain.replace(/^https?:\/\//, '')})` : w.name;
 }
 
+/**
+ * Board name, default range and widgets. Shaped for a dialog: `.dialog-body` with the fields and
+ * a sticky `.dialog-footer` with the actions (the parent renders the dialog header).
+ */
 export function BoardEditorForm({
   websites,
   insights = [],
@@ -48,6 +56,7 @@ export function BoardEditorForm({
   onSubmit,
   onCancel,
   isPending,
+  error,
 }: BoardEditorFormProps) {
   const [name, setName] = useState(initialName);
   const [widgetDrafts, setWidgetDrafts] = useState<BoardWidgetDraft[]>(
@@ -88,10 +97,6 @@ export function BoardEditorForm({
     onSubmit(payload);
   }
 
-  function addWidget() {
-    setWidgetDrafts((prev) => [...prev, emptyStatsWidgetDraft()]);
-  }
-
   function removeWidget(index: number) {
     setWidgetDrafts((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
   }
@@ -106,16 +111,8 @@ export function BoardEditorForm({
     });
   }
 
-  function addInsightWidget() {
-    setWidgetDrafts((prev) => [...prev, emptyInsightWidgetDraft()]);
-  }
-
   function updateWidget(index: number, widget: BoardWidgetDraft) {
     setWidgetDrafts((prev) => prev.map((w, i) => (i === index ? widget : w)));
-  }
-
-  function updateWidgetLabel(index: number, label: string) {
-    setWidgetDrafts((prev) => prev.map((w, i) => (i === index ? { ...w, label } : w)));
   }
 
   function applyAdvancedJson() {
@@ -177,124 +174,103 @@ export function BoardEditorForm({
     setAdvancedOpen(true);
   }
 
+  const noSources = !websites.length && !insights.length;
+
   return (
-    <form className="board-editor-form" onSubmit={onFormSubmit}>
-      <div className="field">
-        <Label htmlFor="board-editor-name">{t('boardName')}</Label>
-        <Input
-          id="board-editor-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder={t('boardName')}
-        />
-      </div>
-
-      <div className="board-widget-editor">
-        <div className="board-widget-editor-head">
-          <h3 className="section-title">{t('boardWidgetsTitle')}</h3>
-          <p className="section-lead">{t('boardWidgetsLead')}</p>
+    <form className="ws-board-form" onSubmit={onFormSubmit}>
+      <div className="dialog-body">
+        <div className="ws-form-grid ws-board-form-head">
+          <div className="field">
+            <Label htmlFor="board-editor-name">{t('boardName')}</Label>
+            <Input id="board-editor-name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+          </div>
+          <div className="field">
+            <Label htmlFor="board-range-preset">{t('boardRange')}</Label>
+            <select
+              id="board-range-preset"
+              className="select"
+              value={rangePreset}
+              onChange={(e) => setRangePreset(normalizeBoardRangePreset(e.target.value))}
+            >
+              {BOARD_RANGE_PRESET_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {t(`boardWidgetPeriod${option}`)}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <div className="field">
-          <Label htmlFor="board-range-preset">{t('boardRange')}</Label>
-          <select
-            id="board-range-preset"
-            className="select"
-            value={rangePreset}
-            onChange={(e) => setRangePreset(normalizeBoardRangePreset(e.target.value))}
-          >
-            <option value="24h">{t('boardWidgetPeriod24h')}</option>
-            <option value="7d">{t('boardWidgetPeriod7d')}</option>
-            <option value="30d">{t('boardWidgetPeriod30d')}</option>
-            <option value="90d">{t('boardWidgetPeriod90d')}</option>
-          </select>
-        </div>
+        <section className="ws-board-widgets" aria-labelledby="board-editor-widgets">
+          <div className="ws-board-widgets-head">
+            <h3 id="board-editor-widgets" className="card-title">
+              {t('boardWidgetsTitle')}
+            </h3>
+            <p className="card-description">{t('boardWidgetsLead')}</p>
+          </div>
 
-        {!websites.length && !insights.length ? (
-          <p className="text-muted">{t('boardNoWebsites')}</p>
-        ) : (
-          <ul className="list-plain board-widget-rows">
-            {widgetDrafts.map((w, index) => (
-              <li key={index} className="board-widget-row">
-                <div className="field">
-                  <Label htmlFor={`board-widget-type-${index}`}>{t('type')}</Label>
+          {noSources ? (
+            <p className="ws-muted-line">{t('boardNoWebsites')}</p>
+          ) : (
+            <ol className="ws-widget-rows">
+              {widgetDrafts.map((w, index) => (
+                <li key={index} className="ws-widget-row">
+                  <span className="ws-q-letter" aria-hidden>
+                    {index + 1}
+                  </span>
                   <select
-                    id={`board-widget-type-${index}`}
-                    className="select"
+                    className="select ws-widget-row-type"
+                    aria-label={t('type')}
                     value={w.type}
                     onChange={(e) =>
-                      setWidgetDrafts((prev) =>
-                        prev.map((item, i) =>
-                          i === index
-                            ? e.target.value === 'insight'
-                              ? emptyInsightWidgetDraft()
-                              : emptyStatsWidgetDraft()
-                            : item,
-                        ),
-                      )
+                      updateWidget(index, e.target.value === 'insight' ? emptyInsightWidgetDraft() : emptyStatsWidgetDraft())
                     }
                   >
                     <option value="stats">{t('boardWidgetStats')}</option>
                     <option value="insight">{t('insight')}</option>
                   </select>
-                </div>
-                <div className="field">
                   {w.type === 'stats' ? (
-                    <>
-                      <Label htmlFor={`board-widget-site-${index}`}>{t('widgetWebsite')}</Label>
-                      <select
-                        id={`board-widget-site-${index}`}
-                        className="select"
-                        value={w.websiteId}
-                        onChange={(e) => updateWidget(index, { ...w, websiteId: e.target.value })}
-                      >
-                        <option value="">{t('selectWebsite')}</option>
-                        {websites.map((site) => (
-                          <option key={site.id} value={site.id}>
-                            {websiteLabel(site)}
-                          </option>
-                        ))}
-                      </select>
-                    </>
+                    <select
+                      className="select ws-widget-row-source"
+                      aria-label={t('widgetWebsite')}
+                      value={w.websiteId}
+                      onChange={(e) => updateWidget(index, { ...w, websiteId: e.target.value })}
+                    >
+                      <option value="">{t('selectWebsite')}</option>
+                      {websites.map((site) => (
+                        <option key={site.id} value={site.id}>
+                          {websiteLabel(site)}
+                        </option>
+                      ))}
+                    </select>
                   ) : (
-                    <>
-                      <Label htmlFor={`board-widget-insight-${index}`}>{t('insight')}</Label>
-                      <select
-                        id={`board-widget-insight-${index}`}
-                        className="select"
-                        value={w.insightId}
-                        onChange={(e) => updateWidget(index, { ...w, insightId: e.target.value })}
-                      >
-                        <option value="">{t('selectInsight')}</option>
-                        {insights.map((insight) => (
-                          <option key={insight.id} value={insight.id}>
-                            {insight.name}
-                          </option>
-                        ))}
-                      </select>
-                    </>
+                    <select
+                      className="select ws-widget-row-source"
+                      aria-label={t('insight')}
+                      value={w.insightId}
+                      onChange={(e) => updateWidget(index, { ...w, insightId: e.target.value })}
+                    >
+                      <option value="">{t('selectInsight')}</option>
+                      {insights.map((insight) => (
+                        <option key={insight.id} value={insight.id}>
+                          {insight.name}
+                        </option>
+                      ))}
+                    </select>
                   )}
-                </div>
-                <div className="field">
-                  <Label htmlFor={`board-widget-label-${index}`}>{t('widgetLabel')}</Label>
                   <Input
-                    id={`board-widget-label-${index}`}
+                    className="ws-widget-row-label"
+                    aria-label={t('widgetLabel')}
                     value={w.label}
-                    onChange={(e) => updateWidgetLabel(index, e.target.value)}
+                    onChange={(e) => updateWidget(index, { ...w, label: e.target.value })}
                     placeholder={t('widgetLabelOptional')}
                   />
-                </div>
-                <div className="field">
-                  <Label htmlFor={`board-widget-width-${index}`}>{t('boardWidgetWidth')}</Label>
                   <select
-                    id={`board-widget-width-${index}`}
-                    className="select"
+                    className="select ws-widget-row-width"
+                    aria-label={t('boardWidgetWidth')}
                     value={w.width}
                     onChange={(e) =>
-                      updateWidget(index, {
-                        ...w,
-                        width: normalizeBoardWidgetWidth(e.target.value) as BoardWidgetWidth,
-                      })
+                      updateWidget(index, { ...w, width: normalizeBoardWidgetWidth(e.target.value) as BoardWidgetWidth })
                     }
                   >
                     {BOARD_WIDGET_SIZES.map((size) => (
@@ -303,99 +279,114 @@ export function BoardEditorForm({
                       </option>
                     ))}
                   </select>
-                </div>
-                <div className="board-widget-row-actions">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={index === 0}
-                    onClick={() => moveWidget(index, -1)}
-                    aria-label={t('moveWidgetUp')}
-                  >
-                    ↑
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={index === widgetDrafts.length - 1}
-                    onClick={() => moveWidget(index, 1)}
-                    aria-label={t('moveWidgetDown')}
-                  >
-                    ↓
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={widgetDrafts.length <= 1}
-                    onClick={() => removeWidget(index)}
-                  >
-                    {t('removeWidget')}
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+                  <span className="ws-widget-row-actions">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={index === 0}
+                      onClick={() => moveWidget(index, -1)}
+                      aria-label={t('moveWidgetUp')}
+                      title={t('moveWidgetUp')}
+                    >
+                      <ArrowUp aria-hidden />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={index === widgetDrafts.length - 1}
+                      onClick={() => moveWidget(index, 1)}
+                      aria-label={t('moveWidgetDown')}
+                      title={t('moveWidgetDown')}
+                    >
+                      <ArrowDown aria-hidden />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={widgetDrafts.length <= 1}
+                      onClick={() => removeWidget(index)}
+                      aria-label={t('removeWidget')}
+                      title={t('removeWidget')}
+                    >
+                      <X aria-hidden />
+                    </Button>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
 
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={addWidget}
-          disabled={!websites.length}
+          <div className="ws-board-widgets-add">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setWidgetDrafts((prev) => [...prev, emptyStatsWidgetDraft()])}
+              disabled={!websites.length}
+            >
+              <Globe aria-hidden />
+              {t('addWidget')}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setWidgetDrafts((prev) => [...prev, emptyInsightWidgetDraft()])}
+              disabled={!insights.length}
+            >
+              <ChartLine aria-hidden />
+              {t('addInsightWidget')}
+            </Button>
+          </div>
+        </section>
+
+        <details
+          className="ws-disclosure"
+          open={advancedOpen}
+          onToggle={(e) => {
+            const open = (e.target as HTMLDetailsElement).open;
+            setAdvancedOpen(open);
+            if (open) openAdvanced();
+          }}
         >
-          {t('addWidget')}
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={addInsightWidget}
-          disabled={!insights.length}
-        >
-          {t('addInsightWidget')}
-        </Button>
+          <summary>{t('advancedJson')}</summary>
+          <div className="ws-disclosure-body">
+            <Textarea
+              className="textarea-mono"
+              value={advancedOpen ? advancedJson : ''}
+              onChange={(e) => setAdvancedJson(e.target.value)}
+              rows={6}
+              spellCheck={false}
+              aria-label={t('advancedJson')}
+            />
+            <div>
+              <Button type="button" variant="outline" size="sm" onClick={applyAdvancedJson}>
+                {t('applyJson')}
+              </Button>
+            </div>
+          </div>
+        </details>
+
+        {validationError || error ? (
+          <p className="text-danger" role="alert">
+            {validationError ?? error}
+          </p>
+        ) : null}
       </div>
 
-      <details
-        className="board-advanced-json"
-        open={advancedOpen}
-        onToggle={(e) => {
-          const open = (e.target as HTMLDetailsElement).open;
-          setAdvancedOpen(open);
-          if (open) openAdvanced();
-        }}
-      >
-        <summary>{t('advancedJson')}</summary>
-        <div className="field">
-          <Textarea
-            className="textarea-mono"
-            value={advancedOpen ? advancedJson : ''}
-            onChange={(e) => setAdvancedJson(e.target.value)}
-            rows={6}
-            spellCheck={false}
-          />
-        </div>
-        <Button type="button" variant="secondary" size="sm" onClick={applyAdvancedJson}>
-          {t('applyJson')}
-        </Button>
-      </details>
-
-      {validationError ? <p className="text-danger">{validationError}</p> : null}
-
-      <div className="board-editor-actions">
-        <Button type="submit" variant="primary" disabled={isPending || (!websites.length && !insights.length)}>
-          {submitLabel}
-        </Button>
+      <footer className="dialog-footer">
         {onCancel ? (
           <Button type="button" variant="ghost" onClick={onCancel} disabled={isPending}>
             {t('cancel')}
           </Button>
         ) : null}
-      </div>
+        <Button type="submit" variant="primary" disabled={isPending || noSources}>
+          {submitLabel}
+        </Button>
+      </footer>
     </form>
   );
 }

@@ -1,22 +1,29 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { Link2Off } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import { Line, LineChart } from 'recharts';
+import { Area, AreaChart } from 'recharts';
 import { AnalyticsChart } from '../components/AnalyticsChart';
 import { BoardWidgets } from '../components/BoardWidgets';
-import { InsightResultView } from '../components/InsightResultView';
 import { BrandLogo } from '../components/BrandLogo';
-import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
-import { StatCard } from '../components/ui/stat-card';
+import { EmptyState } from '../components/EmptyState';
+import { InsightResultView } from '../components/InsightResultView';
+import { KpiStripSkeleton } from '../components/KpiStrip';
+import { OverviewDimensionCard } from '../components/OverviewDimensionCard';
+import { OverviewKpiStrip } from '../components/OverviewKpiStrip';
+import { PageHeader } from '../components/PageHeader';
+import { SectionCard } from '../components/SectionCard';
+import { Skeleton } from '../components/ui/skeleton';
+import { RangeSegmented } from '../components/workspace/RangeSegmented';
+import { SiteAvatar } from '../components/workspace/SiteIdentity';
 import { formatChartTimeLabel, isHourlyChartRange } from '../lib/chartTimeseries';
-import { API_URL, type InsightResult, type WebsiteStats } from '../lib/api';
+import { areaMark } from '../lib/chartMarks';
+import { API_URL, type InsightResult, type MetricRow, type WebsiteStats } from '../lib/api';
 import { parseBoardConfig, type BoardRangePreset } from '../lib/board-config';
 import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/dateRange';
-import { formatNumber } from '../lib/format';
+import { formatMetricLabel } from '../lib/metric-labels';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
-import { SegmentTabs } from '../components/SegmentTabs';
-import { EmptyState } from '../components/EmptyState';
 
 type PublicWebsiteShare = WebsiteStats & {
   website: { id: string; name: string; domain?: string; timezone?: string };
@@ -28,6 +35,7 @@ type PublicBoardShare = {
   board: {
     id: string;
     name: string;
+    description?: string;
     parameters: Record<string, unknown>;
   };
   share: { name: string; slug: string };
@@ -43,16 +51,68 @@ type PublicInsightShare = {
 type PublicShare = PublicWebsiteShare | PublicBoardShare | PublicInsightShare;
 
 const SHARE_PRESETS = ['24h', '7d', '30d', '90d'] as const;
-const PRESET_LABEL_KEYS: Record<(typeof SHARE_PRESETS)[number], string> = {
-  '24h': 'datePreset24h',
-  '7d': 'datePreset7d',
-  '30d': 'datePreset30d',
-  '90d': 'datePreset90d',
-};
+type SharePreset = (typeof SHARE_PRESETS)[number];
+
+/** The overview's dimension cards (same tabs), fed by the public share endpoint. */
+const DIMENSION_CARDS = [
+  { titleKey: 'overviewCardPages', tabs: [['path', 'segmentField_path'], ['entry', 'overviewTabEntry'], ['exit', 'overviewTabExit']] },
+  { titleKey: 'overviewCardSources', tabs: [['referrer', 'segmentField_referrer'], ['channel', 'overviewTabChannel']] },
+  { titleKey: 'overviewCardEnvironment', tabs: [['browser', 'browser'], ['os', 'os'], ['device', 'device']] },
+  { titleKey: 'overviewCardLocation', tabs: [['country', 'country'], ['region', 'segmentField_region'], ['city', 'segmentField_city']] },
+] as const;
+
+async function fetchShare<T>(slug: string, query: string): Promise<T> {
+  const res = await fetch(`${API_URL}/api/share/${slug}${query ? `?${query}` : ''}`);
+  if (!res.ok) throw new Error(t('shareNotFound'));
+  return res.json() as Promise<T>;
+}
+
+function ShareDimensionCard({
+  slug,
+  rangeQs,
+  card,
+}: {
+  slug: string;
+  rangeQs: string;
+  card: (typeof DIMENSION_CARDS)[number];
+}) {
+  const [tab, setTab] = useState<string>(card.tabs[0][0]);
+  const query = useQuery({
+    queryKey: ['public-share-metrics', slug, tab, rangeQs],
+    queryFn: () => fetchShare<MetricRow[]>(slug, `type=${tab}${rangeQs ? `&${rangeQs}` : ''}`),
+    placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[2] === tab ? previous : undefined),
+  });
+  const rows = (query.data ?? []).map((row) => ({ ...row, x: formatMetricLabel(tab, row.x) }));
+  return (
+    <OverviewDimensionCard
+      title={t(card.titleKey)}
+      tabs={card.tabs.map(([id, labelKey]) => ({ id, label: t(labelKey) }))}
+      activeTab={tab}
+      onTabChange={setTab}
+      rows={rows}
+      loading={query.isLoading}
+      error={query.isError ? query.error : null}
+      onRetry={() => query.refetch()}
+    />
+  );
+}
+
+function ShareSkeleton() {
+  return (
+    <div className="page ws-share" aria-busy>
+      <Skeleton className="h-7 w-40" />
+      <Skeleton className="mt-6 h-8 w-64" />
+      <div className="stack mt-6">
+        <KpiStripSkeleton cells={5} />
+        <Skeleton className="h-[300px] w-full" />
+      </div>
+    </div>
+  );
+}
 
 export default function SharePublic() {
   const chartColors = useChartColors();
-  const { slug } = useParams<{ slug: string }>();
+  const { slug = '' } = useParams<{ slug: string }>();
   const [preset, setPreset] = useState<DateRangePreset | 'default'>('default');
   const [siteTimezone, setSiteTimezone] = useState('UTC');
   const range = useMemo(
@@ -64,14 +124,11 @@ export default function SharePublic() {
     ? `${rangeQueryString(range.startAt, range.endAt)}&unit=${isHourlyChartRange(range.startAt, range.endAt) ? 'hour' : 'day'}`
     : '';
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, isPlaceholderData } = useQuery({
     queryKey: ['public-share', slug, range],
     enabled: Boolean(slug),
-    queryFn: async () => {
-      const res = await fetch(`${API_URL}/api/share/${slug}${rangeQs ? `?${rangeQs}` : ''}`);
-      if (!res.ok) throw new Error(t('shareNotFound'));
-      return res.json() as Promise<PublicShare>;
-    },
+    queryFn: () => fetchShare<PublicShare>(slug, rangeQs),
+    placeholderData: (previous) => previous,
   });
 
   useEffect(() => {
@@ -80,106 +137,144 @@ export default function SharePublic() {
     }
   }, [data]);
 
-  const isBoard = data && 'board' in data;
-  const isInsight = data && 'insight' in data;
-  const boardConfig = isBoard ? parseBoardConfig(data.board.parameters) : null;
-  const activePreset = preset === 'default' ? (boardConfig?.rangePreset ?? (isInsight ? '30d' : '24h')) : preset;
+  const isBoard = Boolean(data && 'board' in data);
+  const isInsight = Boolean(data && 'insight' in data);
+  const boardConfig = data && 'board' in data ? parseBoardConfig(data.board.parameters) : null;
+  const activePreset = (preset === 'default' ? (boardConfig?.rangePreset ?? (isInsight ? '30d' : '24h')) : preset) as SharePreset;
   const chartTimezone = !isBoard && data && 'website' in data ? data.website.timezone ?? 'UTC' : siteTimezone;
+  const hourly = range ? isHourlyChartRange(range.startAt, range.endAt) : activePreset === '24h';
   const chartData = useMemo(() => {
     if (!data || !('timeseries' in data)) return [];
-    const hourly = range ? isHourlyChartRange(range.startAt, range.endAt) : activePreset === '24h';
     return data.timeseries.pageviews.map((p) => ({
       ...p,
       x: formatChartTimeLabel(p.x, hourly, chartTimezone),
     }));
-  }, [data, range, chartTimezone, activePreset]);
+  }, [data, hourly, chartTimezone]);
 
-  if (isLoading) {
-    return (
-      <div className="page">
-        <div className="skeleton" style={{ width: '40%', height: '2rem' }} />
-      </div>
-    );
-  }
+  if (isLoading) return <ShareSkeleton />;
 
   if (error || !data) {
     return (
-      <div className="page">
+      <div className="page ws-share">
         <EmptyState
           variant="rich"
           tone="danger"
+          icon={<Link2Off />}
           title={t('shareNotFound')}
-          description={(error as Error)?.message ?? t('shareExpired')}
+          description={(error as Error)?.message === t('shareNotFound') ? t('shareExpired') : ((error as Error)?.message ?? t('shareExpired'))}
         />
       </div>
     );
   }
 
-  const title = isBoard ? data.board.name : isInsight ? data.insight.name : data.website.name;
+  let title: ReactNode;
+  let lead: string;
+  let body: ReactNode;
 
-  return (
-    <div className="page">
-      <header className="page-header">
-        <div className="shell-brand share-public-brand">
-          <BrandLogo />
-        </div>
-        <h1 className="page-title">
-          {isBoard || isInsight ? (
-            title
-          ) : (
-            <WebsiteNameLabel
-              name={data.website.name}
-              domain={data.website.domain}
-              faviconSize={22}
-            />
-          )}
-        </h1>
-        <p className="page-subtitle">
-          {isInsight ? `${data.website.name} · ` : ''}
-          {t('shared')}: {data.share.name}
-        </p>
-        {isInsight && data.insight.description ? <p className="text-muted">{data.insight.description}</p> : null}
-        <SegmentTabs
-          className="share-range-tabs"
-          aria-label={t('dateRange')}
-          value={activePreset}
-          onChange={(id) => setPreset(id as DateRangePreset)}
-          tabs={SHARE_PRESETS.map((p) => ({ id: p, label: t(PRESET_LABEL_KEYS[p]) }))}
+  if ('board' in data) {
+    title = data.board.name;
+    lead = data.board.description || t('workspaceSharedBoardLead');
+    body = (
+      <BoardWidgets
+        widgets={boardConfig?.widgets ?? []}
+        rangePreset={(preset === 'default' || preset === 'custom' ? boardConfig?.rangePreset : preset) as BoardRangePreset}
+        publicMode
+      />
+    );
+  } else if ('insight' in data) {
+    title = data.insight.name;
+    lead = data.insight.description || data.website.name;
+    body = (
+      <SectionCard>
+        {data.result ? (
+          <InsightResultView result={data.result} />
+        ) : (
+          <EmptyState title={t('boardWidgetError')} />
+        )}
+      </SectionCard>
+    );
+  } else {
+    title = (
+      <span className="ws-share-title">
+        <SiteAvatar name={data.website.name} domain={data.website.domain} size="lg" />
+        {data.website.name}
+      </span>
+    );
+    lead = t('workspaceSharedWebsiteLead');
+    body = (
+      <>
+        <OverviewKpiStrip
+          stats={data}
+          compareLabel=""
+          pageviewsColor={chartColors.series.pageviews}
+          visitorsColor=""
         />
-      </header>
-
-      {isBoard ? (
-        <BoardWidgets
-          widgets={boardConfig?.widgets ?? []}
-          rangePreset={(preset === 'default' || preset === 'custom' ? boardConfig?.rangePreset : preset) as BoardRangePreset}
-          publicMode
-        />
-      ) : isInsight ? (
-        <section className="panel section-gap-lg share-insight-panel">
-          {data.result ? (
-            <InsightResultView result={data.result} />
-          ) : (
-            <EmptyState title={t('boardWidgetError')} />
-          )}
-        </section>
-      ) : (
-        <>
-          <div className="stat-grid">
-            <StatCard label={t('pageviews')} value={formatNumber(data.pageviews.value)} variant="primary" />
-            <StatCard label={t('visitors')} value={formatNumber(data.visitors.value)} />
-            <StatCard label={t('visits')} value={formatNumber(data.visits.value)} />
-          </div>
-
-          <section className="panel chart-panel section-gap-lg">
-            <h2 className="section-title">{t('pageviewsOverTime')}</h2>
-            <div className="chart-wrap">
-              <AnalyticsChart Chart={LineChart} data={chartData} xAxis={{ dataKey: 'x' }}>
-                <Line type="monotone" dataKey="y" stroke={chartColors.accent} strokeWidth={2} dot={false} />
+        <SectionCard title={t('pageviewsOverTime')}>
+          {chartData.length > 1 ? (
+            <div className="overview-trend-chart">
+              <AnalyticsChart
+                Chart={AreaChart}
+                data={chartData}
+                responsive={{ height: 300 }}
+                xAxis={{ dataKey: 'x', interval: 'preserveStartEnd', minTickGap: hourly ? 32 : 24 }}
+              >
+                <Area
+                  dataKey="y"
+                  name={t('pageviews')}
+                  stroke={chartColors.series.pageviews}
+                  fill={chartColors.series.pageviews}
+                  {...areaMark(chartColors.panel)}
+                />
               </AnalyticsChart>
             </div>
-          </section>
-        </>
-      )}
+          ) : (
+            <EmptyState title={t('chartNoData')} description={t('noDataInPeriodHint')} />
+          )}
+        </SectionCard>
+        <section className="layout-grid layout-grid--stretch overview-dimensions-grid" aria-label={t('breakdownMetrics')}>
+          {DIMENSION_CARDS.map((card) => (
+            <ShareDimensionCard key={card.titleKey} slug={slug} rangeQs={rangeQs} card={card} />
+          ))}
+        </section>
+      </>
+    );
+  }
+
+  return (
+    <div className="page ws-share">
+      <div className="ws-share-top">
+        <a href="/" className="ws-share-brand" aria-label="Flareboard">
+          <BrandLogo size={22} />
+        </a>
+        <span className="ws-share-badge">{t('workspaceSharedReadOnly')}</span>
+      </div>
+      <PageHeader
+        title={title}
+        lead={lead}
+        meta={<p className="ws-share-meta">{`${t('shared')}: ${data.share.name}`}</p>}
+        actions={
+          <RangeSegmented
+            value={activePreset}
+            options={SHARE_PRESETS}
+            onChange={(next) => setPreset(next)}
+          />
+        }
+      />
+      <div className={isPlaceholderData ? 'stack ws-refreshing' : 'stack'}>{body}</div>
+      <footer className="ws-share-footer">
+        {t('workspacePoweredBy')
+          .split('{brand}')
+          .flatMap((part, index) =>
+            index === 0
+              ? [part]
+              : [
+                  <a key="brand" href="/" className="ws-share-footer-link">
+                    Flareboard
+                  </a>,
+                  part,
+                ],
+          )}
+      </footer>
     </div>
   );
 }

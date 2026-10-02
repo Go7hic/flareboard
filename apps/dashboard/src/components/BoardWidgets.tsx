@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import {
   useRef,
   useState,
@@ -8,12 +8,14 @@ import {
   type RefObject,
 } from 'react';
 import { Link } from 'react-router-dom';
-import { GripVertical } from 'lucide-react';
-import { Line, LineChart } from 'recharts';
+import { CircleAlert, GripVertical } from 'lucide-react';
+import { Area, AreaChart } from 'recharts';
 import type { PropertyFilter } from '@flareboard/shared/insight-query';
 import { AnalyticsChart } from './AnalyticsChart';
 import { InsightResultView } from './InsightResultView';
-import { StatCard } from './ui/stat-card';
+import { KpiCell, KpiStrip } from './KpiStrip';
+import { StatChangeDelta } from './StatChangeDelta';
+import { Skeleton } from './ui/skeleton';
 import { api, type InsightResult, type WebsiteStats } from '../lib/api';
 import {
   BOARD_WIDGET_SIZES,
@@ -26,25 +28,15 @@ import {
   type InsightWidgetConfig,
   type StatsWidgetConfig,
 } from '../lib/board-config';
+import { areaMark } from '../lib/chartMarks';
 import { presetToRange, rangeQueryString } from '../lib/dateRange';
 import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
 import { formatChartTimeLabel, isHourlyChartRange } from '../lib/chartTimeseries';
+import { cn } from '../lib/utils';
 
 type Widget = BoardWidget;
-
-const compactXAxis = {
-  interval: 'preserveStartEnd' as const,
-  tickLine: false,
-  axisLine: false,
-};
-
-const compactYAxis = {
-  tickLine: false,
-  axisLine: false,
-  width: 44,
-};
 
 const SIZE_LABEL_KEYS: Record<BoardWidgetWidth, string> = {
   small: 'boardWidgetSizeSmall',
@@ -63,8 +55,9 @@ function widgetKey(widget: Widget, index: number) {
 }
 
 /**
- * Board grid. With `onLayoutChange`, widgets can be reordered (drag the grip, or focus it and use
- * the arrow keys) and resized (drag the right edge, the size menu, or arrow keys on the edge).
+ * Board grid (12 columns: small 4, medium 6, large 8, full 12). With `onLayoutChange`, widgets
+ * can be reordered (drag the grip, or focus it and use the arrow keys) and resized (drag the
+ * right edge, the size menu, or arrow keys on the edge).
  */
 export function BoardWidgets({
   widgets,
@@ -72,6 +65,8 @@ export function BoardWidgets({
   rangePreset,
   filters = [],
   onLayoutChange,
+  websiteNames,
+  insightNames,
 }: {
   widgets: Widget[];
   publicMode?: boolean;
@@ -79,6 +74,9 @@ export function BoardWidgets({
   /** Board-wide property filters merged into every insight widget. */
   filters?: PropertyFilter[];
   onLayoutChange?: (widgets: Widget[]) => void;
+  /** Default titles for unlabeled widgets (the board page knows the names). */
+  websiteNames?: Record<string, string>;
+  insightNames?: Record<string, string>;
 }) {
   const gridRef = useRef<HTMLDivElement>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -97,49 +95,57 @@ export function BoardWidgets({
   }
 
   return (
-    <div className="board-widgets-grid" ref={gridRef}>
-      {widgets.map((w, i) => (
-        <BoardWidgetFrame
-          key={widgetKey(w, i)}
-          widget={w}
-          index={i}
-          count={widgets.length}
-          editable={editable}
-          linkTitle={!publicMode && !editable}
-          gridRef={gridRef}
-          dragging={dragIndex === i}
-          dropTarget={dragIndex !== null && overIndex === i && dragIndex !== i}
-          draggable={editable && armedIndex === i}
-          onArm={(armed) => setArmedIndex(armed ? i : null)}
-          onDragStart={() => setDragIndex(i)}
-          onDragOver={() => setOverIndex(i)}
-          onDrop={() => {
-            if (dragIndex !== null) commitMove(dragIndex, i);
-            setDragIndex(null);
-            setOverIndex(null);
-            setArmedIndex(null);
-          }}
-          onDragEnd={() => {
-            setDragIndex(null);
-            setOverIndex(null);
-            setArmedIndex(null);
-          }}
-          onMove={(delta) => commitMove(i, Math.max(0, Math.min(widgets.length - 1, i + delta)))}
-          onResize={(width) => resize(i, width)}
-        >
-          {w.type === 'insight' ? (
-            <InsightBoardWidget widget={w} publicMode={publicMode} rangePreset={rangePreset} filters={filters} />
-          ) : (
-            <StatsBoardWidget widget={w} publicMode={publicMode} rangePreset={rangePreset} />
-          )}
-        </BoardWidgetFrame>
-      ))}
+    <div className="ws-widgets" ref={gridRef}>
+      {widgets.map((w, i) => {
+        const fallbackTitle =
+          w.type === 'insight'
+            ? w.insightName || insightNames?.[w.insightId] || t('insight')
+            : websiteNames?.[w.websiteId] || t('boardWidgetStats');
+        return (
+          <BoardWidgetFrame
+            key={widgetKey(w, i)}
+            widget={w}
+            title={w.label?.trim() || fallbackTitle}
+            index={i}
+            count={widgets.length}
+            editable={editable}
+            linkTitle={!publicMode && !editable}
+            gridRef={gridRef}
+            dragging={dragIndex === i}
+            dropTarget={dragIndex !== null && overIndex === i && dragIndex !== i}
+            draggable={editable && armedIndex === i}
+            onArm={(armed) => setArmedIndex(armed ? i : null)}
+            onDragStart={() => setDragIndex(i)}
+            onDragOver={() => setOverIndex(i)}
+            onDrop={() => {
+              if (dragIndex !== null) commitMove(dragIndex, i);
+              setDragIndex(null);
+              setOverIndex(null);
+              setArmedIndex(null);
+            }}
+            onDragEnd={() => {
+              setDragIndex(null);
+              setOverIndex(null);
+              setArmedIndex(null);
+            }}
+            onMove={(delta) => commitMove(i, Math.max(0, Math.min(widgets.length - 1, i + delta)))}
+            onResize={(width) => resize(i, width)}
+          >
+            {w.type === 'insight' ? (
+              <InsightBoardWidget widget={w} publicMode={publicMode} rangePreset={rangePreset} filters={filters} />
+            ) : (
+              <StatsBoardWidget widget={w} publicMode={publicMode} rangePreset={rangePreset} />
+            )}
+          </BoardWidgetFrame>
+        );
+      })}
     </div>
   );
 }
 
 function BoardWidgetFrame({
   widget,
+  title,
   index,
   count,
   editable,
@@ -158,6 +164,7 @@ function BoardWidgetFrame({
   children,
 }: {
   widget: Widget;
+  title: string;
   index: number;
   count: number;
   editable: boolean;
@@ -178,9 +185,6 @@ function BoardWidgetFrame({
   const frameRef = useRef<HTMLElement>(null);
   const [previewSize, setPreviewSize] = useState<BoardWidgetWidth | null>(null);
   const size = previewSize ?? normalizeBoardWidgetWidth(widget.width);
-  const title =
-    widget.label?.trim() ||
-    (widget.type === 'insight' ? widget.insightName || t('insight') : t('boardWidgetStats'));
 
   function onGripKey(event: KeyboardEvent<HTMLButtonElement>) {
     if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
@@ -224,21 +228,17 @@ function BoardWidgetFrame({
     handle.addEventListener('pointercancel', up);
   }
 
-  const className = [
-    'board-stat-widget',
-    `board-stat-widget--${size}`,
-    editable ? 'board-widget--editable' : '',
-    dragging ? 'board-widget--dragging' : '',
-    dropTarget ? 'board-widget--drop-target' : '',
-    previewSize ? 'board-widget--resizing' : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
-
   return (
     <section
       ref={frameRef}
-      className={className}
+      className={cn(
+        'ws-widget',
+        `ws-widget--${size}`,
+        editable && 'ws-widget--editable',
+        dragging && 'ws-widget--dragging',
+        dropTarget && 'ws-widget--drop-target',
+        previewSize && 'ws-widget--resizing',
+      )}
       draggable={draggable}
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = 'move';
@@ -258,30 +258,26 @@ function BoardWidgetFrame({
       }}
       onDragEnd={onDragEnd}
     >
-      <header className="board-widget-head">
+      <header className="ws-widget-head">
         {editable ? (
           <button
             type="button"
-            className="board-widget-grip"
+            className="ws-widget-grip"
             aria-label={t('boardWidgetMoveHint').replace('{position}', String(index + 1)).replace('{count}', String(count))}
             title={t('boardWidgetDrag')}
             onPointerDown={() => onArm(true)}
             onPointerUp={() => onArm(false)}
             onKeyDown={onGripKey}
           >
-            <GripVertical size={14} strokeWidth={2} aria-hidden />
+            <GripVertical aria-hidden />
           </button>
         ) : null}
-        <h3 className="board-stat-widget-title">
-          {widget.type === 'insight' && linkTitle ? (
-            <Link to={`/insights?insight=${widget.insightId}`}>{title}</Link>
-          ) : (
-            title
-          )}
+        <h3 className="ws-widget-title" title={title}>
+          {widget.type === 'insight' && linkTitle ? <Link to={`/insights?insight=${widget.insightId}`}>{title}</Link> : title}
         </h3>
         {editable ? (
           <select
-            className="select board-widget-size-select"
+            className="select ws-widget-size"
             aria-label={t('boardWidgetWidth')}
             value={size}
             onChange={(event) => onResize(normalizeBoardWidgetWidth(event.target.value))}
@@ -294,10 +290,10 @@ function BoardWidgetFrame({
           </select>
         ) : null}
       </header>
-      {children}
+      <div className="ws-widget-body">{children}</div>
       {editable ? (
         <div
-          className="board-widget-resize"
+          className="ws-widget-resize"
           role="slider"
           tabIndex={0}
           aria-label={t('boardWidgetResize')}
@@ -321,6 +317,24 @@ function BoardWidgetFrame({
   );
 }
 
+function WidgetSkeleton() {
+  return (
+    <div className="ws-widget-skeleton" aria-busy>
+      <Skeleton className="h-12 w-full" />
+      <Skeleton className="h-36 w-full" />
+    </div>
+  );
+}
+
+function WidgetError() {
+  return (
+    <div className="ws-widget-error" role="status">
+      <CircleAlert aria-hidden />
+      {t('boardWidgetError')}
+    </div>
+  );
+}
+
 function StatsBoardWidget({
   widget,
   publicMode,
@@ -339,8 +353,8 @@ function StatsBoardWidget({
   const statsQuery = useQuery({
     queryKey: ['board-widget-stats', widget.websiteId, rangePreset],
     enabled: !publicMode && Boolean(widget.websiteId),
-    queryFn: () =>
-      api<WebsiteStats>(`/api/websites/${widget.websiteId}/stats?${rangeQs}`),
+    queryFn: () => api<WebsiteStats>(`/api/websites/${widget.websiteId}/stats?${rangeQs}`),
+    placeholderData: keepPreviousData,
   });
 
   const pageviewsQuery = useQuery({
@@ -350,55 +364,57 @@ function StatsBoardWidget({
       api<{ pageviews: { x: string; y: number }[] }>(
         `/api/websites/${widget.websiteId}/pageviews?unit=${hourly ? 'hour' : 'day'}&${rangeQs}`,
       ),
+    placeholderData: keepPreviousData,
   });
 
   const stats = widget.stats ? (widget.stats as WebsiteStats) : statsQuery.data;
   const series = widget.series ?? pageviewsQuery.data?.pageviews ?? [];
   const loading = !publicMode && (statsQuery.isLoading || pageviewsQuery.isLoading);
-  const chartData = series.map((p) => ({ x: formatChartTimeLabel(p.x, hourly), y: p.y }));
+  // Public boards get daily points even for 24 hours; label them as days.
+  const hourlyLabels = hourly && series.some((point) => point.x.length > 10);
+  const chartData = series.map((p) => ({ x: formatChartTimeLabel(p.x, hourlyLabels), y: p.y }));
+  // "0%" between two empty periods says nothing.
+  const delta = (change: number | undefined, value: number) =>
+    change === undefined || (change === 0 && value === 0) ? undefined : <StatChangeDelta change={change} />;
+
+  if (loading) return <WidgetSkeleton />;
+  if (statsQuery.isError && !stats) return <WidgetError />;
+  if (!stats) return null;
+  const refreshing = statsQuery.isPlaceholderData || pageviewsQuery.isPlaceholderData;
 
   return (
-    <>
-      {loading ? (
-        <div className="board-stat-widget-skeleton" aria-busy>
-          <div className="skeleton" style={{ height: '2.5rem' }} />
-          <div className="skeleton skeleton-block" style={{ height: '4.5rem' }} />
+    <div className={refreshing ? 'ws-widget-content ws-refreshing' : 'ws-widget-content'}>
+      <KpiStrip inline columns={3} className="ws-widget-kpis">
+        <KpiCell label={t('visitors')} value={formatNumber(stats.visitors.value)} delta={delta(stats.visitors.change, stats.visitors.value)} />
+        <KpiCell
+          label={t('pageviews')}
+          keyColor={chartColors.series.pageviews}
+          value={formatNumber(stats.pageviews.value)}
+          delta={delta(stats.pageviews.change, stats.pageviews.value)}
+        />
+        <KpiCell label={t('visits')} value={formatNumber(stats.visits.value)} delta={delta(stats.visits.change, stats.visits.value)} />
+      </KpiStrip>
+      {chartData.length > 1 ? (
+        <div className="ws-result-chart ws-widget-chart">
+          <AnalyticsChart
+            Chart={AreaChart}
+            data={chartData}
+            responsive={{ height: '100%' }}
+            xAxis={{ dataKey: 'x', interval: 'preserveStartEnd', minTickGap: 28 }}
+          >
+            <Area
+              dataKey="y"
+              name={t('pageviews')}
+              stroke={chartColors.series.pageviews}
+              fill={chartColors.series.pageviews}
+              {...areaMark(chartColors.panel)}
+            />
+          </AnalyticsChart>
         </div>
-      ) : null}
-      {!loading && stats ? (
-        <>
-          <div className="board-stat-widget-kpis">
-            <StatCard label={t('pageviews')} value={formatNumber(stats.pageviews.value)} variant="primary" size="secondary" />
-            <StatCard label={t('visitors')} value={formatNumber(stats.visitors.value)} size="secondary" />
-            <StatCard label={t('visits')} value={formatNumber(stats.visits.value)} size="secondary" />
-          </div>
-          <div className="board-stat-widget-chart">
-            {chartData.length > 0 ? (
-              <AnalyticsChart
-                Chart={LineChart}
-                data={chartData}
-                margin={{ top: 8, right: 8, left: 0, bottom: 4 }}
-                responsive={{ width: '100%', height: '100%' }}
-                xAxis={{ dataKey: 'x', tick: { fontSize: 11 }, ...compactXAxis }}
-                yAxis={{ allowDecimals: false, tick: { fontSize: 11 }, ...compactYAxis }}
-              >
-                <Line
-                  type="monotone"
-                  dataKey="y"
-                  stroke={chartColors.series.pageviews}
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 3 }}
-                />
-              </AnalyticsChart>
-            ) : (
-              <p className="text-muted board-stat-widget-empty">{t('noDataInPeriod')}</p>
-            )}
-          </div>
-          <p className="text-muted board-stat-widget-period">{t(`boardWidgetPeriod${rangePreset}`)}</p>
-        </>
-      ) : null}
-    </>
+      ) : (
+        <p className="ws-muted-line ws-widget-empty">{t('noDataInPeriod')}</p>
+      )}
+    </div>
   );
 }
 
@@ -420,20 +436,18 @@ function InsightBoardWidget({
     queryKey: ['board-widget-insight', widget.insightId, rangePreset, filterJson],
     enabled: !publicMode && Boolean(widget.insightId),
     queryFn: () => api<{ data: InsightResult }>(`/api/insights/${widget.insightId}/run?${qs}`),
+    placeholderData: keepPreviousData,
   });
   const result = (widget.result as InsightResult | undefined) ?? insightQuery.data?.data;
   const loading = !publicMode && insightQuery.isLoading;
   const error = widget.error ?? (insightQuery.isError ? (insightQuery.error as Error).message : null);
 
+  if (loading) return <WidgetSkeleton />;
+  if (error) return <WidgetError />;
+  if (!result) return null;
   return (
-    <>
-      {loading ? <div className="skeleton skeleton-block" aria-busy /> : null}
-      {!loading && error ? <p className="text-muted board-stat-widget-empty">{t('boardWidgetError')}</p> : null}
-      {!loading && !error && result ? (
-        <div className="board-insight-widget-body">
-          <InsightResultView result={result} compact />
-        </div>
-      ) : null}
-    </>
+    <div className={insightQuery.isPlaceholderData ? 'ws-refreshing' : undefined}>
+      <InsightResultView result={result} compact />
+    </div>
   );
 }

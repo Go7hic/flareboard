@@ -1,9 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Check, CircleCheck, CreditCard, ExternalLink, Info, Minus } from 'lucide-react';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { EmptyState } from '../components/EmptyState';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
+import { SectionCard } from '../components/SectionCard';
+import { StatusBadge } from '../components/StatusBadge';
 import { Button } from '../components/ui/button';
+import { Skeleton } from '../components/ui/skeleton';
 import {
   api,
   isPaidPlanId,
@@ -13,9 +18,17 @@ import {
   type BillingSubscription,
   type PaidPlanId,
 } from '../lib/api';
-import { formatNextMonthStart, formatNumber, formatPercent, formatRetentionPeriod } from '../lib/format';
+import { formatNextMonthStart, formatNumber, formatPercent, formatRetentionPeriod, formatShortDate } from '../lib/format';
 import { t } from '../lib/i18n';
 import { formatEventLimit, usageGracePercent } from '../lib/landing-links';
+import { cn } from '../lib/utils';
+
+/** Stripe subscription status, localized for the known values. */
+function planStatusLabel(status: string | undefined): string {
+  const key = `workspacePlanStatus_${status ?? 'active'}`;
+  const label = t(key);
+  return label === key ? (status ?? '') : label;
+}
 
 function monthlyPrice(priceUsd: number): string {
   return t('billingPlanMonthlyPrice').replace('{price}', String(priceUsd));
@@ -37,14 +50,14 @@ function UpgradeOption({
     .replace('{otel}', formatEventLimit(plan.maxOtelRowsPerMonth))
     .replace('{duration}', formatRetentionPeriod(plan.maxRetentionDays));
   return (
-    <li className="billing-upgrade-option">
-      <div className="billing-upgrade-copy">
-        <p className="billing-upgrade-name">
-          <span>{plan.name}</span>
-          <span className="billing-upgrade-price">{monthlyPrice(plan.monthlyPriceUsd ?? 0)}</span>
-        </p>
-        <p className="field-hint">{summary}</p>
-      </div>
+    <li className="ws-settings-row ws-upgrade-row">
+      <span className="ws-upgrade-copy">
+        <span className="ws-upgrade-name">
+          {plan.name}
+          <span className="ws-upgrade-price">{monthlyPrice(plan.monthlyPriceUsd ?? 0)}</span>
+        </span>
+        <span className="ws-settings-row-hint">{summary}</span>
+      </span>
       <Button variant="primary" size="sm" disabled={disabled} onClick={() => onUpgrade(plan.id)}>
         {t('billingUpgradeToPlan').replace('{plan}', plan.name)}
       </Button>
@@ -83,30 +96,29 @@ function UsageMeter({ label, used, included, graceMultiple, resetDate }: UsageMe
   } else if (ratio >= 0.8) {
     note = { text: t('billingUsageNear').replace('{percent}', formatPercent(ratio * 100)), tone: 'muted' };
   }
+  const state = note?.tone === 'danger' ? 'is-over' : ratio >= 0.8 ? 'is-near' : '';
 
   return (
-    <div className="billing-usage">
-      <div className="list-row billing-usage-row">
-        <span>{label}</span>
-        <span className="stat-value billing-usage-value">
-          {formatNumber(used)} / {formatNumber(included)}
+    <li className="ws-meter">
+      <div className="ws-meter-head">
+        <span className="ws-meter-label">{label}</span>
+        <span className="ws-meter-value">
+          <strong>{formatNumber(used)}</strong> / {formatNumber(included)}
+          <span className="ws-meter-pct">{formatPercent(ratio * 100, { digits: ratio > 0 && ratio < 0.1 ? 1 : 0 })}</span>
         </span>
       </div>
       <div
-        className="billing-usage-track"
+        className="ws-meter-track"
         role="progressbar"
         aria-label={label}
         aria-valuenow={pct}
         aria-valuemin={0}
         aria-valuemax={100}
       >
-        <div
-          className={`billing-usage-fill${note?.tone === 'danger' ? ' is-over' : ratio >= 0.8 ? ' is-near-limit' : ''}`}
-          style={{ width: `${pct}%` }}
-        />
+        <div className={cn('ws-meter-fill', state)} style={{ width: `${Math.max(pct, used > 0 ? 1 : 0)}%` }} />
       </div>
-      {note ? <p className={`billing-usage-note is-${note.tone}`}>{note.text}</p> : null}
-    </div>
+      {note ? <p className={`ws-meter-note is-${note.tone}`}>{note.text}</p> : null}
+    </li>
   );
 }
 
@@ -146,21 +158,33 @@ export default function Billing() {
   });
 
   const portal = useMutation({
-    mutationFn: () =>
-      api<{ url: string }>('/api/billing/portal', { method: 'POST', body: '{}' }),
+    mutationFn: () => api<{ url: string }>('/api/billing/portal', { method: 'POST', body: '{}' }),
     onSuccess: (res) => {
       if (res.url) window.location.href = res.url;
     },
   });
 
   if (isLoading) {
-    return <div className="skeleton skeleton-block" style={{ minHeight: '12rem' }} aria-hidden />;
+    return (
+      <Page className="ws-page-billing ws-page-settings">
+        <PageHeader title={t('billing')} lead={t('workspaceBillingLead')} />
+        <PageBody>
+          <div className="ws-settings" aria-hidden>
+            <Skeleton className="h-44 w-full" />
+            <Skeleton className="h-56 w-full" />
+          </div>
+        </PageBody>
+      </Page>
+    );
   }
 
   if (!data?.hosted) {
     return (
-      <Page>
-        <PageHeader title={t('billing')} lead={t('billingSelfHosted')} />
+      <Page className="ws-page-billing ws-page-settings">
+        <PageHeader title={t('billing')} />
+        <PageBody>
+          <EmptyState variant="rich" icon={<CreditCard />} title={t('workspaceSelfHostedTitle')} description={t('billingSelfHosted')} />
+        </PageBody>
       </Page>
     );
   }
@@ -182,97 +206,124 @@ export default function Billing() {
   const priceUsd = plan.monthlyPriceUsd ?? plans.find((p) => p.id === plan.id)?.monthlyPriceUsd;
   // Shown once the refetched subscription reflects the switch (the API applies it before replying).
   const switchedPlanName = switchedTo && switchedTo === plan.id ? plan.name : null;
+  const features: Array<{ key: string; label: string; enabled: boolean }> = [
+    {
+      key: 'websites',
+      label:
+        plan.maxWebsites != null
+          ? t('workspacePlanWebsites').replace('{count}', formatNumber(plan.maxWebsites))
+          : t('workspacePlanUnlimitedWebsites'),
+      enabled: true,
+    },
+    { key: 'replay', label: t('replay'), enabled: plan.replayEnabled },
+    { key: 'heatmaps', label: t('heatmaps'), enabled: plan.heatmapsEnabled },
+    { key: 'reports', label: t('emailReports'), enabled: plan.emailReportsEnabled },
+    { key: 'teams', label: t('teams'), enabled: plan.teamsEnabled },
+    { key: 'flags', label: t('featureFlags'), enabled: plan.experimentationEnabled },
+    { key: 'surveys', label: t('surveys'), enabled: plan.surveysEnabled },
+    { key: 'warehouse', label: t('dataWarehouse'), enabled: plan.warehouseEnabled },
+  ];
+  const active = !data.status || data.status === 'active' || data.status === 'trialing';
 
   return (
-    <Page>
-      <PageHeader title={t('billing')} />
+    <Page className="ws-page-billing ws-page-settings">
+      <PageHeader
+        title={t('billing')}
+        lead={t('workspaceBillingLead')}
+        actions={
+          data.billingAccount ? (
+            <Button variant="outline" disabled={portal.isPending} onClick={() => portal.mutate()}>
+              {t('manageBilling')}
+              <ExternalLink aria-hidden />
+            </Button>
+          ) : null
+        }
+      />
       <PageBody>
-      {success ? <p className="text-muted panel-body">{t('billingSuccess')}</p> : null}
-      {canceled ? <p className="text-muted panel-body">{t('billingCanceled')}</p> : null}
-      {switchedPlanName ? (
-        <p className="text-muted panel-body" role="status">
-          {t('billingSwitched').replace('{plan}', switchedPlanName)}
-        </p>
-      ) : null}
-
-      <section className="panel section-gap">
-        <div className="panel-body">
-          <h2 className="section-title">{t('currentPlan')}</h2>
-          <p className="stat-value">{plan.name}</p>
-          <p className="text-muted">
-            {plan.maxWebsites != null ? (
-              <>
-                {t('websiteLimit')}: {plan.maxWebsites} ·{' '}
-              </>
-            ) : null}
-            {t('replay')}: {plan.replayEnabled ? t('yes') : t('no')} ·{' '}
-            {t('emailReports')}: {plan.emailReportsEnabled ? t('yes') : t('no')} · {t('heatmaps')}:{' '}
-            {plan.heatmapsEnabled ? t('yes') : t('no')} · {t('teams')}:{' '}
-            {plan.teamsEnabled ? t('yes') : t('no')} · {t('featureFlags')}:{' '}
-            {plan.experimentationEnabled ? t('yes') : t('no')} · {t('surveys')}:{' '}
-            {plan.surveysEnabled ? t('yes') : t('no')} · {t('dataWarehouse')}:{' '}
-            {plan.warehouseEnabled ? t('yes') : t('no')}
-            {priceUsd != null ? ` · ${monthlyPrice(priceUsd)}` : null}
-          </p>
-          {plan.maxRetentionDays ? (
-            <p className="text-muted">
-              {t('billingRetention').replace('{duration}', formatRetentionPeriod(plan.maxRetentionDays))}
+        <div className="ws-settings">
+          {success || canceled || switchedPlanName ? (
+            <p className="ws-notice" role="status">
+              {canceled ? <Info aria-hidden /> : <CircleCheck aria-hidden />}
+              {switchedPlanName
+                ? t('billingSwitched').replace('{plan}', switchedPlanName)
+                : success
+                  ? t('billingSuccess')
+                  : t('billingCanceled')}
             </p>
           ) : null}
-          <div className="billing-usage-group">
-            <h3 className="billing-usage-title">{t('billingUsageTitle')}</h3>
-            <p className="field-hint">
-              {t('billingUsageResets').replace('{date}', resetDate)}{' '}
-              {gracePercent > 0
-                ? t('billingUsageGraceHint').replace('{percent}', formatPercent(gracePercent))
-                : t('billingUsageStopsHint')}
+          {portal.isError ? (
+            <p className="text-danger" role="alert">
+              {portal.error instanceof Error ? portal.error.message : t('requestFailed')}
             </p>
-            {meters.map((meter) => (
-              <UsageMeter
-                key={meter.key}
-                label={meter.label}
-                used={meter.used}
-                included={meter.included}
-                graceMultiple={plan.usageGraceMultiple ?? 1}
-                resetDate={resetDate}
-              />
-            ))}
-          </div>
+          ) : null}
+
+          <SectionCard title={t('currentPlan')}>
+            <div className="ws-plan-head">
+              <span className="ws-plan-name">{plan.name}</span>
+              <StatusBadge tone={active ? 'success' : 'warning'}>{planStatusLabel(data.status)}</StatusBadge>
+              {priceUsd != null ? <span className="ws-plan-price">{monthlyPrice(priceUsd)}</span> : null}
+              {data.currentPeriodEnd ? (
+                <span className="ws-plan-price">
+                  {t('workspacePlanRenews').replace('{date}', formatShortDate(data.currentPeriodEnd))}
+                </span>
+              ) : null}
+            </div>
+            <ul className="ws-feature-list">
+              {features.map((feature) => (
+                <li key={feature.key} className={feature.enabled ? 'is-on' : 'is-off'}>
+                  {feature.enabled ? <Check aria-hidden /> : <Minus aria-hidden />}
+                  <span>{feature.label}</span>
+                  <span className="visually-hidden">{feature.enabled ? t('yes') : t('no')}</span>
+                </li>
+              ))}
+            </ul>
+            {plan.maxRetentionDays ? (
+              <p className="ws-muted-line ws-plan-retention">
+                {t('billingRetention').replace('{duration}', formatRetentionPeriod(plan.maxRetentionDays))}
+              </p>
+            ) : null}
+          </SectionCard>
+
+          <SectionCard
+            title={t('billingUsageTitle')}
+            description={`${t('billingUsageResets').replace('{date}', resetDate)} ${
+              gracePercent > 0
+                ? t('billingUsageGraceHint').replace('{percent}', formatPercent(gracePercent))
+                : t('billingUsageStopsHint')
+            }`}
+          >
+            <ul className="ws-meters">
+              {meters.map((meter) => (
+                <UsageMeter
+                  key={meter.key}
+                  label={meter.label}
+                  used={meter.used}
+                  included={meter.included}
+                  graceMultiple={plan.usageGraceMultiple ?? 1}
+                  resetDate={resetDate}
+                />
+              ))}
+            </ul>
+          </SectionCard>
+
           {upgradePlans.length > 0 ? (
-            <div className="billing-usage-group">
-              <h3 className="billing-usage-title">{t('billingUpgradeTitle')}</h3>
-              {isPaidPlanId(plan.id) ? <p className="field-hint">{t('billingUpgradeProrated')}</p> : null}
-              <ul className="billing-upgrade-list">
+            <SectionCard
+              title={t('billingUpgradeTitle')}
+              description={isPaidPlanId(plan.id) ? t('billingUpgradeProrated') : undefined}
+            >
+              <ul className="ws-settings-rows">
                 {upgradePlans.map((p) => (
                   <UpgradeOption key={p.id} plan={p} disabled={checkout.isPending} onUpgrade={checkout.mutate} />
                 ))}
               </ul>
               {checkout.isError ? (
-                <p className="text-danger mt-3">
+                <p className="text-danger" role="alert">
                   {checkout.error instanceof Error ? checkout.error.message : t('requestFailed')}
                 </p>
               ) : null}
-            </div>
-          ) : null}
-          {data.billingAccount ? (
-            <div className="mt-5">
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={portal.isPending}
-                onClick={() => portal.mutate()}
-              >
-                {t('manageBilling')}
-              </Button>
-              {portal.isError ? (
-                <p className="text-danger mt-3">
-                  {portal.error instanceof Error ? portal.error.message : t('requestFailed')}
-                </p>
-              ) : null}
-            </div>
+            </SectionCard>
           ) : null}
         </div>
-      </section>
       </PageBody>
     </Page>
   );

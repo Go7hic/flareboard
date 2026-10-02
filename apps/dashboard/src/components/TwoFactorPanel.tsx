@@ -1,8 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
+import { Download, KeyRound, ShieldCheck } from 'lucide-react';
+import { KvList } from './KvList';
 import { QrCode } from './QrCode';
+import { SectionCard } from './SectionCard';
+import { StatusBadge } from './StatusBadge';
 import { TwoFactorCodeField } from './TwoFactorCodeField';
-import { Badge } from './ui/badge';
+import { CopyButton } from './workspace/CopyButton';
 import { Button } from './ui/button';
 import {
   Dialog,
@@ -14,10 +18,9 @@ import {
 } from './ui/dialog';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Panel } from './ui/panel';
 import { Skeleton } from './ui/skeleton';
 import { api } from '../lib/api';
-import { formatDateOnly } from '../lib/format';
+import { formatDateOnly, formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import {
   groupSecret,
@@ -47,7 +50,6 @@ export function TwoFactorPanel({ username, passwordRequired }: { username: strin
   const [enableCode, setEnableCode] = useState('');
   const [freshCodes, setFreshCodes] = useState<string[] | null>(null);
   const [dialog, setDialog] = useState<'regenerate' | 'disable' | null>(null);
-  const [secretCopied, setSecretCopied] = useState(false);
 
   const statusQuery = useQuery({
     queryKey: TWO_FACTOR_QUERY_KEY,
@@ -66,7 +68,6 @@ export function TwoFactorPanel({ username, passwordRequired }: { username: strin
     onSuccess: (data) => {
       setSetup(data);
       setEnableCode('');
-      setSecretCopied(false);
     },
   });
 
@@ -87,16 +88,6 @@ export function TwoFactorPanel({ username, passwordRequired }: { username: strin
     if (isTotpCode(code)) enableMutation.mutate(code);
   }
 
-  async function copySecret() {
-    if (!setup) return;
-    try {
-      await navigator.clipboard.writeText(setup.secret);
-      setSecretCopied(true);
-    } catch {
-      setSecretCopied(false);
-    }
-  }
-
   function cancelSetup() {
     setSetup(null);
     setEnableCode('');
@@ -106,50 +97,59 @@ export function TwoFactorPanel({ username, passwordRequired }: { username: strin
   const status = statusQuery.data;
 
   return (
-    <Panel aria-labelledby="two-factor-title">
-      <div className="security-panel-head">
-        <div>
-          <h2 id="two-factor-title" className="section-title">
-            {t('twoFactorTitle')}
-          </h2>
-          <p className="section-lead">{t('twoFactorLead')}</p>
-        </div>
-        {status?.enabled ? <Badge variant="secondary">{t('twoFactorOn')}</Badge> : null}
-      </div>
-
+    <SectionCard
+      title={t('twoFactorTitle')}
+      description={t('twoFactorLead')}
+      actions={
+        status ? (
+          status.enabled ? (
+            <StatusBadge tone="success">{t('twoFactorOn')}</StatusBadge>
+          ) : (
+            <StatusBadge>{t('workspaceTwoFactorOff')}</StatusBadge>
+          )
+        ) : null
+      }
+    >
       {statusQuery.isLoading ? <Skeleton className="h-10 w-full" /> : null}
-      {statusQuery.error ? <p className="text-danger">{(statusQuery.error as Error).message}</p> : null}
+      {statusQuery.error ? (
+        <p className="text-danger" role="alert">
+          {(statusQuery.error as Error).message}
+        </p>
+      ) : null}
 
       {freshCodes ? (
         <RecoveryCodesReveal codes={freshCodes} username={username} onDone={() => setFreshCodes(null)} />
       ) : null}
 
       {status && !status.enabled && !setup ? (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="ws-form-actions">
           <Button type="button" variant="primary" disabled={setupMutation.isPending} onClick={() => setupMutation.mutate()}>
+            <ShieldCheck aria-hidden />
             {status.pending ? t('twoFactorContinueSetup') : t('twoFactorSetUp')}
           </Button>
-          {setupMutation.error ? <p className="text-danger">{twoFactorErrorMessage(setupMutation.error)}</p> : null}
+          {setupMutation.error ? (
+            <p className="text-danger" role="alert">
+              {twoFactorErrorMessage(setupMutation.error)}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
       {status && !status.enabled && setup ? (
-        <div className="two-factor-setup">
-          <div className="two-factor-qr">
-            <QrCode value={setup.otpauthUri} size={176} label={t('twoFactorQrLabel')} />
+        <div className="ws-2fa-setup">
+          <div className="ws-2fa-qr">
+            <QrCode value={setup.otpauthUri} size={168} label={t('twoFactorQrLabel')} />
           </div>
-          <form className="two-factor-setup-steps" onSubmit={onEnable}>
-            <p className="text-sm">{t('twoFactorScanStep')}</p>
+          <form className="ws-2fa-steps" onSubmit={onEnable}>
+            <p className="ws-2fa-step">{t('twoFactorScanStep')}</p>
             <div className="field">
               <span className="field-label">{t('twoFactorManualKey')}</span>
-              <div className="flex flex-wrap items-center gap-2">
-                <code className="two-factor-secret" aria-label={t('twoFactorManualKey')}>
+              <span className="ws-copy-cell">
+                <code className="ws-code-value ws-2fa-secret" aria-label={t('twoFactorManualKey')}>
                   {groupSecret(setup.secret)}
                 </code>
-                <Button type="button" variant="secondary" size="sm" onClick={() => void copySecret()}>
-                  {secretCopied ? t('copied') : t('copyToClipboard')}
-                </Button>
-              </div>
+                <CopyButton text={setup.secret} iconOnly />
+              </span>
             </div>
             <TwoFactorCodeField
               id="two-factor-enable-code"
@@ -163,7 +163,7 @@ export function TwoFactorPanel({ username, passwordRequired }: { username: strin
                 {twoFactorErrorMessage(enableMutation.error)}
               </p>
             ) : null}
-            <div className="flex flex-wrap gap-2">
+            <div className="ws-form-actions">
               <Button
                 type="submit"
                 variant="primary"
@@ -171,7 +171,7 @@ export function TwoFactorPanel({ username, passwordRequired }: { username: strin
               >
                 {t('twoFactorEnable')}
               </Button>
-              <Button type="button" variant="outline" onClick={cancelSetup}>
+              <Button type="button" variant="ghost" onClick={cancelSetup}>
                 {t('cancel')}
               </Button>
             </div>
@@ -181,23 +181,31 @@ export function TwoFactorPanel({ username, passwordRequired }: { username: strin
 
       {status?.enabled ? (
         <>
-          <dl className="security-facts">
-            <div>
-              <dt>{t('twoFactorEnabledOn')}</dt>
-              <dd>{status.enabledAt ? formatDateOnly(status.enabledAt) : '—'}</dd>
-            </div>
-            <div>
-              <dt>{t('twoFactorRecoveryCodesLeft')}</dt>
-              <dd className="flex items-center gap-2">
-                <span className="font-mono">{status.recoveryCodesRemaining}</span>
-                {status.recoveryCodesRemaining <= LOW_RECOVERY_CODES ? (
-                  <Badge variant="warning">{t('twoFactorRecoveryCodesLow')}</Badge>
-                ) : null}
-              </dd>
-            </div>
-          </dl>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="secondary" onClick={() => setDialog('regenerate')}>
+          <KvList
+            compact
+            items={[
+              {
+                key: 'on',
+                label: t('twoFactorEnabledOn'),
+                value: status.enabledAt ? formatDateOnly(status.enabledAt) : '–',
+              },
+              {
+                key: 'codes',
+                label: t('twoFactorRecoveryCodesLeft'),
+                value: (
+                  <span className="ws-2fa-codes-left">
+                    {formatNumber(status.recoveryCodesRemaining)}
+                    {status.recoveryCodesRemaining <= LOW_RECOVERY_CODES ? (
+                      <StatusBadge tone="warning">{t('twoFactorRecoveryCodesLow')}</StatusBadge>
+                    ) : null}
+                  </span>
+                ),
+              },
+            ]}
+          />
+          <div className="ws-form-actions">
+            <Button type="button" variant="outline" onClick={() => setDialog('regenerate')}>
+              <KeyRound aria-hidden />
               {t('twoFactorRegenerate')}
             </Button>
             <Button type="button" variant="danger" onClick={() => setDialog('disable')}>
@@ -240,7 +248,7 @@ export function TwoFactorPanel({ username, passwordRequired }: { username: strin
           refresh();
         }}
       />
-    </Panel>
+    </SectionCard>
   );
 }
 
@@ -270,19 +278,20 @@ function RecoveryCodesReveal({ codes, username, onDone }: { codes: string[]; use
   }
 
   return (
-    <div className="two-factor-codes" role="status">
-      <h3 className="section-title">{t('twoFactorRecoveryCodesTitle')}</h3>
-      <p className="section-lead">{t('twoFactorRecoveryCodesLead')}</p>
-      <ol className="two-factor-codes-list">
+    <div className="ws-2fa-codes" role="status">
+      <p className="ws-switch-row-label">{t('twoFactorRecoveryCodesTitle')}</p>
+      <p className="ws-muted-line">{t('twoFactorRecoveryCodesLead')}</p>
+      <ol className="ws-2fa-codes-list">
         {codes.map((code) => (
           <li key={code}>{code}</li>
         ))}
       </ol>
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="secondary" onClick={() => void copyAll()}>
+      <div className="ws-form-actions">
+        <Button type="button" variant="outline" onClick={() => void copyAll()}>
           {copied ? t('copied') : t('twoFactorCopyAll')}
         </Button>
-        <Button type="button" variant="secondary" onClick={download}>
+        <Button type="button" variant="outline" onClick={download}>
+          <Download aria-hidden />
           {t('twoFactorDownload')}
         </Button>
         <Button type="button" variant="primary" onClick={onDone}>

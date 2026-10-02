@@ -1,14 +1,18 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Mail, Trash2 } from 'lucide-react';
 import { MAX_SUBSCRIPTION_RECIPIENTS } from '@flareboard/shared/dashboards';
 import { ModalDialog } from './ModalDialog';
 import { deleteTitle, useConfirm } from './ConfirmDialog';
+import { EmptyState } from './EmptyState';
+import { StatusBadge } from './StatusBadge';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
+import { Skeleton } from './ui/skeleton';
 import { Switch } from './ui/switch';
 import { Textarea } from './ui/textarea';
 import { api, type ReportSubscription } from '../lib/api';
-import { formatDateTime } from '../lib/format';
+import { formatDateTime, formatShortDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
 
 const WEEKDAYS = [1, 2, 3, 4, 5, 6, 0];
@@ -105,31 +109,45 @@ export function SubscriptionsDialog({
   const canCreate = recipients.length > 0 && recipients.length <= MAX_SUBSCRIPTION_RECIPIENTS && !invalid.length;
 
   return (
-    <ModalDialog className="subscriptions-dialog" aria-label={t('subscriptionsTitle')} onClose={onClose}>
+    <ModalDialog className="ws-dialog--md" aria-label={t('subscriptionsTitle')} onClose={onClose}>
       <header className="dialog-header">
         <h2 className="dialog-title">{t('subscriptionsTitle')}</h2>
-        <p className="text-muted">{t('subscriptionsLead').replace('{name}', targetName)}</p>
+        <p>{t('subscriptionsLead').replace('{name}', targetName)}</p>
       </header>
       <div className="dialog-body">
-        {listQuery.isLoading ? <div className="skeleton" style={{ height: '2.5rem' }} /> : null}
-        {!listQuery.isLoading && !subscriptions.length ? <p className="text-muted">{t('subscriptionsEmpty')}</p> : null}
+        {listQuery.isLoading ? <Skeleton className="h-12 w-full" /> : null}
+        {!listQuery.isLoading && !subscriptions.length ? (
+          <EmptyState icon={<Mail />} title={t('subscriptionsEmpty')} />
+        ) : null}
         {subscriptions.length ? (
-          <ul className="list-plain subscription-list">
+          <ul className="ws-dialog-list">
             {subscriptions.map((sub) => (
-              <li key={sub.id} className="subscription-row">
-                <div className="subscription-row-main">
-                  <strong>{scheduleText(sub)}</strong>
-                  <span className="text-muted">{sub.recipients.join(', ')}</span>
-                  <span className="text-muted subscription-row-meta">
-                    {sub.enabled
-                      ? t('subscriptionNextSend').replace('{date}', formatDateTime(sub.nextRunAt))
-                      : t('subscriptionPaused')}
-                    {sub.lastSentAt ? ` · ${t('subscriptionLastSent').replace('{date}', formatDateTime(sub.lastSentAt))}` : ''}
+              <li key={sub.id} className="ws-dialog-row">
+                <div className="ws-dialog-row-main">
+                  <span className="ws-dialog-row-title">
+                    {scheduleText(sub)}
+                    {sub.enabled ? null : <StatusBadge>{t('subscriptionPaused')}</StatusBadge>}
                   </span>
-                  {sub.lastError ? <span className="text-danger subscription-row-meta">{sub.lastError}</span> : null}
+                  <span className="ws-dialog-row-meta ws-truncate" title={sub.recipients.join(', ')}>
+                    {sub.recipients.join(', ')}
+                  </span>
+                  <span className="ws-dialog-row-meta">
+                    {sub.enabled ? (
+                      <span title={formatDateTime(sub.nextRunAt)}>
+                        {t('subscriptionNextSend').replace('{date}', formatShortDateTime(sub.nextRunAt))}
+                      </span>
+                    ) : null}
+                    {sub.lastSentAt ? (
+                      <span title={formatDateTime(sub.lastSentAt)}>
+                        {sub.enabled ? ' · ' : ''}
+                        {t('subscriptionLastSent').replace('{date}', formatShortDateTime(sub.lastSentAt))}
+                      </span>
+                    ) : null}
+                  </span>
+                  {sub.lastError ? <span className="ws-dialog-row-meta text-danger">{sub.lastError}</span> : null}
                 </div>
                 {canEdit ? (
-                  <div className="subscription-row-actions">
+                  <div className="ws-dialog-row-actions">
                     <Switch
                       checked={sub.enabled}
                       aria-label={t('subscriptionEnabled')}
@@ -139,12 +157,14 @@ export function SubscriptionsDialog({
                     <Button
                       type="button"
                       variant="destructive-ghost"
-                      size="sm"
+                      size="icon-sm"
+                      aria-label={t('delete')}
+                      title={t('delete')}
                       onClick={() =>
                         confirm({ title: deleteTitle(scheduleText(sub)), onConfirm: () => deleteMutation.mutate(sub.id) })
                       }
                     >
-                      {t('delete')}
+                      <Trash2 aria-hidden />
                     </Button>
                   </div>
                 ) : null}
@@ -154,9 +174,9 @@ export function SubscriptionsDialog({
         ) : null}
 
         {canEdit ? (
-          <div className="subscription-create">
-            <h3 className="section-title">{t('subscriptionNew')}</h3>
-            <div className="subscription-create-grid">
+          <div className="ws-dialog-section">
+            <h3 className="card-title">{t('subscriptionNew')}</h3>
+            <div className="ws-form-grid ws-form-grid--3">
               <div className="field">
                 <Label htmlFor="subscription-frequency">{t('subscriptionFrequency')}</Label>
                 <select
@@ -206,7 +226,7 @@ export function SubscriptionsDialog({
                 placeholder="team@example.com, ceo@example.com"
                 onChange={(event) => setRecipientsText(event.target.value)}
               />
-              <p className="text-muted field-hint">
+              <p className={invalid.length ? 'field-hint text-danger' : 'field-hint'}>
                 {invalid.length
                   ? t('subscriptionInvalidRecipients').replace('{list}', invalid.join(', '))
                   : t('subscriptionRecipientsHint')
@@ -214,7 +234,11 @@ export function SubscriptionsDialog({
                       .replace('{timezone}', timezone ?? browserTimezone)}
               </p>
             </div>
-            {createMutation.error ? <p className="text-danger">{(createMutation.error as Error).message}</p> : null}
+            {createMutation.error ? (
+              <p className="text-danger" role="alert">
+                {(createMutation.error as Error).message}
+              </p>
+            ) : null}
           </div>
         ) : null}
       </div>

@@ -39,7 +39,7 @@ function renderInline(nodes: MdInline[], keyPrefix = 'i'): ReactNode[] {
 export function NotebookMarkdown({ source }: { source: string }) {
   const blocks = parseNotebookMarkdown(source);
   return (
-    <div className="notebook-markdown">
+    <div className="ws-markdown">
       {blocks.map((block, index) => {
         switch (block.type) {
           case 'heading': {

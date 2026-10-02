@@ -1,11 +1,16 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link2, Plus } from 'lucide-react';
 import { ModalDialog } from './ModalDialog';
 import { useConfirm } from './ConfirmDialog';
+import { EmptyState } from './EmptyState';
+import { StatusBadge } from './StatusBadge';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
+import { Skeleton } from './ui/skeleton';
+import { CopyButton } from './workspace/CopyButton';
 import { api, type ShareLink } from '../lib/api';
-import { formatDateTime } from '../lib/format';
+import { formatDateTime, formatShortDate } from '../lib/format';
 import { t } from '../lib/i18n';
 
 const EXPIRY_OPTIONS = ['never', '7', '30', '90'] as const;
@@ -31,7 +36,6 @@ export function ShareLinksDialog({
   const confirm = useConfirm();
   const queryClient = useQueryClient();
   const [expiry, setExpiry] = useState<(typeof EXPIRY_OPTIONS)[number]>('30');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const queryKey = ['share-links', entityId];
 
   const sharesQuery = useQuery({
@@ -53,48 +57,45 @@ export function ShareLinksDialog({
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   });
 
-  async function copy(link: ShareLink) {
-    try {
-      await navigator.clipboard.writeText(shareUrl(link.slug));
-      setCopiedId(link.id);
-    } catch {
-      setCopiedId(null);
-    }
-  }
-
   const links = sharesQuery.data ?? [];
 
   return (
-    <ModalDialog className="share-links-dialog" aria-label={t('shareLinksTitle')} onClose={onClose}>
+    <ModalDialog className="ws-dialog--md" aria-label={t('shareLinksTitle')} onClose={onClose}>
       <header className="dialog-header">
         <h2 className="dialog-title">{t('shareLinksTitle')}</h2>
-        <p className="text-muted">{t('shareLinksLead').replace('{name}', entityName)}</p>
+        <p>{t('shareLinksLead').replace('{name}', entityName)}</p>
       </header>
       <div className="dialog-body">
-        {sharesQuery.isLoading ? <div className="skeleton" style={{ height: '2.5rem' }} /> : null}
-        {!sharesQuery.isLoading && !links.length ? <p className="text-muted">{t('shareLinksEmpty')}</p> : null}
+        {sharesQuery.isLoading ? <Skeleton className="h-11 w-full" /> : null}
+        {!sharesQuery.isLoading && !links.length ? (
+          <EmptyState icon={<Link2 />} title={t('shareLinksEmpty')} />
+        ) : null}
         {links.length ? (
-          <ul className="list-plain share-links-list">
+          <ul className="ws-dialog-list">
             {links.map((link) => {
-              const expired = link.expiresAt != null && new Date(link.expiresAt).getTime() <= Date.now();
+              const expiresAt = link.expiresAt != null ? new Date(link.expiresAt).getTime() : null;
+              const expired = expiresAt != null && expiresAt <= Date.now();
+              const url = shareUrl(link.slug);
               return (
-                <li key={link.id} className="share-links-row">
-                  <div className="share-links-row-main">
-                    <a href={shareUrl(link.slug)} target="_blank" rel="noreferrer" className="share-links-url">
-                      {shareUrl(link.slug)}
+                <li key={link.id} className="ws-dialog-row">
+                  <div className="ws-dialog-row-main">
+                    <a href={url} target="_blank" rel="noreferrer" className="ws-share-url" title={url}>
+                      {url.replace(/^https?:\/\//, '')}
                     </a>
-                    <span className="text-muted share-links-meta">
-                      {expired
-                        ? t('shareExpired')
-                        : link.expiresAt
-                          ? t('shareLinksExpires').replace('{date}', formatDateTime(new Date(link.expiresAt).getTime()))
-                          : t('shareLinksNoExpiry')}
+                    <span className="ws-dialog-row-meta">
+                      {expired ? (
+                        <StatusBadge tone="warning">{t('shareExpired')}</StatusBadge>
+                      ) : expiresAt != null ? (
+                        <span title={formatDateTime(expiresAt)}>
+                          {t('shareLinksExpires').replace('{date}', formatShortDate(expiresAt))}
+                        </span>
+                      ) : (
+                        t('shareLinksNoExpiry')
+                      )}
                     </span>
                   </div>
-                  <div className="share-links-row-actions">
-                    <Button type="button" variant="ghost" size="sm" onClick={() => copy(link)}>
-                      {copiedId === link.id ? t('shareCopied') : t('copyShareLink')}
-                    </Button>
+                  <div className="ws-dialog-row-actions">
+                    <CopyButton text={url} label={t('copyShareLink')} copiedLabel={t('shareCopied')} iconOnly />
                     {canEdit ? (
                       <Button
                         type="button"
@@ -120,7 +121,7 @@ export function ShareLinksDialog({
           </ul>
         ) : null}
         {canEdit ? (
-          <div className="share-links-create">
+          <div className="ws-dialog-create">
             <div className="field">
               <Label htmlFor="share-link-expiry">{t('shareLinksExpiry')}</Label>
               <select
@@ -136,13 +137,18 @@ export function ShareLinksDialog({
                 ))}
               </select>
             </div>
-            <Button type="button" variant="secondary" disabled={createMutation.isPending} onClick={() => createMutation.mutate()}>
+            <Button type="button" variant="outline" disabled={createMutation.isPending} onClick={() => createMutation.mutate()}>
+              <Plus aria-hidden />
               {t('shareLinksCreate')}
             </Button>
           </div>
         ) : null}
-        <p className="text-muted share-links-note">{t('shareLinksNote')}</p>
-        {createMutation.error ? <p className="text-danger">{(createMutation.error as Error).message}</p> : null}
+        <p className="field-hint">{t('shareLinksNote')}</p>
+        {createMutation.error ? (
+          <p className="text-danger" role="alert">
+            {(createMutation.error as Error).message}
+          </p>
+        ) : null}
       </div>
       <footer className="dialog-footer">
         <Button type="button" variant="ghost" onClick={onClose}>

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { Check, Ellipsis, LayoutGrid, Link2, Mail, Pencil, Share2, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { PropertyFilter } from '@flareboard/shared/insight-query';
 import { BoardEditorForm } from '../components/BoardEditorForm';
@@ -7,17 +8,25 @@ import { BoardWidgets } from '../components/BoardWidgets';
 import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
 import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
+import { ModalDialog } from '../components/ModalDialog';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { PropertyFilterBuilder } from '../components/PropertyFilterBuilder';
 import { ShareLinksDialog } from '../components/ShareLinksDialog';
 import { SubscriptionsDialog } from '../components/SubscriptionsDialog';
 import { Button } from '../components/ui/button';
-import { Label } from '../components/ui/label';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu';
+import { Skeleton } from '../components/ui/skeleton';
+import { RangeSegmented } from '../components/workspace/RangeSegmented';
 import {
   BOARD_RANGE_PRESET_OPTIONS,
   boardConfigToDrafts,
-  normalizeBoardRangePreset,
   parseBoardConfig,
   parseBoardUrlState,
   withBoardWidgets,
@@ -40,6 +49,7 @@ export default function BoardDetailPage() {
   const [editing, setEditing] = useState(false);
   const [dialog, setDialog] = useState<'share' | 'subscribe' | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const copiedTimer = useRef<number | undefined>(undefined);
   /** Widget order / sizes while a layout save is in flight (optimistic). */
   const [pendingWidgets, setPendingWidgets] = useState<BoardWidget[] | null>(null);
 
@@ -62,6 +72,8 @@ export default function BoardDetailPage() {
   useEffect(() => {
     setDraftFilters((current) => (sameFilters(completeFilters(current), appliedFilters) ? current : appliedFilters));
   }, [appliedFilters]);
+
+  useEffect(() => () => window.clearTimeout(copiedTimer.current), []);
 
   function updateUrl(next: { rangePreset?: BoardRangePreset; filters?: PropertyFilter[] }) {
     const params = new URLSearchParams(searchParams);
@@ -91,6 +103,15 @@ export default function BoardDetailPage() {
   const range = presetToRange(rangePreset);
   const rangeQs = rangeQueryString(range.startAt, range.endAt);
   const dirty = rangePreset !== saved.rangePreset || !sameFilters(appliedFilters, saved.filters);
+
+  const websiteNames = useMemo(
+    () => Object.fromEntries((websitesQuery.data ?? []).map((site) => [site.id, site.name])),
+    [websitesQuery.data],
+  );
+  const insightNames = useMemo(
+    () => Object.fromEntries((insightsQuery.data ?? []).map((insight) => [insight.id, insight.name])),
+    [insightsQuery.data],
+  );
 
   const saveMutation = useMutation({
     mutationFn: (payload: { name?: string; parameters: Record<string, unknown> }) =>
@@ -128,7 +149,8 @@ export default function BoardDetailPage() {
     try {
       await navigator.clipboard.writeText(window.location.href);
       setLinkCopied(true);
-      window.setTimeout(() => setLinkCopied(false), 2000);
+      window.clearTimeout(copiedTimer.current);
+      copiedTimer.current = window.setTimeout(() => setLinkCopied(false), 2000);
     } catch {
       setLinkCopied(false);
     }
@@ -136,138 +158,185 @@ export default function BoardDetailPage() {
 
   const widgets = pendingWidgets ?? saved.widgets;
 
+  const actions = board ? (
+    <div className="ws-header-controls">
+      {linkCopied ? (
+        <span className="ws-inline-status" role="status">
+          <Check aria-hidden />
+          {t('shareCopied')}
+        </span>
+      ) : null}
+      <Button type="button" variant="outline" onClick={() => setDialog('share')}>
+        <Share2 aria-hidden />
+        {t('shareBoard')}
+      </Button>
+      {canEdit ? (
+        <Button type="button" variant="outline" onClick={() => setEditing(true)}>
+          <Pencil aria-hidden />
+          {t('editBoard')}
+        </Button>
+      ) : null}
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={<Button type="button" variant="outline" size="icon" aria-label={t('workspaceMoreActions')} title={t('workspaceMoreActions')} />}
+        >
+          <Ellipsis aria-hidden />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="ws-menu">
+          <DropdownMenuItem onClick={() => void copyViewLink()}>
+            <Link2 aria-hidden />
+            {t('boardCopyViewLink')}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setDialog('subscribe')}>
+            <Mail aria-hidden />
+            {t('subscribe')}
+          </DropdownMenuItem>
+          {canEdit ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => confirm({ title: deleteTitle(board.name), onConfirm: () => deleteMutation.mutate() })}
+              >
+                <Trash2 aria-hidden />
+                {t('workspaceDeleteBoard')}
+              </DropdownMenuItem>
+            </>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  ) : null;
+
+  const toolbar = board ? (
+    <div className="ws-board-toolbar">
+      <RangeSegmented
+        value={rangePreset}
+        options={BOARD_RANGE_PRESET_OPTIONS}
+        onChange={(next) => updateUrl({ rangePreset: next })}
+      />
+      <div className="ws-board-filters">
+        <PropertyFilterBuilder
+          websiteId={insightWebsite}
+          value={draftFilters}
+          onChange={onFiltersChange}
+          rangeQs={rangeQs}
+          addLabel={t('boardFilterAdd')}
+        />
+      </div>
+      {dirty ? (
+        <div className="ws-board-dirty">
+          <span>{t('boardFiltersUnsaved')}</span>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setSearchParams({}, { replace: true })}>
+            {t('boardFiltersReset')}
+          </Button>
+          {canEdit ? (
+            <Button type="button" variant="outline" size="sm" disabled={saveMutation.isPending} onClick={saveDefaults}>
+              {t('boardFiltersSave')}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  ) : null;
+
   return (
-    <Page className="page-board-detail">
+    <Page className="ws-page-board">
       <PageHeader
         title={board?.name ?? t('boards')}
         lead={board?.description || undefined}
         backTo="/boards"
         backLabel={t('boards')}
-        actions={
-          board ? (
-            <>
-              <Button type="button" variant="ghost" onClick={copyViewLink}>
-                {linkCopied ? t('shareCopied') : t('boardCopyViewLink')}
-              </Button>
-              <Button type="button" variant="ghost" onClick={() => setDialog('subscribe')}>
-                {t('subscribe')}
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => setDialog('share')}>
-                {t('shareBoard')}
-              </Button>
-              {canEdit ? (
-                <Button type="button" variant="secondary" onClick={() => setEditing((value) => !value)}>
-                  {editing ? t('cancel') : t('editBoard')}
-                </Button>
-              ) : null}
-              {canEdit ? (
-                <Button
-                  type="button"
-                  variant="danger"
-                  onClick={() => confirm({ title: deleteTitle(board.name), onConfirm: () => deleteMutation.mutate() })}
-                >
-                  {t('delete')}
-                </Button>
-              ) : null}
-            </>
-          ) : null
-        }
-        toolbar={
-          board ? (
-            <div className="board-filter-bar">
-              <div className="field board-filter-range">
-                <Label htmlFor="board-range">{t('dateRange')}</Label>
-                <select
-                  id="board-range"
-                  className="select"
-                  value={rangePreset}
-                  onChange={(event) => updateUrl({ rangePreset: normalizeBoardRangePreset(event.target.value) })}
-                >
-                  {BOARD_RANGE_PRESET_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {t(`boardWidgetPeriod${option}`)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="field board-filter-properties">
-                <Label>{t('boardFilters')}</Label>
-                <PropertyFilterBuilder
-                  websiteId={insightWebsite}
-                  value={draftFilters}
-                  onChange={onFiltersChange}
-                  rangeQs={rangeQs}
-                  addLabel={t('boardFilterAdd')}
-                />
-              </div>
-              {dirty ? (
-                <div className="board-filter-actions">
-                  <span className="text-muted">{t('boardFiltersUnsaved')}</span>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setSearchParams({}, { replace: true })}>
-                    {t('boardFiltersReset')}
-                  </Button>
-                  {canEdit ? (
-                    <Button type="button" variant="secondary" size="sm" disabled={saveMutation.isPending} onClick={saveDefaults}>
-                      {t('boardFiltersSave')}
-                    </Button>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ) : null
-        }
+        actions={actions}
+        toolbar={toolbar}
       />
 
-      <PageBody>
+      <PageBody className="stack">
         <DataViewState
           loading={boardQuery.isLoading}
           error={boardQuery.isError ? boardQuery.error : null}
           onRetry={() => boardQuery.refetch()}
+          loadingFallback={
+            <div className="ws-widgets" aria-hidden>
+              <div className="ws-widget ws-widget--full">
+                <Skeleton className="h-64 w-full" />
+              </div>
+              <div className="ws-widget ws-widget--medium">
+                <Skeleton className="h-48 w-full" />
+              </div>
+              <div className="ws-widget ws-widget--medium">
+                <Skeleton className="h-48 w-full" />
+              </div>
+            </div>
+          }
         >
           {board ? (
             <>
-              <p className="text-muted board-filter-note">{t('boardFiltersNote')}</p>
-              {editing ? (
-                <section className="panel section-gap">
-                  <h2 className="section-title">{t('editBoard')}</h2>
-                  <BoardEditorForm
-                    key={`edit-${board.id}-${String(board.updatedAt)}`}
-                    websites={websitesQuery.data ?? []}
-                    insights={insightsQuery.data ?? []}
-                    initialName={board.name}
-                    initialWidgets={boardConfigToDrafts(saved)}
-                    initialRangePreset={saved.rangePreset}
-                    initialFilters={saved.filters}
-                    submitLabel={t('saveBoard')}
-                    isPending={saveMutation.isPending}
-                    onCancel={() => setEditing(false)}
-                    onSubmit={(payload) =>
-                      saveMutation.mutate(
-                        { name: payload.name, parameters: { ...board.parameters, ...payload.parameters } },
-                        { onSuccess: () => setEditing(false) },
-                      )
-                    }
-                  />
-                </section>
+              <p className="ws-muted-line ws-board-note">{t('boardFiltersNote')}</p>
+              {saveMutation.error ? (
+                <p className="text-danger" role="alert">
+                  {(saveMutation.error as Error).message}
+                </p>
               ) : null}
-              {saveMutation.error ? <p className="text-danger">{(saveMutation.error as Error).message}</p> : null}
               {widgets.length ? (
                 <>
-                  {canEdit ? <p className="text-muted board-layout-hint">{t('boardLayoutHint')}</p> : null}
                   <BoardWidgets
                     widgets={widgets}
                     rangePreset={rangePreset}
                     filters={appliedFilters}
                     onLayoutChange={canEdit ? saveLayout : undefined}
+                    websiteNames={websiteNames}
+                    insightNames={insightNames}
                   />
+                  {canEdit ? <p className="ws-muted-line">{t('boardLayoutHint')}</p> : null}
                 </>
               ) : (
-                <EmptyState variant="rich" title={t('boardEmptyTitle')} description={t('boardEmptyBody')} />
+                <EmptyState
+                  variant="rich"
+                  icon={<LayoutGrid />}
+                  title={t('boardEmptyTitle')}
+                  description={t('boardEmptyBody')}
+                  action={
+                    canEdit ? (
+                      <Button variant="primary" onClick={() => setEditing(true)}>
+                        <Pencil aria-hidden />
+                        {t('editBoard')}
+                      </Button>
+                    ) : undefined
+                  }
+                />
               )}
             </>
           ) : null}
         </DataViewState>
       </PageBody>
+
+      {editing && board ? (
+        <ModalDialog className="ws-dialog--lg" aria-label={t('editBoard')} onClose={() => setEditing(false)}>
+          <header className="dialog-header">
+            <h2 className="dialog-title">{t('editBoard')}</h2>
+          </header>
+          <BoardEditorForm
+            key={`edit-${board.id}-${String(board.updatedAt)}`}
+            websites={websitesQuery.data ?? []}
+            insights={insightsQuery.data ?? []}
+            initialName={board.name}
+            initialWidgets={boardConfigToDrafts(saved)}
+            initialRangePreset={saved.rangePreset}
+            initialFilters={saved.filters}
+            submitLabel={t('saveBoard')}
+            isPending={saveMutation.isPending}
+            onCancel={() => setEditing(false)}
+            error={saveMutation.error ? (saveMutation.error as Error).message : null}
+            onSubmit={(payload) =>
+              saveMutation.mutate(
+                { name: payload.name, parameters: { ...board.parameters, ...payload.parameters } },
+                { onSuccess: () => setEditing(false) },
+              )
+            }
+          />
+        </ModalDialog>
+      ) : null}
 
       {dialog === 'share' && board ? (
         <ShareLinksDialog

@@ -1,24 +1,29 @@
-import { useQuery } from '@tanstack/react-query';
-import { useCallback, useMemo, useState } from 'react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { Globe, Plus } from 'lucide-react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Area, AreaChart } from 'recharts';
-import { AnalyticsChart } from '../components/AnalyticsChart';
+import { DashboardSiteRanking, DashboardSiteRankingSkeleton, type DashboardSiteTotals } from '../components/DashboardSiteRanking';
 import { DataViewState } from '../components/DataViewState';
 import { DateRangePicker } from '../components/DateRangePicker';
-import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
-import { DashboardSiteRanking } from '../components/DashboardSiteRanking';
+import { EmptyState } from '../components/EmptyState';
+import { KpiCell, KpiStrip, KpiStripSkeleton } from '../components/KpiStrip';
+import { OverviewTrendCard } from '../components/OverviewTrendCard';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
+import { SectionCard } from '../components/SectionCard';
+import { StatChangeDelta } from '../components/StatChangeDelta';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
-import { StatCard } from '../components/ui/stat-card';
-import { EmptyState } from '../components/EmptyState';
+import { changePercent, safeRatio } from '../components/workspace/workspace-format';
 import { api } from '../lib/api';
-import { formatChartTimeLabel, isHourlyChartRange } from '../lib/chartTimeseries';
+import { isHourlyChartRange, mergePageviewsVisitors } from '../lib/chartTimeseries';
+import { computeCompareRange } from '../lib/compare-utils';
+import { rangeQueryString } from '../lib/dateRange';
 import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
-import { useDashboardRange } from '../lib/useDashboardRange';
 import { useChartColors } from '../lib/useChartColors';
+import { useDashboardRange } from '../lib/useDashboardRange';
+import { useDemoSession } from '../lib/useDemoSession';
 
 interface SeriesPoint {
   x: string;
@@ -35,331 +40,174 @@ interface DashboardSite {
   series: SeriesPoint[];
 }
 
-interface AggregateMetrics {
-  pageviews: SeriesPoint[];
-  visitors: SeriesPoint[];
-  visits: SeriesPoint[];
-}
-
 interface DashboardOverview {
   websites: DashboardSite[];
-  ranking: Array<{ id: string; name: string; pageviews: number; visitors: number }>;
   siteCount: number;
   cardsLimit: number;
   cardsTruncated: boolean;
   totals: { pageviews: number; visitors: number; visits: number };
-  aggregateMetrics: AggregateMetrics;
+  aggregateMetrics: { pageviews: SeriesPoint[]; visitors: SeriesPoint[]; visits: SeriesPoint[] };
 }
 
-function mergeAggregateMetrics(metrics: AggregateMetrics | undefined, hourly: boolean) {
-  if (!metrics) return [];
-
-  const byKey = new Map<
-    string,
-    { rawX: string; pageviews: number; visitors: number; visits: number }
-  >();
-
-  for (const point of metrics.pageviews) {
-    const row = byKey.get(point.x) ?? { rawX: point.x, pageviews: 0, visitors: 0, visits: 0 };
-    row.pageviews = point.y;
-    byKey.set(point.x, row);
-  }
-  for (const point of metrics.visitors) {
-    const row = byKey.get(point.x) ?? { rawX: point.x, pageviews: 0, visitors: 0, visits: 0 };
-    row.visitors = point.y;
-    byKey.set(point.x, row);
-  }
-  for (const point of metrics.visits) {
-    const row = byKey.get(point.x) ?? { rawX: point.x, pageviews: 0, visitors: 0, visits: 0 };
-    row.visits = point.y;
-    byKey.set(point.x, row);
-  }
-
-  return Array.from(byKey.values())
-    .sort((a, b) => a.rawX.localeCompare(b.rawX))
-    .map(({ rawX, pageviews, visitors, visits }) => ({
-      x: formatChartTimeLabel(rawX, hourly),
-      pageviews,
-      visitors,
-      visits,
-    }));
+/** Delta chip vs the previous period; a chip-sized skeleton while that period loads. */
+function deltaFor(current: number | undefined, previous: number | undefined, show: boolean, pending = false) {
+  if (pending) return <Skeleton className="ws-delta-skeleton" />;
+  if (!show || current === undefined) return undefined;
+  const change = changePercent(current, previous);
+  return change === undefined ? undefined : <StatChangeDelta change={change} />;
 }
-
-type AggregateMetricKey = 'pageviews' | 'visitors' | 'visits';
-
-const AGGREGATE_METRICS: AggregateMetricKey[] = ['pageviews', 'visitors', 'visits'];
 
 export default function DashboardHome() {
   const chartColors = useChartColors();
+  const { isDemo } = useDemoSession();
   const { range, setRange, rangeQs } = useDashboardRange('24h');
+  // Deltas compare with the period of the same length just before (as the overview does).
+  const previousRange = useMemo(
+    () => computeCompareRange(range.startAt, range.endAt, 'previous'),
+    [range.startAt, range.endAt],
+  );
 
   const overviewQuery = useQuery({
     queryKey: ['dashboard-overview', range],
     queryFn: () => api<DashboardOverview>(`/api/dashboard?${rangeQs}`),
+    placeholderData: keepPreviousData,
+  });
+  const hasWebsites = (overviewQuery.data?.siteCount ?? 0) > 0;
+
+  const previousQuery = useQuery({
+    queryKey: ['dashboard-overview', 'previous', previousRange.compareStartAt, previousRange.compareEndAt],
+    enabled: hasWebsites,
+    queryFn: () =>
+      api<DashboardOverview>(
+        `/api/dashboard?${rangeQueryString(previousRange.compareStartAt, previousRange.compareEndAt)}`,
+      ),
+    placeholderData: keepPreviousData,
   });
 
-  const sites = overviewQuery.data?.websites ?? [];
-  const ranking = overviewQuery.data?.ranking ?? [];
-  const siteCount = overviewQuery.data?.siteCount ?? 0;
-  const hasWebsites = siteCount > 0;
-  const cardsTruncated = overviewQuery.data?.cardsTruncated ?? false;
-  const totals = overviewQuery.data?.totals;
+  const data = overviewQuery.data;
+  const totals = data?.totals;
   const hourly = isHourlyChartRange(range.startAt, range.endAt);
+  // Deltas only when both periods belong to the selected range (not a kept previous render).
+  const showDeltas =
+    Boolean(previousQuery.data) && !previousQuery.isPlaceholderData && !overviewQuery.isPlaceholderData;
+  const previousTotals = showDeltas ? previousQuery.data?.totals : undefined;
+  const deltasPending = hasWebsites && !showDeltas && (previousQuery.isFetching || overviewQuery.isFetching);
 
-  const aggregateChart = useMemo(
-    () => mergeAggregateMetrics(overviewQuery.data?.aggregateMetrics, hourly),
-    [overviewQuery.data?.aggregateMetrics, hourly],
+  const trend = useMemo(
+    () =>
+      data
+        ? mergePageviewsVisitors(
+            { pageviews: data.aggregateMetrics.pageviews, visitors: data.aggregateMetrics.visitors },
+            hourly,
+          )
+        : [],
+    [data, hourly],
   );
 
-  const metricColors = useMemo(
-    () => ({
-      pageviews: chartColors.series.pageviews,
-      visitors: chartColors.series.visitors,
-      visits: chartColors.series.visits,
-    }),
-    [chartColors],
+  const previousBySite = useMemo(() => {
+    if (!showDeltas || !previousQuery.data) return undefined;
+    return new Map<string, DashboardSiteTotals>(
+      previousQuery.data.websites.map((site) => [
+        site.id,
+        { pageviews: site.pageviews, visitors: site.visitors, visits: site.visits },
+      ]),
+    );
+  }, [previousQuery.data, showDeltas]);
+
+  const pagesPerVisit = totals ? safeRatio(totals.pageviews, totals.visits) : undefined;
+  const previousPagesPerVisit = previousTotals ? safeRatio(previousTotals.pageviews, previousTotals.visits) : undefined;
+
+  const loadingFallback = (
+    <div className="stack" aria-hidden>
+      <KpiStripSkeleton cells={4} />
+      <SectionCard title={t('trafficOverTime')}>
+        <Skeleton className="h-[300px] w-full" />
+      </SectionCard>
+      <DashboardSiteRankingSkeleton />
+    </div>
   );
-
-  const [visibleMetrics, setVisibleMetrics] = useState<Record<AggregateMetricKey, boolean>>({
-    pageviews: true,
-    visitors: true,
-    visits: true,
-  });
-
-  const toggleMetric = useCallback((key: AggregateMetricKey) => {
-    setVisibleMetrics((prev) => {
-      const visibleCount = AGGREGATE_METRICS.filter((metric) => prev[metric]).length;
-      if (prev[key] && visibleCount <= 1) return prev;
-      return { ...prev, [key]: !prev[key] };
-    });
-  }, []);
 
   return (
-    <Page className="page-dashboard">
+    <Page className="ws-page-dashboard">
       <PageHeader
         title={t('dashboard')}
         lead={t('dashboardAllSitesLead')}
         actions={<DateRangePicker value={range} onChange={setRange} popover />}
       />
 
-      <PageBody>
-      <DataViewState
-        loading={overviewQuery.isLoading}
-        error={overviewQuery.isError ? overviewQuery.error : null}
-        onRetry={() => overviewQuery.refetch()}
-        loadingFallback={
-          <section className="panel dashboard-aggregate section-gap" aria-hidden>
-            <Skeleton className="h-5 w-1/4" />
-            <Skeleton className="dashboard-aggregate-chart mt-4 h-52 w-full" />
-          </section>
-        }
-      >
-        {!hasWebsites ? (
-          <EmptyState
-            variant="rich"
-            className="section-gap"
-            title={t('noWebsitesDashboard')}
-            description={t('noWebsitesHint')}
-          >
-            <ol className="empty-state-steps">
-              <li data-step="1">{t('emptyStep1')}</li>
-              <li data-step="2">{t('emptyStep2')}</li>
-              <li data-step="3">{t('emptyStep3')}</li>
-            </ol>
-            <Button asChild variant="primary" className="empty-state-cta">
-              <Link to="/websites">{t('addWebsiteCta')}</Link>
-            </Button>
-          </EmptyState>
-        ) : (
-          <>
-            <section className="panel dashboard-aggregate section-gap" aria-labelledby="dashboard-total-traffic">
-              <div className="dashboard-aggregate-head">
-                <div>
-                  <h2 id="dashboard-total-traffic" className="section-title">
-                    {t('dashboardTotalTraffic')}
-                  </h2>
-                  {totals ? (
-                    <div className="dashboard-aggregate-kpis">
-                      <StatCard label={t('pageviews')} value={formatNumber(totals.pageviews)} />
-                      <StatCard label={t('visitors')} value={formatNumber(totals.visitors)} />
-                      <StatCard label={t('visits')} value={formatNumber(totals.visits)} />
-                    </div>
-                  ) : null}
+      <PageBody className="stack">
+        <DataViewState
+          loading={overviewQuery.isLoading && !data}
+          error={overviewQuery.isError && !data ? overviewQuery.error : null}
+          onRetry={() => overviewQuery.refetch()}
+          loadingFallback={loadingFallback}
+        >
+          {!hasWebsites ? (
+            <EmptyState
+              variant="rich"
+              icon={<Globe />}
+              title={t('noWebsitesDashboard')}
+              description={t('noWebsitesHint')}
+            >
+              <ol className="empty-state-steps">
+                <li data-step="1">{t('emptyStep1')}</li>
+                <li data-step="2">{t('emptyStep2')}</li>
+                <li data-step="3">{t('emptyStep3')}</li>
+              </ol>
+              {isDemo ? null : (
+                <div className="empty-state-actions">
+                  <Button variant="primary" render={<Link to="/websites?new=1" />}>
+                    <Plus aria-hidden />
+                    {t('addWebsiteCta')}
+                  </Button>
                 </div>
-              </div>
+              )}
+            </EmptyState>
+          ) : (
+            <>
+              <section aria-labelledby="ws-dashboard-kpis">
+                <h2 id="ws-dashboard-kpis" className="visually-hidden">
+                  {t('dashboardTotalTraffic')}
+                </h2>
+                {totals ? (
+                  <KpiStrip columns={4}>
+                    <KpiCell
+                      label={t('visitors')}
+                      keyColor={chartColors.series.visitors}
+                      value={formatNumber(totals.visitors)}
+                      delta={deltaFor(totals.visitors, previousTotals?.visitors, showDeltas, deltasPending)}
+                    />
+                    <KpiCell
+                      label={t('visits')}
+                      value={formatNumber(totals.visits)}
+                      delta={deltaFor(totals.visits, previousTotals?.visits, showDeltas, deltasPending)}
+                    />
+                    <KpiCell
+                      label={t('pageviews')}
+                      keyColor={chartColors.series.pageviews}
+                      value={formatNumber(totals.pageviews)}
+                      delta={deltaFor(totals.pageviews, previousTotals?.pageviews, showDeltas, deltasPending)}
+                    />
+                    <KpiCell
+                      label={t('workspacePagesPerVisit')}
+                      value={pagesPerVisit === undefined ? '–' : formatNumber(pagesPerVisit, { maximumFractionDigits: 2 })}
+                      delta={deltaFor(pagesPerVisit, previousPagesPerVisit, showDeltas, deltasPending)}
+                    />
+                  </KpiStrip>
+                ) : null}
+              </section>
 
-              <div className="dashboard-aggregate-body">
-                <div className="dashboard-aggregate-chart">
-                  {aggregateChart.length > 0 ? (
-                    <>
-                      <div className="dashboard-aggregate-chart-plot">
-                        <AnalyticsChart
-                          Chart={AreaChart}
-                          data={aggregateChart}
-                          margin={{ top: 8, right: 8, left: 0, bottom: 4 }}
-                          responsive={{ width: '100%', height: '100%' }}
-                          xAxis={{
-                            dataKey: 'x',
-                            interval: 'preserveStartEnd',
-                            tickLine: false,
-                            axisLine: false,
-                          }}
-                          yAxis={{ tickLine: false, axisLine: false, width: 48 }}
-                        >
-                          <Area
-                            type="monotone"
-                            dataKey="pageviews"
-                            name={t('pageviews')}
-                            hide={!visibleMetrics.pageviews}
-                            stroke={metricColors.pageviews}
-                            strokeWidth={2}
-                            fill={metricColors.pageviews}
-                            fillOpacity={0.14}
-                            dot={false}
-                            activeDot={{ r: 4, strokeWidth: 0 }}
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="visitors"
-                            name={t('visitors')}
-                            hide={!visibleMetrics.visitors}
-                            stroke={metricColors.visitors}
-                            strokeWidth={2}
-                            fill={metricColors.visitors}
-                            fillOpacity={0.14}
-                            dot={false}
-                            activeDot={{ r: 4, strokeWidth: 0 }}
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="visits"
-                            name={t('visits')}
-                            hide={!visibleMetrics.visits}
-                            stroke={metricColors.visits}
-                            strokeWidth={2}
-                            fill={metricColors.visits}
-                            fillOpacity={0.14}
-                            dot={false}
-                            activeDot={{ r: 4, strokeWidth: 0 }}
-                          />
-                        </AnalyticsChart>
-                      </div>
-                      <div className="dashboard-aggregate-legend" role="group" aria-label={t('dashboardTotalTraffic')}>
-                        {AGGREGATE_METRICS.map((key) => (
-                          <button
-                            key={key}
-                            type="button"
-                            className={`dashboard-aggregate-legend-item${visibleMetrics[key] ? '' : ' is-hidden'}`}
-                            aria-pressed={visibleMetrics[key]}
-                            onClick={() => toggleMetric(key)}
-                          >
-                            <span
-                              className={`dashboard-aggregate-legend-swatch dashboard-aggregate-legend-swatch--${key}`}
-                              aria-hidden
-                            />
-                            <span className="dashboard-aggregate-legend-label">{t(key)}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-muted dashboard-site-card-empty">{t('noDataInPeriod')}</p>
-                  )}
-                </div>
+              <OverviewTrendCard data={trend} hourly={hourly} />
 
-                <DashboardSiteRanking ranking={ranking} siteCount={siteCount} />
-              </div>
-            </section>
-
-            {cardsTruncated ? (
-              <div className="dashboard-sites-section-head">
-                <p className="text-muted dashboard-sites-truncated">
-                  {t('dashboardSitesTruncated')
-                    .replace('{shown}', String(sites.length))
-                    .replace('{total}', String(siteCount))}
-                  {' '}
-                  <Link to="/websites">{t('dashboardViewAllSites').replace('{count}', String(siteCount))}</Link>
-                </p>
-              </div>
-            ) : null}
-            <div className="dashboard-site-list section-gap">
-              {sites.map((w) => {
-                const chartData = w.series.map((p) => ({
-                  x: formatChartTimeLabel(p.x, hourly),
-                  y: p.y,
-                }));
-                return (
-                  <Link key={w.id} to={`/websites/${w.id}`} className="panel dashboard-site-card">
-                    <span className="site-card-arrow" aria-hidden>
-                      →
-                    </span>
-                    <div className="dashboard-site-card-head">
-                      <div className="dashboard-site-card-identity">
-                        <WebsiteNameLabel name={w.name} domain={w.domain} className="site-card-name" />
-                        {w.domain ? <span className="site-card-domain">{w.domain}</span> : null}
-                      </div>
-                      <div className="dashboard-site-row-kpis">
-                        <div className="dashboard-site-kpi dashboard-site-kpi-primary">
-                          <span className="dashboard-site-kpi-label">{t('pageviews')}</span>
-                          <span className="dashboard-site-kpi-value is-primary">
-                            {formatNumber(w.pageviews)}
-                          </span>
-                        </div>
-                        <div className="dashboard-site-kpi">
-                          <span className="dashboard-site-kpi-label">{t('visitors')}</span>
-                          <span className="dashboard-site-kpi-value">{formatNumber(w.visitors)}</span>
-                        </div>
-                        {w.visits != null ? (
-                          <div className="dashboard-site-kpi">
-                            <span className="dashboard-site-kpi-label">{t('visits')}</span>
-                            <span className="dashboard-site-kpi-value">{formatNumber(w.visits)}</span>
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className="dashboard-site-card-chart" aria-hidden={chartData.length === 0}>
-                      {chartData.length > 0 ? (
-                        <AnalyticsChart
-                          Chart={AreaChart}
-                          data={chartData}
-                          margin={{ top: 4, right: 4, left: 0, bottom: 0 }}
-                          responsive={{ width: '100%', height: '100%' }}
-                          xAxis={{
-                            dataKey: 'x',
-                            interval: 'preserveStartEnd',
-                            tickLine: false,
-                            axisLine: false,
-                          }}
-                          yAxis={{ hide: true, allowDecimals: false }}
-                          grid={{ vertical: false }}
-                        >
-                          <Area
-                            type="monotone"
-                            dataKey="y"
-                            name={t('pageviews')}
-                            stroke={chartColors.accent}
-                            strokeWidth={2}
-                            fill={chartColors.accent}
-                            fillOpacity={0.12}
-                            dot={false}
-                            activeDot={{ r: 3 }}
-                          />
-                        </AnalyticsChart>
-                      ) : (
-                        <p className="text-muted dashboard-site-card-empty">{t('noDataInPeriod')}</p>
-                      )}
-                    </div>
-                    <div className="dashboard-site-card-foot">
-                      <span className="dashboard-site-card-hint">{t('dashboardViewSite')}</span>
-                      <span className="dashboard-site-card-compare">{t('dashboardCompareHint')}</span>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </DataViewState>
+              <DashboardSiteRanking
+                sites={data?.websites ?? []}
+                previous={previousBySite}
+                deltasPending={deltasPending}
+                siteCount={data?.siteCount ?? 0}
+              />
+            </>
+          )}
+        </DataViewState>
       </PageBody>
     </Page>
   );

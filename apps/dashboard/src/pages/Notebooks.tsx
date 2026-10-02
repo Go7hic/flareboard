@@ -1,19 +1,39 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, X } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  ChartLine,
+  CirclePlay,
+  Eye,
+  NotebookPen,
+  NotebookText,
+  Pencil,
+  Plus,
+  Trash2,
+  Type,
+  X,
+} from 'lucide-react';
 import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
 import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
 import { InsightResultView } from '../components/InsightResultView';
-import { MasterDetailLayout, MasterDetailListItem, MasterDetailPane } from '../components/master-detail';
+import {
+  MasterDetailLayout,
+  MasterDetailListItem,
+  MasterDetailPane,
+  ResourceSearchField,
+} from '../components/master-detail';
 import { NotebookMarkdown } from '../components/NotebookMarkdown';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Skeleton } from '../components/ui/skeleton';
 import { Textarea } from '../components/ui/textarea';
+import { pickWorkspaceWebsite, rememberWorkspaceWebsite } from '../components/workspace/workspaceWebsite';
 import {
   api,
   type Insight,
@@ -25,7 +45,7 @@ import {
 } from '../lib/api';
 import { BOARD_RANGE_PRESET_OPTIONS, normalizeBoardRangePreset, type BoardRangePreset } from '../lib/board-config';
 import { presetToRange, rangeQueryString } from '../lib/dateRange';
-import { formatDateTime } from '../lib/format';
+import { formatDateTime, formatNumber, formatRelativeTime } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 
@@ -46,6 +66,8 @@ function savableBlocks(blocks: NotebookBlock[]) {
   );
 }
 
+const BLOCK_ICONS = { text: Type, insight: ChartLine, replay: CirclePlay } as const;
+
 function InsightBlockView({ insight, rangePreset }: { insight: Insight | undefined; rangePreset: BoardRangePreset }) {
   const range = presetToRange(rangePreset);
   const run = useQuery({
@@ -53,19 +75,25 @@ function InsightBlockView({ insight, rangePreset }: { insight: Insight | undefin
     enabled: Boolean(insight),
     queryFn: () => api<{ data: InsightResult }>(`/api/insights/${insight!.id}/run?${rangeQueryString(range.startAt, range.endAt)}`),
   });
-  if (!insight) return <p className="text-muted">{t('notebookInsightMissing')}</p>;
+  if (!insight) return <p className="ws-muted-line">{t('notebookInsightMissing')}</p>;
   return (
-    <div className="notebook-insight">
-      <div className="notebook-insight-head">
-        <Link to={`/insights?insight=${insight.id}`} className="notebook-insight-title">
+    <figure className="ws-nb-insight">
+      <figcaption className="ws-nb-insight-head">
+        <ChartLine aria-hidden />
+        <Link to={`/insights?insight=${insight.id}`} className="ws-nb-insight-title">
           {insight.name}
         </Link>
-        <span className="text-muted">{t(`boardWidgetPeriod${rangePreset}`)}</span>
-      </div>
-      <DataViewState loading={run.isLoading} error={run.isError ? run.error : null} onRetry={() => run.refetch()}>
+        <span className="ws-nb-insight-range">{t(`boardWidgetPeriod${rangePreset}`)}</span>
+      </figcaption>
+      <DataViewState
+        loading={run.isLoading}
+        error={run.isError ? run.error : null}
+        onRetry={() => run.refetch()}
+        loadingFallback={<Skeleton className="h-48 w-full" />}
+      >
         {run.data?.data ? <InsightResultView result={run.data.data} compact /> : null}
       </DataViewState>
-    </div>
+    </figure>
   );
 }
 
@@ -85,7 +113,7 @@ function BlockEditor({
   if (block.type === 'text') {
     return editing ? (
       <Textarea
-        className="notebook-text-input"
+        className="ws-nb-text-input"
         rows={Math.min(16, Math.max(3, block.text.split('\n').length + 1))}
         value={block.text}
         placeholder={t('notebookTextPlaceholder')}
@@ -103,7 +131,7 @@ function BlockEditor({
     return (
       <>
         {editing ? (
-          <div className="notebook-block-fields">
+          <div className="ws-nb-fields">
             <select
               className="select"
               aria-label={t('insight')}
@@ -140,7 +168,7 @@ function BlockEditor({
   return (
     <>
       {editing ? (
-        <div className="notebook-block-fields">
+        <div className="ws-nb-fields">
           <Input
             aria-label={t('notebookSessionId')}
             placeholder={t('notebookSessionId')}
@@ -156,11 +184,10 @@ function BlockEditor({
         </div>
       ) : null}
       {sessionId && /^[A-Za-z0-9._:-]{1,128}$/.test(sessionId) ? (
-        <p className="notebook-replay-link">
-          <Link to={`/websites/${websiteId}/sessions/${encodeURIComponent(sessionId)}`}>
-            {block.label?.trim() || t('notebookReplayLink').replace('{id}', sessionId)}
-          </Link>
-        </p>
+        <Link className="ws-nb-replay" to={`/websites/${websiteId}/sessions/${encodeURIComponent(sessionId)}`}>
+          <CirclePlay aria-hidden />
+          <span>{block.label?.trim() || t('notebookReplayLink').replace('{id}', sessionId)}</span>
+        </Link>
       ) : sessionId ? (
         <p className="text-danger">{t('notebookSessionInvalid')}</p>
       ) : null}
@@ -197,6 +224,7 @@ function NotebookEditor({
       queryClient.invalidateQueries({ queryKey: ['notebooks', notebook.websiteId] });
       setBlocks(saved.content.blocks);
       setTitle(saved.title);
+      setEditing(false);
     },
   });
 
@@ -223,99 +251,146 @@ function NotebookEditor({
   }
 
   return (
-    <div className="notebook-editor">
-      <div className="notebook-editor-head">
-        {editing ? (
-          <div className="field notebook-title-field">
-            <Label htmlFor="notebook-title">{t('notebookTitle')}</Label>
+    <MasterDetailPane
+      title={
+        editing ? (
+          <span className="ws-nb-title-field">
+            <Label htmlFor="notebook-title" className="visually-hidden">
+              {t('notebookTitle')}
+            </Label>
             <Input id="notebook-title" value={title} onChange={(event) => setTitle(event.target.value)} />
-          </div>
+          </span>
         ) : (
-          <h2 className="notebook-title">{title}</h2>
-        )}
-        <p className="text-muted notebook-meta">
-          {t('notebookUpdated').replace('{date}', formatDateTime(notebook.updatedAt))}
-        </p>
-        {canEdit ? (
-          <div className="form-actions">
-            <Button type="button" variant="secondary" onClick={() => setEditing((value) => !value)}>
+          title
+        )
+      }
+      meta={
+        <>
+          <span>{t('notebookBlockCount').replace('{count}', formatNumber(blocks.length))}</span>
+          {notebook.updatedAt ? (
+            <span title={formatDateTime(notebook.updatedAt)}>
+              {t('workspaceUpdatedAgo').replace('{time}', formatRelativeTime(notebook.updatedAt))}
+            </span>
+          ) : null}
+        </>
+      }
+      actions={
+        canEdit ? (
+          <>
+            <Button type="button" variant={editing ? 'ghost' : 'outline'} size="sm" onClick={() => setEditing((value) => !value)}>
+              {editing ? <Eye aria-hidden /> : <Pencil aria-hidden />}
               {editing ? t('notebookPreview') : t('edit')}
             </Button>
+            {editing || dirty ? (
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                disabled={!dirty || !title.trim() || saveMutation.isPending}
+                onClick={() => saveMutation.mutate()}
+              >
+                {t('saveChanges')}
+              </Button>
+            ) : null}
             <Button
               type="button"
-              variant="primary"
-              disabled={!dirty || !title.trim() || saveMutation.isPending}
-              onClick={() => saveMutation.mutate()}
-            >
-              {t('saveChanges')}
-            </Button>
-            <Button
-              type="button"
-              variant="danger"
+              variant="destructive-ghost"
+              size="icon-sm"
+              aria-label={t('delete')}
+              title={t('delete')}
               onClick={() => confirm({ title: deleteTitle(notebook.title), onConfirm: () => deleteMutation.mutate() })}
             >
-              {t('delete')}
+              <Trash2 aria-hidden />
             </Button>
-          </div>
-        ) : null}
-        {saveMutation.error ? <p className="text-danger">{(saveMutation.error as Error).message}</p> : null}
-      </div>
+          </>
+        ) : null
+      }
+    >
+      {saveMutation.error ? (
+        <p className="text-danger" role="alert">
+          {(saveMutation.error as Error).message}
+        </p>
+      ) : null}
 
-      {!blocks.length && !editing ? <EmptyState title={t('notebookEmptyTitle')} description={t('notebookEmptyBody')} /> : null}
-      <ol className="list-plain notebook-blocks">
-        {blocks.map((block, index) => (
-          <li key={block.id} className={`notebook-block notebook-block--${block.type}${editing ? ' notebook-block--editing' : ''}`}>
-            {editing ? (
-              <div className="notebook-block-toolbar">
-                <span className="text-muted notebook-block-kind">{t(`notebookBlock_${block.type}`)}</span>
-                <Button type="button" variant="ghost" size="sm" disabled={index === 0} aria-label={t('moveWidgetUp')} onClick={() => move(index, -1)}>
-                  <ArrowUp size={14} strokeWidth={2} aria-hidden />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={index === blocks.length - 1}
-                  aria-label={t('moveWidgetDown')}
-                  onClick={() => move(index, 1)}
-                >
-                  <ArrowDown size={14} strokeWidth={2} aria-hidden />
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive-ghost"
-                  size="sm"
-                  aria-label={t('notebookRemoveBlock')}
-                  onClick={() => setBlocks((current) => current.filter((_, i) => i !== index))}
-                >
-                  <X size={14} strokeWidth={2} aria-hidden />
-                </Button>
-              </div>
-            ) : null}
-            <BlockEditor
-              block={block}
-              websiteId={notebook.websiteId}
-              insights={insights}
-              editing={editing}
-              onChange={(next) => update(index, next)}
-            />
-          </li>
-        ))}
+      {!blocks.length && !editing ? (
+        <EmptyState icon={<NotebookPen />} title={t('notebookEmptyTitle')} description={t('notebookEmptyBody')} />
+      ) : null}
+
+      <ol className={editing ? 'ws-nb-blocks is-editing' : 'ws-nb-blocks'}>
+        {blocks.map((block, index) => {
+          const Icon = BLOCK_ICONS[block.type];
+          return (
+            <li key={block.id} className={`ws-nb-block ws-nb-block--${block.type}`}>
+              {editing ? (
+                <div className="ws-nb-block-toolbar">
+                  <span className="ws-nb-block-kind">
+                    <Icon aria-hidden />
+                    {t(`notebookBlock_${block.type}`)}
+                  </span>
+                  <span className="ws-nb-block-actions">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={index === 0}
+                      aria-label={t('moveWidgetUp')}
+                      title={t('moveWidgetUp')}
+                      onClick={() => move(index, -1)}
+                    >
+                      <ArrowUp aria-hidden />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={index === blocks.length - 1}
+                      aria-label={t('moveWidgetDown')}
+                      title={t('moveWidgetDown')}
+                      onClick={() => move(index, 1)}
+                    >
+                      <ArrowDown aria-hidden />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={t('notebookRemoveBlock')}
+                      title={t('notebookRemoveBlock')}
+                      onClick={() => setBlocks((current) => current.filter((_, i) => i !== index))}
+                    >
+                      <X aria-hidden />
+                    </Button>
+                  </span>
+                </div>
+              ) : null}
+              <BlockEditor
+                block={block}
+                websiteId={notebook.websiteId}
+                insights={insights}
+                editing={editing}
+                onChange={(next) => update(index, next)}
+              />
+            </li>
+          );
+        })}
       </ol>
       {editing ? (
-        <div className="notebook-add">
-          <Button type="button" variant="ghost" size="sm" onClick={() => setBlocks((current) => [...current, newBlock('text')])}>
+        <div className="ws-nb-add">
+          <Button type="button" variant="outline" size="sm" onClick={() => setBlocks((current) => [...current, newBlock('text')])}>
+            <Type aria-hidden />
             {t('notebookAddText')}
           </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setBlocks((current) => [...current, newBlock('insight')])}>
+          <Button type="button" variant="outline" size="sm" onClick={() => setBlocks((current) => [...current, newBlock('insight')])}>
+            <ChartLine aria-hidden />
             {t('notebookAddInsight')}
           </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setBlocks((current) => [...current, newBlock('replay')])}>
+          <Button type="button" variant="outline" size="sm" onClick={() => setBlocks((current) => [...current, newBlock('replay')])}>
+            <CirclePlay aria-hidden />
             {t('notebookAddReplay')}
           </Button>
         </div>
       ) : null}
-    </div>
+    </MasterDetailPane>
   );
 }
 
@@ -323,6 +398,7 @@ export default function NotebooksPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [websiteId, setWebsiteId] = useState(searchParams.get('website') ?? '');
+  const [search, setSearch] = useState('');
   const selectedId = searchParams.get('notebook');
   const { canEdit, viewOnly } = useWebsitePermissions(websiteId, 'analytics');
 
@@ -330,7 +406,7 @@ export default function NotebooksPage() {
   const websites = useMemo(() => websitesQuery.data ?? [], [websitesQuery.data]);
 
   useEffect(() => {
-    if (!websiteId && websites.length) setWebsiteId(websites[0]!.id);
+    if (!websiteId && websites.length) setWebsiteId(pickWorkspaceWebsite(websites));
   }, [websiteId, websites]);
 
   const listQuery = useQuery({
@@ -338,6 +414,15 @@ export default function NotebooksPage() {
     enabled: Boolean(websiteId),
     queryFn: () => api<NotebookSummary[]>(`/api/websites/${websiteId}/notebooks`),
   });
+  const notebooks = useMemo(
+    () => [...(listQuery.data ?? [])].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)),
+    [listQuery.data],
+  );
+  const visibleNotebooks = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return needle ? notebooks.filter((notebook) => notebook.title.toLowerCase().includes(needle)) : notebooks;
+  }, [notebooks, search]);
+
   const notebookQuery = useQuery({
     queryKey: ['notebook', websiteId, selectedId],
     enabled: Boolean(websiteId && selectedId),
@@ -356,6 +441,12 @@ export default function NotebooksPage() {
     setSearchParams(params, { replace: true });
   }
 
+  // Lead with a notebook: open the most recently updated one when none is selected.
+  useEffect(() => {
+    if (!selectedId && notebooks.length) select(notebooks[0]!.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, notebooks]);
+
   const createMutation = useMutation({
     mutationFn: () =>
       api<Notebook>(`/api/websites/${websiteId}/notebooks`, {
@@ -368,89 +459,162 @@ export default function NotebooksPage() {
     },
   });
 
+  const newButton = canEdit ? (
+    <Button variant="primary" disabled={!websiteId || createMutation.isPending} onClick={() => createMutation.mutate()}>
+      <Plus aria-hidden />
+      {t('notebookNew')}
+    </Button>
+  ) : null;
+
+  const headerActions = websites.length ? (
+    <div className="ws-header-controls">
+      <select
+        className="select ws-header-select"
+        aria-label={t('website')}
+        value={websiteId}
+        onChange={(event) => {
+          setWebsiteId(event.target.value);
+          rememberWorkspaceWebsite(event.target.value);
+          setSearch('');
+          setSearchParams({ website: event.target.value }, { replace: true });
+        }}
+      >
+        {websites.map((website) => (
+          <option key={website.id} value={website.id}>
+            {website.name}
+          </option>
+        ))}
+      </select>
+      {newButton}
+    </div>
+  ) : null;
+
+  const listLoading = listQuery.isLoading || (!websiteId && websitesQuery.isLoading);
+  const empty = Boolean(websiteId) && !listLoading && !listQuery.isError && !notebooks.length;
+
   return (
-    <Page className="page-notebooks">
-      <PageHeader title={t('notebooks')} lead={t('notebooksLead')} backTo="/websites" backLabel={t('websites')} />
-      <PageBody>
-        {viewOnly ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
-        <div className="field notebooks-website">
-          <Label htmlFor="notebooks-website">{t('website')}</Label>
-          <select
-            id="notebooks-website"
-            className="select"
-            value={websiteId}
-            onChange={(event) => {
-              setWebsiteId(event.target.value);
-              setSearchParams({ website: event.target.value }, { replace: true });
-            }}
-          >
-            {websites.map((website) => (
-              <option key={website.id} value={website.id}>
-                {website.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <section className="section-gap">
+    <Page className="ws-page-notebooks">
+      <PageHeader title={t('notebooks')} lead={t('notebooksLead')} actions={headerActions} />
+      <PageBody className="stack">
+        {viewOnly ? (
+          <p className="ws-notice">
+            <Eye aria-hidden />
+            {t('viewOnlyHint')}
+          </p>
+        ) : null}
+        {createMutation.error ? (
+          <p className="text-danger" role="alert">
+            {(createMutation.error as Error).message}
+          </p>
+        ) : null}
+
+        {!websitesQuery.isLoading && !websites.length ? (
+          <EmptyState
+            variant="rich"
+            icon={<NotebookPen />}
+            title={t('noWebsites')}
+            description={t('workspaceReportsNoWebsite')}
+            action={
+              <Button variant="primary" render={<Link to="/websites?new=1" />}>
+                {t('addWebsite')}
+              </Button>
+            }
+          />
+        ) : empty ? (
+          <EmptyState
+            variant="rich"
+            icon={<NotebookPen />}
+            title={t('notebooksEmptyTitle')}
+            description={t('notebooksEmptyBody')}
+            action={newButton ?? undefined}
+          />
+        ) : (
           <MasterDetailLayout
+            listClassName="ws-md-list"
+            listHeader={
+              <>
+                <ResourceSearchField
+                  value={search}
+                  onChange={setSearch}
+                  placeholder={t('workspaceSearchNotebooks')}
+                  aria-label={t('workspaceSearchNotebooks')}
+                />
+                <span className="master-detail-list-count">
+                  {t('workspaceNotebookCount').replace('{count}', formatNumber(notebooks.length))}
+                </span>
+              </>
+            }
             list={
               <DataViewState
-                loading={listQuery.isLoading}
+                loading={listLoading}
                 error={listQuery.isError ? listQuery.error : null}
                 onRetry={() => listQuery.refetch()}
-                isEmpty={!listQuery.isLoading && !(listQuery.data ?? []).length}
-                emptyTitle={t('notebooksEmptyTitle')}
-                emptyDescription={t('notebooksEmptyBody')}
+                loadingFallback={
+                  <div className="ws-list-skeleton">
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                }
               >
-                <>
-                  {(listQuery.data ?? []).map((notebook) => (
-                    <MasterDetailListItem
-                      key={notebook.id}
-                      selected={selectedId === notebook.id}
-                      onSelect={() => select(notebook.id)}
-                      title={notebook.title}
-                      subtitle={`${t('notebookBlockCount').replace('{count}', String(notebook.blockCount))} · ${formatDateTime(notebook.updatedAt)}`}
-                    />
-                  ))}
-                </>
+                {visibleNotebooks.length ? (
+                  <>
+                    {visibleNotebooks.map((notebook) => (
+                      <MasterDetailListItem
+                        key={notebook.id}
+                        selected={selectedId === notebook.id}
+                        onSelect={() => select(notebook.id)}
+                        icon={<NotebookText aria-hidden />}
+                        title={notebook.title}
+                        subtitle={t('notebookBlockCount').replace('{count}', formatNumber(notebook.blockCount))}
+                        meta={
+                          notebook.updatedAt ? (
+                            <span title={formatDateTime(notebook.updatedAt)}>{formatRelativeTime(notebook.updatedAt)}</span>
+                          ) : undefined
+                        }
+                      />
+                    ))}
+                  </>
+                ) : (
+                  <EmptyState title={t('workspaceNoMatches')} description={t('workspaceNoMatchesHint')} />
+                )}
               </DataViewState>
             }
             detail={
-              <MasterDetailPane
-                title={notebookQuery.data?.title ?? t('notebooks')}
-                description={t('notebookDetailLead')}
-                actions={
-                  canEdit ? (
-                    <Button type="button" variant="secondary" disabled={createMutation.isPending} onClick={() => createMutation.mutate()}>
-                      {t('notebookNew')}
-                    </Button>
-                  ) : null
-                }
-              >
-                {selectedId ? (
-                  <DataViewState
-                    loading={notebookQuery.isLoading}
-                    error={notebookQuery.isError ? notebookQuery.error : null}
-                    onRetry={() => notebookQuery.refetch()}
-                  >
-                    {notebookQuery.data ? (
-                      <NotebookEditor
-                        key={notebookQuery.data.id}
-                        notebook={notebookQuery.data}
-                        insights={insightsQuery.data ?? []}
-                        canEdit={canEdit}
-                        onDeleted={() => select(null)}
-                      />
-                    ) : null}
-                  </DataViewState>
-                ) : (
-                  <EmptyState title={t('notebookPickTitle')} description={t('notebookPickBody')} />
-                )}
-                {createMutation.error ? <p className="text-danger">{(createMutation.error as Error).message}</p> : null}
-              </MasterDetailPane>
+              selectedId ? (
+                <DataViewState
+                  loading={notebookQuery.isLoading}
+                  error={notebookQuery.isError ? notebookQuery.error : null}
+                  onRetry={() => notebookQuery.refetch()}
+                  loadingFallback={
+                    <div className="master-detail-pane">
+                      <Skeleton className="h-6 w-1/3" />
+                      <Skeleton className="mt-6 h-40 w-full" />
+                    </div>
+                  }
+                >
+                  {notebookQuery.data ? (
+                    <NotebookEditor
+                      key={notebookQuery.data.id}
+                      notebook={notebookQuery.data}
+                      insights={insightsQuery.data ?? []}
+                      canEdit={canEdit}
+                      onDeleted={() => select(null)}
+                    />
+                  ) : null}
+                </DataViewState>
+              ) : (
+                <div className="master-detail-pane ws-pane-empty">
+                  <EmptyState
+                    icon={<NotebookText />}
+                    title={t('notebookPickTitle')}
+                    description={t('notebookPickBody')}
+                    action={newButton ?? undefined}
+                  />
+                </div>
+              )
             }
           />
-        </section>
+        )}
       </PageBody>
     </Page>
   );

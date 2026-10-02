@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Area, AreaChart, Bar, BarChart, ReferenceLine } from 'recharts';
 import { ChevronDown, ChevronUp, CreditCard, Download, ReceiptText } from 'lucide-react';
@@ -55,11 +55,6 @@ const MOVEMENT = [
   { key: 'contractionMrr', label: () => t('revenueContractionMrr'), slot: 2 },
   { key: 'churnedMrr', label: () => t('revenueChurnedMrr'), slot: 3 },
 ] as const;
-
-/** Bar chart whose stacks split by sign: gains stack above the axis, losses below. */
-function SignStackedBarChart(props: ComponentProps<typeof BarChart>) {
-  return <BarChart {...props} stackOffset="sign" barCategoryGap="24%" barGap={2} />;
-}
 
 /** GET /revenue/sessions: tracked purchase revenue per session, highest first (max 100). */
 type RevenueSessionsResponse = {
@@ -643,16 +638,13 @@ function SubscriptionsCard({
               </div>
               <div className="audience-chart">
                 <AnalyticsChart
-                  Chart={SignStackedBarChart}
+                  Chart={BarChart}
+                  stackOffset="sign"
                   data={mrrSeries}
                   responsive={{ height: 220 }}
                   valueFormatter={formatAxisAmount}
                   xAxis={{ dataKey: 'x', interval: 'preserveStartEnd' }}
-                  yAxis={{ domain: ['auto', 'auto'] }}
-                  tooltip={{
-                    formatter: (value) => money(Number(value)),
-                    cursor: { fill: chartColors.border, fillOpacity: 0.5 },
-                  }}
+                  tooltip={{ formatter: (value) => money(Number(value)) }}
                 >
                   <ReferenceLine y={0} stroke={chartColors.border} />
                   {MOVEMENT.map((series) => (

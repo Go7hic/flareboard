@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import { Bar, BarChart, BarStack } from 'recharts';
 import { AnalyticsChart } from '../AnalyticsChart';
+import { ChartTooltipContent } from '../ChartTooltipContent';
 import { EmptyState } from '../EmptyState';
 import { SectionCard } from '../SectionCard';
 import { Skeleton } from '../ui/skeleton';
-import { bucketRangeLabel, bucketTickLabel, bucketTicks, NonZeroTooltip, stackedAxis } from '../quality/chartParts';
+import { bucketRangeLabel, bucketTickLabel, bucketTicks } from '../quality/chartParts';
 import { useMediaQuery } from '../quality/useMediaQuery';
 import { getSeverityColors, LOG_SEVERITIES, SEVERITY_CHART_VARS } from '../../lib/chart-colors';
 import type { LogHistogramResponse, LogSeverity } from '../../lib/api';
@@ -134,10 +135,10 @@ export function LogHistogram({
               interval: 0,
               tickFormatter: (index: number) => rows[index]?.tick ?? '',
             }}
-            yAxis={{ ...stackedAxis(rows, stacked), width: 40 }}
+            yAxis={{ width: 40 }}
             tooltip={{
               content: (
-                <NonZeroTooltip
+                <ChartTooltipContent hideZero
                   indicator="box"
                   labelFormatter={(_, payload) => String(payload[0]?.payload?.title ?? '')}
                 />

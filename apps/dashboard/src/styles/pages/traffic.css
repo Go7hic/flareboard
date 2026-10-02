@@ -202,10 +202,6 @@
   flex: 0 0 auto;
 }
 
-.traffic-list-search .cohorts-search {
-  height: 2rem;
-}
-
 .traffic-list-toolbar {
   display: flex;
   align-items: center;

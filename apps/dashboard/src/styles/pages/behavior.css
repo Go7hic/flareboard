@@ -205,7 +205,6 @@
 }
 
 .behavior-search .cohorts-search {
-  height: var(--shell-control-height);
   font-size: 0.8125rem;
 }
 

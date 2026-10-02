@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Bar, BarChart, BarStack } from 'recharts';
 import { AnalyticsChart } from '../AnalyticsChart';
+import { ChartTooltipContent } from '../ChartTooltipContent';
 import { ChartLegend } from '../ChartLegend';
 import { EmptyState } from '../EmptyState';
 import { SectionCard } from '../SectionCard';
@@ -10,7 +11,7 @@ import { BAR_MARK, STACK_MARK } from '../../lib/chartMarks';
 import { formatShortDate } from '../../lib/format';
 import { t } from '../../lib/i18n';
 import { useChartColors } from '../../lib/useChartColors';
-import { bucketRangeLabel, bucketTickLabel, bucketTicks, NonZeroTooltip, stackedAxis } from './chartParts';
+import { bucketRangeLabel, bucketTickLabel, bucketTicks } from './chartParts';
 import { useMediaQuery } from './useMediaQuery';
 
 /** Error severities as the tracker sends them, most severe first (also the stack order, bottom up). */
@@ -140,8 +141,8 @@ export function ErrorOccurrencesChart({
                 interval: 0,
                 tickFormatter: (index: number) => series.rows[index]?.tick ?? '',
               }}
-              yAxis={{ ...stackedAxis(series.rows, series.present), width: 36 }}
-              tooltip={{ content: <NonZeroTooltip indicator="box" labelFormatter={(_, payload) => titleFor(payload)} /> }}
+              yAxis={{ width: 36 }}
+              tooltip={{ content: <ChartTooltipContent hideZero indicator="box" labelFormatter={(_, payload) => titleFor(payload)} /> }}
             >
               <BarStack radius={[4, 4, 0, 0]}>
                 {series.present.map((severity) => (

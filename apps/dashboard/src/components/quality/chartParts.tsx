@@ -1,30 +1,4 @@
-import type { ComponentProps } from 'react';
-import { ChartTooltipContent } from '../ChartTooltipContent';
-import { niceTicks } from '../../lib/chartTicks';
 import { getLocale } from '../../lib/i18n';
-
-type TooltipProps = ComponentProps<typeof ChartTooltipContent>;
-
-/** Tooltip for stacked bars: lists only the series that have a value in the hovered bucket. */
-export function NonZeroTooltip(props: TooltipProps) {
-  const payload = (props.payload ?? []).filter((entry) => Number(entry.value) > 0);
-  return <ChartTooltipContent {...props} payload={payload} />;
-}
-
-/**
- * Clean value axis for a stack drawn inside <BarStack> (AnalyticsChart only reads direct
- * children, so it cannot sum the stack itself).
- */
-export function stackedAxis(rows: Array<Record<string, unknown>>, keys: readonly string[]) {
-  let max = 0;
-  for (const row of rows) {
-    let total = 0;
-    for (const key of keys) total += Math.max(0, Number(row[key]) || 0);
-    max = Math.max(max, total);
-  }
-  const ticks = niceTicks(max, 4);
-  return { ticks, domain: [0, ticks[ticks.length - 1] ?? 1] as [number, number] };
-}
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;

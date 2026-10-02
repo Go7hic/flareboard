@@ -31,15 +31,6 @@
 
 /* ── List card ─────────────────────────────────────────────────────────────── */
 
-.product-page .master-detail-list-head .cohorts-search-wrap {
-  max-width: none;
-  flex: none;
-}
-
-.product-page .master-detail-list-head .cohorts-search {
-  height: 2.25rem;
-}
-
 .product-list-summary {
   margin: 0;
   padding: 0 0.15rem;
@@ -1198,7 +1189,6 @@
 }
 
 .product-toolbar .product-toolbar-search .cohorts-search {
-  height: 2rem;
   font-size: 0.8125rem;
 }
 

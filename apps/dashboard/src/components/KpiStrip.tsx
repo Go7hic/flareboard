@@ -50,6 +50,7 @@ export function KpiCell({
   spark,
   sparkColor,
   keyColor,
+  keyShape = 'line',
   selected,
   onSelect,
   title,
@@ -67,6 +68,8 @@ export function KpiCell({
   sparkColor?: string;
   /** Series color key beside the label when the cell drives a chart series. */
   keyColor?: string;
+  /** Match the chart's legend: a line key for lines, a square for bars. */
+  keyShape?: 'line' | 'box';
   selected?: boolean;
   onSelect?: () => void;
   /** Full value for the tooltip when `value` is compacted. */
@@ -77,7 +80,13 @@ export function KpiCell({
   const body = (
     <>
       <span className="kpi-label">
-        {keyColor ? <span className="kpi-label-key" style={{ '--kpi-key': keyColor } as CSSProperties} aria-hidden /> : null}
+        {keyColor ? (
+          <span
+            className={keyShape === 'box' ? 'kpi-label-key is-box' : 'kpi-label-key'}
+            style={{ '--kpi-key': keyColor } as CSSProperties}
+            aria-hidden
+          />
+        ) : null}
         {label}
       </span>
       <span className="kpi-value-row">

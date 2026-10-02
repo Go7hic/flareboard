@@ -405,15 +405,10 @@ a.ws-site-card:hover .ws-site-card-arrow {
   width: auto;
   min-width: 9rem;
   max-width: 15rem;
-  height: var(--shell-control-height, 35px);
+  height: var(--shell-control-height);
   background-color: var(--bg-elevated);
   font-size: 0.8125rem;
   font-weight: 500;
-}
-
-/* Same height as the date range trigger and the overview's header controls. */
-.ws-header-controls [data-slot='button'] {
-  height: var(--shell-control-height, 35px);
 }
 
 @media (max-width: 767px) {
@@ -1110,13 +1105,6 @@ a.ws-actor:hover {
 
 .ws-dialog-section .field {
   margin-bottom: 0;
-}
-
-/* Master–detail list head on workspace pages: the shared search wrap is sized for rows
-   (flex-basis 14rem), which turns into 14rem of height in this column. */
-.ws-md-list .master-detail-list-head .cohorts-search-wrap {
-  flex: 0 0 auto;
-  max-width: none;
 }
 
 /* ── Boards list ──────────────────────────────────────────────────────────── */

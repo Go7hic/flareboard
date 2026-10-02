@@ -1,4 +1,4 @@
-import { useMemo, type ComponentProps, type CSSProperties } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import { Area, Bar, BarChart, ComposedChart, LabelList, Line, ReferenceLine } from 'recharts';
 import { formatDayBucketLabel } from '@flareboard/shared/timezone';
 import type {
@@ -77,10 +77,6 @@ function changeOf(current: number, previous: number | undefined) {
 }
 
 /** Bars where negative values stack below zero (lifecycle "dormant"). */
-function SignStackedBarChart(props: ComponentProps<typeof BarChart>) {
-  return <BarChart {...props} stackOffset="sign" barCategoryGap="24%" barGap={2} />;
-}
-
 /** Category axis wide enough for the step labels (approximate glyph widths), within bounds. */
 function categoryAxisWidth(labels: string[], compact?: boolean) {
   const longest = labels.reduce((max, label) => {
@@ -516,19 +512,24 @@ function LifecycleView({ result, compact }: { result: LifecycleResult; compact?:
       {compact ? null : (
         <KpiStrip inline columns={4}>
           {LIFECYCLE_KEYS.map((key, i) => (
-            <KpiCell key={key} label={t(`insightLifecycle_${key}`)} keyColor={chartSeriesColor(i)} value={formatNumber(sum(result[key]))} />
+            <KpiCell
+              key={key}
+              label={t(`insightLifecycle_${key}`)}
+              keyColor={chartSeriesColor(i)}
+              keyShape="box"
+              value={formatNumber(sum(result[key]))}
+            />
           ))}
         </KpiStrip>
       )}
       <LegendRow items={legend} />
       <div className={compact ? 'ws-result-chart ws-result-chart--compact' : 'ws-result-chart'}>
         <AnalyticsChart
-          Chart={SignStackedBarChart}
+          Chart={BarChart}
+          stackOffset="sign"
           data={data}
           responsive={{ height: compact ? '100%' : 280 }}
           xAxis={{ dataKey: 'x', interval: 'preserveStartEnd', minTickGap: 24 }}
-          yAxis={{ domain: ['auto', 'auto'] }}
-          tooltip={{ cursor: { fill: colors.border, fillOpacity: 0.5 } }}
         >
           <ReferenceLine y={0} stroke={colors.border} />
           {LIFECYCLE_KEYS.map((key, i) => (

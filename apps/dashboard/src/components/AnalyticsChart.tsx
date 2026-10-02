@@ -7,7 +7,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { niceTicks, plottedMax } from '../lib/chartTicks';
+import { niceSignedTicks, plottedRange } from '../lib/chartTicks';
 import { formatNumber } from '../lib/format';
 import { useChartColors } from '../lib/useChartColors';
 import { ChartTooltipContent } from './ChartTooltipContent';
@@ -18,6 +18,7 @@ type ChartShellProps = {
   layout?: 'horizontal' | 'vertical';
   barCategoryGap?: number | string;
   barGap?: number | string;
+  stackOffset?: 'none' | 'sign' | 'expand' | 'wiggle' | 'silhouette' | 'positive';
   children?: ReactNode;
 };
 
@@ -29,6 +30,8 @@ type AnalyticsChartProps = {
   children: ReactNode;
   margin?: ChartShellProps['margin'];
   layout?: ChartShellProps['layout'];
+  /** `sign` stacks negative values below zero (lifecycle dormant, MRR churn). */
+  stackOffset?: ChartShellProps['stackOffset'];
   xAxis?: ComponentProps<typeof XAxis>;
   yAxis?: ComponentProps<typeof YAxis>;
   grid?: ComponentProps<typeof CartesianGrid>;
@@ -53,6 +56,7 @@ export function AnalyticsChart({
   children,
   margin,
   layout,
+  stackOffset,
   xAxis,
   yAxis,
   grid,
@@ -75,10 +79,10 @@ export function AnalyticsChart({
   const autoTicks =
     valueAxisIsNumber && !valueAxis?.domain && !valueAxis?.ticks
       ? (() => {
-          const max = plottedMax(data, children);
-          if (max === null) return undefined;
-          const ticks = niceTicks(max, 4, valueAxis?.allowDecimals ?? false);
-          return { ticks, domain: [0, ticks[ticks.length - 1]] as [number, number] };
+          const range = plottedRange(data, children);
+          if (range === null) return undefined;
+          const ticks = niceSignedTicks(range.min, range.max, 4, valueAxis?.allowDecimals ?? false);
+          return { ticks, domain: [ticks[0], ticks[ticks.length - 1]] as [number, number] };
         })()
       : undefined;
 
@@ -88,6 +92,7 @@ export function AnalyticsChart({
         data={data}
         margin={margin ?? { top: 8, right: 8, bottom: 0, left: 0 }}
         layout={layout}
+        {...(stackOffset ? { stackOffset } : {})}
         {...(isBar ? { barCategoryGap: '24%', barGap: 2 } : {})}
       >
         <CartesianGrid

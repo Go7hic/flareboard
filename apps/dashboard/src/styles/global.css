@@ -98,7 +98,9 @@
   --map-tooltip-bg: var(--geist-gray-1000);
   --map-tooltip-text: var(--geist-background-100);
   --map-tooltip-border: var(--geist-gray-alpha-400);
-  --shell-control-padding-y: 0.35rem;
+  /* Header and toolbar controls (date range, selects, search, theme, locale) are 32px tall, the
+     default Button / Select height (h-8), so a row of mixed controls lines up. */
+  --shell-control-padding-y: 0.25rem;
   --shell-control-inner-h: 22px;
   --shell-control-height: calc(
     var(--shell-control-inner-h) + 2 * var(--shell-control-padding-y) + 2px
@@ -1831,10 +1833,12 @@ img.website-switcher-icon {
   white-space: nowrap;
 }
 
+/* Cells keep their words: a squeezed table scrolls inside its card instead of breaking ids and
+   times one character per line (break-word shrank every column's min-content to one glyph). */
 .data-table td {
   padding: 0.7rem 0.75rem;
   border-bottom: 1px solid var(--border);
-  word-break: break-word;
+  overflow-wrap: break-word;
   vertical-align: middle;
 }
 
@@ -3562,6 +3566,7 @@ code {
 }
 
 .cohorts-search {
+  height: var(--shell-control-height);
   padding-left: 2.25rem;
 }
 
@@ -5751,6 +5756,12 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   padding: 0.75rem;
   border-bottom: 1px solid var(--border);
   background: var(--bg-elevated);
+}
+
+/* The search fills the list column (its 14rem flex-basis is meant for toolbar rows). */
+.master-detail-list-head .cohorts-search-wrap {
+  flex: 0 0 auto;
+  max-width: none;
 }
 
 .master-detail-list-count {

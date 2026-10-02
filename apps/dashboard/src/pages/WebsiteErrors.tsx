@@ -216,11 +216,11 @@ export default function WebsiteErrorsPage() {
         lead={t('qualityErrorsLead')}
         actions={
           <div className="q-header-actions">
-            <Button type="button" variant="outline" size="sm" onClick={() => setSheet('source-maps')}>
+            <Button type="button" variant="outline" onClick={() => setSheet('source-maps')}>
               <FileCode2 aria-hidden />
               {t('errorsTabSourceMaps')}
             </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => setSheet('alerts')}>
+            <Button type="button" variant="outline" onClick={() => setSheet('alerts')}>
               <BellRing aria-hidden />
               {t('errorsTabAlerts')}
             </Button>
@@ -324,6 +324,7 @@ export default function WebsiteErrorsPage() {
                                 <th className="q-col-check">
                                   <Checkbox
                                     checked={allSelected}
+                                    indeterminate={!allSelected && selectedVisible.length > 0}
                                     onCheckedChange={(checked) =>
                                       setSelectedIssues(checked === true ? issues.map((issue) => issue.fingerprint) : [])
                                     }

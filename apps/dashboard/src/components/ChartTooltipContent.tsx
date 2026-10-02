@@ -23,7 +23,8 @@ type Formatter = (
 /**
  * Tooltip body for every AnalyticsChart: title (the x value), then one row per series with a
  * line key (or box for bars), the series name muted and the value strong (dataviz: values lead).
- * Honors Recharts `formatter` / `labelFormatter` passed through `tooltip`.
+ * Honors Recharts `formatter` / `labelFormatter` passed through `tooltip`; `hideZero` drops
+ * series without a value in the hovered bucket.
  */
 export function ChartTooltipContent({
   active,
@@ -33,6 +34,7 @@ export function ChartTooltipContent({
   formatter,
   valueFormatter,
   indicator = 'line',
+  hideZero = false,
 }: {
   active?: boolean;
   payload?: readonly TooltipEntry[];
@@ -41,8 +43,12 @@ export function ChartTooltipContent({
   formatter?: Formatter;
   valueFormatter?: (value: number) => string;
   indicator?: 'line' | 'box';
+  /** Skip series that are 0 or empty in the hovered bucket (stacked bars with many series). */
+  hideZero?: boolean;
 }) {
-  const rows = (payload ?? []).filter((entry) => !entry.hide && entry.value !== undefined);
+  const rows = (payload ?? []).filter(
+    (entry) => !entry.hide && entry.value !== undefined && (!hideZero || Number(entry.value) !== 0),
+  );
   if (!active || rows.length === 0) return null;
   const title = labelFormatter ? labelFormatter(label, rows) : label;
 

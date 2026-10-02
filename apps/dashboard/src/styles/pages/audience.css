@@ -8,10 +8,6 @@
 }
 
 /* Toolbar controls share the header control height (date picker, segment menu). */
-.audience-search .cohorts-search {
-  height: var(--shell-control-height);
-}
-
 .page-header-toolbar .segmented > button {
   height: calc(var(--shell-control-height) - 4px);
   padding: 0 0.75rem;
@@ -130,7 +126,6 @@
 .audience-table td {
   padding-top: 0.55rem;
   padding-bottom: 0.55rem;
-  word-break: normal;
 }
 
 .audience-table .audience-avatar {
@@ -586,10 +581,6 @@
 .audience-list-search {
   flex: 1 1 auto;
   max-width: none;
-}
-
-.audience-list-search .cohorts-search {
-  height: 2rem;
 }
 
 .audience-list-empty {

@@ -2683,12 +2683,6 @@ span.q-tree-toggle {
 
 /* ── Responsive ───────────────────────────────────────────────────────────── */
 
-/* Cells keep their words: narrow screens scroll the table inside its card instead of breaking
-   ids and times one character per line (global .data-table td uses word-break: break-word). */
-.q-page .data-table td {
-  word-break: normal;
-}
-
 .q-page .data-table td.q-col-when,
 .q-page .data-table td .q-id-link {
   white-space: nowrap;

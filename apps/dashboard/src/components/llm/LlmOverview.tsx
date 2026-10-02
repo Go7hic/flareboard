@@ -3,13 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Bar, BarChart, BarStack, Line, LineChart } from 'recharts';
 import { Sparkles } from 'lucide-react';
 import { AnalyticsChart } from '../AnalyticsChart';
+import { ChartTooltipContent } from '../ChartTooltipContent';
 import { BreakdownList, type BreakdownItem } from '../BreakdownList';
 import { ChartLegend } from '../ChartLegend';
 import { EmptyState } from '../EmptyState';
 import { KpiCell, KpiStrip } from '../KpiStrip';
 import { SectionCard } from '../SectionCard';
 import { StatusBadge } from '../StatusBadge';
-import { bucketTicks, NonZeroTooltip, stackedAxis } from '../quality/chartParts';
+import { bucketTicks } from '../quality/chartParts';
 import { RelativeTime } from '../quality/RelativeTime';
 import { useMediaQuery } from '../quality/useMediaQuery';
 import { type AiObservabilityResponse } from '../../lib/api';
@@ -245,9 +246,9 @@ export function LlmOverview({
               data={trend}
               responsive={{ height: 200 }}
               xAxis={xAxis}
-              yAxis={{ ...stackedAxis(trend, ['successes', 'errors']), width: 40 }}
+              yAxis={{ width: 40 }}
               tooltip={{
-                content: <NonZeroTooltip indicator="box" labelFormatter={(_, payload) => titleFor(payload)} />,
+                content: <ChartTooltipContent hideZero indicator="box" labelFormatter={(_, payload) => titleFor(payload)} />,
               }}
             >
               <BarStack radius={[4, 4, 0, 0]}>

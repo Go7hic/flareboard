@@ -220,6 +220,12 @@ button.kpi-cell:focus-visible {
   background: var(--kpi-key, transparent);
 }
 
+.kpi-label-key.is-box {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 2px;
+}
+
 .kpi-value-row {
   display: flex;
   align-items: baseline;

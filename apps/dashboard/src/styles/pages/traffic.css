@@ -602,6 +602,31 @@
   color: var(--text);
 }
 
+/* Under 1280px the side column is too narrow for its key–value rows: the timeline takes the
+   full width and the visitor / properties cards sit side by side below it. */
+@media (max-width: 1279px) {
+  .traffic-session-grid > .span-8,
+  .traffic-session-grid > .traffic-session-side {
+    grid-column: span 12;
+  }
+
+  .traffic-session-side {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .traffic-session-side > :only-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 767px) {
+  .traffic-session-side {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Visit header: a shared .meta-line (its separators drop at wrapped line starts). */
 .traffic-timeline-visit {
   padding: 0.55rem var(--card-pad-x);

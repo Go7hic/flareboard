@@ -252,7 +252,7 @@ export default function SessionDetailPage() {
               />
             </KpiStrip>
 
-            <div className="layout-grid">
+            <div className="layout-grid traffic-session-grid">
               <SectionCard
                 className="span-8"
                 title={t('trafficTimeline')}
@@ -282,7 +282,7 @@ export default function SessionDetailPage() {
                 )}
               </SectionCard>
 
-              <div className="span-4 stack">
+              <div className="span-4 stack traffic-session-side">
                 <SectionCard title={t('trafficVisitor')}>
                   <KvList compact items={details} className="traffic-kv" />
                 </SectionCard>

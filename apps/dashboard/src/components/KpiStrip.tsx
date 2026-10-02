@@ -30,6 +30,7 @@ export function KpiStrip({
     <div
       className={cn('kpi-strip', inline && 'kpi-strip--inline', className)}
       style={{ '--kpi-cols': cols } as CSSProperties}
+      data-cols={cols}
       role={label ? 'tablist' : undefined}
       aria-label={label}
     >

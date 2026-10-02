@@ -3,8 +3,8 @@ import type { ExtraMessages } from './types';
 /** Console v2 shared strings (shell, KPI strip, charts, empty states). */
 export const consoleMessages: ExtraMessages = {
   'en-US': {
+    loginSubtitle: 'Welcome back. Sign in to continue.',
     timeJustNow: 'just now',
-    allWebsites: 'All websites',
     vsPreviousPeriod: 'vs previous period',
     deltaNoChange: 'No change',
     chartViewAll: 'View all',
@@ -14,8 +14,8 @@ export const consoleMessages: ExtraMessages = {
     emptyNothingYet: 'Nothing here yet',
   },
   'zh-CN': {
+    loginSubtitle: '欢迎回来，登录后继续。',
     timeJustNow: '刚刚',
-    allWebsites: '所有网站',
     vsPreviousPeriod: '较上一时期',
     deltaNoChange: '无变化',
     chartViewAll: '查看全部',
@@ -25,8 +25,8 @@ export const consoleMessages: ExtraMessages = {
     emptyNothingYet: '暂无内容',
   },
   'ja-JP': {
+    loginSubtitle: 'おかえりなさい。サインインして続行します。',
     timeJustNow: 'たった今',
-    allWebsites: 'すべてのウェブサイト',
     vsPreviousPeriod: '前期間比',
     deltaNoChange: '変化なし',
     chartViewAll: 'すべて表示',
@@ -36,8 +36,8 @@ export const consoleMessages: ExtraMessages = {
     emptyNothingYet: 'まだ何もありません',
   },
   'de-DE': {
+    loginSubtitle: 'Willkommen zurück. Melde dich an, um fortzufahren.',
     timeJustNow: 'gerade eben',
-    allWebsites: 'Alle Websites',
     vsPreviousPeriod: 'ggü. Vorzeitraum',
     deltaNoChange: 'Keine Änderung',
     chartViewAll: 'Alle anzeigen',
@@ -47,8 +47,8 @@ export const consoleMessages: ExtraMessages = {
     emptyNothingYet: 'Noch nichts vorhanden',
   },
   'fr-FR': {
+    loginSubtitle: 'Bon retour. Connectez-vous pour continuer.',
     timeJustNow: 'à l’instant',
-    allWebsites: 'Tous les sites',
     vsPreviousPeriod: 'vs période précédente',
     deltaNoChange: 'Aucun changement',
     chartViewAll: 'Tout afficher',

@@ -158,7 +158,10 @@
   gap: 0.35rem;
   min-width: 0;
   padding: 1rem 1.25rem 1.05rem;
-  border-left: 1px solid var(--border);
+  border: 0;
+  /* Hairlines on the left and top, drawn outside the cell: the strip clips the outer ones, so
+     the grid reads right at any column count (no nth-child bookkeeping when it wraps). */
+  box-shadow: -1px 0 0 0 var(--border), 0 -1px 0 0 var(--border);
   text-align: left;
   background: transparent;
   color: var(--text);
@@ -169,15 +172,8 @@
   padding: 0.85rem 1rem;
 }
 
-.kpi-cell:first-child {
-  border-left: 0;
-}
-
 button.kpi-cell {
   cursor: pointer;
-  border-top: 0;
-  border-right: 0;
-  border-bottom: 0;
   transition: background var(--transition);
 }
 
@@ -271,40 +267,22 @@ button.kpi-cell:focus-visible {
   height: 28px;
 }
 
+/* Wrap to even rows: 4 → 2 × 2, 5/6 → 3 per row, then 2 per row on phones. */
 @media (max-width: 1100px) {
-  .kpi-strip {
-    grid-template-columns: repeat(min(var(--kpi-cols, 4), 3), minmax(0, 1fr));
+  .kpi-strip[data-cols='4'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .kpi-cell {
-    border-top: 1px solid var(--border);
-  }
-
-  .kpi-cell:nth-child(-n + 3) {
-    border-top: 0;
-  }
-
-  .kpi-cell:nth-child(3n + 1) {
-    border-left: 0;
+  .kpi-strip[data-cols='5'],
+  .kpi-strip[data-cols='6'] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 640px) {
-  .kpi-strip {
+  .kpi-strip,
+  .kpi-strip[data-cols] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .kpi-cell:nth-child(n) {
-    border-left: 1px solid var(--border);
-    border-top: 1px solid var(--border);
-  }
-
-  .kpi-cell:nth-child(2n + 1) {
-    border-left: 0;
-  }
-
-  .kpi-cell:nth-child(-n + 2) {
-    border-top: 0;
   }
 
   .kpi-value {
@@ -722,19 +700,29 @@ button.breakdown-row:hover {
 .meta-line {
   display: flex;
   align-items: center;
-  gap: 0.35rem 0.75rem;
   flex-wrap: wrap;
+  row-gap: 0.35rem;
+  /* Each item carries its separator dot on its left; the line is shifted left and clipped so
+     the dot of an item that starts a wrapped line falls outside and disappears. */
+  margin-left: -1rem;
+  clip-path: inset(-0.5rem -0.5rem -0.5rem 1rem);
   font-size: 0.8125rem;
   color: var(--text-muted);
 }
 
-.meta-line > * + *::before {
+.meta-line > * {
+  position: relative;
+  margin-left: 1rem;
+}
+
+.meta-line > *::before {
   content: '·';
-  margin-right: 0.75rem;
+  position: absolute;
+  left: -0.62rem;
   color: var(--text-faint);
 }
 
-.meta-line--plain > * + *::before {
+.meta-line--plain > *::before {
   display: none;
 }
 
@@ -908,5 +896,32 @@ button.breakdown-row:hover {
   .master-detail-list {
     position: static;
     max-height: 22rem;
+  }
+}
+
+.live-dot.is-idle {
+  background: var(--text-faint);
+  animation: none;
+  box-shadow: none;
+}
+
+.live-dot.is-idle::after,
+.live-dot.is-idle::before {
+  display: none;
+}
+
+/* EventCatalogPicker suggestions, portaled to <body> (above dialogs and clipped cards). */
+.event-catalog-picker-dropdown.is-floating {
+  position: fixed;
+  top: auto;
+  right: auto;
+  z-index: 310;
+  box-shadow: var(--shadow-md);
+}
+
+/* Phones: the detail header stacks; the title block must not keep its 16rem flex basis. */
+@media (max-width: 900px) {
+  .master-detail-pane-copy {
+    flex: 0 0 auto;
   }
 }

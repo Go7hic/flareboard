@@ -17,7 +17,8 @@ export function RealtimeOnlineKpi({ websiteId }: { websiteId: string }) {
       aria-live="polite"
       aria-label={isLoading ? t('realtimeOnline') : label ?? undefined}
     >
-      <span className="live-dot" aria-hidden="true" />
+      {/* Pulses only while someone is online; a quiet gray dot otherwise. */}
+      <span className={data && data.visitors > 0 ? 'live-dot' : 'live-dot is-idle'} aria-hidden="true" />
       {isLoading ? (
         <Skeleton className="realtime-online-badge-skeleton" aria-hidden />
       ) : (

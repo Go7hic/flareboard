@@ -1,20 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Line, LineChart } from 'recharts';
-import { AnalyticsChart } from '../components/AnalyticsChart';
 import { BrandLogo } from '../components/BrandLogo';
 import { DataViewState } from '../components/DataViewState';
 import { DateRangePicker } from '../components/DateRangePicker';
-import { EmptyState } from '../components/EmptyState';
 import { LanguageSelector } from '../components/LanguageSelector';
+import { KpiStripSkeleton } from '../components/KpiStrip';
 import { OverviewDimensions } from '../components/OverviewDimensions';
+import { OverviewKpiStrip } from '../components/OverviewKpiStrip';
+import { OverviewTrendCard } from '../components/OverviewTrendCard';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { WebsiteNameLabel } from '../components/WebsiteNameLabel';
 import { Button } from '../components/ui/button';
-import { StatCard, StatCardSkeleton } from '../components/ui/stat-card';
 import { api, bootstrapSession, logoutSession, startDemoSession, type WebsiteStats } from '../lib/api';
 import {
   isHourlyChartRange,
@@ -22,7 +21,6 @@ import {
   type MetricsSeries,
 } from '../lib/chartTimeseries';
 import { presetToRange, rangeQueryString, type DateRangePreset } from '../lib/dateRange';
-import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
 import { fetchMe } from '../lib/useDemoSession';
@@ -43,17 +41,6 @@ type DemoOverview = {
 type AppConfig = {
   registrationEnabled?: boolean;
 };
-
-function OverviewKpi({
-  label,
-  stat,
-}: {
-  label: string;
-  stat?: { value: number; change?: number };
-}) {
-  if (!stat) return null;
-  return <StatCard label={label} value={formatNumber(stat.value)} />;
-}
 
 /**
  * Public overview of the sample website: the fallback when a demo session cannot be started
@@ -110,20 +97,8 @@ function DemoOverview() {
 
   const overviewLoadingFallback = (
     <>
-      <section className="page-stats-kpis section-gap" aria-hidden>
-        <div className="analytics-hero-stats">
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-          <StatCardSkeleton />
-        </div>
-      </section>
-      <section className="panel page-stats-chart section-gap" aria-hidden>
-        <div className="chart-wrap chart-wrap-hero chart-skeleton" aria-busy>
-          <div className="skeleton skeleton-block" />
-        </div>
-      </section>
+      <KpiStripSkeleton cells={5} />
+      <OverviewTrendCard data={[]} loading />
     </>
   );
 
@@ -201,87 +176,30 @@ function DemoOverview() {
             }
           />
 
-          <PageBody>
+          <PageBody className="stack">
             <DataViewState
               loading={!overviewQuery.data && (metaQuery.isPending || overviewQuery.isPending)}
               error={overviewQuery.isError ? overviewQuery.error : null}
               onRetry={() => overviewQuery.refetch()}
               loadingFallback={overviewLoadingFallback}
             >
-              <section className="page-stats-kpis section-gap" aria-labelledby="demo-overview">
+              <section aria-labelledby="demo-overview">
                 <h2 id="demo-overview" className="visually-hidden">
                   {t('trafficOverTime')}
                 </h2>
-                <div className="analytics-hero-stats">
-                  {stats ? (
-                    <>
-                      <OverviewKpi label={t('pageviews')} stat={stats.pageviews} />
-                      <OverviewKpi label={t('visitors')} stat={stats.visitors} />
-                      <OverviewKpi label={t('visits')} stat={stats.visits} />
-                      <OverviewKpi label={t('bounces')} stat={stats.bounces} />
-                      <OverviewKpi label={t('totalTime')} stat={stats.totaltime} />
-                    </>
-                  ) : (
-                    <>
-                      <StatCardSkeleton />
-                      <StatCardSkeleton />
-                      <StatCardSkeleton />
-                      <StatCardSkeleton />
-                      <StatCardSkeleton />
-                    </>
-                  )}
-                </div>
-              </section>
-
-              <section className="panel page-stats-chart section-gap" aria-labelledby="demo-chart-title">
-                <h2 id="demo-chart-title" className="section-title">
-                  {t('trafficOverTime')}
-                </h2>
-                {chartData.length > 0 ? (
-                  <>
-                    <div className="chart-wrap chart-wrap-hero">
-                      <AnalyticsChart
-                        Chart={LineChart}
-                        data={chartData}
-                        xAxis={{
-                          dataKey: 'x',
-                          interval: hourly ? 'preserveStartEnd' : undefined,
-                          minTickGap: hourly ? 24 : 8,
-                        }}
-                      >
-                        <Line
-                          type="monotone"
-                          dataKey="pageviews"
-                          name={t('pageviews')}
-                          stroke={metricColors.pageviews}
-                          strokeWidth={2}
-                          dot={false}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="visitors"
-                          name={t('visitors')}
-                          stroke={metricColors.visitors}
-                          strokeWidth={2}
-                          dot={false}
-                        />
-                      </AnalyticsChart>
-                    </div>
-                    <div className="dashboard-aggregate-legend analytics-chart-legend" aria-hidden>
-                      <span className="dashboard-aggregate-legend-item">
-                        <span className="dashboard-aggregate-legend-swatch dashboard-aggregate-legend-swatch--pageviews" />
-                        <span className="dashboard-aggregate-legend-label">{t('pageviews')}</span>
-                      </span>
-                      <span className="dashboard-aggregate-legend-item">
-                        <span className="dashboard-aggregate-legend-swatch dashboard-aggregate-legend-swatch--visitors" />
-                        <span className="dashboard-aggregate-legend-label">{t('visitors')}</span>
-                      </span>
-                    </div>
-                  </>
+                {stats ? (
+                  <OverviewKpiStrip
+                    stats={stats}
+                    compareLabel=""
+                    pageviewsColor={metricColors.pageviews}
+                    visitorsColor={metricColors.visitors}
+                  />
                 ) : (
-                  <EmptyState title={t('chartNoData')} description={t('noDataInPeriodHint')} />
+                  <KpiStripSkeleton cells={5} />
                 )}
               </section>
+
+              <OverviewTrendCard data={chartData} hourly={hourly} />
             </DataViewState>
 
             {metaQuery.isSuccess ? (

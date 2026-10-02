@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, X } from 'lucide-react';
 import { Button } from './ui/button';
@@ -41,6 +42,54 @@ function useEventCatalog(websiteId: string | undefined, search: string) {
         `/api/websites/${websiteId}/events/catalog${debouncedSearch ? `?q=${encodeURIComponent(debouncedSearch)}` : ''}`,
       ),
   });
+}
+
+/**
+ * The suggestion list, portaled to <body> and fixed under (or above) its input so dialogs and
+ * cards with `overflow: auto` cannot clip it. Sits on the popover layer (z 310).
+ */
+function FloatingDropdown({
+  anchorRef,
+  floatingRef,
+  id,
+  children,
+}: {
+  anchorRef: RefObject<HTMLElement | null>;
+  floatingRef: RefObject<HTMLDivElement | null>;
+  id: string;
+  children: ReactNode;
+}) {
+  const [style, setStyle] = useState<CSSProperties | null>(null);
+
+  useLayoutEffect(() => {
+    function place() {
+      const anchor = anchorRef.current;
+      if (!anchor) return;
+      const rect = anchor.getBoundingClientRect();
+      const below = window.innerHeight - rect.bottom;
+      const openUp = below < 220 && rect.top > below;
+      setStyle({
+        left: rect.left,
+        width: rect.width,
+        ...(openUp ? { bottom: window.innerHeight - rect.top + 4 } : { top: rect.bottom + 4 }),
+      });
+    }
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [anchorRef]);
+
+  if (!style) return null;
+  return createPortal(
+    <div id={id} ref={floatingRef} className="event-catalog-picker-dropdown is-floating" style={style}>
+      {children}
+    </div>,
+    document.body,
+  );
 }
 
 function EventCatalogList({
@@ -125,7 +174,10 @@ function EventCatalogCombobox({
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(value);
   const rootRef = useRef<HTMLDivElement>(null);
+  const floatingRef = useRef<HTMLDivElement>(null);
   const listId = useId();
+  const isInside = (node: Node | null) =>
+    Boolean(node && (rootRef.current?.contains(node) || floatingRef.current?.contains(node)));
 
   useEffect(() => {
     setDraft(value);
@@ -134,7 +186,7 @@ function EventCatalogCombobox({
   useEffect(() => {
     if (!open) return;
     function onPointerDown(event: PointerEvent) {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+      if (!isInside(event.target as Node)) {
         commitDraft();
         setOpen(false);
       }
@@ -191,7 +243,7 @@ function EventCatalogCombobox({
           }}
           onBlur={() => {
             window.setTimeout(() => {
-              if (!rootRef.current?.contains(document.activeElement)) {
+              if (!isInside(document.activeElement)) {
                 commitDraft();
                 setOpen(false);
               }
@@ -210,9 +262,9 @@ function EventCatalogCombobox({
         </Button>
       </div>
       {open ? (
-        <div id={listId} className="event-catalog-picker-dropdown">
+        <FloatingDropdown anchorRef={rootRef} floatingRef={floatingRef} id={listId}>
           <EventCatalogList websiteId={websiteId} search={draft} onPick={pick} exclude={exclude} />
-        </div>
+        </FloatingDropdown>
       ) : null}
     </div>
   );
@@ -256,12 +308,14 @@ function EventCatalogMultiPicker({
   const [stepDraft, setStepDraft] = useState('');
   const [stepOpen, setStepOpen] = useState(false);
   const stepRootRef = useRef<HTMLDivElement>(null);
+  const stepFloatingRef = useRef<HTMLDivElement>(null);
   const stepListId = useId();
 
   useEffect(() => {
     if (!stepOpen) return;
     function onPointerDown(event: PointerEvent) {
-      if (stepRootRef.current && !stepRootRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (!stepRootRef.current?.contains(target) && !stepFloatingRef.current?.contains(target)) {
         setStepOpen(false);
       }
     }
@@ -344,14 +398,14 @@ function EventCatalogMultiPicker({
           </Button>
         </div>
         {stepOpen ? (
-          <div id={stepListId} className="event-catalog-picker-dropdown">
+          <FloatingDropdown anchorRef={stepRootRef} floatingRef={stepFloatingRef} id={stepListId}>
             <EventCatalogList
               websiteId={websiteId}
               search={stepDraft}
               onPick={addStep}
               exclude={exclude}
             />
-          </div>
+          </FloatingDropdown>
         ) : null}
       </div>
     </div>

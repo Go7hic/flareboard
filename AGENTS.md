@@ -1,6 +1,6 @@
 # Flareboard — agent guide
 
-Monorepo: `apps/dashboard` (Vite/React), `apps/api`, `apps/ingest`, `apps/blog` (Astro), packages. Dashboard UI is **Flareboard** — analytics on Cloudflare. Deeper brand/audit notes: `apps/dashboard/DESIGN-NOTE.md`. Redesign playbook: `docs/geist-redesign-playbook.md`.
+Monorepo: `apps/dashboard` (Vite/React), `apps/api`, `apps/ingest`, `apps/blog` (Astro), packages. Dashboard UI is **Flareboard** — analytics on Cloudflare. **Console design spec (v2): `docs/dashboard-design-system.md`** — page anatomy, building blocks, chart rules; follow it for every dashboard page. Brand notes: `apps/dashboard/DESIGN-NOTE.md`.
 
 ## Design system (dashboard)
 
@@ -11,15 +11,17 @@ Interactive primitives live under `apps/dashboard/src/components/ui/*` as **shad
 ### Principles
 
 - **Minimal:** flat solids only — no gradients, no colored glows, no heavy decoration.
-- **Hierarchy:** typography scale, spacing, 1px borders, light shadows (`--shadow-sm` / `--shadow-md`), gray accent rails on panels where needed.
+- **Hierarchy:** typography scale, spacing, 1px borders. Cards are flat (no shadow) on the off-white page (`--bg` #fafafa / dark #000, cards `--bg-elevated`); shadows only for popovers and dialogs. One container level: no bordered boxes inside cards.
+- **Answer first:** pages lead with a KPI strip / primary chart / list; create and configure live in dialogs opened from header buttons.
+- **Fonts:** Geist is self-hosted (`src/assets/fonts`, `@font-face` in `global.css`); never load fonts from a CDN.
 - **Icons:** thin stroke SVGs (2px), Lucide-style — match `ThemeToggle` / header controls.
 
 ### Border radius
 
 | Use | Token / value |
 |-----|----------------|
-| Form fields, chips, panels, header controls, cards | `--radius-sm` (6px) |
-| Larger shells / soft containers | `--radius-md` (12px) |
+| Form fields, chips, badges, header controls, inner tiles | `--radius-sm` (6px) |
+| Cards (`.panel`, `SectionCard`, KPI strip), dialogs, popovers | `--radius-md` (12px) |
 | Rare oversized surfaces | `--radius-lg` (16px) |
 | Pills (theme track only) | `999px` |
 
@@ -27,8 +29,8 @@ Interactive primitives live under `apps/dashboard/src/components/ui/*` as **shad
 
 | Role | Token | Notes |
 |------|-------|-------|
-| Page bg | `--bg` | Geist `background-100` |
-| Surfaces | `--bg-elevated` | elevated panels |
+| Page bg | `--bg` | Geist `background-200` (#fafafa) / dark #000 |
+| Cards | `--bg-elevated` | #fff / dark #0a0a0a |
 | Subtle fill | `--bg-subtle` | gray-100 |
 | Text | `--text` | Geist `gray-1000` |
 | Muted text | `--text-muted` | Geist `gray-900` |
@@ -42,8 +44,8 @@ Header chrome: `--shell-bg` + `backdrop-filter` on `.shell-nav` / `.landing-nav`
 
 ### Spacing
 
-- Page content: `.page` — `1.5rem` padding; max `--container-max` 1200px.
-- Panels: `1.5rem` padding (`.panel`, `.panel-body`).
+- Page content: `.page` — `1.5rem` padding (2rem ≥ 1280px); max `--container-max` 1320px.
+- Cards: `1.25rem` padding (`--card-pad-x/y`); gap between cards `--section-gap` (1rem); `.stack` / `.layout-grid` (12 columns, `.span-N`).
 - Header control row: `.shell-nav-end` — `gap: 0.5rem`, align center with nav height `--nav-height` 64px.
 
 ### Component patterns
@@ -64,9 +66,9 @@ Header chrome: `--shell-bg` + `backdrop-filter` on `.shell-nav` / `.landing-nav`
 
 **Nav links:** `.shell-link` / `.sidebar-link.active` (inset gray bar).
 
-**Data UI:** `.panel`, `.stat-card`, `.data-table`, `.stat-value` (mono tabular).
+**Data UI (console v2):** `SectionCard` (title, description, actions, `flush` for tables), `KpiStrip` + `KpiCell` (headline numbers, `StatChangeDelta` chips), `BreakdownList` (ranked rows with share bars), `.data-table` (sentence-case headers), `KvList`, `StatusBadge`, `EmptyState` (icon + next step), master–detail (`MasterDetailLayout listHeader`, `MasterDetailPane meta`). Big numbers use proportional Geist Sans; `tabular-nums` only in columns. Dates: `formatShortDateTime` / `formatRelativeTime`, never a full date as a big value.
 
-**Charts:** series strokes/fills and legend swatches share `apps/dashboard/src/lib/chart-colors.ts` + `--chart-1`…`--chart-6` / `--chart-pageviews|visitors|visits` in `geist-tokens.css`. Never use `--accent`, `--text`, or gray-1000 for data series (chrome only). Re-run `node apps/dashboard/scripts/check-chart-colors.mjs`.
+**Charts:** `AnalyticsChart` (solid hairline grid, no axis lines, clean ticks, shared tooltip) with mark presets from `src/lib/chartMarks.ts` (`BAR_MARK` ≤ 24px with a 4px data end, `lineMark`), `ChartLegend` in the card header for ≥ 2 series. Series colors come from `useChartColors()` (resolved values; SVG attributes cannot read CSS variables) in the fixed slot order blue, orange, teal, purple, green, pink (`--chart-1…6`, validated for color-vision deficiency in both themes — re-validate with the dataviz checks before changing). Never `--accent`, `--text` or gray-1000 for series; status colors only for status. Re-run `node apps/dashboard/scripts/check-chart-colors.mjs`.
 
 ### i18n
 

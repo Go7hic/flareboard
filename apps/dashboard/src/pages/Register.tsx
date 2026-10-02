@@ -60,7 +60,6 @@ export default function Register() {
         </div>
         <div className="login-card">
           <div className="login-brand">
-            <BrandLogo showWordmark={false} size={32} />
             <h1>{t('createAccount')}</h1>
           </div>
           {message ? (

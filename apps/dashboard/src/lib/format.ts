@@ -125,13 +125,14 @@ const RELATIVE_STEPS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
  */
 export function formatRelativeTime(
   value: string | number | Date | null | undefined,
-  opts?: { now?: number; maxDays?: number },
+  opts?: { now?: number; maxDays?: number; allowFuture?: boolean },
 ): string {
   if (value == null) return EMPTY;
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return EMPTY;
   const now = opts?.now ?? Date.now();
-  const diffSeconds = (date.getTime() - now) / 1000;
+  // A past event a little "ahead" of this clock (client skew, sample data) reads as just now.
+  const diffSeconds = opts?.allowFuture ? (date.getTime() - now) / 1000 : Math.min(0, (date.getTime() - now) / 1000);
   if (Math.abs(diffSeconds) >= (opts?.maxDays ?? 7) * 86_400) return formatShortDate(date);
   if (Math.abs(diffSeconds) < 45) return t('timeJustNow');
   const rtf = new Intl.RelativeTimeFormat(getLocale(), { numeric: 'auto', style: 'short' });

@@ -53,11 +53,16 @@ and the same few building blocks appear everywhere.
 ## 4. Page anatomy
 
 ```
-PageHeader   title · lead                                   [secondary] [primary action]
-Toolbar      [date range] [segment] [filters…]              (one row, left aligned, no box)
+PageHeader   title · lead                     [live] [segment] [date range] [export] | [primary action]
+Toolbar      [search] [filter…] [filter…]                   (only when a page has many filters; one row, no box)
 KpiStrip     one card, N cells split by hairlines (cells may be selectable → drive the chart)
 Content      cards on a 12-column grid (.layout-grid, .span-4/.span-6/.span-8/.span-12)
 ```
+
+- Report pages put their scope controls (segment, date range, export) in the header actions, right of
+  the title; they wrap under it on narrow screens. Every chart and number on the page follows them.
+- Streams and catalogs with several filters (logs, sessions, errors, people) use a toolbar row under
+  the header (or the list card header in master–detail).
 
 - Page width: `--container-max` (1320px), 24px gutters (16px under 640px).
 - Rhythm: header → toolbar 16px; toolbar → content 20px; between cards 16px (`--section-gap`).

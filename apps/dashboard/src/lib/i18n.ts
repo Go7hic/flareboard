@@ -5076,7 +5076,7 @@ const zhCN: Partial<Record<string, string>> = {
   viewReplays: '查看回放',
   sessionContext: '会话上下文',
   sessionContextEmpty: '这个会话暂时没有关联上下文。',
-  contextKindPageview: '访问',
+  contextKindPageview: '浏览',
   contextKindEvent: '事件',
   contextKindFeatureFlag: '开关',
   contextKindError: '错误',

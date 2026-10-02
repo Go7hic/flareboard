@@ -239,12 +239,7 @@ export default function Login() {
           <ThemeToggle />
         </div>
         <div className="login-card">
-          <span className="login-edge-badge">
-            <span className="live-dot" aria-hidden />
-            {t('loginBadge')}
-          </span>
           <div className="login-brand">
-            <BrandLogo showWordmark={false} size={32} />
             <h1>
               {mode === 'forgot'
                 ? t('forgotPassword')
@@ -254,6 +249,7 @@ export default function Login() {
                     ? t('twoFactorTitle')
                     : t('signIn')}
             </h1>
+            {mode === 'login' ? <p className="login-subtitle">{t('loginSubtitle')}</p> : null}
           </div>
           {mode === 'login' ? (
             <>
@@ -270,7 +266,12 @@ export default function Login() {
                   />
                 </div>
                 <div className="field">
-                  <Label htmlFor="password">{t('password')}</Label>
+                  <div className="login-label-row">
+                    <Label htmlFor="password">{t('password')}</Label>
+                    <button type="button" className="login-inline-link" onClick={() => setMode('forgot')}>
+                      {t('forgotPassword')}
+                    </button>
+                  </div>
                   <Input
                     id="password"
                     type="password"
@@ -282,15 +283,10 @@ export default function Login() {
                 </div>
                 {error ? <p className="text-danger mb-4">{error}</p> : null}
                 {message ? <p className="text-muted mb-4">{message}</p> : null}
-                <Button variant="primary" className="w-full" type="submit">
+                <Button variant="primary" size="lg" className="w-full" type="submit">
                   {t('continueToDashboard')}
                 </Button>
               </form>
-              <p className="mt-3 text-center">
-                <Button type="button" variant="ghost" size="sm" onClick={() => setMode('forgot')}>
-                  {t('forgotPassword')}
-                </Button>
-              </p>
               {registrationEnabled ? (
                 <p className="login-footer-link text-muted">
                   {t('noAccount')}{' '}

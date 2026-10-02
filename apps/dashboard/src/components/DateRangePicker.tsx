@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { Check } from 'lucide-react';
 import { type DateRangePreset, presetToRange } from '../lib/dateRange';
 import { formatDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
@@ -221,34 +222,37 @@ export function DateRangePicker({
         </button>
         {popoverOpen ? (
           <div id={popoverId} className="date-range-picker-popover" role="dialog" aria-label={t('dateRange')}>
-            <div className="date-range-picker-popover-body">
-              <div className="date-range-picker-popover-custom">{customControls}</div>
-              <ul className="date-range-picker-popover-presets" aria-label={t('dateRange')}>
-                {PRESET_ORDER.map((p) => (
-                  <li key={p}>
-                    <button
-                      type="button"
-                      className={`date-range-picker-preset${value.preset === p ? ' is-active' : ''}`}
-                      onClick={() => applyPreset(p, true)}
-                    >
-                      {t(PRESET_LABEL_KEYS[p])}
-                    </button>
-                  </li>
-                ))}
-                <li>
+            <ul className="date-range-picker-popover-presets" aria-label={t('dateRange')}>
+              {PRESET_ORDER.map((p) => (
+                <li key={p}>
                   <button
                     type="button"
-                    className={`date-range-picker-preset${value.preset === 'custom' ? ' is-active' : ''}`}
-                    onClick={() => {
-                      prefillCustomFromValue();
-                      setCustomFocused(true);
-                    }}
+                    className={`date-range-picker-preset${value.preset === p && !detailsOpen ? ' is-active' : ''}`}
+                    onClick={() => applyPreset(p, true)}
                   >
-                    {t('customRange')}
+                    <span>{t(PRESET_LABEL_KEYS[p])}</span>
+                    {value.preset === p && !detailsOpen ? <Check aria-hidden /> : null}
                   </button>
                 </li>
-              </ul>
-            </div>
+              ))}
+              <li>
+                <button
+                  type="button"
+                  className={`date-range-picker-preset${value.preset === 'custom' || detailsOpen ? ' is-active' : ''}`}
+                  aria-expanded={value.preset === 'custom' || detailsOpen}
+                  onClick={() => {
+                    prefillCustomFromValue();
+                    setDetailsOpen(true);
+                  }}
+                >
+                  <span>{t('customRange')}</span>
+                  {value.preset === 'custom' && !detailsOpen ? <Check aria-hidden /> : null}
+                </button>
+              </li>
+            </ul>
+            {value.preset === 'custom' || detailsOpen ? (
+              <div className="date-range-picker-popover-custom">{customControls}</div>
+            ) : null}
           </div>
         ) : null}
       </div>

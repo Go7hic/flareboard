@@ -942,18 +942,22 @@ textarea {
 }
 
 .website-sidebar-group-label {
-  padding: 0 0.75rem;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  padding: 0 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 500;
   color: var(--text-faint);
 }
 
 .website-sidebar-group-links {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 1px;
+}
+
+/* ~30 website destinations: a slightly tighter row than the global nav so groups fit. */
+.website-sidebar-group-links .sidebar-link {
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
 }
 
 /* Website content header (back + site switcher) */
@@ -2181,31 +2185,64 @@ code {
   width: 100%;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 1.5rem;
-  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-md);
+  padding: 2rem 2rem 1.75rem;
+  box-shadow: none;
 }
 
 .login-card .field {
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.9rem;
 }
 
 .login-card form > .field:last-of-type {
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
 }
 
 .login-brand {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 1.25rem;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 1.5rem;
 }
 
 .login-brand h1 {
   margin: 0;
   font-size: 1.5rem;
   font-weight: 600;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.02em;
+}
+
+.login-subtitle {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.login-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.login-inline-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.login-inline-link:hover {
+  color: var(--text);
+}
+
+@media (max-width: 480px) {
+  .login-card {
+    padding: 1.5rem 1.25rem;
+  }
 }
 
 .login-hint {
@@ -2741,7 +2778,7 @@ code {
 
 .stats-header-controls {
   display: inline-flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   width: auto;
@@ -2820,59 +2857,28 @@ code {
   top: calc(100% + 0.35rem);
   right: 0;
   z-index: 220;
-  width: min(36rem, calc(100vw - 2rem));
-  padding: 1rem;
+  width: 16rem;
+  padding: 0.3rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
   box-shadow: var(--shadow-md);
 }
 
-.date-range-picker-popover-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 11rem;
-  gap: 1rem;
-}
-
-.date-range-picker-popover-custom {
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-  min-width: 0;
-}
-
-/* Popover mode: stacked label + full-width inputs */
-.date-range-picker-popover-custom .date-range-picker-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-
-.date-range-picker-popover-custom .date-range-picker-field-label {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.date-range-picker-popover-custom .date-range-picker-input {
-  width: 100%;
-  min-width: 0;
-  flex: none;
-}
-
+/* Presets as rows with a check on the selection; custom range below a hairline (dataviz). */
 .date-range-picker-popover-presets {
   margin: 0;
-  padding: 0.25rem;
+  padding: 0;
   list-style: none;
-  border-left: 1px solid var(--border-subtle);
 }
 
 .date-range-picker-preset {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   width: 100%;
-  padding: 0.5rem 0.65rem;
+  padding: 0.45rem 0.6rem;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -2885,14 +2891,51 @@ code {
   transition: background var(--transition), color var(--transition);
 }
 
+.date-range-picker-preset svg {
+  width: 1rem;
+  height: 1rem;
+  stroke-width: 2.5;
+  flex: 0 0 auto;
+}
+
 .date-range-picker-preset:hover {
-  background: var(--bg-subtle);
+  background: var(--row-hover, var(--bg-subtle));
 }
 
 .date-range-picker-preset.is-active {
-  background: var(--bg-subtle);
-  color: var(--text);
   font-weight: 600;
+}
+
+.date-range-picker-popover-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+  margin: 0.3rem -0.3rem -0.3rem;
+  padding: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.date-range-picker-popover-custom .date-range-picker-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.date-range-picker-popover-custom .date-range-picker-field-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.date-range-picker-popover-custom .date-range-picker-input {
+  width: 100%;
+  min-width: 0;
+  flex: none;
+}
+
+.date-range-picker-popover-custom .date-range-picker-apply {
+  align-self: flex-end;
 }
 
 .export-menu {
@@ -3348,12 +3391,12 @@ code {
 
 .dialog-panel {
   width: min(640px, 100%);
-  max-height: calc(100vh - 2.5rem);
+  max-height: calc(100dvh - 2.5rem);
   overflow: auto;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-lg);
   outline: none;
 }
 
@@ -3434,28 +3477,44 @@ code {
 }
 
 
+/* Dialogs (console v2): title block, body, and a footer bar that stays visible in long forms. */
 .dialog-header {
-  padding: 1.15rem 1.35rem 0;
+  padding: 1.25rem 1.5rem 0;
+}
+
+.dialog-header > p,
+.dialog-description {
+  margin: 0.35rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 
 .dialog-title {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.0625rem;
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .dialog-body {
-  padding: 1rem 1.35rem;
+  padding: 1.1rem 1.5rem 1.35rem;
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  gap: 1rem;
 }
 
 .dialog-footer {
+  position: sticky;
+  bottom: 0;
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: 0.5rem;
-  padding: 0 1.35rem 1.15rem;
+  padding: 0.8rem 1.5rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg-subtle);
+  border-radius: 0 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px);
 }
 
 
@@ -7001,13 +7060,9 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
     grid-template-columns: 1fr;
   }
 
-  .master-detail-pane-head,
-  .master-detail-list-item {
+  /* List rows stay rows (title left, metric right); only the detail header stacks. */
+  .master-detail-pane-head {
     flex-direction: column;
-  }
-
-  .master-detail-list-meta {
-    align-items: flex-start;
   }
 }
 
@@ -7127,15 +7182,6 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
     justify-content: center;
   }
 
-  .date-range-picker-popover-body {
-    grid-template-columns: 1fr;
-  }
-
-  .date-range-picker-popover-presets {
-    border-left: none;
-    border-top: 1px solid var(--border-subtle);
-    padding-top: 0.65rem;
-  }
 }
 
 .badge {
@@ -8879,11 +8925,11 @@ th[aria-sort='descending'] .metrics-table-sort-btn::after {
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
-  padding: 0.9rem 1.1rem;
+  padding: 0.85rem 1rem 0.85rem 1.25rem;
   margin-bottom: 1rem;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
-  background: var(--bg-subtle);
+  background: var(--bg-elevated);
 }
 
 .plan-upgrade-banner-text {

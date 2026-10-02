@@ -1,258 +1,215 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
-import { ExternalLink, MousePointerClick } from 'lucide-react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { MousePointerClick, SearchX } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { DataViewState } from '../components/DataViewState';
+import { EmptyState } from '../components/EmptyState';
 import { EventDataPanel } from '../components/EventDataPanel';
-import { MetricsTable } from '../components/MetricsTable';
 import {
   MasterDetailLayout,
   MasterDetailListItem,
-  MasterDetailPane,
   ResourceSearchField,
-  useMasterDetailSelection,
 } from '../components/master-detail';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
-import { StatCard } from '../components/ui/stat-card';
-import { api, type EventCatalogDetailResponse, type EventCatalogResponse, type MetricRow } from '../lib/api';
-import { formatDateTime, formatNumber } from '../lib/format';
+import { EventDetail } from '../components/traffic/EventDetail';
+import { countLabel, formatCount } from '../components/traffic/format';
+import { RelativeTime } from '../components/traffic/RelativeTime';
+import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
+import { Skeleton } from '../components/ui/skeleton';
+import { api, type EventCatalogResponse, type EventCatalogRow, type WebsiteStats } from '../lib/api';
+import { eventDisplayName } from '../lib/autocapture';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
-import { describeBuiltinEvent, eventDisplayName } from '../lib/autocapture';
+import { useDebouncedValue } from '../lib/useDebouncedValue';
+import { useWebsiteRange } from '../lib/useWebsiteRange';
 
-/** Readable text for built-in events; otherwise the first few properties. */
-function recentDetails(eventName: string, properties: Array<{ key: string; value: string | null }> | undefined) {
-  const builtin = describeBuiltinEvent(eventName, properties);
-  if (builtin) return builtin;
-  const shown = (properties ?? [])
-    .filter((p) => p.value != null && p.value !== '' && !p.key.startsWith('$'))
-    .slice(0, 3)
-    .map((p) => `${p.key}: ${p.value}`);
-  return shown.length ? shown.join(' · ') : '-';
+type SortMode = 'recent' | 'volume';
+
+function MasterDetailSkeleton() {
+  return (
+    <div className="master-detail-layout" aria-hidden>
+      <div className="master-detail-list">
+        {Array.from({ length: 6 }, (_, index) => (
+          <div key={index} className="traffic-list-skeleton">
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="mt-2 h-3 w-1/3" />
+          </div>
+        ))}
+      </div>
+      <div className="master-detail-pane">
+        <Skeleton className="h-6 w-1/3" />
+        <Skeleton className="mt-3 h-4 w-1/2" />
+        <Skeleton className="mt-6 h-[72px] w-full" />
+        <Skeleton className="mt-6 h-[180px] w-full" />
+      </div>
+    </div>
+  );
 }
 
 export default function WebsiteEventsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
   const [search, setSearch] = useState('');
+  const query = useDebouncedValue(search.trim(), 250);
+  const [sort, setSort] = useState<SortMode>('recent');
+  const selectedName = searchParams.get('event');
 
   const catalogQuery = useQuery({
-    queryKey: ['event-catalog', websiteId, search],
+    queryKey: ['event-catalog', websiteId, query, rangeQs],
     enabled: Boolean(websiteId),
+    // Typing in the search or changing the range keeps the list on screen.
+    placeholderData: keepPreviousData,
     queryFn: () =>
       api<EventCatalogResponse>(
-        `/api/websites/${websiteId}/events/catalog${search.trim() ? `?q=${encodeURIComponent(search.trim())}` : ''}`,
+        `/api/websites/${websiteId}/events/catalog?${rangeQs}${query ? `&q=${encodeURIComponent(query)}` : ''}`,
       ),
   });
 
-  const eventsQuery = useQuery({
-    queryKey: ['events', websiteId],
+  // Total visits in the range, for each event's share of visits.
+  const statsQuery = useQuery({
+    queryKey: ['website-stats', websiteId, rangeQs],
     enabled: Boolean(websiteId),
-    queryFn: () => api<MetricRow[]>(`/api/websites/${websiteId}/events`),
+    queryFn: () => api<WebsiteStats>(`/api/websites/${websiteId}/stats?${rangeQs}`),
   });
 
-  const catalog = catalogQuery.data?.events ?? [];
-  const { selectedId: selectedEventName, setSelectedId: setSelectedEventName, selectedItem: selectedEvent } =
-    useMasterDetailSelection(catalog, (event) => event.eventName, { defaultToFirst: true });
+  const catalog = useMemo(() => {
+    const events = catalogQuery.data?.events ?? [];
+    if (sort === 'recent') return events;
+    return [...events].sort((a, b) => b.events - a.events || a.eventName.localeCompare(b.eventName));
+  }, [catalogQuery.data, sort]);
 
-  const detailQuery = useQuery({
-    queryKey: ['event-catalog-detail', websiteId, selectedEvent?.eventName],
-    enabled: Boolean(websiteId && selectedEvent?.eventName),
-    queryFn: () =>
-      api<EventCatalogDetailResponse>(
-        `/api/websites/${websiteId}/events/catalog/${encodeURIComponent(selectedEvent!.eventName)}`,
-      ),
-  });
+  const selected: EventCatalogRow | null =
+    catalog.find((event) => event.eventName === selectedName) ?? catalog[0] ?? null;
 
-  const detail = detailQuery.data;
-  const summary = detail?.summary ?? selectedEvent;
+  const select = useCallback(
+    (eventName: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('event', eventName);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const totalEvents = catalog.reduce((sum, event) => sum + event.events, 0);
+  const initialLoading = catalogQuery.isLoading && !catalogQuery.data;
+  const noEventsAtAll = !initialLoading && !catalog.length && !query;
 
   return (
     <Page className="page-events">
-      <PageHeader title={t('events')} lead={t('eventCatalogLead')} />
+      <PageHeader
+        title={t('navEvents')}
+        lead={t('eventCatalogLead')}
+        actions={<WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />}
+      />
 
-      <PageBody>
-      <section className="panel section-gap">
-        <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('eventCatalog')}</h2>
-          </div>
-        </header>
-
-        <ResourceSearchField
-          value={search}
-          onChange={setSearch}
-          placeholder={t('eventCatalogSearchPlaceholder')}
-          aria-label={t('eventCatalogSearchPlaceholder')}
-        />
-      </section>
-
-      <section className="section-gap">
+      <PageBody className="stack">
         <DataViewState
-          loading={catalogQuery.isLoading && !catalogQuery.data}
-          error={catalogQuery.isError ? catalogQuery.error : null}
+          loading={initialLoading}
+          error={catalogQuery.isError && !catalogQuery.data ? catalogQuery.error : null}
           onRetry={() => catalogQuery.refetch()}
-          isEmpty={!catalogQuery.isLoading && !catalog.length}
-          emptyTitle={t('eventCatalogEmptyTitle')}
-          emptyDescription={t('eventCatalogEmptyBody')}
+          loadingFallback={<MasterDetailSkeleton />}
         >
-          <MasterDetailLayout
-            list={catalog.map((event) => (
-              <MasterDetailListItem
-                key={event.eventName}
-                selected={event.eventName === selectedEvent?.eventName}
-                onSelect={() => setSelectedEventName(event.eventName)}
-                icon={<MousePointerClick size={16} strokeWidth={2} aria-hidden />}
-                title={eventDisplayName(event.eventName)}
-                subtitle={`${eventDisplayName(event.eventName) !== event.eventName ? `${event.eventName} · ` : ''}${formatNumber(event.paths)} ${t('eventCatalogPathsCount')}`}
-                meta={
-                  <>
-                    <span className="badge">
-                      {formatNumber(event.events)} {t('events')}
+          {noEventsAtAll ? (
+            <EmptyState
+              variant="rich"
+              icon={<MousePointerClick />}
+              title={t('eventCatalogEmptyTitle')}
+              description={t('eventCatalogEmptyBody')}
+            >
+              <pre className="traffic-snippet">
+                <code>{"flareboard.track('signup', { plan: 'pro' })"}</code>
+              </pre>
+            </EmptyState>
+          ) : (
+            <MasterDetailLayout
+              listHeader={
+                <>
+                  <ResourceSearchField
+                    value={search}
+                    onChange={setSearch}
+                    placeholder={t('eventCatalogSearchPlaceholder')}
+                    aria-label={t('eventCatalogSearchPlaceholder')}
+                    className="traffic-list-search"
+                  />
+                  <div className="traffic-list-toolbar">
+                    <span className="master-detail-list-count">
+                      {countLabel('trafficEventTypes', catalog.length)} · {countLabel('trafficEventsTotal', totalEvents)}
                     </span>
-                    <span className="text-muted">{formatDateTime(event.lastSeenAt)}</span>
-                  </>
-                }
-              />
-            ))}
-            detail={
-              selectedEvent && summary ? (
-                <MasterDetailPane
-                  title={eventDisplayName(selectedEvent.eventName)}
-                  description={
-                    selectedEvent.propertyKeys.length
-                      ? selectedEvent.propertyKeys.slice(0, 5).join(', ')
-                      : t('eventCatalogNoProperties')
-                  }
-                >
-                  <div className="experiment-summary-grid">
-                    <StatCard label={t('events')} value={formatNumber(summary.events)} />
-                    <StatCard label={t('sessions')} value={formatNumber(summary.sessions)} />
-                    <StatCard label={t('visits')} value={formatNumber(summary.visits)} />
-                    <StatCard label={t('eventLastSeen')} value={formatDateTime(summary.lastSeenAt)} />
-                  </div>
-
-                  <div className="workflow-insights-grid">
-                    <div className="detail-section">
-                      <div className="panel-header compact-panel-header">
-                        <div>
-                          <h3 className="section-title experiment-title">{t('eventCatalogProperties')}</h3>
-                          <p className="text-muted">{t('eventCatalogPropertiesLead')}</p>
-                        </div>
-                      </div>
-                      <div className="table-scroll">
-                        <table className="data-table">
-                          <thead>
-                            <tr>
-                              <th>{t('key')}</th>
-                              <th className="num">{t('events')}</th>
-                              <th className="num">{t('eventPropertyValues')}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(detail?.properties ?? []).length ? (
-                              detail!.properties.map((property) => (
-                                <tr key={property.key}>
-                                  <td>{property.key}</td>
-                                  <td className="num">{formatNumber(property.count)}</td>
-                                  <td className="num">{formatNumber(property.valuesCount)}</td>
-                                </tr>
-                              ))
-                            ) : (
-                              <tr>
-                                <td colSpan={3} className="text-muted">
-                                  {detailQuery.isLoading ? t('loading') : t('eventCatalogNoProperties')}
-                                </td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    <div className="detail-section">
-                      <div className="panel-header compact-panel-header">
-                        <div>
-                          <h3 className="section-title experiment-title">{t('eventCatalogPaths')}</h3>
-                          <p className="text-muted">{t('eventCatalogPathsLead')}</p>
-                        </div>
-                      </div>
-                      <div className="workflow-event-list">
-                        {(detail?.paths ?? []).length ? (
-                          detail!.paths.map((path) => (
-                            <div key={path.path ?? 'unknown'} className="workflow-event-row">
-                              <div>
-                                <strong>{path.path ?? '-'}</strong>
-                                <p className="text-muted">{formatDateTime(path.lastSeenAt)}</p>
-                              </div>
-                              <span className="badge">{formatNumber(path.events)}</span>
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-muted">{detailQuery.isLoading ? t('loading') : t('eventCatalogNoPaths')}</p>
-                        )}
-                      </div>
+                    <div className="segmented" role="group" aria-label={t('trafficSortBy')}>
+                      <button type="button" aria-pressed={sort === 'recent'} onClick={() => setSort('recent')}>
+                        {t('trafficSortRecent')}
+                      </button>
+                      <button type="button" aria-pressed={sort === 'volume'} onClick={() => setSort('volume')}>
+                        {t('trafficSortVolume')}
+                      </button>
                     </div>
                   </div>
-
-                  <div className="detail-section">
-                    <div className="panel-header compact-panel-header">
-                      <div>
-                        <h3 className="section-title experiment-title">{t('eventCatalogRecent')}</h3>
-                        <p className="text-muted">{t('eventCatalogRecentLead')}</p>
-                      </div>
-                    </div>
-                    <div className="table-scroll">
-                      <table className="data-table">
-                        <thead>
-                          <tr>
-                            <th>{t('eventCatalogDetails')}</th>
-                            <th>{t('page')}</th>
-                            <th>{t('session')}</th>
-                            <th>{t('created')}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(detail?.recent ?? []).length ? (
-                            detail!.recent.map((event) => (
-                              <tr key={event.id}>
-                                <td>{recentDetails(selectedEvent.eventName, event.properties)}</td>
-                                <td className="text-muted">{event.urlPath ?? '-'}</td>
-                                <td>
-                                  <Link to={`/websites/${websiteId}/sessions/${event.sessionId}`} className="inline-link">
-                                    {event.sessionId.slice(0, 8)}
-                                    <ExternalLink size={12} strokeWidth={2} aria-hidden />
-                                  </Link>
-                                </td>
-                                <td className="text-muted">{formatDateTime(event.createdAt)}</td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td colSpan={4} className="text-muted">
-                                {detailQuery.isLoading ? t('loading') : t('eventCatalogNoRecent')}
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
+                </>
+              }
+              list={
+                catalog.length ? (
+                  catalog.map((event) => {
+                    const builtin = eventDisplayName(event.eventName) !== event.eventName;
+                    return (
+                      <MasterDetailListItem
+                        key={event.eventName}
+                        selected={event.eventName === selected?.eventName}
+                        onSelect={() => select(event.eventName)}
+                        title={
+                          <span className={builtin ? undefined : 'mono'} title={event.eventName}>
+                            {eventDisplayName(event.eventName)}
+                          </span>
+                        }
+                        subtitle={`${countLabel('trafficPages', event.paths)} · ${countLabel('trafficProperties', event.propertyCount)}`}
+                        meta={
+                          <>
+                            <span className="traffic-list-metric" title={formatNumber(event.events)}>
+                              {formatCount(event.events)}
+                            </span>
+                            <RelativeTime value={event.lastSeenAt} />
+                          </>
+                        }
+                      />
+                    );
+                  })
+                ) : (
+                  <EmptyState
+                    icon={<SearchX />}
+                    title={t('trafficNoMatchTitle')}
+                    description={t('trafficNoMatchBody').replace('{query}', query)}
+                  />
+                )
+              }
+              detail={
+                selected && websiteId ? (
+                  <EventDetail
+                    key={selected.eventName}
+                    websiteId={websiteId}
+                    event={selected}
+                    rangeQs={rangeQs}
+                    startAt={range.startAt}
+                    endAt={range.endAt}
+                    timezone={timezone}
+                    totalVisits={statsQuery.data?.visits.value}
+                  />
+                ) : (
+                  <div className="master-detail-pane">
+                    <EmptyState icon={<MousePointerClick />} title={t('trafficSelectEvent')} />
                   </div>
-                </MasterDetailPane>
-              ) : null
-            }
-          />
+                )
+              }
+            />
+          )}
         </DataViewState>
-      </section>
 
-      <section className="panel section-gap custom-events-panel">
-        <MetricsTable
-          embedded
-          title={t('customEvents')}
-          rows={eventsQuery.data ?? []}
-          loading={eventsQuery.isLoading}
-        />
-      </section>
-      {websiteId ? <EventDataPanel websiteId={websiteId} /> : null}
+        {websiteId ? <EventDataPanel websiteId={websiteId} rangeQs={rangeQs} /> : null}
       </PageBody>
     </Page>
   );

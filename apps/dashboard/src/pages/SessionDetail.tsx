@@ -1,239 +1,308 @@
 import { useQuery } from '@tanstack/react-query';
-import { Fragment, useEffect } from 'react';
+import { CirclePlay, History, UserX } from 'lucide-react';
+import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ExternalLink } from 'lucide-react';
+import { DataViewState } from '../components/DataViewState';
+import { EmptyState } from '../components/EmptyState';
+import { KpiCell, KpiStrip, KpiStripSkeleton } from '../components/KpiStrip';
+import { KvList } from '../components/KvList';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
+import { SectionCard } from '../components/SectionCard';
+import { SessionAvatar } from '../components/SessionAvatar';
+import { countLabel, relativeLabel } from '../components/traffic/format';
+import {
+  SessionTimeline,
+  summarizeVisits,
+  type SessionActivityRow,
+  type SessionContextItem,
+} from '../components/traffic/SessionTimeline';
 import { Button } from '../components/ui/button';
-import { api } from '../lib/api';
-import { formatDateTime } from '../lib/format';
+import { Skeleton } from '../components/ui/skeleton';
+import { api, ApiError } from '../lib/api';
+import { formatDateTime, formatDurationSeconds, formatNumber, formatShortDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
-import { describeBuiltinEvent } from '../lib/autocapture';
+import { getCountryLabel } from '../lib/map-format';
+import { countryFlagEmoji, formatDeviceLabel, formatSessionLocation } from '../lib/session-display';
 
 interface SessionDetail {
   id: string;
   browser: string | null;
   os: string | null;
   device: string | null;
+  screen?: string | null;
   country: string | null;
+  region?: string | null;
   city: string | null;
   language: string | null;
   distinctId: string | null;
   createdAt: number;
 }
 
-interface ActivityRow {
-  urlPath: string;
-  eventName: string | null;
-  createdAt: number;
-}
+type SessionReplay = { visitId: string; startedAt: number; endedAt: number; eventCount: number; chunks: number };
 
-interface SessionContextItem {
-  id: string;
-  kind:
-    | 'pageview'
-    | 'event'
-    | 'feature_flag'
-    | 'error'
-    | 'log'
-    | 'ai'
-    | 'survey_response'
-    | 'workflow_execution';
-  title: string;
-  detail: string | null;
-  urlPath: string | null;
-  createdAt: number;
-  source?: {
-    module: 'feature_flags' | 'errors' | 'logs' | 'ai_observability' | 'surveys' | 'workflows';
-    id?: string | null;
-  };
-  properties?: Array<{ key: string; value: string | null }>;
-}
+/** Custom events, link/pixel hits and signals; not pageviews or telemetry (matches the list). */
+const NON_EVENT_TYPES = new Set([1, 5, 6, 7]);
 
-const contextKindLabels: Record<SessionContextItem['kind'], string> = {
-  pageview: 'contextKindPageview',
-  event: 'contextKindEvent',
-  feature_flag: 'contextKindFeatureFlag',
-  error: 'contextKindError',
-  log: 'contextKindLog',
-  ai: 'contextKindAi',
-  survey_response: 'contextKindSurvey',
-  workflow_execution: 'contextKindWorkflow',
-};
-
-function formatContextProperties(properties: SessionContextItem['properties']) {
-  const values = (properties ?? [])
-    .filter((item) => item.value)
-    .map((item) => `${item.key}: ${item.value}`);
-  return values.length ? values.join(' · ') : null;
-}
-
-/** Built-in events read as sentences; their element properties collapse to the selector. */
-function contextDisplay(item: SessionContextItem) {
-  const builtin = item.kind === 'event' ? describeBuiltinEvent(item.title, item.properties) : null;
-  if (!builtin) return { title: item.title, properties: formatContextProperties(item.properties) };
-  const selector = item.properties?.find((p) => p.key === '$el_selector')?.value ?? null;
-  return { title: builtin, properties: selector };
-}
-
-function sourcePath(websiteId: string | undefined, source: SessionContextItem['source'], sessionId?: string) {
-  if (!websiteId || !source) return null;
-  if (source.module === 'feature_flags') {
-    return `/websites/${websiteId}/feature-flags${
-      source.id ? `?flag=${encodeURIComponent(source.id)}` : ''
-    }`;
-  }
-  if (source.module === 'errors') return `/websites/${websiteId}/errors`;
-  if (source.module === 'logs') {
-    return `/websites/${websiteId}/logs${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''}`;
-  }
-  if (source.module === 'ai_observability') return `/websites/${websiteId}/ai-observability`;
-  if (source.module === 'surveys') {
-    return `/websites/${websiteId}/surveys${source.id ? `?survey=${encodeURIComponent(source.id)}` : ''}`;
-  }
-  if (source.module === 'workflows') {
-    return `/websites/${websiteId}/workflows${source.id ? `?workflow=${encodeURIComponent(source.id)}` : ''}`;
-  }
-  return null;
+function DetailSkeleton() {
+  return (
+    <div className="stack" aria-hidden>
+      <KpiStripSkeleton cells={4} />
+      <div className="layout-grid">
+        <div className="panel span-8">
+          {Array.from({ length: 8 }, (_, index) => (
+            <Skeleton key={index} className="mb-3 h-6 w-full" />
+          ))}
+        </div>
+        <div className="panel span-4">
+          {Array.from({ length: 6 }, (_, index) => (
+            <Skeleton key={index} className="mb-3 h-5 w-full" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function SessionDetailPage() {
   const { websiteId, sessionId } = useParams<{ websiteId: string; sessionId: string }>();
-  
+  const enabled = Boolean(websiteId && sessionId);
+  const base = `/api/websites/${websiteId}/sessions/${sessionId}`;
+
   const sessionQuery = useQuery({
     queryKey: ['session', websiteId, sessionId],
-    enabled: Boolean(websiteId && sessionId),
-    queryFn: () => api<SessionDetail>(`/api/websites/${websiteId}/sessions/${sessionId}`),
+    enabled,
+    queryFn: () => api<SessionDetail>(base),
   });
 
   const activityQuery = useQuery({
     queryKey: ['session-activity', websiteId, sessionId],
-    enabled: Boolean(websiteId && sessionId),
-    queryFn: () => api<ActivityRow[]>(`/api/websites/${websiteId}/sessions/${sessionId}/activity`),
+    enabled,
+    queryFn: () => api<SessionActivityRow[]>(`${base}/activity`),
   });
 
   const contextQuery = useQuery({
     queryKey: ['session-context', websiteId, sessionId],
-    enabled: Boolean(websiteId && sessionId),
-    queryFn: () =>
-      api<SessionContextItem[]>(`/api/websites/${websiteId}/sessions/${sessionId}/context`),
+    enabled,
+    queryFn: () => api<SessionContextItem[]>(`${base}/context`),
   });
 
   const propsQuery = useQuery({
     queryKey: ['session-props', websiteId, sessionId],
-    enabled: Boolean(websiteId && sessionId),
-    queryFn: () =>
-      api<Array<{ key: string; value: string }>>(
-        `/api/websites/${websiteId}/sessions/${sessionId}/properties`,
-      ),
+    enabled,
+    queryFn: () => api<Array<{ key: string; value: string }>>(`${base}/properties`),
   });
 
-  const s = sessionQuery.data;
-  const location =
-    s?.country || s?.city
-      ? `${s.country ?? '—'}${s.city ? `, ${s.city}` : ''}`
-      : '—';
-  const device =
-    s?.browser || s?.os || s?.device
-      ? [s.browser, s.os, s.device].filter(Boolean).join(' / ')
-      : '—';
+  const replaysQuery = useQuery({
+    queryKey: ['session-replays', websiteId, sessionId],
+    enabled,
+    queryFn: () => api<SessionReplay[]>(`${base}/replays`),
+  });
+
+  const session = sessionQuery.data;
+  const activity = useMemo(() => activityQuery.data ?? [], [activityQuery.data]);
+  const visits = useMemo(() => summarizeVisits(activity), [activity]);
+
+  const stats = useMemo(() => {
+    const pageviews = activity.filter((row) => row.eventType === 1);
+    return {
+      duration: visits.reduce((sum, visit) => sum + (visit.end - visit.start), 0) / 1000,
+      pageviews: pageviews.length,
+      uniquePages: new Set(pageviews.map((row) => row.urlPath)).size,
+      events: activity.filter((row) => row.eventType !== undefined && !NON_EVENT_TYPES.has(row.eventType)).length,
+      lastSeen: activity.reduce((max, row) => Math.max(max, row.createdAt), 0),
+    };
+  }, [activity, visits]);
+
+  const latestReplay = replaysQuery.data?.[0];
+  const identity = session?.distinctId || t('trafficVisitorTitle').replace('{id}', (sessionId ?? '').slice(0, 8));
+  const location = session ? formatSessionLocation(session.country, session.city) : '';
+  const flag = countryFlagEmoji(session?.country);
+  const tech = session ? [session.browser, session.os].filter(Boolean).join(' · ') : '';
+  const lead = session ? [location, tech, formatDeviceLabel(session.device)].filter(Boolean).join(' · ') : undefined;
+  const notFound = sessionQuery.error instanceof ApiError && sessionQuery.error.status === 404;
+
+  const details = session
+    ? [
+        {
+          key: 'location',
+          label: t('location'),
+          value: (
+            <span className="traffic-location-cell">
+              {flag ? (
+                <span className="traffic-flag" aria-hidden>
+                  {flag}
+                </span>
+              ) : null}
+              <span>
+                {[
+                  session.city,
+                  session.region && session.region !== session.city ? session.region : null,
+                  session.country ? getCountryLabel(session.country) : t('unknown'),
+                ]
+                  .filter(Boolean)
+                  .join(', ')}
+              </span>
+            </span>
+          ),
+        },
+        { key: 'device', label: t('device'), value: formatDeviceLabel(session.device) },
+        { key: 'browser', label: t('browser'), value: session.browser || t('unknown') },
+        { key: 'os', label: t('os'), value: session.os || t('unknown') },
+        ...(session.screen ? [{ key: 'screen', label: t('trafficScreen'), value: session.screen }] : []),
+        { key: 'language', label: t('languageLabel'), value: session.language || t('unknown') },
+        {
+          key: 'distinct',
+          label: t('distinctId'),
+          value: session.distinctId ? <span className="mono">{session.distinctId}</span> : <span className="text-muted">-</span>,
+        },
+        {
+          key: 'first',
+          label: t('firstSeen'),
+          value: <span title={formatDateTime(session.createdAt)}>{formatShortDateTime(session.createdAt)}</span>,
+        },
+        ...(stats.lastSeen
+          ? [
+              {
+                key: 'last',
+                label: t('lastSeen'),
+                value: (
+                  <span title={formatDateTime(stats.lastSeen)}>
+                    {formatShortDateTime(stats.lastSeen)} <span className="text-muted">· {relativeLabel(stats.lastSeen)}</span>
+                  </span>
+                ),
+              },
+            ]
+          : []),
+        {
+          key: 'session',
+          label: t('trafficSessionId'),
+          value: <span className="mono traffic-break">{session.id}</span>,
+        },
+      ]
+    : [];
 
   return (
     <Page className="page-session-detail">
-      <PageHeader title={t('session')} lead={sessionId?.slice(0, 12)} />
-
-      <PageBody>
-      {s ? (
-        <section className="panel panel-accent-rail section-gap">
-          <h2 className="section-title">{t('session')}</h2>
-          <dl className="kv-grid">
-            <dt>{t('location')}</dt>
-            <dd>{location}</dd>
-            <dt>{t('device')}</dt>
-            <dd>{device}</dd>
-            <dt>{t('languageLabel')}</dt>
-            <dd>{s.language ?? '—'}</dd>
-            <dt>{t('distinctId')}</dt>
-            <dd>{s.distinctId ?? '—'}</dd>
-            <dt>{t('started')}</dt>
-            <dd>{formatDateTime(s.createdAt)}</dd>
-          </dl>
-          {websiteId && sessionId ? (
-            <Button asChild variant="secondary" className="mt-4">
-              <Link to={`/websites/${websiteId}/replays`}>{t('viewReplays')}</Link>
+      <PageHeader
+        backTo={websiteId ? `/websites/${websiteId}/sessions` : undefined}
+        backLabel={t('sessions')}
+        title={
+          <span className="traffic-visitor-title">
+            {sessionId ? <SessionAvatar seed={sessionId} size={32} /> : null}
+            <span className={session?.distinctId ? undefined : 'mono'}>{identity}</span>
+          </span>
+        }
+        lead={lead}
+        actions={
+          latestReplay && websiteId ? (
+            <Button asChild variant="outline">
+              <Link to={`/websites/${websiteId}/replays?visit=${encodeURIComponent(latestReplay.visitId)}`}>
+                <CirclePlay aria-hidden />
+                {t('trafficWatchReplay')}
+              </Link>
             </Button>
-          ) : null}
-        </section>
-      ) : null}
+          ) : null
+        }
+      />
 
-      <section className="panel section-gap">
-        <h2 className="section-title">{t('sessionContext')}</h2>
-        {(contextQuery.data ?? []).length ? (
-          <ul className="activity-timeline session-context-timeline">
-            {(contextQuery.data ?? []).map((item) => (
-              <li key={`${item.kind}-${item.id}`} className={`activity-timeline-item context-${item.kind}`}>
-                <div>
-                  <div className="activity-timeline-path">
-                    <span className="badge session-context-kind">{t(contextKindLabels[item.kind])}</span>
-                    <strong>{contextDisplay(item).title}</strong>
-                    {item.detail ? <span className="text-muted"> · {item.detail}</span> : null}
+      <PageBody className="stack">
+        {notFound ? (
+          <EmptyState
+            variant="rich"
+            icon={<UserX />}
+            title={t('trafficSessionNotFound')}
+            description={t('trafficSessionNotFoundBody')}
+            action={
+              <Button asChild variant="outline">
+                <Link to={`/websites/${websiteId}/sessions`}>{t('sessions')}</Link>
+              </Button>
+            }
+          />
+        ) : (
+          <DataViewState
+            loading={(sessionQuery.isLoading || activityQuery.isLoading) && !session}
+            error={sessionQuery.error ?? activityQuery.error ?? null}
+            onRetry={() => {
+              sessionQuery.refetch();
+              activityQuery.refetch();
+            }}
+            loadingFallback={<DetailSkeleton />}
+          >
+            <KpiStrip columns={4}>
+              <KpiCell
+                label={t('trafficDuration')}
+                value={formatDurationSeconds(stats.duration)}
+                hint={visits.length > 1 ? countLabel('trafficAcrossVisits', visits.length) : undefined}
+              />
+              <KpiCell
+                label={t('pageviews')}
+                value={formatNumber(stats.pageviews)}
+                hint={stats.uniquePages ? countLabel('trafficUniquePages', stats.uniquePages) : undefined}
+              />
+              <KpiCell label={t('events')} value={formatNumber(stats.events)} />
+              <KpiCell
+                label={t('visits')}
+                value={formatNumber(visits.length)}
+                hint={
+                  visits.length > 1 && session
+                    ? t('trafficFirstSeenAgo').replace('{time}', relativeLabel(session.createdAt))
+                    : undefined
+                }
+              />
+            </KpiStrip>
+
+            <div className="layout-grid">
+              <SectionCard
+                className="span-8"
+                title={t('trafficTimeline')}
+                description={t('trafficTimelineLead')}
+                actions={
+                  visits.length > 1 ? (
+                    <span className="toolbar-meta">{countLabel('trafficVisits', visits.length)}</span>
+                  ) : undefined
+                }
+              >
+                {contextQuery.isLoading ? (
+                  <div className="traffic-skeleton-rows" aria-hidden>
+                    {Array.from({ length: 6 }, (_, index) => (
+                      <Skeleton key={index} className="h-7 w-full" />
+                    ))}
                   </div>
-                  <div className="activity-timeline-time">
-                    {item.urlPath ? <span>{item.urlPath}</span> : null}
-                    {contextDisplay(item).properties ? <span>{contextDisplay(item).properties}</span> : null}
-                    <span>{formatDateTime(item.createdAt)}</span>
-                  </div>
-                </div>
-                {sourcePath(websiteId, item.source, sessionId) ? (
-                  <Link to={sourcePath(websiteId, item.source, sessionId)!} className="inline-link session-context-source">
-                    {t('viewSource')}
-                    <ExternalLink size={12} strokeWidth={2} aria-hidden />
-                  </Link>
+                ) : contextQuery.data?.length && websiteId && sessionId ? (
+                  <SessionTimeline
+                    websiteId={websiteId}
+                    sessionId={sessionId}
+                    items={contextQuery.data}
+                    activity={activity}
+                    visits={visits}
+                  />
+                ) : (
+                  <EmptyState icon={<History />} title={t('sessionContextEmpty')} />
+                )}
+              </SectionCard>
+
+              <div className="span-4 stack">
+                <SectionCard title={t('trafficVisitor')}>
+                  <KvList compact items={details} className="traffic-kv" />
+                </SectionCard>
+                {propsQuery.data?.length ? (
+                  <SectionCard title={t('properties')} description={t('trafficSessionPropertiesLead')}>
+                    <KvList
+                      compact
+                      className="traffic-kv"
+                      items={propsQuery.data.map((property) => ({
+                        key: property.key,
+                        label: <span className="mono">{property.key}</span>,
+                        value: property.value,
+                      }))}
+                    />
+                  </SectionCard>
                 ) : null}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-muted">
-            {contextQuery.isLoading ? t('loading') : t('sessionContextEmpty')}
-          </p>
+              </div>
+            </div>
+          </DataViewState>
         )}
-      </section>
-
-      <section className="panel section-gap">
-        <h2 className="section-title">{t('activity')}</h2>
-        {(activityQuery.data ?? []).length ? (
-          <ul className="activity-timeline">
-            {(activityQuery.data ?? []).map((a, i) => (
-              <li key={i} className="activity-timeline-item">
-                <div className="activity-timeline-path">
-                  {a.eventName ? `[${a.eventName}] ` : ''}
-                  {a.urlPath}
-                </div>
-                <div className="activity-timeline-time">
-                  {formatDateTime(a.createdAt)}
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-muted">{t('noDataInPeriod')}</p>
-        )}
-      </section>
-
-      {(propsQuery.data ?? []).length ? (
-        <section className="panel section-gap">
-          <h2 className="section-title">{t('properties')}</h2>
-          <dl className="kv-grid">
-            {propsQuery.data!.map((p) => (
-              <Fragment key={p.key}>
-                <dt>{p.key}</dt>
-                <dd>{p.value}</dd>
-              </Fragment>
-            ))}
-          </dl>
-        </section>
-      ) : null}
       </PageBody>
     </Page>
   );

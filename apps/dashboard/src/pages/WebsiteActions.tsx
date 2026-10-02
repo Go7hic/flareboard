@@ -1,366 +1,230 @@
-import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
-import { ExternalLink, ListChecks, Plus, Trash2 } from 'lucide-react';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ListChecks, Plus, SearchX } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
 import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
-import {
-  MasterDetailLayout,
-  MasterDetailListItem,
-  MasterDetailPane,
-} from '../components/master-detail';
+import { MasterDetailLayout, MasterDetailListItem, ResourceSearchField } from '../components/master-detail';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
+import { ActionDetail, ruleSummary } from '../components/traffic/ActionDetail';
+import { ActionFormDialog } from '../components/traffic/ActionFormDialog';
+import { countLabel, formatCount } from '../components/traffic/format';
+import { RelativeTime } from '../components/traffic/RelativeTime';
+import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
 import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { StatCard } from '../components/ui/stat-card';
-import { api, type ActionDefinition, type ActionRule } from '../lib/api';
-import { formatDateTime, formatNumber } from '../lib/format';
+import { Skeleton } from '../components/ui/skeleton';
+import { api, type ActionDefinition, type WebsiteStats } from '../lib/api';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
+import { useWebsiteRange } from '../lib/useWebsiteRange';
 
-const EMPTY_RULE: ActionRule = {
-  field: 'event_name',
-  operator: 'equals',
-  value: '',
-};
+/** Show a search box once the list is long enough to need one. */
+const SEARCH_THRESHOLD = 8;
 
-const EMPTY_DRAFT = {
-  name: '',
-  description: '',
-  rules: [{ ...EMPTY_RULE }] as ActionRule[],
-};
+type DialogState = { mode: 'create' } | { mode: 'edit'; action: ActionDefinition } | null;
 
-function ruleLabel(rule: ActionRule) {
-  const field =
-    rule.field === 'event_name'
-      ? t('actionFieldEvent')
-      : rule.field === 'url_path'
-        ? t('actionFieldPath')
-        : rule.key || t('actionFieldProperty');
-  return `${field} ${t(`actionOperator_${rule.operator}`)} ${rule.value}`;
+function ListSkeleton() {
+  return (
+    <div className="master-detail-layout" aria-hidden>
+      <div className="master-detail-list">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className="traffic-list-skeleton">
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="mt-2 h-3 w-3/4" />
+          </div>
+        ))}
+      </div>
+      <div className="master-detail-pane">
+        <Skeleton className="h-6 w-1/3" />
+        <Skeleton className="mt-3 h-4 w-1/2" />
+        <Skeleton className="mt-6 h-[72px] w-full" />
+        <Skeleton className="mt-6 h-[180px] w-full" />
+      </div>
+    </div>
+  );
 }
 
 export default function WebsiteActionsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
   const { canEdit, viewOnly } = useWebsitePermissions(websiteId, 'analytics');
+  const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '30d');
   const queryClient = useQueryClient();
-  const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
-  const [draft, setDraft] = useState(EMPTY_DRAFT);
+  const confirm = useConfirm();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [search, setSearch] = useState('');
+  const [dialog, setDialog] = useState<DialogState>(null);
+  const selectedId = searchParams.get('action');
 
   const actionsQuery = useQuery({
-    queryKey: ['actions', websiteId],
+    queryKey: ['actions', websiteId, rangeQs],
     enabled: Boolean(websiteId),
-    queryFn: () => api<ActionDefinition[]>(`/api/websites/${websiteId}/actions`),
+    placeholderData: keepPreviousData,
+    queryFn: () => api<ActionDefinition[]>(`/api/websites/${websiteId}/actions?${rangeQs}`),
   });
 
-  const actions = actionsQuery.data ?? [];
-  const selectedAction = useMemo(() => {
-    if (!actions.length || !selectedActionId) return null;
-    return actions.find((action) => action.id === selectedActionId) ?? null;
-  }, [actions, selectedActionId]);
-
-  const saveMutation = useMutation({
-    mutationFn: (payload: typeof draft) => {
-      const body = JSON.stringify({
-        name: payload.name.trim(),
-        description: payload.description.trim(),
-        rules: payload.rules.map((rule) => ({
-          ...rule,
-          key: rule.field === 'property' ? rule.key?.trim() : undefined,
-          value: rule.value.trim(),
-        })),
-      });
-      if (selectedActionId) {
-        return api<ActionDefinition>(`/api/websites/${websiteId}/actions/${selectedActionId}`, {
-          method: 'PATCH',
-          body,
-        });
-      }
-      return api<ActionDefinition>(`/api/websites/${websiteId}/actions`, {
-        method: 'POST',
-        body,
-      });
-    },
-    onSuccess: (action) => {
-      setSelectedActionId(action.id);
-      setDraft({
-        name: action.name,
-        description: action.description,
-        rules: action.rules.length ? action.rules : [{ ...EMPTY_RULE }],
-      });
-      queryClient.invalidateQueries({ queryKey: ['actions', websiteId] });
-    },
+  const statsQuery = useQuery({
+    queryKey: ['website-stats', websiteId, rangeQs],
+    enabled: Boolean(websiteId),
+    queryFn: () => api<WebsiteStats>(`/api/websites/${websiteId}/stats?${rangeQs}`),
   });
+
+  const actions = useMemo(() => actionsQuery.data ?? [], [actionsQuery.data]);
+  const visible = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return actions;
+    return actions.filter(
+      (action) => action.name.toLowerCase().includes(query) || action.rules.some((rule) => rule.value.toLowerCase().includes(query)),
+    );
+  }, [actions, search]);
+  const selected = visible.find((action) => action.id === selectedId) ?? visible[0] ?? null;
+
+  const select = useCallback(
+    (id: string | null) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (id) next.set('action', id);
+          else next.delete('action');
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const deleteMutation = useMutation({
     mutationFn: (actionId: string) => api(`/api/websites/${websiteId}/actions/${actionId}`, { method: 'DELETE' }),
     onSuccess: () => {
-      setSelectedActionId(null);
-      setDraft(EMPTY_DRAFT);
+      select(null);
       queryClient.invalidateQueries({ queryKey: ['actions', websiteId] });
     },
   });
 
-  const canSave =
-    Boolean(draft.name.trim()) &&
-    draft.rules.length > 0 &&
-    draft.rules.every((rule) => rule.value.trim() && (rule.field !== 'property' || rule.key?.trim())) &&
-    !saveMutation.isPending;
-
-  function selectAction(action: ActionDefinition) {
-    setSelectedActionId(action.id);
-    setDraft({
-      name: action.name,
-      description: action.description,
-      rules: action.rules.length ? action.rules : [{ ...EMPTY_RULE }],
-    });
+  function requestDelete(action: ActionDefinition) {
+    confirm({ title: deleteTitle(action.name), onConfirm: () => deleteMutation.mutate(action.id) });
   }
 
-  function newAction() {
-    setSelectedActionId(null);
-    setDraft(EMPTY_DRAFT);
-  }
+  const newButton = canEdit ? (
+    <Button type="button" variant="primary" onClick={() => setDialog({ mode: 'create' })}>
+      <Plus aria-hidden />
+      {t('newActionDefinition')}
+    </Button>
+  ) : null;
 
-  function updateRule(index: number, patch: Partial<ActionRule>) {
-    setDraft((prev) => ({
-      ...prev,
-      rules: prev.rules.map((rule, ruleIndex) =>
-        ruleIndex === index
-          ? (() => {
-              const nextField = patch.field ?? rule.field;
-              return {
-                ...rule,
-                ...patch,
-                key: nextField === 'property' ? (patch.key ?? rule.key) : undefined,
-              };
-            })()
-          : rule,
-      ),
-    }));
-  }
-
-  const summary = selectedAction?.summary;
+  const initialLoading = actionsQuery.isLoading && !actionsQuery.data;
 
   return (
     <Page className="page-actions">
-      <PageHeader title={t('actions')} lead={t('actionDefinitionsLead')} />
+      <PageHeader
+        title={t('actionDefinitions')}
+        lead={t('actionDefinitionsLead')}
+        meta={viewOnly ? <p className="traffic-view-only">{t('viewOnlyHint')}</p> : undefined}
+        actions={
+          <>
+            <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
+            {newButton}
+          </>
+        }
+      />
 
       <PageBody>
-
-      {viewOnly ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
-
-      <section className="panel section-gap">
-        <header className="panel-header">
-          <div>
-            <h2 className="section-title">{t('actionDefinitions')}</h2>
-          </div>
-          {canEdit ? (
-            <Button type="button" variant="secondary" onClick={newAction}>
-              <Plus size={16} strokeWidth={2} aria-hidden />
-              {t('newActionDefinition')}
-            </Button>
-          ) : null}
-        </header>
-      </section>
-
-      <section className="section-gap">
         <DataViewState
-          loading={actionsQuery.isLoading && !actionsQuery.data}
-          error={actionsQuery.isError ? actionsQuery.error : null}
+          loading={initialLoading}
+          error={actionsQuery.isError && !actionsQuery.data ? actionsQuery.error : null}
           onRetry={() => actionsQuery.refetch()}
-          isEmpty={!actionsQuery.isLoading && !actions.length && Boolean(selectedActionId)}
-          emptyTitle={t('actionsEmptyTitle')}
-          emptyDescription={t('actionsEmptyBody')}
+          loadingFallback={<ListSkeleton />}
         >
-          {actions.length || !selectedActionId ? (
-          <MasterDetailLayout
-            list={
-              <>
-                {actions.map((action) => (
-                  <MasterDetailListItem
-                    key={action.id}
-                    selected={action.id === selectedAction?.id}
-                    onSelect={() => selectAction(action)}
-                    icon={<ListChecks size={16} strokeWidth={2} aria-hidden />}
-                    title={action.name}
-                    subtitle={action.rules.map(ruleLabel).join(' · ')}
-                    meta={
-                      <>
-                        <span className="badge">{formatNumber(action.summary?.events ?? 0)}</span>
-                        <span className="text-muted">{formatDateTime(action.summary?.lastSeenAt)}</span>
-                      </>
-                    }
-                  />
-                ))}
-                {!actions.length ? (
-                  <EmptyState title={t('actionsEmptyTitle')} description={t('actionsEmptyBody')} />
-                ) : null}
-              </>
-            }
-            detail={
-              <MasterDetailPane
-                title={selectedActionId ? t('editActionDefinition') : t('createActionDefinition')}
-                description={t('actionDefinitionFormLead')}
-                actions={
-                  canEdit && selectedActionId ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => deleteMutation.mutate(selectedActionId)}
-                      disabled={deleteMutation.isPending}
-                      aria-label={t('delete')}
-                    >
-                      <Trash2 size={16} strokeWidth={2} aria-hidden />
-                    </Button>
-                  ) : null
-                }
-              >
-                {canEdit ? (
-                  <div className="detail-section">
-                    <div className="field">
-                      <Label htmlFor="action-name">{t('name')}</Label>
-                      <Input
-                        id="action-name"
-                        value={draft.name}
-                        onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
-                        placeholder="Signup completed"
-                      />
-                    </div>
-                    <div className="field">
-                      <Label htmlFor="action-description">{t('description')}</Label>
-                      <textarea
-                        id="action-description"
-                        className="textarea"
-                        rows={4}
-                        value={draft.description}
-                        onChange={(event) =>
-                          setDraft((prev) => ({ ...prev, description: event.target.value }))
-                        }
-                      />
-                    </div>
-
-                    <div className="action-rule-list">
-                      {draft.rules.map((rule, index) => (
-                        <div key={index} className="action-rule-row">
-                          <div className="field">
-                            <Label htmlFor={`action-rule-field-${index}`}>{t('field')}</Label>
-                            <select
-                              id={`action-rule-field-${index}`}
-                              className="select"
-                              value={rule.field}
-                              onChange={(event) =>
-                                updateRule(index, { field: event.target.value as ActionRule['field'] })
-                              }
-                            >
-                              <option value="event_name">{t('actionFieldEvent')}</option>
-                              <option value="url_path">{t('actionFieldPath')}</option>
-                              <option value="property">{t('actionFieldProperty')}</option>
-                            </select>
-                          </div>
-                          {rule.field === 'property' ? (
-                            <div className="field">
-                              <Label htmlFor={`action-rule-key-${index}`}>{t('key')}</Label>
-                              <Input
-                                id={`action-rule-key-${index}`}
-                                value={rule.key ?? ''}
-                                onChange={(event) => updateRule(index, { key: event.target.value })}
-                                placeholder="plan"
-                              />
-                            </div>
-                          ) : null}
-                          <div className="field">
-                            <Label htmlFor={`action-rule-operator-${index}`}>{t('actionOperator')}</Label>
-                            <select
-                              id={`action-rule-operator-${index}`}
-                              className="select"
-                              value={rule.operator}
-                              onChange={(event) =>
-                                updateRule(index, { operator: event.target.value as ActionRule['operator'] })
-                              }
-                            >
-                              <option value="equals">{t('actionOperator_equals')}</option>
-                              <option value="contains">{t('actionOperator_contains')}</option>
-                              <option value="starts_with">{t('actionOperator_starts_with')}</option>
-                              <option value="ends_with">{t('actionOperator_ends_with')}</option>
-                              <option value="not_equals">{t('actionOperator_not_equals')}</option>
-                              <option value="not_contains">{t('actionOperator_not_contains')}</option>
-                            </select>
-                          </div>
-                          <div className="field">
-                            <Label htmlFor={`action-rule-value-${index}`}>{t('value')}</Label>
-                            <Input
-                              id={`action-rule-value-${index}`}
-                              value={rule.value}
-                              onChange={(event) => updateRule(index, { value: event.target.value })}
-                              placeholder={rule.field === 'event_name' ? 'checkout_started' : '/pricing'}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="form-actions">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => setDraft((prev) => ({ ...prev, rules: [...prev.rules, { ...EMPTY_RULE }] }))}
-                      >
-                        <Plus size={16} strokeWidth={2} aria-hidden />
-                        {t('addRule')}
-                      </Button>
-                      <Button type="button" variant="primary" onClick={() => saveMutation.mutate(draft)} disabled={!canSave}>
-                        {saveMutation.isPending
-                          ? t('saving')
-                          : selectedActionId
-                            ? t('saveChanges')
-                            : t('createActionDefinition')}
-                      </Button>
-                    </div>
-                    {saveMutation.error ? <p className="text-danger">{saveMutation.error.message}</p> : null}
-                  </div>
-                ) : null}
-
-                {selectedActionId ? (
-                  <div className="action-summary-section">
-                    <div className="experiment-summary-grid">
-                      <StatCard label={t('events')} value={formatNumber(summary?.events ?? 0)} />
-                      <StatCard label={t('sessions')} value={formatNumber(summary?.sessions ?? 0)} />
-                      <StatCard label={t('visits')} value={formatNumber(summary?.visits ?? 0)} />
-                      <StatCard label={t('lastSeen')} value={formatDateTime(summary?.lastSeenAt)} />
-                    </div>
-                    <div className="workflow-event-list">
-                      {(summary?.recent ?? []).slice(0, 8).map((event) => (
-                        <div key={event.id} className="workflow-event-row">
-                          <div>
-                            <strong>{event.eventName ?? t('pageview')}</strong>
-                            <p className="text-muted">{event.urlPath ?? '-'}</p>
-                          </div>
-                          <Link
-                            to={`/websites/${websiteId}/sessions/${event.sessionId}`}
-                            className="inline-link"
-                          >
-                            {event.sessionId.slice(0, 8)}
-                            <ExternalLink size={12} strokeWidth={2} aria-hidden />
-                          </Link>
-                        </div>
-                      ))}
-                      {!(summary?.recent ?? []).length ? (
-                        <p className="text-muted">{t('actionNoMatches')}</p>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-              </MasterDetailPane>
-            }
-          />
+          {!actions.length ? (
+            <EmptyState
+              variant="rich"
+              icon={<ListChecks />}
+              title={t('actionsEmptyTitle')}
+              description={t('actionsEmptyBody')}
+              action={newButton}
+            />
           ) : (
-          <EmptyState title={t('actionsEmptyTitle')} description={t('actionsEmptyBody')} />
+            <MasterDetailLayout
+              listHeader={
+                <>
+                  {actions.length > SEARCH_THRESHOLD ? (
+                    <ResourceSearchField
+                      value={search}
+                      onChange={setSearch}
+                      placeholder={t('trafficSearchActions')}
+                      aria-label={t('trafficSearchActions')}
+                      className="traffic-list-search"
+                    />
+                  ) : null}
+                  <span className="master-detail-list-count">{countLabel('trafficActionsCount', actions.length)}</span>
+                </>
+              }
+              list={
+                visible.length ? (
+                  visible.map((action) => (
+                    <MasterDetailListItem
+                      key={action.id}
+                      selected={action.id === selected?.id}
+                      onSelect={() => select(action.id)}
+                      title={action.name}
+                      subtitle={action.rules.map(ruleSummary).join(' · ')}
+                      meta={
+                        <>
+                          <span className="traffic-list-metric" title={formatNumber(action.summary?.events ?? 0)}>
+                            {formatCount(action.summary?.events ?? 0)}
+                          </span>
+                          {action.summary?.lastSeenAt ? <RelativeTime value={action.summary.lastSeenAt} /> : null}
+                        </>
+                      }
+                    />
+                  ))
+                ) : (
+                  <EmptyState
+                    icon={<SearchX />}
+                    title={t('trafficNoMatchTitle')}
+                    description={t('trafficNoMatchBody').replace('{query}', search.trim())}
+                  />
+                )
+              }
+              detail={
+                selected && websiteId ? (
+                  <ActionDetail
+                    key={selected.id}
+                    websiteId={websiteId}
+                    action={selected}
+                    startAt={range.startAt}
+                    endAt={range.endAt}
+                    totalVisits={statsQuery.data?.visits.value}
+                    refreshing={actionsQuery.isPlaceholderData}
+                    canEdit={canEdit}
+                    onEdit={() => setDialog({ mode: 'edit', action: selected })}
+                    onDelete={() => requestDelete(selected)}
+                  />
+                ) : (
+                  <div className="master-detail-pane">
+                    <EmptyState icon={<ListChecks />} title={t('trafficSelectAction')} />
+                  </div>
+                )
+              }
+            />
           )}
         </DataViewState>
-      </section>
       </PageBody>
+
+      {dialog && websiteId ? (
+        <ActionFormDialog
+          websiteId={websiteId}
+          action={dialog.mode === 'edit' ? dialog.action : null}
+          onClose={() => setDialog(null)}
+          onSaved={(saved) => {
+            setDialog(null);
+            select(saved.id);
+          }}
+        />
+      ) : null}
     </Page>
   );
 }

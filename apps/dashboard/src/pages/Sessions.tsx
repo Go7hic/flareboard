@@ -1,25 +1,28 @@
-import { useMemo, useState } from 'react';
 import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
+import { Search, Users } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
-import { SessionAvatar } from '../components/SessionAvatar';
-import { SessionTechCell } from '../components/SessionTechCell';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
+import { SectionCard } from '../components/SectionCard';
+import { SessionAvatar } from '../components/SessionAvatar';
+import { SessionTechCell } from '../components/SessionTechCell';
+import { countLabel } from '../components/traffic/format';
+import { RelativeTime } from '../components/traffic/RelativeTime';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Skeleton } from '../components/ui/skeleton';
 import { api } from '../lib/api';
-import { formatDateTime, formatNumber } from '../lib/format';
+import { formatDurationSeconds, formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
-import {
-  countryFlagEmoji,
-  formatRelativeTime,
-  formatSessionLocation,
-} from '../lib/session-display';
+import { countryFlagEmoji, formatSessionLocation } from '../lib/session-display';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
+import { cn } from '../lib/utils';
 
 interface SessionRow {
   id: string;
@@ -28,6 +31,8 @@ interface SessionRow {
   device: string | null;
   country: string | null;
   city: string | null;
+  /** First event of the session (may be before the range). */
+  createdAt?: number;
   visits: number;
   pageviews: number;
   events: number;
@@ -42,10 +47,45 @@ interface SessionsPage {
 }
 
 const PAGE_SIZE = 50;
-const DEVICE_FILTERS = ['', 'desktop', 'mobile', 'tablet'] as const;
+const ALL_DEVICES = 'all';
+const DEVICES = ['desktop', 'mobile', 'tablet'] as const;
+
+function deviceLabel(device: string) {
+  if (device === 'desktop') return t('deviceDesktop');
+  if (device === 'mobile') return t('deviceMobile');
+  if (device === 'tablet') return t('deviceTablet');
+  return t('allDevices');
+}
+
+/**
+ * Time on site for a single-visit session that started inside the range. A session id
+ * spans a visitor's visits for the month, so first-to-last event across several visits
+ * would count the gaps between them; those rows show a dash instead.
+ */
+function sessionDuration(row: SessionRow, rangeStart: number): number | null {
+  if (row.visits !== 1 || row.createdAt == null || row.createdAt < rangeStart) return null;
+  return Math.max(0, (row.lastAt - row.createdAt) / 1000);
+}
+
+function TableSkeleton() {
+  return (
+    <div className="traffic-table-skeleton" aria-hidden>
+      {Array.from({ length: 8 }, (_, index) => (
+        <div key={index} className="traffic-table-skeleton-row">
+          <Skeleton className="size-6 rounded-full" />
+          <Skeleton className="h-3.5 w-24" />
+          <Skeleton className="h-3.5 w-40" />
+          <Skeleton className="h-3.5 w-32" />
+          <Skeleton className="ml-auto h-3.5 w-16" />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function SessionsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
+  const navigate = useNavigate();
   const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
   const [pathFilter, setPathFilter] = useState('');
   const [countryFilter, setCountryFilter] = useState('');
@@ -70,20 +110,11 @@ export default function SessionsPage() {
   }, [debouncedBrowser, debouncedCountry, debouncedPath, debouncedReferrer, deviceFilter, rangeQs]);
 
   const hasFilters = Boolean(
-    debouncedPath || debouncedCountry || deviceFilter || debouncedBrowser || debouncedReferrer,
+    pathFilter.trim() || countryFilter.trim() || deviceFilter || browserFilter.trim() || referrerFilter.trim(),
   );
 
   const sessionsQuery = useInfiniteQuery({
-    queryKey: [
-      'sessions',
-      websiteId,
-      range,
-      debouncedPath,
-      debouncedCountry,
-      deviceFilter,
-      debouncedBrowser,
-      debouncedReferrer,
-    ],
+    queryKey: ['sessions', websiteId, filterQs],
     enabled: Boolean(websiteId),
     // Keep the current rows on screen while a new filter loads instead of a skeleton per keystroke.
     placeholderData: keepPreviousData,
@@ -100,6 +131,7 @@ export default function SessionsPage() {
   const rows = sessionsQuery.data?.pages.flatMap((page) => page.data) ?? [];
   const total = sessionsQuery.data?.pages[0]?.count ?? rows.length;
   const hasMore = rows.length < total;
+  const refreshing = sessionsQuery.isFetching && !sessionsQuery.isFetchingNextPage && !sessionsQuery.isLoading;
 
   const clearFilters = () => {
     setPathFilter('');
@@ -109,183 +141,191 @@ export default function SessionsPage() {
     setReferrerFilter('');
   };
 
+  const sessionHref = (id: string) => `/websites/${websiteId}/sessions/${id}`;
+
+  const toolbar = (
+    <>
+      <div className="traffic-filter traffic-filter--search">
+        <Search className="traffic-filter-icon" size={14} strokeWidth={2} aria-hidden />
+        <Input
+          className="h-8"
+          value={pathFilter}
+          onChange={(event) => setPathFilter(event.target.value)}
+          placeholder={t('sessionFilterPathPlaceholder')}
+          aria-label={t('sessionFilterPath')}
+        />
+      </div>
+      <Input
+        className="traffic-filter h-8"
+        value={countryFilter}
+        onChange={(event) => setCountryFilter(event.target.value)}
+        placeholder={t('trafficFilterCountryPlaceholder')}
+        aria-label={t('sessionFilterCountry')}
+      />
+      <Select
+        value={deviceFilter || ALL_DEVICES}
+        onValueChange={(next) => setDeviceFilter(next === ALL_DEVICES || typeof next !== 'string' ? '' : next)}
+        items={[ALL_DEVICES, ...DEVICES].map((device) => ({ value: device, label: deviceLabel(device) }))}
+      >
+        <SelectTrigger className="traffic-filter traffic-filter--select" aria-label={t('sessionFilterDevice')}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {[ALL_DEVICES, ...DEVICES].map((device) => (
+            <SelectItem key={device} value={device}>
+              {deviceLabel(device)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Input
+        className="traffic-filter h-8"
+        value={browserFilter}
+        onChange={(event) => setBrowserFilter(event.target.value)}
+        placeholder={t('sessionFilterBrowserPlaceholder')}
+        aria-label={t('sessionFilterBrowser')}
+      />
+      <Input
+        className="traffic-filter h-8"
+        value={referrerFilter}
+        onChange={(event) => setReferrerFilter(event.target.value)}
+        placeholder={t('sessionFilterReferrerPlaceholder')}
+        aria-label={t('sessionFilterReferrer')}
+      />
+      {hasFilters ? (
+        <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
+          {t('reset')}
+        </Button>
+      ) : null}
+      <span className="toolbar-spacer" />
+      {sessionsQuery.data ? (
+        <span className="toolbar-meta traffic-toolbar-count">{countLabel('trafficSessionsTotal', total)}</span>
+      ) : null}
+    </>
+  );
+
   return (
     <Page className="page-sessions">
       <PageHeader
         title={t('sessions')}
         lead={t('sessionsPageLead')}
-        actions={
-          <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
-        }
+        actions={<WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />}
+        toolbar={toolbar}
       />
 
       <PageBody>
-        <section className="panel sessions-panel section-gap">
-          <div className="sessions-filter-row">
-            <Input
-              className="sessions-filter-input"
-              value={pathFilter}
-              onChange={(event) => setPathFilter(event.target.value)}
-              placeholder={t('sessionFilterPathPlaceholder')}
-              aria-label={t('sessionFilterPath')}
-            />
-            <Input
-              className="sessions-filter-input sessions-filter-input--narrow"
-              value={countryFilter}
-              onChange={(event) => setCountryFilter(event.target.value)}
-              placeholder={t('sessionFilterCountryPlaceholder')}
-              aria-label={t('sessionFilterCountry')}
-            />
-            <select
-              className="select sessions-filter-select"
-              value={deviceFilter}
-              onChange={(event) => setDeviceFilter(event.target.value)}
-              aria-label={t('sessionFilterDevice')}
-            >
-              <option value="">{t('allDevices')}</option>
-              {DEVICE_FILTERS.filter(Boolean).map((device) => (
-                <option key={device} value={device}>
-                  {device === 'desktop'
-                    ? t('deviceDesktop')
-                    : device === 'mobile'
-                      ? t('deviceMobile')
-                      : t('deviceTablet')}
-                </option>
-              ))}
-            </select>
-            <Input
-              className="sessions-filter-input"
-              value={browserFilter}
-              onChange={(event) => setBrowserFilter(event.target.value)}
-              placeholder={t('sessionFilterBrowserPlaceholder')}
-              aria-label={t('sessionFilterBrowser')}
-            />
-            <Input
-              className="sessions-filter-input"
-              value={referrerFilter}
-              onChange={(event) => setReferrerFilter(event.target.value)}
-              placeholder={t('sessionFilterReferrerPlaceholder')}
-              aria-label={t('sessionFilterReferrer')}
-            />
-            {hasFilters ? (
-              <Button type="button" variant="secondary" size="sm" onClick={clearFilters}>
-                {t('reset')}
-              </Button>
-            ) : null}
-          </div>
+        <SectionCard
+          flush
+          className={cn('traffic-sessions-card', refreshing && 'is-refreshing')}
+          footer={
+            rows.length ? (
+              <>
+                <span>
+                  {t('showingSessionsOf')
+                    .replace('{shown}', formatNumber(rows.length))
+                    .replace('{total}', formatNumber(total))}
+                </span>
+                {hasMore ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={sessionsQuery.isFetchingNextPage}
+                    onClick={() => sessionsQuery.fetchNextPage()}
+                  >
+                    {sessionsQuery.isFetchingNextPage ? t('loading') : t('sessionsLoadMore')}
+                  </Button>
+                ) : null}
+              </>
+            ) : undefined
+          }
+        >
           {/* Filters stay outside the loading/error state so typing never unmounts them. */}
           <DataViewState
             loading={sessionsQuery.isLoading}
-            error={sessionsQuery.isError ? sessionsQuery.error : null}
+            error={sessionsQuery.isError && !sessionsQuery.data ? sessionsQuery.error : null}
             onRetry={() => sessionsQuery.refetch()}
-            loadingFallback={<div className="skeleton section-gap" style={{ height: '4rem' }} />}
+            loadingFallback={<TableSkeleton />}
           >
-          {rows.length === 0 ? (
-            <EmptyState
-              title={hasFilters ? t('noSessionsMatchFilters') : t('noSessionsInRange')}
-              description={
-                hasFilters ? t('noSessionsMatchFiltersHint') : t('noDataInPeriodHint')
-              }
-            />
-          ) : (
-            <>
-          <div className="sessions-table-scroll">
-            <table className="data-table sessions-data-table">
-              <thead>
-                <tr>
-                  <th className="sessions-col-session">{t('session')}</th>
-                  <th className="num">{t('visits')}</th>
-                  <th className="num">{t('pageviews')}</th>
-                  <th className="num">{t('customEvents')}</th>
-                  <th>{t('location')}</th>
-                  <th>{t('browser')}</th>
-                  <th>{t('os')}</th>
-                  <th>{t('device')}</th>
-                  <th className="sessions-col-last">{t('lastSeen')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((s) => {
-                  const flag = countryFlagEmoji(s.country);
-                  const location = formatSessionLocation(s.country, s.city);
-                  return (
-                    <tr key={s.id}>
-                      <td>
-                        <Link
-                          to={`/websites/${websiteId}/sessions/${s.id}`}
-                          className="sessions-row-link"
-                        >
-                          <SessionAvatar seed={s.id} size={32} className="sessions-table-avatar" />
-                        </Link>
-                      </td>
-                      <td className="num">{formatNumber(s.visits)}</td>
-                      <td className="num">{formatNumber(s.pageviews)}</td>
-                      <td className="num">{formatNumber(s.events)}</td>
-                      <td>
-                        <Link
-                          to={`/websites/${websiteId}/sessions/${s.id}`}
-                          className="sessions-row-link sessions-location-cell"
-                        >
-                          {flag ? (
-                            <span className="sessions-flag" aria-hidden>
-                              {flag}
-                            </span>
-                          ) : null}
-                          <span>{location}</span>
-                        </Link>
-                      </td>
-                      <td>
-                        <Link to={`/websites/${websiteId}/sessions/${s.id}`} className="sessions-row-link">
-                          <SessionTechCell kind="browser" value={s.browser} />
-                        </Link>
-                      </td>
-                      <td>
-                        <Link to={`/websites/${websiteId}/sessions/${s.id}`} className="sessions-row-link">
-                          <SessionTechCell kind="os" value={s.os} />
-                        </Link>
-                      </td>
-                      <td>
-                        <Link to={`/websites/${websiteId}/sessions/${s.id}`} className="sessions-row-link">
-                          <SessionTechCell kind="device" value={s.device} />
-                        </Link>
-                      </td>
-                      <td className="sessions-col-last">
-                        <Link
-                          to={`/websites/${websiteId}/sessions/${s.id}`}
-                          className="sessions-row-link sessions-last-cell"
-                          title={formatDateTime(s.lastAt)}
-                        >
-                          {formatRelativeTime(s.lastAt)}
-                        </Link>
-                      </td>
+            {rows.length === 0 ? (
+              <EmptyState
+                icon={<Users />}
+                title={hasFilters ? t('noSessionsMatchFilters') : t('noSessionsInRange')}
+                description={hasFilters ? t('noSessionsMatchFiltersHint') : t('noDataInPeriodHint')}
+                action={
+                  hasFilters ? (
+                    <Button type="button" variant="outline" size="sm" onClick={clearFilters}>
+                      {t('reset')}
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ) : (
+              <div className="table-scroll" aria-busy={refreshing || undefined}>
+                <table className="data-table data-table--interactive traffic-sessions-table">
+                  <thead>
+                    <tr>
+                      <th>{t('trafficVisitor')}</th>
+                      <th>{t('location')}</th>
+                      <th>{t('device')}</th>
+                      <th className="num">{t('trafficPagesColumn')}</th>
+                      <th className="num">{t('events')}</th>
+                      <th className="num">{t('trafficDuration')}</th>
+                      <th className="num">{t('lastSeen')}</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <footer className="sessions-footer">
-            <p>
-              {t('showingSessionsOf')
-                .replace('{shown}', String(rows.length))
-                .replace('{total}', String(total))}
-            </p>
-            {hasMore ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={sessionsQuery.isFetchingNextPage}
-                onClick={() => sessionsQuery.fetchNextPage()}
-              >
-                {sessionsQuery.isFetchingNextPage ? t('loading') : t('sessionsLoadMore')}
-              </Button>
-            ) : null}
-          </footer>
-            </>
-          )}
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => {
+                      const flag = countryFlagEmoji(row.country);
+                      const duration = sessionDuration(row, range.startAt);
+                      return (
+                        <tr key={row.id} onClick={() => navigate(sessionHref(row.id))}>
+                          <td>
+                            <Link
+                              to={sessionHref(row.id)}
+                              className="traffic-visitor-cell"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <SessionAvatar seed={row.id} size={24} />
+                              <span className="mono">{row.id.slice(0, 8)}</span>
+                              {row.visits > 1 ? (
+                                <span className="traffic-visits-badge">{countLabel('trafficVisits', row.visits)}</span>
+                              ) : null}
+                            </Link>
+                          </td>
+                          <td>
+                            <span className="traffic-location-cell">
+                              {flag ? (
+                                <span className="traffic-flag" aria-hidden>
+                                  {flag}
+                                </span>
+                              ) : null}
+                              <span className="traffic-cell-truncate">{formatSessionLocation(row.country, row.city)}</span>
+                            </span>
+                          </td>
+                          <td>
+                            <SessionTechCell browser={row.browser} os={row.os} device={row.device} />
+                          </td>
+                          <td className="num">{formatNumber(row.pageviews)}</td>
+                          <td className="num">{formatNumber(row.events)}</td>
+                          <td
+                            className={cn('num', duration === null && 'text-muted')}
+                            title={duration === null ? t('trafficDurationUnknown') : undefined}
+                          >
+                            {duration === null ? '-' : formatDurationSeconds(duration)}
+                          </td>
+                          <td className="num">
+                            <RelativeTime value={row.lastAt} className="text-muted" />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </DataViewState>
-        </section>
+        </SectionCard>
       </PageBody>
     </Page>
   );

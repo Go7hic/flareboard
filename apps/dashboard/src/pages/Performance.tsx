@@ -1,27 +1,44 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { Gauge } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Bar, BarChart, Line, LineChart } from 'recharts';
+import { Area, AreaChart, ReferenceLine } from 'recharts';
 import { AnalyticsChart } from '../components/AnalyticsChart';
 import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
+import { KpiCell, KpiStrip, KpiStripSkeleton } from '../components/KpiStrip';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
+import { SectionCard } from '../components/SectionCard';
+import { StatusBadge } from '../components/StatusBadge';
+import { formatShare } from '../components/traffic/format';
+import { bucketKeys, bucketLabel } from '../components/traffic/series';
+import { VitalMeter } from '../components/traffic/VitalMeter';
+import {
+  formatVital,
+  goodShare,
+  p75Rating,
+  RATING_TONE,
+  ratingLabel,
+  VITAL_METRICS,
+  VITAL_NAME_KEYS,
+  VITAL_THRESHOLDS,
+  vitalParts,
+  vitalTick,
+  type VitalDistribution,
+  type VitalMetric,
+} from '../components/traffic/vitals';
 import { WebsiteDateExportControls } from '../components/WebsiteDateExportControls';
-import { SegmentTabs } from '../components/SegmentTabs';
 import { Skeleton } from '../components/ui/skeleton';
 import { api } from '../lib/api';
+import { niceTicks } from '../lib/chartTicks';
+import { areaMark } from '../lib/chartMarks';
 import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
+import { getCountryLabel } from '../lib/map-format';
+import { countryFlagEmoji } from '../lib/session-display';
 import { useChartColors } from '../lib/useChartColors';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
-
-type VitalDistribution = {
-  good: number;
-  needsImprovement: number;
-  poor: number;
-  total: number;
-};
 
 type PerformanceBreakdownRow = {
   dimension: string;
@@ -56,13 +73,7 @@ interface PerformanceReport {
   clsSamples?: number;
   fcpSamples?: number;
   ttfbSamples?: number;
-  distributions: {
-    lcp: VitalDistribution;
-    inp: VitalDistribution;
-    cls: VitalDistribution;
-    fcp: VitalDistribution;
-    ttfb: VitalDistribution;
-  };
+  distributions: Record<VitalMetric, VitalDistribution>;
   trends: {
     unit: 'hour' | 'day';
     points: PerformanceTrendPoint[];
@@ -75,429 +86,301 @@ interface PerformanceReport {
 }
 
 type BreakdownTab = 'url' | 'browser' | 'country';
-type BreakdownMetric = 'lcp' | 'inp' | 'cls';
-type TrendMetric = 'lcp' | 'inp' | 'cls' | 'fcp' | 'ttfb';
-
 const BREAKDOWN_TABS: BreakdownTab[] = ['url', 'browser', 'country'];
-const BREAKDOWN_METRICS: BreakdownMetric[] = ['lcp', 'inp', 'cls'];
-const TREND_METRICS: TrendMetric[] = ['lcp', 'inp', 'cls', 'fcp', 'ttfb'];
+/** The breakdown carries rating splits for the three Core Web Vitals only. */
+const BREAKDOWN_METRICS = ['lcp', 'inp', 'cls'] as const;
 
-function formatMs(value: number | null | undefined) {
-  if (value == null) return '—';
-  return `${formatNumber(value)} ms`;
+const SAMPLE_KEYS = {
+  lcp: 'lcpSamples',
+  inp: 'inpSamples',
+  cls: 'clsSamples',
+  fcp: 'fcpSamples',
+  ttfb: 'ttfbSamples',
+} as const satisfies Record<VitalMetric, keyof PerformanceReport>;
+
+const DISTRIBUTION_KEYS = {
+  lcp: 'lcpDistribution',
+  inp: 'inpDistribution',
+  cls: 'clsDistribution',
+} as const satisfies Record<(typeof BREAKDOWN_METRICS)[number], keyof PerformanceBreakdownRow>;
+
+function tabLabel(tab: BreakdownTab) {
+  if (tab === 'url') return t('page');
+  if (tab === 'browser') return t('browser');
+  return t('country');
 }
 
-function formatCls(value: number | null | undefined) {
-  if (value == null) return '—';
-  return formatNumber(value, { maximumFractionDigits: 3 });
-}
-
-function formatAverage(metric: TrendMetric, value: number | null | undefined) {
-  if (value == null) return '—';
-  return metric === 'cls' ? String(value) : `${value} ms`;
-}
-
-function distPercents(dist: VitalDistribution) {
-  const total = dist.total || 0;
-  if (!total) return { good: 0, needsImprovement: 0, poor: 0 };
-  return {
-    good: Math.round((dist.good / total) * 100),
-    needsImprovement: Math.round((dist.needsImprovement / total) * 100),
-    poor: Math.round((dist.poor / total) * 100),
-  };
-}
-
-function DistributionBar({ dist, loading }: { dist?: VitalDistribution; loading?: boolean }) {
-  if (loading) return <Skeleton className="cwv-dist-bar" />;
-  const pct = distPercents(dist ?? { good: 0, needsImprovement: 0, poor: 0, total: 0 });
-  if (!dist?.total) {
-    return <div className="cwv-dist-bar cwv-dist-bar-empty" aria-hidden />;
-  }
+function RatingBadge({ dist }: { dist: VitalDistribution | undefined }) {
+  const rating = p75Rating(dist);
+  if (!rating || !dist) return null;
+  const good = goodShare(dist);
   return (
-    <div
-      className="cwv-dist-bar"
-      role="img"
-      aria-label={`${pct.good}% ${t('cwvGood')}, ${pct.needsImprovement}% ${t('cwvNeedsImprovement')}, ${pct.poor}% ${t('cwvPoor')}`}
+    <StatusBadge
+      tone={RATING_TONE[rating]}
+      title={t('trafficRatingHint').replace('{pct}', formatShare(good))}
     >
-      {pct.good > 0 ? (
-        <span className="cwv-dist-segment cwv-dist-segment-good" style={{ flex: pct.good }} />
-      ) : null}
-      {pct.needsImprovement > 0 ? (
-        <span
-          className="cwv-dist-segment cwv-dist-segment-ni"
-          style={{ flex: pct.needsImprovement }}
-        />
-      ) : null}
-      {pct.poor > 0 ? (
-        <span className="cwv-dist-segment cwv-dist-segment-poor" style={{ flex: pct.poor }} />
-      ) : null}
-    </div>
+      {ratingLabel(rating)}
+    </StatusBadge>
   );
 }
 
-function CwvVitalCard({
-  label,
-  metric,
-  value,
-  samples,
-  dist,
-  loading,
-  primary,
-}: {
-  label: string;
-  metric: TrendMetric;
-  value: string;
-  samples?: number;
-  dist?: VitalDistribution;
-  loading?: boolean;
-  primary?: boolean;
-}) {
-  const pct = dist ? distPercents(dist) : null;
+function PerformanceSkeleton() {
   return (
-    <div className={`stat-card cwv-vital-card${primary ? ' stat-card-primary' : ''}`}>
-      <div className="stat-label">
-        {label}
-        {samples != null && !loading ? (
-          <span className="text-muted text-[0.78rem] font-normal"> ({formatNumber(samples)})</span>
-        ) : null}
-      </div>
-      {loading ? (
-        <Skeleton className="mt-[0.65rem] h-7 w-full" />
-      ) : (
-        <div className="stat-value">{value}</div>
-      )}
-      <DistributionBar dist={dist} loading={loading} />
-      {!loading && pct && dist && dist.total > 0 ? (
-        <div className="cwv-dist-legend">
-          <span className="cwv-dist-legend-item">
-            <span className="cwv-dist-dot cwv-dist-dot-good" />
-            {t('cwvGood')} {pct.good}%
-          </span>
-          <span className="cwv-dist-legend-item">
-            <span className="cwv-dist-dot cwv-dist-dot-ni" />
-            {t('cwvNeedsImprovement')} {pct.needsImprovement}%
-          </span>
-          <span className="cwv-dist-legend-item">
-            <span className="cwv-dist-dot cwv-dist-dot-poor" />
-            {t('cwvPoor')} {pct.poor}%
-          </span>
-        </div>
-      ) : null}
-      {!loading && metric !== 'cls' ? (
-        <div className="cwv-threshold-hint text-muted">{t(`cwvThreshold_${metric}`)}</div>
-      ) : null}
+    <div className="stack" aria-hidden>
+      <KpiStripSkeleton cells={5} />
+      <SectionCard title={<Skeleton className="h-4 w-40" />}>
+        <Skeleton className="h-[260px] w-full" />
+      </SectionCard>
+      <SectionCard title={<Skeleton className="h-4 w-32" />}>
+        <Skeleton className="h-[220px] w-full" />
+      </SectionCard>
     </div>
   );
-}
-
-function breakdownChartData(rows: PerformanceBreakdownRow[], metric: BreakdownMetric) {
-  return rows.map((row) => {
-    const dist = row[`${metric}Distribution`];
-    const total = dist.total || 1;
-    return {
-      dimension: row.dimension,
-      good: Math.round((dist.good / total) * 100),
-      needsImprovement: Math.round((dist.needsImprovement / total) * 100),
-      poor: Math.round((dist.poor / total) * 100),
-      samples: row.samples,
-      average: row[metric],
-    };
-  });
 }
 
 export default function PerformancePage() {
   const chartColors = useChartColors();
   const { websiteId } = useParams<{ websiteId: string }>();
-    const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
+  const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '24h');
+  const [metric, setMetric] = useState<VitalMetric>('lcp');
   const [breakdownTab, setBreakdownTab] = useState<BreakdownTab>('url');
-  const [breakdownMetric, setBreakdownMetric] = useState<BreakdownMetric>('lcp');
-  const [trendMetric, setTrendMetric] = useState<TrendMetric>('lcp');
 
   const performanceQuery = useQuery({
-    queryKey: ['performance', websiteId, range],
+    queryKey: ['performance', websiteId, rangeQs],
     enabled: Boolean(websiteId),
-    queryFn: () =>
-      api<PerformanceReport>(
-        `/api/reports/performance?websiteId=${websiteId}&${rangeQs}`,
-      ),
+    placeholderData: keepPreviousData,
+    queryFn: () => api<PerformanceReport>(`/api/reports/performance?websiteId=${websiteId}&${rangeQs}`),
   });
 
   const data = performanceQuery.data;
   const hasData = Boolean(data && data.samples > 0);
-  const loading = performanceQuery.isLoading;
+  const unit = data?.trends.unit ?? 'hour';
+  const threshold = VITAL_THRESHOLDS[metric];
+
+  // Every bucket in the range (UTC, like the API); empty buckets are gaps, not zeros. While a
+  // new range loads, the previous report stays on screen with its own buckets.
+  const stale = performanceQuery.isPlaceholderData;
+  const trend = useMemo(() => {
+    if (!data) return [];
+    const byKey = new Map(data.trends.points.map((point) => [point.x, point]));
+    const keys = stale ? data.trends.points.map((point) => point.x) : bucketKeys(range.startAt, range.endAt, unit, 'UTC');
+    return keys.map((key) => ({
+      label: bucketLabel(key, unit, timezone),
+      value: byKey.get(key)?.[metric] ?? null,
+      samples: byKey.get(key)?.samples ?? 0,
+    }));
+  }, [data, metric, range.startAt, range.endAt, unit, timezone, stale]);
+
+  const yAxis = useMemo(() => {
+    const values = trend.map((point) => point.value).filter((value): value is number => value != null);
+    const max = Math.max(threshold.good * 1.1, ...values);
+    const ticks = niceTicks(max, 4, metric === 'cls');
+    return { ticks, domain: [0, ticks[ticks.length - 1]] as [number, number] };
+  }, [trend, threshold.good, metric]);
 
   const breakdownRows = data?.breakdown[breakdownTab] ?? [];
-  const chartData = useMemo(
-    () => breakdownChartData(breakdownRows, breakdownMetric),
-    [breakdownRows, breakdownMetric],
-  );
-
-  const trendData = data?.trends.points ?? [];
-  const cwvColors = useMemo(
-    () => ({
-      good: getComputedStyle(document.documentElement).getPropertyValue('--success').trim(),
-      ni: getComputedStyle(document.documentElement).getPropertyValue('--warning').trim(),
-      poor: getComputedStyle(document.documentElement).getPropertyValue('--danger').trim(),
-    }),
-    [chartColors],
-  );
+  const metricName = t(VITAL_NAME_KEYS[metric]);
+  const samples = data?.[SAMPLE_KEYS[metric]] ?? data?.samples ?? 0;
 
   return (
     <Page className="page-performance">
       <PageHeader
         title={t('performance')}
         lead={t('performancePageLead')}
-        actions={
-          <WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />
-        }
+        actions={<WebsiteDateExportControls range={range} onRangeChange={setRange} timezone={timezone} />}
       />
 
-      <PageBody>
-      <DataViewState
-        loading={performanceQuery.isLoading && !performanceQuery.data}
-        error={performanceQuery.isError ? performanceQuery.error : null}
-        onRetry={() => performanceQuery.refetch()}
-      >
-      {!loading && !hasData ? (
-        <div className="section-gap">
-          <EmptyState
-            title={t('noDataInPeriod')}
-            description={t('noDataInPeriodHint')}
-          />
-        </div>
-      ) : (
-      <section className="analytics-hero panel section-gap" aria-labelledby="performance-overview">
-        <h2 id="performance-overview" className="visually-hidden">
-          {t('performance')}
-        </h2>
-
-        <div className="cwv-dist-global-legend" aria-hidden={loading}>
-          <span className="cwv-dist-legend-item">
-            <span className="cwv-dist-dot cwv-dist-dot-good" />
-            {t('cwvGood')}
-          </span>
-          <span className="cwv-dist-legend-item">
-            <span className="cwv-dist-dot cwv-dist-dot-ni" />
-            {t('cwvNeedsImprovement')}
-          </span>
-          <span className="cwv-dist-legend-item">
-            <span className="cwv-dist-dot cwv-dist-dot-poor" />
-            {t('cwvPoor')}
-          </span>
-        </div>
-
-        <div className="analytics-hero-stats">
-          <CwvVitalCard
-            label="LCP"
-            metric="lcp"
-            value={formatMs(data?.lcp)}
-            samples={data?.lcpSamples}
-            dist={data?.distributions.lcp}
-            loading={loading}
-            primary
-          />
-          <CwvVitalCard
-            label="INP"
-            metric="inp"
-            value={formatMs(data?.inp)}
-            samples={data?.inpSamples}
-            dist={data?.distributions.inp}
-            loading={loading}
-            primary
-          />
-          <CwvVitalCard
-            label="CLS"
-            metric="cls"
-            value={formatCls(data?.cls)}
-            samples={data?.clsSamples}
-            dist={data?.distributions.cls}
-            loading={loading}
-            primary
-          />
-          <CwvVitalCard
-            label="FCP"
-            metric="fcp"
-            value={formatMs(data?.fcp)}
-            samples={data?.fcpSamples}
-            dist={data?.distributions.fcp}
-            loading={loading}
-          />
-          <CwvVitalCard
-            label="TTFB"
-            metric="ttfb"
-            value={formatMs(data?.ttfb)}
-            samples={data?.ttfbSamples}
-            dist={data?.distributions.ttfb}
-            loading={loading}
-          />
-        </div>
-
-        <div className="analytics-hero-chart">
-          <div className="performance-trend-head">
-            <h3 className="section-title">{t('performanceTrendTitle')}</h3>
-            <SegmentTabs
-              tabs={TREND_METRICS.map((metric) => ({
-                id: metric,
-                label: metric.toUpperCase(),
-              }))}
-              value={trendMetric}
-              onChange={(id) => setTrendMetric(id as (typeof TREND_METRICS)[number])}
-              aria-label={t('performanceTrendTitle')}
+      <PageBody className="stack">
+        <DataViewState
+          loading={performanceQuery.isLoading && !data}
+          error={performanceQuery.isError && !data ? performanceQuery.error : null}
+          onRetry={() => performanceQuery.refetch()}
+          loadingFallback={<PerformanceSkeleton />}
+        >
+          {!hasData ? (
+            <EmptyState
+              variant="rich"
+              icon={<Gauge />}
+              title={t('trafficPerfEmptyTitle')}
+              description={t('trafficPerfEmptyBody')}
             />
-          </div>
-          {loading ? (
-            <Skeleton className="h-56 w-full" />
-          ) : trendData.length > 0 ? (
-            <AnalyticsChart
-              Chart={LineChart}
-              data={trendData}
-              responsive={{ height: 220 }}
-              xAxis={{ dataKey: 'x' }}
-              yAxis={{ allowDecimals: trendMetric === 'cls' }}
-              tooltip={{
-                formatter: (value) => [
-                  formatAverage(trendMetric, typeof value === 'number' ? value : null),
-                  trendMetric.toUpperCase(),
-                ],
-              }}
-            >
-              <Line
-                type="monotone"
-                dataKey={trendMetric}
-                stroke={chartColors.accent}
-                strokeWidth={2}
-                dot={false}
-                connectNulls
-              />
-            </AnalyticsChart>
           ) : (
-            <p className="text-muted">{t('chartNoData')}</p>
-          )}
-          {!loading && data ? (
-            <p className="performance-trend-meta text-muted">
-              {t('performanceTrendUnit')}: {data.trends.unit === 'hour' ? t('hourly') : t('daily')}
-              {' · '}
-              {t('performanceEvents')}: {formatNumber(data.samples)}
-            </p>
-          ) : null}
-        </div>
-      </section>
-      )}
-
-      {hasData || loading ? (
-        <section className="panel breakdown-panel section-gap-lg">
-          <div className="breakdown-panel-head">
-            <h2 className="section-title">{t('performanceBreakdownTitle')}</h2>
-            <SegmentTabs
-              tabs={BREAKDOWN_TABS.map((tab) => ({
-                id: tab,
-                label:
-                  tab === 'url'
-                    ? t('performanceBreakdownUrl')
-                    : tab === 'browser'
-                      ? t('browser')
-                      : t('country'),
-              }))}
-              value={breakdownTab}
-              onChange={(id) => setBreakdownTab(id as BreakdownTab)}
-              aria-label={t('performanceBreakdownTitle')}
-            />
-          </div>
-
-          <div className="performance-breakdown-metric-row">
-            <span className="path-sort-toolbar-label">{t('performanceBreakdownMetric')}:</span>
-            <SegmentTabs
-              tabs={BREAKDOWN_METRICS.map((metric) => ({
-                id: metric,
-                label: metric.toUpperCase(),
-              }))}
-              value={breakdownMetric}
-              onChange={(id) => setBreakdownMetric(id as (typeof BREAKDOWN_METRICS)[number])}
-              aria-label={t('performanceBreakdownMetric')}
-            />
-          </div>
-
-          {loading ? (
-            <Skeleton className="h-64 w-full" />
-          ) : breakdownRows.length > 0 ? (
             <>
-              <div className="performance-breakdown-chart">
-                <AnalyticsChart
-                  Chart={BarChart}
-                  data={chartData}
-                  layout="vertical"
-                  margin={{ left: 8, right: 16 }}
-                  grid={{ horizontal: false }}
-                  responsive={{ height: Math.max(180, breakdownRows.length * 36) }}
-                  xAxis={{
-                    type: 'number',
-                    domain: [0, 100],
-                    tickFormatter: (v) => `${v}%`,
-                  }}
-                  yAxis={{
-                    type: 'category',
-                    dataKey: 'dimension',
-                    width: 140,
-                  }}
-                  tooltip={{
-                    formatter: (value, name) => {
-                      const label =
-                        name === 'good'
-                          ? t('cwvGood')
-                          : name === 'needsImprovement'
-                            ? t('cwvNeedsImprovement')
-                            : t('cwvPoor');
-                      return [`${value}%`, label];
-                    },
-                  }}
-                >
-                  <Bar dataKey="good" stackId="dist" fill={cwvColors.good} radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="needsImprovement" stackId="dist" fill={cwvColors.ni} />
-                  <Bar dataKey="poor" stackId="dist" fill={cwvColors.poor} radius={[0, 4, 4, 0]} />
-                </AnalyticsChart>
-              </div>
+              <KpiStrip columns={5} label={t('trafficVitalsLabel')} className="traffic-vitals-strip">
+                {VITAL_METRICS.map((key) => {
+                  const parts = vitalParts(key, data?.[key]);
+                  const dist = data?.distributions[key];
+                  const good = goodShare(dist);
+                  return (
+                    <KpiCell
+                      key={key}
+                      selected={metric === key}
+                      onSelect={() => setMetric(key)}
+                      label={
+                        <>
+                          <abbr title={t(VITAL_NAME_KEYS[key])}>{key.toUpperCase()}</abbr>
+                          <span className="traffic-kpi-label-note">{t('trafficAvg')}</span>
+                          <RatingBadge dist={dist} />
+                        </>
+                      }
+                      value={parts.value}
+                      unit={parts.unit || undefined}
+                      hint={
+                        <span className="traffic-vital-hint">
+                          <VitalMeter dist={dist} />
+                          <span>{good == null ? '-' : t('trafficGoodShare').replace('{pct}', formatShare(good))}</span>
+                        </span>
+                      }
+                    />
+                  );
+                })}
+              </KpiStrip>
 
-              <div className="data-table-wrap performance-breakdown-table">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>
-                        {breakdownTab === 'url'
-                          ? t('performanceBreakdownUrl')
-                          : breakdownTab === 'browser'
-                            ? t('browser')
-                            : t('country')}
-                      </th>
-                      <th>{t('performanceEvents')}</th>
-                      <th>LCP</th>
-                      <th>INP</th>
-                      <th>CLS</th>
-                      <th>{breakdownMetric.toUpperCase()} {t('performanceDistribution')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {breakdownRows.map((row) => (
-                      <tr key={row.dimension}>
-                        <td className="performance-breakdown-dimension">{row.dimension}</td>
-                        <td>{formatNumber(row.samples)}</td>
-                        <td>{formatMs(row.lcp)}</td>
-                        <td>{formatMs(row.inp)}</td>
-                        <td>{formatCls(row.cls)}</td>
-                        <td className="performance-breakdown-dist-cell">
-                          <DistributionBar dist={row[`${breakdownMetric}Distribution`]} />
-                        </td>
-                      </tr>
+              <SectionCard
+                title={t('trafficMetricOverTime').replace('{metric}', metric.toUpperCase())}
+                description={`${metricName} · ${(unit === 'hour' ? t('trafficAvgPerHour') : t('trafficAvgPerDay')).replace(
+                  '{samples}',
+                  formatNumber(samples),
+                )}`}
+              >
+                {trend.some((point) => point.value != null) ? (
+                  <div className="traffic-chart">
+                    <AnalyticsChart
+                      Chart={AreaChart}
+                      data={trend}
+                      responsive={{ height: 260 }}
+                      valueFormatter={(value) => formatVital(metric, value)}
+                      xAxis={{ dataKey: 'label', interval: 'preserveStartEnd', minTickGap: 40 }}
+                      yAxis={{
+                        ...yAxis,
+                        allowDecimals: metric === 'cls',
+                        width: 56,
+                        tickFormatter: (value: number) => vitalTick(metric, value),
+                      }}
+                    >
+                      <ReferenceLine
+                        y={threshold.good}
+                        stroke={chartColors.muted}
+                        strokeOpacity={0.6}
+                        ifOverflow="extendDomain"
+                        label={{
+                          value: t('trafficGoodThreshold').replace('{value}', formatVital(metric, threshold.good)),
+                          position: 'insideTopLeft',
+                          fill: chartColors.muted,
+                          fontSize: 11,
+                          // A halo in the card color keeps the label legible where the line crosses it.
+                          stroke: chartColors.panel,
+                          strokeWidth: 3,
+                          paintOrder: 'stroke',
+                        }}
+                      />
+                      <Area
+                        dataKey="value"
+                        name={metric.toUpperCase()}
+                        stroke={chartColors.accent}
+                        fill={chartColors.accent}
+                        connectNulls
+                        {...areaMark(chartColors.panel)}
+                      />
+                    </AnalyticsChart>
+                  </div>
+                ) : (
+                  <EmptyState title={t('noDataInPeriod')} description={t('noDataInPeriodHint')} />
+                )}
+              </SectionCard>
+
+              <SectionCard
+                flush
+                title={t('performanceBreakdownTitle')}
+                description={t('trafficPerfBreakdownLead')}
+                actions={
+                  <div className="segmented" role="group" aria-label={t('performanceBreakdownTitle')}>
+                    {BREAKDOWN_TABS.map((tab) => (
+                      <button
+                        key={tab}
+                        type="button"
+                        aria-pressed={breakdownTab === tab}
+                        onClick={() => setBreakdownTab(tab)}
+                      >
+                        {tabLabel(tab)}
+                      </button>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </div>
+                }
+              >
+                {breakdownRows.length ? (
+                  <div className="table-scroll">
+                    <table className="data-table traffic-vitals-table">
+                      <thead>
+                        <tr>
+                          <th>{tabLabel(breakdownTab)}</th>
+                          <th className="num">{t('samples')}</th>
+                          {BREAKDOWN_METRICS.map((key) => (
+                            <th key={key} className="num">
+                              <abbr title={t(VITAL_NAME_KEYS[key])}>{key.toUpperCase()}</abbr>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {breakdownRows.map((row) => {
+                          const flag = breakdownTab === 'country' ? countryFlagEmoji(row.dimension) : '';
+                          const label =
+                            breakdownTab === 'country' && row.dimension !== 'Unknown'
+                              ? getCountryLabel(row.dimension)
+                              : row.dimension === 'Unknown'
+                                ? t('unknown')
+                                : row.dimension;
+                          return (
+                            <tr key={row.dimension}>
+                              <td>
+                                <span className="traffic-location-cell">
+                                  {flag ? (
+                                    <span className="traffic-flag" aria-hidden>
+                                      {flag}
+                                    </span>
+                                  ) : null}
+                                  <span
+                                    className={`traffic-cell-truncate${breakdownTab === 'url' ? ' mono' : ''}`}
+                                    title={row.dimension}
+                                  >
+                                    {label}
+                                  </span>
+                                </span>
+                              </td>
+                              <td className="num">{formatNumber(row.samples)}</td>
+                              {BREAKDOWN_METRICS.map((key) => {
+                                const dist = row[DISTRIBUTION_KEYS[key]];
+                                const rating = p75Rating(dist);
+                                return (
+                                  <td key={key} className="num traffic-vital-cell">
+                                    <span className="traffic-vital-value">
+                                      {rating ? (
+                                        <span
+                                          className={`traffic-rating-dot is-${rating}`}
+                                          title={ratingLabel(rating)}
+                                          aria-label={ratingLabel(rating)}
+                                        />
+                                      ) : null}
+                                      {formatVital(key, row[key])}
+                                    </span>
+                                    <VitalMeter dist={dist} className="traffic-vital-cell-meter" />
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <EmptyState title={t('noDataInPeriod')} />
+                )}
+              </SectionCard>
             </>
-          ) : (
-            <p className="text-muted">{t('chartNoData')}</p>
           )}
-        </section>
-      ) : null}
-      </DataViewState>
+        </DataViewState>
       </PageBody>
     </Page>
   );

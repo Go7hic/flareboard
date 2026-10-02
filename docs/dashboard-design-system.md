@@ -64,6 +64,9 @@ Content      cards on a 12-column grid (.layout-grid, .span-4/.span-6/.span-8/.s
 - Streams and catalogs with several filters (logs, sessions, errors, people) use a toolbar row under
   the header (or the list card header in master–detail).
 
+- Controls in the header and toolbar rows (date range, selects, search, buttons) are 32px tall
+  (`--shell-control-height`, the Button / Select default). Under 900px the header actions move
+  under the title, left-aligned, and wrap.
 - Page width: `--container-max` (1320px), 24px gutters (16px under 640px).
 - Rhythm: header → toolbar 16px; toolbar → content 20px; between cards 16px (`--section-gap`).
 - Website pages: the top bar shows a breadcrumb (`All websites / Demo Store ▾`) instead of
@@ -103,6 +106,10 @@ Content      cards on a 12-column grid (.layout-grid, .span-4/.span-6/.span-8/.s
 - Legend for ≥ 2 series (line keys for lines, squares for bars), top-right of the card header;
   none for a single series (the card title names it).
 - Hover: crosshair + one tooltip listing every series, value first; bars highlight on hover.
+  Stacked bars with many series pass `ChartTooltipContent hideZero` so empty series drop out.
+- Stacks with negative parts (lifecycle dormant, MRR churn) use `AnalyticsChart stackOffset="sign"`;
+  automatic ticks cover negatives and bars inside `<BarStack>`. KPI cells that key a bar series
+  use `keyShape="box"` to match the legend.
 - Text never wears the series color; values and labels stay in text tokens.
 - Chart height includes the axis band; no nested scroll.
 

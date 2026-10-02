@@ -180,6 +180,28 @@ describe('per-website analytics store (siteDb facade)', () => {
     expect(ids.results.map((r) => r.id)).toEqual(['new']);
   });
 
+  it('refreshes planner statistics, skipping tables too small to analyze', async () => {
+    const site = freshSite();
+    const db = siteDb(typedEnv, site);
+    await db.batch(
+      Array.from({ length: 60 }, (_, i) =>
+        db
+          .prepare(
+            `INSERT INTO website_event (event_id, website_id, session_id, visit_id, url_path, created_at, event_type)
+             VALUES (?1, ?2, ?3, ?3, '/', ?4, 1)`,
+          )
+          .bind(`stat-${i}`, site, `s-${i % 6}`, 1000 + i),
+      ),
+    );
+    const { runDurableObjectAlarm } = await import('cloudflare:test');
+    expect(await runDurableObjectAlarm(siteStoreStub(typedEnv, site))).toBe(true);
+    const stats = await db.prepare('SELECT DISTINCT tbl FROM sqlite_stat1').all<{ tbl: string }>();
+    const tables = stats.results.map((row) => row.tbl);
+    expect(tables).toContain('website_event');
+    // Statistics from an empty table would tell the planner it stays tiny.
+    expect(tables).not.toContain('log_record');
+  });
+
   it('refuses to serve a store under a different website id and can erase itself', async () => {
     const site = freshSite();
     const stub = siteStoreStub(typedEnv, site);

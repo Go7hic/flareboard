@@ -74,6 +74,9 @@ export async function listPeople(
   filters: PeopleFilters = {},
 ) {
   const filter = searchClause(filters);
+  // Identity props come from the email/name rows only, read through (website_id, data_key):
+  // joining every session to all of session_data was a nested scan (40 s on demo data). The CTE
+  // columns are named apart from the output aliases, so HAVING (search) matches the output values.
   const rows = await siteDb(env, websiteId).prepare(
     `WITH latest_identity AS (
        SELECT sd.session_id as sessionId,
@@ -82,24 +85,32 @@ export async function listPeople(
        WHERE sd.website_id = ?1 AND sd.distinct_id IS NOT NULL
        GROUP BY sd.session_id
      ),
+     session_props AS (
+       SELECT sd.session_id as sessionId,
+              MAX(CASE WHEN sd.data_key IN ('email', '$email') THEN sd.string_value ELSE NULL END) as email,
+              MAX(CASE WHEN sd.data_key IN ('name', 'displayName', '$name') THEN sd.string_value ELSE NULL END) as name
+       FROM session_data sd
+       WHERE sd.website_id = ?1 AND sd.data_key IN ('email', '$email', 'name', 'displayName', '$name')
+       GROUP BY sd.session_id
+     ),
      latest_props AS (
-       SELECT ${personKeySql()} as personId,
-              MAX(CASE WHEN sd.data_key IN ('email', '$email') THEN sd.string_value ELSE NULL END) as latestEmail,
-              MAX(CASE WHEN sd.data_key IN ('name', 'displayName', '$name') THEN sd.string_value ELSE NULL END) as latestName
-       FROM session s
+       SELECT ${personKeySql()} as propsPersonId,
+              MAX(session_props.email) as propsEmail,
+              MAX(session_props.name) as propsName
+       FROM session_props
+       INNER JOIN session s ON s.session_id = session_props.sessionId
        LEFT JOIN latest_identity ON latest_identity.sessionId = s.session_id
-       LEFT JOIN session_data sd ON sd.session_id = s.session_id AND sd.website_id = s.website_id
        WHERE s.website_id = ?1
        GROUP BY ${personKeySql()}
      )
      SELECT ${personKeySql()} as personId,
             COALESCE(
-              latest_props.latestEmail,
+              latest_props.propsEmail,
               json_extract(p.properties_json, '$.email'),
               json_extract(p.properties_json, '$.$email')
             ) as latestEmail,
             COALESCE(
-              latest_props.latestName,
+              latest_props.propsName,
               json_extract(p.properties_json, '$.name'),
               json_extract(p.properties_json, '$.displayName'),
               json_extract(p.properties_json, '$.$name')
@@ -117,7 +128,7 @@ export async function listPeople(
      FROM session s
      LEFT JOIN latest_identity ON latest_identity.sessionId = s.session_id
      INNER JOIN website_event e ON e.session_id = s.session_id AND e.website_id = s.website_id
-     LEFT JOIN latest_props ON latest_props.personId = ${personKeySql()}
+     LEFT JOIN latest_props ON latest_props.propsPersonId = ${personKeySql()}
      LEFT JOIN person p ON p.website_id = ?1 AND p.distinct_id = ${personKeySql()}
      WHERE s.website_id = ?1 AND e.created_at >= ?2 AND e.created_at <= ?5
      GROUP BY ${personKeySql()}

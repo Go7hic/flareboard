@@ -106,4 +106,21 @@ describe('people query helpers', () => {
 
     expect(people.map((person) => person.personId)).toContain('user-123');
   });
+
+  it('matches the id and a profile-only email for people without identity rows', async () => {
+    const { upsertPerson } = await import('@flareboard/db');
+    await insertSession('people-session-c', 'grace-77', BASE + 400);
+    await insertEvent('people-pageview-c', 'people-session-c', null, EVENT_TYPE.pageView, BASE + 500);
+    await upsertPerson(testSiteDb(TEST_WEBSITE_ID), {
+      websiteId: TEST_WEBSITE_ID,
+      distinctId: 'grace-77',
+      properties: { email: 'grace@hopper.dev' },
+      seenAt: BASE + 500,
+    });
+
+    for (const search of ['grace-77', 'hopper.dev']) {
+      const people = await listPeople(env, TEST_WEBSITE_ID, BASE - 1000, BASE + 2000, 100, { search });
+      expect(people.map((person) => [person.personId, person.latestEmail])).toEqual([['grace-77', 'grace@hopper.dev']]);
+    }
+  });
 });

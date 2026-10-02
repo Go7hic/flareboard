@@ -37,6 +37,7 @@ export class EventStore extends DurableObject<Env> {
     this.sql = ctx.storage.sql;
     ctx.blockConcurrencyWhile(async () => {
       this.migrate();
+      this.optimize();
       // Daily housekeeping (see alarm()); re-armed whenever a sleeping store wakes up.
       if ((await ctx.storage.getAlarm()) === null) await ctx.storage.setAlarm(Date.now() + DAY_MS);
     });
@@ -48,6 +49,7 @@ export class EventStore extends DurableObject<Env> {
     const now = Date.now();
     this.sql.exec('DELETE FROM heatmap_ingest_dedup WHERE created_at < ?', now - HEATMAP_DEDUP_TTL_MS);
     const otelBacklog = this.purgeExpiredOtel(now);
+    this.optimize();
     const hasData =
       this.sql.exec<{ n: number }>(
         `SELECT (EXISTS (SELECT 1 FROM heatmap_ingest_dedup)
@@ -57,6 +59,19 @@ export class EventStore extends DurableObject<Env> {
     // Nothing left to clean: let the store sleep; the constructor re-arms it on the next write.
     if (otelBacklog) await this.ctx.storage.setAlarm(now + OTEL_PURGE_BACKLOG_DELAY_MS);
     else if (hasData) await this.ctx.storage.setAlarm(now + DAY_MS);
+  }
+
+  /**
+   * Keeps SQLite's planner statistics (sqlite_stat1) current. Without them the planner picks
+   * among indexes blindly: listing people scanned the website's whole session_data once per
+   * session (40 s instead of 0.6 s on demo data). 0x10002 checks every table, not only those this
+   * connection has queried; SQLite then analyzes a table only when an index has no statistics or
+   * it grew 25x since the last run, skips tables under ~25 rows (stats taken on an empty table
+   * mislead the planner badly once it fills) and samples a bounded number of rows. A no-op check
+   * costs microseconds per table, so it runs on every wake and in the daily alarm.
+   */
+  private optimize() {
+    this.sql.exec('PRAGMA optimize=0x10002');
   }
 
   /**

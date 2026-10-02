@@ -715,14 +715,15 @@ button.breakdown-row:hover {
   margin-left: 1rem;
 }
 
-.meta-line > *::before {
+/* ::after (placed on the left) so items keep their own ::before, e.g. the status-badge dot. */
+.meta-line > *::after {
   content: '·';
   position: absolute;
   left: -0.62rem;
   color: var(--text-faint);
 }
 
-.meta-line--plain > *::before {
+.meta-line--plain > *::after {
   display: none;
 }
 
@@ -886,6 +887,13 @@ button.breakdown-row:hover {
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+/* Spec §8: the list narrows to 280px before it stacks, so the detail keeps room for its charts. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .master-detail-layout {
+    grid-template-columns: 17.5rem minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 1023px) {

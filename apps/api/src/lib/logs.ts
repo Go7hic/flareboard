@@ -703,7 +703,8 @@ export async function getLogHistogram(
   ];
   const rows = await sources.db
     .prepare(
-      `SELECT (l.created_at / ${bucket}) * ${bucket} AS t, l.severity AS severity, COUNT(*) AS n
+      // CAST floors: numbers are bound as REAL, so a bare division would not truncate.
+      `SELECT CAST(l.created_at / ${bucket} AS INTEGER) * ${bucket} AS t, l.severity AS severity, COUNT(*) AS n
        FROM ${fromArms(sources.logArms, filters.source)} ${whereClause(conditions)}
        GROUP BY t, l.severity`,
     )

@@ -152,6 +152,14 @@ describe('unified log queries (OTLP + tracker logs)', () => {
     expect(errors.buckets.reduce((sum, bucket) => sum + bucket.total, 0)).toBe(2);
   });
 
+  it('floors lines that fall inside a bucket onto its start', async () => {
+    const start = BASE + 100_000;
+    await seedOtlpLog(SITE, { id: 'bucket-a', at: start + 250, severity: 'info', body: 'a', service: 'search' });
+    await seedOtlpLog(SITE, { id: 'bucket-b', at: start + 750, severity: 'info', body: 'b', service: 'search' });
+    const histogram = await getLogHistogram(testEnv, SITE, start, start + 10_000);
+    expect(histogram.buckets.filter((bucket) => bucket.total).map((bucket) => [bucket.t - start, bucket.total])).toEqual([[0, 2]]);
+  });
+
   it('picks bucket sizes that give at most ~60 bars', () => {
     expect(histogramBucketMs(0, 60 * MIN)).toBe(MIN);
     expect(histogramBucketMs(0, DAY)).toBe(30 * MIN);

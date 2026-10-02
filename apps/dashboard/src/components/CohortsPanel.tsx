@@ -1,42 +1,125 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Users } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { ArrowUpRight, Braces, Pencil, Plus, Trash2, Users } from 'lucide-react';
 import type { PropertyFilter } from '@flareboard/shared/insight-query';
+import { RelativeTime } from './audience/ActivityLists';
+import { cohortConditionRows, ConditionList, conditionSummary } from './audience/ConditionChips';
+import { DetailSection } from './audience/DetailSheet';
+import { MasterDetailSkeleton } from './audience/MasterDetailSkeleton';
+import { TrendArea } from './audience/TrendArea';
 import { CohortFormDialog } from './CohortFormDialog';
-import { describeFilter } from './PropertyFilterBuilder';
+import { deleteTitle, useConfirm } from './ConfirmDialog';
+import { DataViewState } from './DataViewState';
+import { DateRangePicker } from './DateRangePicker';
 import { EmptyState } from './EmptyState';
-import {
-  MasterDetailLayout,
-  MasterDetailListItem,
-  MasterDetailPane,
-  ResourceSearchField,
-  useMasterDetailSelection,
-} from './master-detail';
-import { ConfirmDialog } from './ConfirmDialog';
+import { KpiCell, KpiStrip, KpiStripSkeleton } from './KpiStrip';
+import { MasterDetailLayout, MasterDetailListItem, MasterDetailPane, ResourceSearchField } from './master-detail';
+import { PageBody } from './Page';
+import { PageHeader } from './PageHeader';
 import { Button } from './ui/button';
+import { Skeleton } from './ui/skeleton';
 import { api } from '../lib/api';
-import { formatDateOnly } from '../lib/format';
+import { formatNumber, formatShortDate } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
+import { useWebsiteRange } from '../lib/useWebsiteRange';
 
 type CohortRow = {
   id: string;
   name: string;
   createdAt: string;
+  updatedAt?: string;
   definition: {
     conditions: Array<{ field: string; operator: string; value: string; filters?: PropertyFilter[] }>;
+    windowStart?: number;
+    windowEnd?: number;
   };
 };
 
+/** GET /api/reports/cohort: member sessions (all of the definition) and daily activity in range. */
+type CohortReport = {
+  unit: 'day' | 'week';
+  totalUsers: number;
+  series: Array<{ bucket: string; users: number }>;
+};
+
+function CohortActivity({ cohortId, rangeQs }: { cohortId: string; rangeQs: string }) {
+  const reportQuery = useQuery({
+    queryKey: ['cohort-report', cohortId, rangeQs],
+    // A new date range keeps this cohort's numbers until the new ones land.
+    placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[1] === cohortId ? previous : undefined),
+    queryFn: () => api<CohortReport>(`/api/reports/cohort?cohortId=${encodeURIComponent(cohortId)}&${rangeQs}`),
+  });
+  const report = reportQuery.data;
+  const points = useMemo(
+    () => (report?.series ?? []).map((point) => ({ label: formatShortDate(`${point.bucket}T00:00:00`), value: point.users })),
+    [report?.series],
+  );
+
+  if (reportQuery.isLoading) {
+    return (
+      <>
+        <div className="audience-pane-kpis">
+          <KpiStripSkeleton cells={3} inline />
+        </div>
+        <DetailSection title={t('audienceActiveMembers')}>
+          <Skeleton className="h-[180px] w-full" />
+        </DetailSection>
+      </>
+    );
+  }
+  if (reportQuery.isError || !report) {
+    return (
+      <div className="audience-pane-kpis">
+        <p className="audience-inline-error" role="alert">
+          {t('audienceCohortSizeFailed')}
+          <Button type="button" variant="link" size="sm" onClick={() => reportQuery.refetch()}>
+            {t('retry')}
+          </Button>
+        </p>
+      </div>
+    );
+  }
+
+  const active = report.series.reduce((sum, point) => sum + point.users, 0);
+  const perBucket = report.series.length ? active / report.series.length : 0;
+  return (
+    <>
+      <div className="audience-pane-kpis">
+        <KpiStrip inline columns={3}>
+          <KpiCell label={t('members')} value={formatNumber(report.totalUsers)} hint={t('audienceMembersHint')} />
+          <KpiCell label={t('audienceActiveInPeriod')} value={formatNumber(active)} />
+          <KpiCell
+            label={report.unit === 'week' ? t('audienceActivePerWeek') : t('audienceActivePerDay')}
+            value={formatNumber(perBucket, { maximumFractionDigits: perBucket < 10 ? 1 : 0 })}
+          />
+        </KpiStrip>
+      </div>
+      <DetailSection title={t('audienceActiveMembers')}>
+        {points.length > 1 ? (
+          <TrendArea data={points} name={t('audienceActiveMembers')} />
+        ) : (
+          <p className="audience-section-empty">
+            {report.totalUsers ? t('audienceNoActivityInPeriod') : t('audienceCohortNoMembers')}
+          </p>
+        )}
+      </DetailSection>
+    </>
+  );
+}
+
+/** Cohorts catalog (console v2 master–detail): behavioral groups, their size and definition. */
 export function CohortsPanel({ websiteId }: { websiteId: string }) {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   // View-only members (and the demo) see the list without create, edit or delete.
   const { canEdit } = useWebsitePermissions(websiteId, 'analytics');
+  const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '30d');
+  const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
-  const [formOpen, setFormOpen] = useState(false);
-  const [editId, setEditId] = useState<string | undefined>();
-  const [deleteTarget, setDeleteTarget] = useState<CohortRow | null>(null);
+  const [form, setForm] = useState<{ open: boolean; editId?: string }>({ open: false });
+  const [showJson, setShowJson] = useState(false);
 
   const cohortsQuery = useQuery({
     queryKey: ['cohorts', websiteId],
@@ -44,169 +127,198 @@ export function CohortsPanel({ websiteId }: { websiteId: string }) {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (cohortId: string) =>
-      api(`/api/websites/${websiteId}/cohorts/${cohortId}`, { method: 'DELETE' }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cohorts', websiteId] });
-      setDeleteTarget(null);
-    },
+    mutationFn: (cohortId: string) => api(`/api/websites/${websiteId}/cohorts/${cohortId}`, { method: 'DELETE' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cohorts', websiteId] }),
   });
 
+  const all = cohortsQuery.data ?? [];
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const rows = cohortsQuery.data ?? [];
-    if (!query) return rows;
-    return rows.filter((row) => row.name.toLowerCase().includes(query));
-  }, [cohortsQuery.data, search]);
+    return query ? all.filter((row) => row.name.toLowerCase().includes(query)) : all;
+  }, [all, search]);
 
-  const { selectedId, setSelectedId, selectedItem: selectedCohort } = useMasterDetailSelection(
-    filtered,
-    (row) => row.id,
-  );
+  const requestedId = searchParams.get('id');
+  const selected = filtered.find((row) => row.id === requestedId) ?? filtered[0] ?? null;
+  const rows = useMemo(() => (selected ? cohortConditionRows(selected.definition.conditions) : []), [selected]);
 
-  useEffect(() => {
-    if (!filtered.length) {
-      setSelectedId(null);
-      return;
-    }
-    if (!selectedId || !filtered.some((row) => row.id === selectedId)) {
-      setSelectedId(filtered[0].id);
-    }
-  }, [filtered, selectedId, setSelectedId]);
-
-  function openCreate() {
-    setEditId(undefined);
-    setFormOpen(true);
+  function select(id: string) {
+    const next = new URLSearchParams(searchParams);
+    next.set('id', id);
+    setSearchParams(next, { replace: true });
+    setShowJson(false);
   }
 
-  function openEdit(row: CohortRow) {
-    setEditId(row.id);
-    setFormOpen(true);
+  function remove(row: CohortRow) {
+    confirm({ title: deleteTitle(row.name), onConfirm: () => deleteMutation.mutate(row.id) });
   }
 
-  function closeForm() {
-    setFormOpen(false);
-    setEditId(undefined);
-  }
+  const createButton = canEdit ? (
+    <Button type="button" variant="primary" onClick={() => setForm({ open: true })}>
+      <Plus data-icon="inline-start" aria-hidden />
+      {t('createCohort')}
+    </Button>
+  ) : null;
+
+  const definition = selected?.definition;
+  const windowLabel =
+    definition?.windowStart != null && definition.windowEnd != null
+      ? `${formatShortDate(definition.windowStart)} – ${formatShortDate(definition.windowEnd)}`
+      : null;
 
   return (
     <>
-      <section className="cohorts-panel section-gap">
-        <header className="cohorts-panel-head">
-          <ResourceSearchField
-            value={search}
-            onChange={setSearch}
-            placeholder={t('cohortSearch')}
-            aria-label={t('cohortSearch')}
-          />
-          {canEdit ? (
-            <Button type="button" variant="primary" size="sm" onClick={openCreate}>
-              {t('createCohort')}
-            </Button>
-          ) : null}
-        </header>
+      <PageHeader
+        title={t('cohorts')}
+        lead={t('audienceCohortsLead')}
+        actions={
+          <>
+            <DateRangePicker value={range} onChange={setRange} popover timezone={timezone} />
+            {createButton}
+          </>
+        }
+      />
 
-        {cohortsQuery.isLoading ? (
-          <div className="skeleton skeleton-block" aria-busy />
-        ) : filtered.length === 0 ? (
-          <EmptyState title={t('noCohorts')} />
-        ) : (
-          <MasterDetailLayout
-            list={filtered.map((row) => (
-              <MasterDetailListItem
-                key={row.id}
-                selected={row.id === selectedId}
-                onSelect={() => setSelectedId(row.id)}
-                icon={<Users size={16} strokeWidth={2} aria-hidden />}
-                title={row.name}
-                subtitle={formatDateOnly(row.createdAt)}
-                meta={
-                  <span className="text-muted">
-                    {row.definition.conditions.length} {t('cohortConditions').toLowerCase()}
+      <PageBody>
+        <DataViewState
+          loading={cohortsQuery.isLoading}
+          loadingFallback={<MasterDetailSkeleton />}
+          error={cohortsQuery.isError ? cohortsQuery.error : null}
+          onRetry={() => cohortsQuery.refetch()}
+        >
+          {all.length === 0 ? (
+            <EmptyState
+              variant="rich"
+              icon={<Users />}
+              title={t('audienceCohortsEmptyTitle')}
+              description={t('audienceCohortsEmptyBody')}
+              action={createButton}
+            />
+          ) : (
+            <MasterDetailLayout
+              listHeader={
+                <>
+                  <ResourceSearchField
+                    value={search}
+                    onChange={setSearch}
+                    placeholder={t('cohortSearch')}
+                    aria-label={t('cohortSearch')}
+                    className="audience-list-search"
+                  />
+                  <span className="master-detail-list-count">
+                    {t('audienceCohortCount').replace('{count}', formatNumber(filtered.length))}
                   </span>
-                }
-              />
-            ))}
-            detail={
-              selectedCohort ? (
-                <MasterDetailPane
-                  title={selectedCohort.name}
-                  description={
-                    <span className="text-muted">
-                      {t('cohortCreated')}: {formatDateOnly(selectedCohort.createdAt)}
-                    </span>
-                  }
-                  actions={
-                    <div className="cohorts-row-actions">
-                      {canEdit ? (
-                        <>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEdit(selectedCohort)}
-                          >
-                            {t('edit')}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="destructive-ghost"
-                            size="sm"
-                            onClick={() => setDeleteTarget(selectedCohort)}
-                          >
-                            {t('delete')}
-                          </Button>
-                        </>
+                </>
+              }
+              list={
+                filtered.length ? (
+                  filtered.map((row) => (
+                    <MasterDetailListItem
+                      key={row.id}
+                      selected={row.id === selected?.id}
+                      onSelect={() => select(row.id)}
+                      icon={<Users size={16} strokeWidth={2} aria-hidden />}
+                      title={row.name}
+                      subtitle={conditionSummary(cohortConditionRows(row.definition.conditions)) || undefined}
+                      meta={<RelativeTime value={row.updatedAt ?? row.createdAt} />}
+                    />
+                  ))
+                ) : (
+                  <p className="audience-list-empty">{t('audienceNoMatchTitle')}</p>
+                )
+              }
+              detail={
+                selected ? (
+                  <MasterDetailPane
+                    title={selected.name}
+                    meta={
+                      <>
+                        <span>{t('audienceConditionCount').replace('{count}', formatNumber(rows.length))}</span>
+                        {windowLabel ? (
+                          <span>
+                            {t('cohortDateWindow')} {windowLabel}
+                          </span>
+                        ) : null}
+                        <span>{t('audienceCreatedOn').replace('{date}', formatShortDate(selected.createdAt))}</span>
+                      </>
+                    }
+                    actions={
+                      <>
+                        <Button type="button" variant="secondary" size="sm" asChild>
+                          <Link to={`/websites/${websiteId}?cohort=${encodeURIComponent(selected.id)}`}>
+                            <ArrowUpRight data-icon="inline-start" aria-hidden />
+                            {t('audienceOpenInOverview')}
+                          </Link>
+                        </Button>
+                        {canEdit ? (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setForm({ open: true, editId: selected.id })}
+                            >
+                              <Pencil data-icon="inline-start" aria-hidden />
+                              {t('edit')}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="destructive-ghost"
+                              size="icon-sm"
+                              aria-label={t('delete')}
+                              title={t('delete')}
+                              onClick={() => remove(selected)}
+                            >
+                              <Trash2 aria-hidden />
+                            </Button>
+                          </>
+                        ) : null}
+                      </>
+                    }
+                  >
+                    <CohortActivity cohortId={selected.id} rangeQs={rangeQs} />
+
+                    <DetailSection
+                      title={t('cohortConditions')}
+                      actions={
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          aria-pressed={showJson}
+                          onClick={() => setShowJson((open) => !open)}
+                        >
+                          <Braces data-icon="inline-start" aria-hidden />
+                          {showJson ? t('audienceHideJson') : t('audienceViewJson')}
+                        </Button>
+                      }
+                    >
+                      {rows.length ? (
+                        <ConditionList rows={rows} />
+                      ) : (
+                        <p className="audience-section-empty">{t('audienceNoConditions')}</p>
+                      )}
+                      {showJson ? (
+                        <pre className="code-block audience-json">{JSON.stringify(selected.definition, null, 2)}</pre>
                       ) : null}
-                      <Button type="button" variant="secondary" size="sm" asChild>
-                        <Link to={`/websites/${websiteId}?cohort=${encodeURIComponent(selectedCohort.id)}`}>
-                          {t('dashboard')}
-                        </Link>
-                      </Button>
-                    </div>
-                  }
-                >
-                  <div className="detail-section">
-                    <h4 className="section-title experiment-title">{t('cohortConditions')}</h4>
-                    {selectedCohort.definition.conditions.length ? (
-                      <ul className="cohort-conditions-list">
-                        {selectedCohort.definition.conditions.map((condition, index) => (
-                          <li key={`${condition.field}-${index}`} className="text-muted">
-                            <span className="badge">{condition.field}</span>{' '}
-                            {condition.field === 'any_event' ? '' : `${condition.operator} ${condition.value}`}
-                            {(condition.filters ?? []).map((filter, filterIndex) => (
-                              <span key={filterIndex} className="cohort-condition-filter">
-                                {' · '}
-                                {describeFilter(filter)}
-                              </span>
-                            ))}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-muted">—</p>
-                    )}
+                    </DetailSection>
+                  </MasterDetailPane>
+                ) : (
+                  <div className="master-detail-pane">
+                    <EmptyState icon={<Users />} title={t('audienceSelectCohort')} description={t('audienceNoMatchBody')} />
                   </div>
-                </MasterDetailPane>
-              ) : null
-            }
-          />
-        )}
-      </section>
+                )
+              }
+            />
+          )}
+        </DataViewState>
+      </PageBody>
 
-      <CohortFormDialog open={formOpen} onClose={closeForm} websiteId={websiteId} cohortId={editId} />
-
-      <ConfirmDialog
-        open={deleteTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
-        }}
-        title={t('confirmDeleteTitle').replace('{name}', deleteTarget?.name ?? '')}
-        description={t('confirmDeleteBody')}
-        pending={deleteMutation.isPending}
-        onConfirm={() => {
-          if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
-        }}
+      <CohortFormDialog
+        open={form.open}
+        onClose={() => setForm({ open: false })}
+        websiteId={websiteId}
+        cohortId={form.editId}
+        onSaved={(id) => (id ? select(id) : undefined)}
       />
     </>
   );

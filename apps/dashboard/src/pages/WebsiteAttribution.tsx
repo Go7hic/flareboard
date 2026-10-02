@@ -1,23 +1,32 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Megaphone, MousePointerClick, Route, Tag } from 'lucide-react';
 import type { AttributionConversionResponse } from '@flareboard/shared/client';
+import { keepPreviousForWebsite } from '../components/audience/keepPrevious';
+import { DimensionCard } from '../components/audience/DimensionCard';
+import { Segmented } from '../components/audience/Segmented';
+import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
-import { MetricsTable } from '../components/MetricsTable';
-import { SegmentTabs } from '../components/SegmentTabs';
+import { KpiCell, KpiStrip, KpiStripSkeleton } from '../components/KpiStrip';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
+import { SectionCard } from '../components/SectionCard';
 import { WebsiteReportControls } from '../components/WebsiteReportControls';
-import { StatCard, StatCardSkeleton } from '../components/ui/stat-card';
 import { Input } from '../components/ui/input';
 import { useWebsiteReportContext } from '../hooks/useWebsiteReportContext';
 import { api } from '../lib/api';
 import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
+import { cn } from '../lib/utils';
 
 type AttributionModel = 'first' | 'last';
 type AttributionType = 'path' | 'event';
+
+/** API placeholders for a touch without the tag / without a referrer. */
+const NO_TAG = ['(none)', '(direct)'] as const;
+const DIRECT = '(direct)';
 
 function formatPaidAdsLabel(name: string) {
   switch (name) {
@@ -36,39 +45,21 @@ function formatPaidAdsLabel(name: string) {
   }
 }
 
-function breakdownRows(rows: Array<{ name: string; value: number }>, formatName?: (name: string) => string) {
-  return rows.map((row) => ({
-    x: formatName ? formatName(row.name) : row.name,
-    y: row.value,
-  }));
+function formatReferrer(name: string) {
+  return name === DIRECT ? t('revenueAttributionDirect') : name;
 }
 
-function BreakdownPanel({
-  title,
-  rows,
-  loading,
-  formatName,
-}: {
-  title: string;
-  rows: Array<{ name: string; value: number }>;
-  loading?: boolean;
-  formatName?: (name: string) => string;
-}) {
-  return (
-    <section className="panel overview-dimension-card">
-      <h2 className="overview-dimension-card-title">{title}</h2>
-      <MetricsTable
-        embedded
-        hideTitle
-        maxRows={10}
-        rows={breakdownRows(rows, formatName)}
-        loading={loading}
-        primaryMetric="views"
-        title={title}
-      />
-    </section>
-  );
-}
+/** UTM breakdowns of the attributed touch; titles reuse the insight dimension labels ("UTM source"). */
+const UTM_CARDS: Array<{
+  key: 'utm_source' | 'utm_medium' | 'utm_campaign' | 'utm_content' | 'utm_term';
+  span: string;
+}> = [
+  { key: 'utm_source', span: 'span-4' },
+  { key: 'utm_medium', span: 'span-4' },
+  { key: 'utm_campaign', span: 'span-4' },
+  { key: 'utm_content', span: 'span-6' },
+  { key: 'utm_term', span: 'span-6' },
+];
 
 export default function WebsiteAttributionPage() {
   const { websiteId, range, setRange, segmentId, setSegmentId, segments, reportUrl, timezone } =
@@ -94,17 +85,25 @@ export default function WebsiteAttributionPage() {
   const attributionQuery = useQuery({
     queryKey: ['reports-attribution', websiteId, range, segmentId, model, convType, debouncedStep],
     enabled: Boolean(websiteId) && debouncedStep.trim().length > 0,
+    // Switching the model or editing the step keeps the last result until the new one lands.
+    placeholderData: keepPreviousForWebsite(websiteId),
     queryFn: () => api<AttributionConversionResponse>(reportUrl('attribution', queryExtra)),
   });
 
   const data = attributionQuery.data;
-  const loading = attributionQuery.isLoading;
-  const hasConversions = (data?.total.conversions ?? 0) > 0;
+  const hasStep = step.trim().length > 0;
+  const initialLoading = hasStep && attributionQuery.isLoading && !data;
+  const refreshing = attributionQuery.isFetching && attributionQuery.isPlaceholderData;
+  const conversions = data?.total.conversions ?? 0;
+  const anyUtmTagged = UTM_CARDS.some(({ key }) =>
+    (data?.[key] ?? []).some((row) => !(NO_TAG as readonly string[]).includes(row.name)),
+  );
+  const pagesPerConversion = conversions > 0 ? (data?.total.pageviews ?? 0) / conversions : 0;
 
   return (
     <Page className="page-attribution">
       <PageHeader
-        title={t('attribution')}
+        title={t('navAttribution')}
         lead={t('attributionLead')}
         actions={
           <WebsiteReportControls
@@ -118,104 +117,139 @@ export default function WebsiteAttributionPage() {
         }
       />
 
-      <PageBody>
-      <section className="panel section-gap">
-        <div className="stats-toolbar">
-          <SegmentTabs
-            tabs={[
-              { id: 'last', label: t('attributionModelLast') },
-              { id: 'first', label: t('attributionModelFirst') },
-            ]}
-            value={model}
-            onChange={(id) => setModel(id as AttributionModel)}
-            aria-label={t('attribution')}
-          />
-          <SegmentTabs
-            tabs={[
-              { id: 'event', label: t('attributionTypeEvent') },
-              { id: 'path', label: t('attributionTypePath') },
-            ]}
-            value={convType}
-            onChange={(id) => setConvType(id as AttributionType)}
-            aria-label={t('attributionStep')}
-          />
-          <div className="field max-w-96">
-            <label className="field-label" htmlFor="attribution-step">
-              {t('attributionStep')}
+      <PageBody className="stack">
+        <section className="panel audience-query" aria-label={t('audienceAttributionQuery')}>
+          <div className="audience-query-field">
+            <span className="audience-query-label" id="attribution-model-label">
+              {t('audienceAttributionModel')}
+            </span>
+            <Segmented
+              aria-label={t('audienceAttributionModel')}
+              value={model}
+              onChange={setModel}
+              options={[
+                { id: 'last', label: t('attributionModelLast') },
+                { id: 'first', label: t('attributionModelFirst') },
+              ]}
+            />
+          </div>
+          <div className="audience-query-field audience-query-field--grow">
+            <label className="audience-query-label" htmlFor="attribution-step">
+              {t('audienceConvertsOn')}
             </label>
+            <Segmented
+              aria-label={t('audienceConvertsOn')}
+              value={convType}
+              onChange={setConvType}
+              options={[
+                { id: 'event', label: t('attributionTypeEvent') },
+                { id: 'path', label: t('attributionTypePath') },
+              ]}
+            />
             <Input
               id="attribution-step"
+              className="audience-query-input mono"
               value={step}
               onChange={(e) => setStep(e.target.value)}
               placeholder={
-                convType === 'path'
-                  ? t('attributionStepPathPlaceholder')
-                  : t('attributionStepEventPlaceholder')
+                convType === 'path' ? t('attributionStepPathPlaceholder') : t('attributionStepEventPlaceholder')
               }
+              aria-describedby="attribution-model-hint"
             />
           </div>
-        </div>
-      </section>
+          <p className="audience-query-hint" id="attribution-model-hint">
+            {model === 'first' ? t('audienceModelFirstHint') : t('audienceModelLastHint')}
+          </p>
+        </section>
 
-      <section className="analytics-hero-stats section-gap">
-        {loading ? (
-          <>
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-            <StatCardSkeleton />
-          </>
+        {!hasStep ? (
+          <EmptyState
+            variant="rich"
+            icon={convType === 'path' ? <Route /> : <MousePointerClick />}
+            title={t('audienceEnterStepTitle')}
+            description={t('audienceEnterStepBody')}
+          />
         ) : (
-          <>
-            <StatCard
-              label={t('attributionConversions')}
-              value={formatNumber(data?.total.conversions ?? 0)}
-              variant="primary"
-            />
-            <StatCard label={t('visitors')} value={formatNumber(data?.total.visitors ?? 0)} />
-            <StatCard label={t('visits')} value={formatNumber(data?.total.visits ?? 0)} />
-            <StatCard label={t('pageviews')} value={formatNumber(data?.total.pageviews ?? 0)} />
-          </>
-        )}
-      </section>
+          <DataViewState
+            error={attributionQuery.isError && !data ? attributionQuery.error : null}
+            onRetry={() => attributionQuery.refetch()}
+          >
+            <div className={cn('stack', refreshing && 'audience-refreshing')} aria-busy={refreshing || undefined}>
+              {initialLoading ? (
+                <KpiStripSkeleton cells={4} />
+              ) : (
+                <KpiStrip columns={4}>
+                  <KpiCell label={t('attributionConversions')} value={formatNumber(conversions)} />
+                  <KpiCell label={t('audienceConvertingVisitors')} value={formatNumber(data?.total.visitors ?? 0)} />
+                  <KpiCell
+                    label={t('audienceConvertingPageviews')}
+                    value={formatNumber(data?.total.pageviews ?? 0)}
+                  />
+                  <KpiCell
+                    label={t('audiencePagesPerConversion')}
+                    value={conversions > 0 ? formatNumber(pagesPerConversion, { maximumFractionDigits: 1 }) : '-'}
+                  />
+                </KpiStrip>
+              )}
 
-      {!step.trim() ? (
-        <EmptyState title={t('attributionStep')} description={t('attributionStepEventPlaceholder')} />
-      ) : loading ? (
-        <div className="overview-dimensions-grid section-gap">
-          <div className="panel skeleton skeleton-block" aria-busy />
-          <div className="panel skeleton skeleton-block" aria-busy />
-        </div>
-      ) : !hasConversions ? (
-        <EmptyState title={t('noDataInPeriod')} />
-      ) : (
-        <>
-          <div className="overview-dimensions-grid section-gap">
-            <BreakdownPanel
-              title={t('attributionSectionSource')}
-              rows={data?.referrer ?? []}
-              loading={loading}
-            />
-            <BreakdownPanel
-              title={t('attributionSectionPaidAds')}
-              rows={data?.paidAds ?? []}
-              loading={loading}
-              formatName={formatPaidAdsLabel}
-            />
-          </div>
-
-          <section className="section-gap" aria-label={t('attributionSectionUtm')}>
-            <h2 className="section-title">{t('attributionSectionUtm')}</h2>
-            <div className="overview-dimensions-grid">
-              <BreakdownPanel title={t('source')} rows={data?.utm_source ?? []} loading={loading} />
-              <BreakdownPanel title={t('medium')} rows={data?.utm_medium ?? []} loading={loading} />
-              <BreakdownPanel title={t('campaign')} rows={data?.utm_campaign ?? []} loading={loading} />
-              <BreakdownPanel title={t('utmContent')} rows={data?.utm_content ?? []} loading={loading} />
-              <BreakdownPanel title={t('utmTerm')} rows={data?.utm_term ?? []} loading={loading} />
+              {!initialLoading && conversions === 0 ? (
+                <EmptyState
+                  variant="rich"
+                  icon={convType === 'path' ? <Route /> : <MousePointerClick />}
+                  title={t('audienceNoConversionsTitle').replace('{step}', debouncedStep.trim())}
+                  description={t('audienceNoConversionsBody')}
+                />
+              ) : (
+                <div className="layout-grid layout-grid--stretch">
+                  <DimensionCard
+                    className="span-6"
+                    title={t('attributionSectionSource')}
+                    rows={data?.referrer ?? []}
+                    loading={initialLoading}
+                    valueLabel={t('attributionConversions')}
+                    formatName={formatReferrer}
+                    emptyTitle={t('noDataInPeriod')}
+                  />
+                  <DimensionCard
+                    className="span-6"
+                    title={t('attributionSectionPaidAds')}
+                    rows={data?.paidAds ?? []}
+                    loading={initialLoading}
+                    valueLabel={t('attributionConversions')}
+                    formatName={formatPaidAdsLabel}
+                    emptyIcon={<Megaphone />}
+                    emptyTitle={t('audienceNoPaidAdsTitle')}
+                    emptyDescription={t('audienceNoPaidAdsBody')}
+                  />
+                  {!initialLoading && !anyUtmTagged ? (
+                    <SectionCard className="span-12" title={t('attributionSectionUtm')}>
+                      <EmptyState
+                        icon={<Tag />}
+                        title={t('audienceNoTaggedConversionsTitle')}
+                        description={t('audienceNoTaggedConversions')}
+                      />
+                    </SectionCard>
+                  ) : null}
+                  {(initialLoading || anyUtmTagged ? UTM_CARDS : []).map(({ key, span }) => (
+                    <DimensionCard
+                      key={key}
+                      className={span}
+                      title={t(`insightDimension_${key}`)}
+                      rows={data?.[key] ?? []}
+                      loading={initialLoading}
+                      valueLabel={t('attributionConversions')}
+                      untagged={NO_TAG}
+                      untaggedLabel={t('audienceUntagged')}
+                      emptyIcon={<Tag />}
+                      emptyTitle={t('audienceNoTagValues').replace('{param}', key)}
+                      emptyDescription={t('audienceNoTaggedConversions')}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
-          </section>
-        </>
-      )}
+          </DataViewState>
+        )}
       </PageBody>
     </Page>
   );

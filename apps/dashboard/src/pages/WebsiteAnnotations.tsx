@@ -2,60 +2,71 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import { CalendarDays, Plus, Trash2 } from 'lucide-react';
+import { AnnotationDialog, categoryLabel, type AnnotationCategory } from '../components/audience/AnnotationDialog';
+import { deleteTitle, useConfirm } from '../components/ConfirmDialog';
+import { DataViewState } from '../components/DataViewState';
 import { EmptyState } from '../components/EmptyState';
-import {
-  MasterDetailLayout,
-  MasterDetailListItem,
-  MasterDetailPane,
-} from '../components/master-detail';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
+import { SectionCard } from '../components/SectionCard';
+import { StatusBadge, type StatusTone } from '../components/StatusBadge';
 import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
+import { Skeleton } from '../components/ui/skeleton';
 import { api, type Annotation, type AnnotationsResponse } from '../lib/api';
-import { formatDateTime } from '../lib/format';
-import { t } from '../lib/i18n';
+import { formatNumber, formatShortDateTime, formatTimeOfDay } from '../lib/format';
+import { getLocale, t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
+import { cn } from '../lib/utils';
 
-type AnnotationCategory = Annotation['category'];
+/** Color only where the category signals something: incidents (bad) and releases. */
+const CATEGORY_TONE: Record<AnnotationCategory, StatusTone> = {
+  incident: 'danger',
+  release: 'info',
+  campaign: 'neutral',
+  experiment: 'neutral',
+  note: 'neutral',
+};
 
-const CATEGORIES: AnnotationCategory[] = ['note', 'release', 'campaign', 'incident', 'experiment'];
+type MonthGroup = { key: string; label: string; items: Annotation[] };
 
-function formatDate(value: string | number | null | undefined) {
-  return formatDateTime(value);
+/** Newest first, grouped by calendar month in the viewer's zone. */
+function groupByMonth(annotations: Annotation[]): MonthGroup[] {
+  const sorted = [...annotations].sort((a, b) => b.happenedAt - a.happenedAt);
+  const groups: MonthGroup[] = [];
+  const formatter = new Intl.DateTimeFormat(getLocale(), { year: 'numeric', month: 'long' });
+  for (const annotation of sorted) {
+    const date = new Date(annotation.happenedAt);
+    const key = `${date.getFullYear()}-${date.getMonth()}`;
+    let group = groups[groups.length - 1];
+    if (!group || group.key !== key) {
+      group = { key, label: formatter.format(date), items: [] };
+      groups.push(group);
+    }
+    group.items.push(annotation);
+  }
+  return groups;
 }
 
-function toInputDateTime(value: number) {
+function DayLabel({ value }: { value: number }) {
   const date = new Date(value);
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-}
-
-function fromInputDateTime(value: string) {
-  const timestamp = new Date(value).getTime();
-  return Number.isNaN(timestamp) ? Date.now() : timestamp;
-}
-
-function emptyDraft() {
-  return {
-    title: '',
-    description: '',
-    category: 'note' as AnnotationCategory,
-    happenedAt: toInputDateTime(Date.now()),
-  };
-}
-
-function categoryLabel(category: AnnotationCategory) {
-  return t(`annotationCategory_${category}`);
+  const day = date.toLocaleDateString(getLocale(), { month: 'short', day: 'numeric' });
+  const weekday = date.toLocaleDateString(getLocale(), { weekday: 'short' });
+  return (
+    <span className="audience-annotation-date" title={formatShortDateTime(value)}>
+      <span className="audience-annotation-day">{day}</span>
+      <span className="audience-annotation-time">
+        {weekday} {formatTimeOfDay(value)}
+      </span>
+    </span>
+  );
 }
 
 export default function WebsiteAnnotationsPage() {
   const { websiteId } = useParams<{ websiteId: string }>();
   const { canEdit, viewOnly } = useWebsitePermissions(websiteId);
   const queryClient = useQueryClient();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [draft, setDraft] = useState(emptyDraft);
+  const confirm = useConfirm();
+  const [dialog, setDialog] = useState<{ open: boolean; annotation?: Annotation }>({ open: false });
 
   const annotationsQuery = useQuery({
     queryKey: ['annotations', websiteId],
@@ -63,199 +74,150 @@ export default function WebsiteAnnotationsPage() {
     queryFn: () => api<AnnotationsResponse>(`/api/websites/${websiteId}/annotations`),
   });
 
-  const annotations = annotationsQuery.data?.annotations ?? [];
-  const selectedAnnotation = useMemo(
-    () => annotations.find((annotation) => annotation.id === selectedId) ?? null,
-    [annotations, selectedId],
-  );
-
-  const saveMutation = useMutation({
-    mutationFn: (payload: typeof draft) => {
-      const body = JSON.stringify({
-        title: payload.title.trim(),
-        description: payload.description.trim(),
-        category: payload.category,
-        happenedAt: fromInputDateTime(payload.happenedAt),
-      });
-      if (selectedId) {
-        return api<Annotation>(`/api/websites/${websiteId}/annotations/${selectedId}`, {
-          method: 'PATCH',
-          body,
-        });
-      }
-      return api<Annotation>(`/api/websites/${websiteId}/annotations`, {
-        method: 'POST',
-        body,
-      });
-    },
-    onSuccess: (annotation) => {
-      setSelectedId(annotation.id);
-      setDraft({
-        title: annotation.title,
-        description: annotation.description,
-        category: annotation.category,
-        happenedAt: toInputDateTime(annotation.happenedAt),
-      });
-      queryClient.invalidateQueries({ queryKey: ['annotations', websiteId] });
-    },
-  });
-
   const deleteMutation = useMutation({
     mutationFn: (annotationId: string) =>
       api(`/api/websites/${websiteId}/annotations/${annotationId}`, { method: 'DELETE' }),
-    onSuccess: () => {
-      setSelectedId(null);
-      setDraft(emptyDraft());
-      queryClient.invalidateQueries({ queryKey: ['annotations', websiteId] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['annotations', websiteId] }),
   });
 
-  function selectAnnotation(annotation: Annotation) {
-    setSelectedId(annotation.id);
-    setDraft({
-      title: annotation.title,
-      description: annotation.description,
-      category: annotation.category,
-      happenedAt: toInputDateTime(annotation.happenedAt),
+  const annotations = annotationsQuery.data?.annotations ?? [];
+  const groups = useMemo(() => groupByMonth(annotations), [annotations]);
+
+  function remove(annotation: Annotation) {
+    confirm({
+      title: deleteTitle(annotation.title),
+      onConfirm: () => {
+        deleteMutation.mutate(annotation.id);
+        setDialog({ open: false });
+      },
     });
   }
 
-  function newAnnotation() {
-    setSelectedId(null);
-    setDraft(emptyDraft());
-  }
-
-  const canSave = Boolean(draft.title.trim() && draft.happenedAt) && !saveMutation.isPending;
+  const createButton = canEdit ? (
+    <Button type="button" variant="primary" onClick={() => setDialog({ open: true })}>
+      <Plus data-icon="inline-start" aria-hidden />
+      {t('newAnnotation')}
+    </Button>
+  ) : null;
 
   return (
     <Page className="page-annotations">
-      <PageHeader title={t('annotations')} lead={t('annotationsLead')} />
+      <PageHeader
+        title={t('annotations')}
+        lead={t('annotationsLead')}
+        actions={createButton}
+        meta={viewOnly ? <p className="audience-footnote">{t('viewOnlyHint')}</p> : undefined}
+      />
 
-      <PageBody>
-
-      {viewOnly ? <p className="text-muted section-gap">{t('viewOnlyHint')}</p> : null}
-
-      {canEdit ? (
-        <section className="panel section-gap">
-          <header className="panel-header">
-            <Button type="button" variant="secondary" onClick={newAnnotation}>
-              <Plus size={16} strokeWidth={2} aria-hidden />
-              {t('newAnnotation')}
-            </Button>
-          </header>
-        </section>
-      ) : null}
-
-      <section className="section-gap">
-        {annotationsQuery.isLoading ? (
-          <div className="skeleton skeleton-block" aria-busy />
-        ) : annotations.length || !selectedId ? (
-          <MasterDetailLayout
-            list={
-              <>
-                {annotations.map((annotation) => (
-                  <MasterDetailListItem
-                    key={annotation.id}
-                    selected={annotation.id === selectedAnnotation?.id}
-                    onSelect={() => selectAnnotation(annotation)}
-                    icon={<CalendarDays size={16} strokeWidth={2} aria-hidden />}
-                    title={annotation.title}
-                    subtitle={formatDate(annotation.happenedAt)}
-                    meta={
-                      <span className={`badge annotation-badge-${annotation.category}`}>
-                        {categoryLabel(annotation.category)}
-                      </span>
-                    }
-                  />
-                ))}
-                {!annotations.length ? (
-                  <EmptyState title={t('annotationsEmptyTitle')} description={t('annotationsEmptyBody')} />
-                ) : null}
-              </>
-            }
-            detail={
-              <MasterDetailPane
-                title={selectedId ? t('editAnnotation') : t('createAnnotation')}
-                description={t('annotationFormLead')}
-                actions={
-                  canEdit && selectedId ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => deleteMutation.mutate(selectedId)}
-                      disabled={deleteMutation.isPending}
-                      aria-label={t('delete')}
-                    >
-                      <Trash2 size={16} strokeWidth={2} aria-hidden />
-                    </Button>
-                  ) : null
-                }
-              >
-                {canEdit ? (
-                  <div className="detail-section">
-                    <div className="field">
-                      <Label htmlFor="annotation-title">{t('title')}</Label>
-                      <Input
-                        id="annotation-title"
-                        value={draft.title}
-                        onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))}
-                        placeholder={t('annotationTitlePlaceholder')}
-                      />
-                    </div>
-                    <div className="field">
-                      <Label htmlFor="annotation-category">{t('category')}</Label>
-                      <select
-                        id="annotation-category"
-                        className="select"
-                        value={draft.category}
-                        onChange={(event) =>
-                          setDraft((prev) => ({ ...prev, category: event.target.value as AnnotationCategory }))
-                        }
-                      >
-                        {CATEGORIES.map((category) => (
-                          <option key={category} value={category}>
-                            {categoryLabel(category)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="field">
-                      <Label htmlFor="annotation-time">{t('annotationHappenedAt')}</Label>
-                      <Input
-                        id="annotation-time"
-                        type="datetime-local"
-                        value={draft.happenedAt}
-                        onChange={(event) => setDraft((prev) => ({ ...prev, happenedAt: event.target.value }))}
-                      />
-                    </div>
-                    <div className="field">
-                      <Label htmlFor="annotation-description">{t('description')}</Label>
-                      <textarea
-                        id="annotation-description"
-                        className="textarea"
-                        rows={5}
-                        value={draft.description}
-                        onChange={(event) =>
-                          setDraft((prev) => ({ ...prev, description: event.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="form-actions">
-                      <Button type="button" variant="primary" onClick={() => saveMutation.mutate(draft)} disabled={!canSave}>
-                        {selectedId ? t('saveChanges') : t('createAnnotation')}
-                      </Button>
-                    </div>
-                    {saveMutation.error ? <p className="text-danger">{saveMutation.error.message}</p> : null}
-                  </div>
-                ) : null}
-              </MasterDetailPane>
-            }
-          />
-        ) : (
-          <EmptyState title={t('annotationsEmptyTitle')} description={t('annotationsEmptyBody')} />
-        )}
-      </section>
+      <PageBody className="stack">
+        <DataViewState
+          loading={annotationsQuery.isLoading}
+          loadingFallback={<TimelineSkeleton />}
+          error={annotationsQuery.isError ? annotationsQuery.error : null}
+          onRetry={() => annotationsQuery.refetch()}
+        >
+          {groups.length === 0 ? (
+            <EmptyState
+              variant="rich"
+              icon={<CalendarDays />}
+              title={t('annotationsEmptyTitle')}
+              description={t('annotationsEmptyBody')}
+              action={createButton}
+            />
+          ) : (
+            <>
+              <p className="audience-footnote">
+                {t('audienceAnnotationsCount').replace('{count}', formatNumber(annotations.length))}
+              </p>
+              {groups.map((group) => (
+                <SectionCard
+                  key={group.key}
+                  flush
+                  className="audience-month"
+                  title={group.label}
+                  actions={
+                    <span className="audience-month-count">
+                      {t('audienceAnnotationsInMonth').replace('{count}', formatNumber(group.items.length))}
+                    </span>
+                  }
+                >
+                  <ol className="audience-timeline">
+                    {group.items.map((annotation) => (
+                      <li key={annotation.id} className={cn('audience-annotation', canEdit && 'is-editable')}>
+                        <button
+                          type="button"
+                          className="audience-annotation-main"
+                          disabled={!canEdit}
+                          aria-label={canEdit ? `${t('editAnnotation')}: ${annotation.title}` : undefined}
+                          onClick={() => setDialog({ open: true, annotation })}
+                        >
+                          <DayLabel value={annotation.happenedAt} />
+                          <span className="audience-annotation-category">
+                            <StatusBadge tone={CATEGORY_TONE[annotation.category]}>
+                              {categoryLabel(annotation.category)}
+                            </StatusBadge>
+                          </span>
+                          <span className="audience-annotation-copy">
+                            <span className="audience-annotation-title">{annotation.title}</span>
+                            {annotation.description ? (
+                              <span className="audience-annotation-desc">{annotation.description}</span>
+                            ) : null}
+                          </span>
+                        </button>
+                        {canEdit ? (
+                          <Button
+                            type="button"
+                            variant="destructive-ghost"
+                            size="icon-sm"
+                            className="audience-annotation-delete"
+                            aria-label={`${t('delete')}: ${annotation.title}`}
+                            title={t('delete')}
+                            onClick={() => remove(annotation)}
+                          >
+                            <Trash2 aria-hidden />
+                          </Button>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ol>
+                </SectionCard>
+              ))}
+            </>
+          )}
+        </DataViewState>
       </PageBody>
+
+      {websiteId ? (
+        <AnnotationDialog
+          open={dialog.open}
+          websiteId={websiteId}
+          annotation={dialog.annotation}
+          onClose={() => setDialog({ open: false })}
+          onDelete={remove}
+        />
+      ) : null}
     </Page>
+  );
+}
+
+function TimelineSkeleton() {
+  return (
+    <div className="panel-flush" aria-hidden>
+      <div className="card-header">
+        <Skeleton className="h-4 w-32" />
+      </div>
+      {Array.from({ length: 5 }, (_, index) => (
+        <div key={index} className="audience-annotation">
+          <div className="audience-annotation-main">
+            <div className="audience-annotation-date">
+              <Skeleton className="h-3.5 w-14" />
+              <Skeleton className="mt-1.5 h-3 w-16" />
+            </div>
+            <Skeleton className="h-5 w-14" />
+            <Skeleton className="h-3.5 w-64" />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }

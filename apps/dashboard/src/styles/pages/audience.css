@@ -1,1 +1,1148 @@
 /* Console v2 page styles: audience pages. See docs/dashboard-design-system.md. */
+
+/* ── Toolbar ──────────────────────────────────────────────────────────────── */
+
+.audience-search {
+  flex: 0 1 18rem;
+  max-width: 18rem;
+}
+
+/* Toolbar controls share the header control height (date picker, segment menu). */
+.audience-search .cohorts-search {
+  height: var(--shell-control-height);
+}
+
+.page-header-toolbar .segmented > button {
+  height: calc(var(--shell-control-height) - 4px);
+  padding: 0 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .audience-search {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+}
+
+/* ── Identity (people and groups tables, sheets) ──────────────────────────── */
+
+.audience-avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  user-select: none;
+}
+
+.audience-avatar svg {
+  width: 52%;
+  height: 52%;
+}
+
+.audience-avatar.is-anonymous {
+  color: var(--text-faint);
+}
+
+.audience-avatar--sm {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.625rem;
+}
+
+.audience-avatar--lg {
+  width: 2.75rem;
+  height: 2.75rem;
+  font-size: 0.9375rem;
+}
+
+.audience-avatar--group {
+  border-radius: var(--radius-sm);
+}
+
+.audience-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.audience-identity-copy {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+  max-width: 20rem;
+}
+
+.audience-identity-title,
+.audience-identity-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audience-identity-title {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.audience-identity-title.is-anonymous {
+  color: var(--text-muted);
+}
+
+.audience-identity-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.audience-identity-sub.mono {
+  font-size: 0.71875rem;
+}
+
+.audience-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.audience-flag {
+  flex: 0 0 auto;
+  font-size: 0.9375rem;
+  line-height: 1;
+}
+
+/* ── Tables ───────────────────────────────────────────────────────────────── */
+
+.audience-table {
+  min-width: 760px;
+}
+
+.audience-table td {
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+  word-break: normal;
+}
+
+.audience-table .audience-avatar {
+  width: 1.875rem;
+  height: 1.875rem;
+}
+
+.audience-col-identity {
+  width: 36%;
+}
+
+.audience-col-location {
+  max-width: 15rem;
+}
+
+.audience-table td.audience-col-location {
+  color: var(--text-muted);
+}
+
+.audience-row-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.audience-row-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.audience-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.audience-sort.is-numeric {
+  flex-direction: row-reverse;
+}
+
+.audience-sort:hover,
+.audience-sort.is-active {
+  color: var(--text);
+}
+
+.audience-sort:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.audience-sort svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+/* Phones: keep who, how much and when; the rest is in the detail sheet. */
+@media (max-width: 640px) {
+  .audience-table {
+    min-width: 0;
+  }
+
+  .audience-table .audience-hide-sm {
+    display: none;
+  }
+
+  .audience-col-identity {
+    width: auto;
+  }
+
+  .audience-identity-copy {
+    max-width: 12rem;
+  }
+}
+
+.audience-refreshing {
+  opacity: 0.6;
+  transition: opacity var(--transition);
+}
+
+/* ── Side sheet (person / group detail) ───────────────────────────────────── */
+
+.audience-sheet-backdrop {
+  transition: opacity 160ms ease;
+}
+
+.audience-sheet-backdrop[data-starting-style],
+.audience-sheet-backdrop[data-ending-style] {
+  opacity: 0;
+}
+
+.audience-sheet {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  width: min(40rem, 100vw);
+  background: var(--bg-elevated);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  outline: none;
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 180ms ease;
+}
+
+.audience-sheet[data-starting-style],
+.audience-sheet[data-ending-style] {
+  transform: translateX(1.5rem);
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .audience-sheet,
+  .audience-sheet-backdrop {
+    transition: none;
+  }
+}
+
+.audience-sheet-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 1.25rem 1.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.audience-sheet-head-row {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  min-width: 0;
+}
+
+.audience-sheet-head-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.audience-sheet-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audience-sheet-subtitle {
+  margin: 0.15rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audience-sheet-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
+
+.audience-sheet-meta {
+  margin-top: 0.75rem;
+}
+
+.audience-sheet-meta time {
+  color: var(--text);
+}
+
+.audience-id {
+  max-width: 18rem;
+}
+
+.audience-sheet-body {
+  padding: 0 1.5rem 2rem;
+}
+
+.audience-sheet-body > .kpi-strip--inline {
+  --audience-edge: 1.5rem;
+  margin: 0 -1.5rem;
+  border-top: 0;
+}
+
+.audience-sheet-body > .kpi-strip--inline .kpi-cell {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+@media (max-width: 640px) {
+  .audience-sheet-head {
+    padding: 1rem 1rem 0.875rem;
+  }
+
+  .audience-sheet-body {
+    padding: 0 1rem 1.5rem;
+  }
+
+  .audience-sheet-body > .kpi-strip--inline {
+    --audience-edge: 1rem;
+    margin: 0 -1rem;
+  }
+}
+
+/* Edge-to-edge inline strips (sheet, detail pane, subscriptions card): the first cell of every
+   row lines up with the card's content, also when the shared strip wraps to 2 per row. */
+:is(.audience-sheet-body, .audience-pane-kpis, .audience-card-kpis) > .kpi-strip--inline .kpi-cell:first-child {
+  padding-left: var(--audience-edge, var(--card-pad-x, 1.25rem));
+}
+
+@media (max-width: 1100px) {
+  :is(.audience-sheet-body, .audience-pane-kpis, .audience-card-kpis) > .kpi-strip--inline[data-cols='4'] .kpi-cell:nth-child(2n + 1) {
+    padding-left: var(--audience-edge, var(--card-pad-x, 1.25rem));
+  }
+}
+
+@media (max-width: 640px) {
+  :is(.audience-sheet-body, .audience-pane-kpis, .audience-card-kpis) > .kpi-strip--inline .kpi-cell:nth-child(2n + 1) {
+    padding-left: var(--audience-edge, var(--card-pad-x, 1.25rem));
+  }
+}
+
+/* ── Sections inside a sheet or detail pane (hairlines, no boxes) ─────────── */
+
+.audience-section {
+  padding: 1.25rem 0 0.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.audience-section + .audience-section {
+  margin-top: 1rem;
+}
+
+.audience-sheet-body > .audience-section:first-child,
+.kpi-strip + .audience-section {
+  border-top: 0;
+}
+
+.audience-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.audience-section-copy {
+  min-width: 0;
+  flex: 1 1 14rem;
+}
+
+.audience-section-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.audience-section-description {
+  margin: 0.15rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.audience-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.audience-section-empty {
+  margin: 0;
+  padding: 0.25rem 0 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.audience-section-skeleton {
+  display: grid;
+  gap: 0.5rem;
+}
+
+/* Property keys can be long ($group/company/employees): fixed key column, ellipsis + title. */
+.audience-kv {
+  grid-template-columns: minmax(7rem, 36%) minmax(0, 1fr);
+}
+
+.audience-kv > dt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .audience-kv {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.audience-properties-editor {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.audience-form-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.8125rem;
+}
+
+/* ── Activity rows (sessions, events) ─────────────────────────────────────── */
+
+.audience-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.audience-rows > li + li {
+  border-top: 1px solid var(--border);
+}
+
+.audience-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 -0.5rem;
+  padding: 0.6rem 0.5rem;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  text-decoration: none;
+  transition: background var(--transition);
+}
+
+.audience-row:hover {
+  background: var(--row-hover);
+}
+
+.audience-row:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.audience-row-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}
+
+.audience-row-icon svg {
+  width: 0.9375rem;
+  height: 0.9375rem;
+}
+
+.audience-row-main {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.audience-row-main--inline {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.audience-row-title {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.audience-row-title.mono {
+  font-size: 0.78125rem;
+}
+
+.audience-row-sub {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.audience-row-sub .mono {
+  font-size: 0.71875rem;
+}
+
+.audience-row-path {
+  min-width: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.audience-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.audience-event-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  margin: 0 0.25rem;
+  border-radius: 999px;
+  background: var(--border-strong);
+}
+
+.audience-event-dot.is-event {
+  background: var(--text);
+}
+
+/* ── Catalogs: segments and cohorts (master–detail) ───────────────────────── */
+
+.audience-list-search {
+  flex: 1 1 auto;
+  max-width: none;
+}
+
+.audience-list-search .cohorts-search {
+  height: 2rem;
+}
+
+.audience-list-empty {
+  margin: 0;
+  padding: 1rem 0.9rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+/* The detail pane's KPI strip runs edge to edge under the header (hairlines, no box). */
+.audience-pane-kpis {
+  margin: 0 calc(var(--card-pad-x, 1.25rem) * -1) 0.25rem;
+}
+
+.audience-pane-kpis > .kpi-strip--inline {
+  border-bottom: 0;
+}
+
+
+.audience-inline-error {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0.75rem var(--card-pad-x, 1.25rem);
+  border-top: 1px solid var(--border);
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.audience-chart {
+  margin: 0 -0.25rem -0.25rem;
+}
+
+.audience-json {
+  margin: 0.75rem 0 0;
+  max-height: 20rem;
+  overflow: auto;
+  white-space: pre;
+}
+
+/* Condition rows: "Where [Country equals US]" / "and [Path contains /blog]". */
+.audience-conditions {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.audience-condition {
+  display: grid;
+  grid-template-columns: 3.25rem minmax(0, 1fr);
+  align-items: start;
+  gap: 0.75rem;
+}
+
+.audience-condition-join {
+  padding-top: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.audience-condition-chips,
+.audience-condition-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.audience-condition-with {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.audience-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: 100%;
+  min-height: 1.875rem;
+  padding: 0.2rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  font-size: 0.8125rem;
+  line-height: 1.3;
+}
+
+.audience-chip-field {
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.audience-chip-op {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.audience-chip-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.audience-chip-value.mono {
+  font-size: 0.78125rem;
+  font-weight: 400;
+}
+
+/* ── Create / edit dialogs (segments, cohorts) ────────────────────────────── */
+
+.audience-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.audience-legend {
+  margin-bottom: 0.625rem;
+  padding: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.audience-field-hint {
+  margin: -0.25rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.audience-condition-editor {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.audience-condition-edit-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 11rem) minmax(6.5rem, 8rem) minmax(0, 1fr) 1.75rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.audience-condition-edit-row > .select {
+  width: 100%;
+  min-width: 0;
+}
+
+.audience-condition-hint {
+  grid-column: span 2;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.audience-condition-filters {
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--border);
+}
+
+.audience-json-editor {
+  display: grid;
+  justify-items: start;
+  gap: 0.5rem;
+}
+
+.audience-json-editor > textarea {
+  justify-self: stretch;
+}
+
+/* The dialog body's gap already spaces fields. */
+.segment-dialog .dialog-body > .field,
+.cohort-dialog .dialog-body > .field,
+.audience-dialog .dialog-body > .field {
+  margin-bottom: 0;
+}
+
+@media (max-width: 640px) {
+  .audience-condition-edit-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 1.75rem;
+  }
+
+  .audience-condition-edit-row > .input,
+  .audience-condition-edit-row > [data-slot='input'] {
+    grid-column: 1 / 3;
+  }
+
+  .audience-condition-hint {
+    grid-column: 1 / 3;
+  }
+}
+
+/* ── Report pages: UTM, attribution, revenue ──────────────────────────────── */
+
+.audience-footnote {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.audience-alert {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+/* Text values in a KPI cell (a campaign name, not a number). */
+.audience-kpi-text {
+  font-size: 1.375rem;
+  letter-spacing: -0.01em;
+}
+
+.audience-dimension-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.audience-dimension-card > .card-footer {
+  margin-top: auto;
+  padding-top: 1rem;
+}
+
+.audience-card-note {
+  color: var(--text-muted);
+}
+
+.audience-card-note .num {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.audience-card-empty {
+  padding-block: 1.5rem;
+}
+
+.audience-breakdown-skeleton {
+  display: grid;
+  gap: 2px;
+}
+
+.audience-snippet {
+  width: fit-content;
+  max-width: 100%;
+  margin: 1rem auto 0;
+  overflow-x: auto;
+  text-align: left;
+  white-space: pre;
+}
+
+/* Attribution query card: model + conversion step in one compact row. */
+.audience-query {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.5rem;
+  padding: 0.875rem var(--card-pad-x, 1.25rem);
+}
+
+.audience-query-field {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.audience-query-field--grow {
+  flex: 1 1 26rem;
+}
+
+.audience-query-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.audience-query .segmented > button {
+  height: 1.875rem;
+}
+
+.audience-query-input {
+  flex: 1 1 12rem;
+  max-width: 22rem;
+  height: 2.125rem;
+}
+
+.audience-query-hint {
+  flex-basis: 100%;
+  margin: -0.25rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  .audience-query-field,
+  .audience-query-field--grow {
+    flex-wrap: wrap;
+    flex: 1 1 100%;
+  }
+
+  .audience-query-input {
+    max-width: none;
+  }
+}
+
+/* Revenue */
+.audience-currency {
+  display: inline-flex;
+}
+
+.audience-currency-select {
+  width: auto;
+  height: var(--shell-control-height);
+  padding-left: 0.65rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.audience-source-tag {
+  flex: 0 0 auto;
+  padding: 0 0.35rem;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  line-height: 1.25rem;
+  white-space: nowrap;
+}
+
+.audience-card-segmented {
+  margin-bottom: 0.875rem;
+}
+
+.audience-card-kpis {
+  margin: -0.25rem calc(var(--card-pad-x, 1.25rem) * -1) 1.25rem;
+}
+
+
+.audience-mrr-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+@media (max-width: 900px) {
+  .audience-mrr-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.audience-subchart-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  flex-wrap: wrap;
+}
+
+.audience-subchart-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.audience-subchart-head .audience-subchart-title {
+  margin: 0;
+}
+
+.audience-subchart-head + .audience-chart {
+  margin-top: 0.5rem;
+}
+
+.audience-sessions-table {
+  min-width: 640px;
+}
+
+.audience-cell-muted {
+  color: var(--text-muted);
+}
+
+.audience-sessions-table td.mono {
+  font-size: 0.8125rem;
+}
+
+.audience-cell-strong {
+  font-weight: 500;
+}
+
+/* ── Annotations timeline ─────────────────────────────────────────────────── */
+
+.audience-month > .card-header {
+  padding-block: 0.875rem;
+}
+
+.audience-month-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.audience-timeline {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.audience-annotation {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-right: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.audience-timeline > .audience-annotation:first-child,
+.panel-flush > .audience-annotation:nth-child(2) {
+  border-top: 0;
+}
+
+.audience-annotation-main {
+  display: grid;
+  grid-template-columns: 6.5rem 6.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.75rem 0 0.75rem var(--card-pad-x, 1.25rem);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.audience-annotation.is-editable:hover {
+  background: var(--row-hover);
+}
+
+.audience-annotation.is-editable .audience-annotation-main {
+  cursor: pointer;
+}
+
+.audience-annotation-main:disabled {
+  cursor: default;
+}
+
+.audience-annotation-main:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+}
+
+.audience-annotation-date {
+  display: grid;
+  gap: 0.1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.audience-annotation-day {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.audience-annotation-time {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.audience-annotation-copy {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.audience-annotation-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audience-annotation-desc {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audience-annotation-delete {
+  flex: 0 0 auto;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.audience-annotation:hover .audience-annotation-delete,
+.audience-annotation:focus-within .audience-annotation-delete {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .audience-annotation-delete {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .audience-annotation-main {
+    grid-template-columns: 5rem minmax(0, 1fr);
+    gap: 0.35rem 0.75rem;
+    padding-left: 1rem;
+  }
+
+  .audience-annotation-category {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .audience-annotation-copy {
+    grid-column: 2;
+  }
+
+  .audience-annotation-date {
+    grid-row: 1 / span 2;
+    align-self: start;
+  }
+}
+
+.audience-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.audience-form-grid > .field {
+  margin-bottom: 0;
+}
+
+@media (max-width: 640px) {
+  .audience-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

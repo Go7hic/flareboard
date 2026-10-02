@@ -1,65 +1,85 @@
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
-import { ExternalLink, UserRound } from 'lucide-react';
-import { DataViewState } from '../components/DataViewState';
-import { EmptyState } from '../components/EmptyState';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { SearchX, UsersRound } from 'lucide-react';
+import { keepPreviousForWebsite } from '../components/audience/keepPrevious';
+import { LocationLabel, RelativeTime } from '../components/audience/ActivityLists';
 import {
-  MasterDetailLayout,
-  MasterDetailListItem,
-  MasterDetailPane,
-  ResourceSearchField,
-  useMasterDetailSelection,
-} from '../components/master-detail';
+  SortHeader,
+  TableSkeletonRows,
+  type SortState,
+} from '../components/audience/DataTableParts';
+import { IdentityAvatar } from '../components/audience/IdentityAvatar';
+import { PersonSheet } from '../components/audience/PersonSheet';
+import { isIdentified, personIdentity } from '../components/audience/person-identity';
+import { Segmented } from '../components/audience/Segmented';
+import { DataViewState } from '../components/DataViewState';
+import { DateRangePicker } from '../components/DateRangePicker';
+import { EmptyState } from '../components/EmptyState';
+import { ResourceSearchField } from '../components/master-detail';
 import { Page, PageBody } from '../components/Page';
 import { PageHeader } from '../components/PageHeader';
+import { SectionCard } from '../components/SectionCard';
 import { Button } from '../components/ui/button';
-import { StatCard } from '../components/ui/stat-card';
-import { api, type PeopleResponse, type PersonDetailResponse, type PersonSummary } from '../lib/api';
-import { formatDateOnly, formatDateTime, formatNumber, identityPrimary } from '../lib/format';
+import { api, type PeopleResponse, type PersonSummary } from '../lib/api';
+import { formatNumber } from '../lib/format';
 import { t } from '../lib/i18n';
-import { eventDisplayName } from '../lib/autocapture';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 import { useWebsiteRange } from '../lib/useWebsiteRange';
+import { cn } from '../lib/utils';
 
-function personLabel(person: PersonSummary | null | undefined) {
-  if (!person) return '-';
-  return identityPrimary(
-    [person.latestName, person.latestEmail, person.latestAlias],
-    person.personId,
+/** The people endpoint returns the most recently active people, up to this many. */
+const PEOPLE_LIMIT = 100;
+
+type IdentityFilter = 'all' | 'identified' | 'anonymous';
+type PeopleSortKey = 'sessions' | 'pageviews' | 'events' | 'lastSeen';
+
+const SORT_VALUE: Record<PeopleSortKey, (person: PersonSummary) => number> = {
+  sessions: (person) => person.sessions,
+  pageviews: (person) => person.pageviews,
+  events: (person) => person.events,
+  lastSeen: (person) => person.lastSeenAt ?? 0,
+};
+
+function PersonCell({ person }: { person: PersonSummary }) {
+  const identity = personIdentity(person);
+  return (
+    <span className="audience-identity">
+      <IdentityAvatar label={identity.avatarLabel} anonymous={!identity.avatarLabel} />
+      <span className="audience-identity-copy">
+        <span className={cn('audience-identity-title', !identity.identified && 'is-anonymous')}>
+          {identity.title}
+        </span>
+        {identity.subtitle ? (
+          <span
+            className={cn('audience-identity-sub', identity.subtitleIsId && 'mono')}
+            title={person.personId}
+          >
+            {identity.subtitle}
+          </span>
+        ) : null}
+      </span>
+    </span>
   );
-}
-
-function personDetailMeta(person: PersonSummary) {
-  const lastSeen = person.lastSeenAt
-    ? `${t('peopleLastSeen')} ${formatDateTime(person.lastSeenAt)}`
-    : null;
-  return [person.personId, lastSeen].filter(Boolean).join(' · ');
-}
-
-function propertiesToJson(properties: Array<{ key: string; value: string | null }>) {
-  const record: Record<string, string> = {};
-  for (const row of properties) {
-    if (row.value != null) record[row.key] = row.value;
-  }
-  return JSON.stringify(record, null, 2);
 }
 
 export default function WebsitePeoplePage() {
   const { websiteId } = useParams<{ websiteId: string }>();
-  const { rangeQs } = useWebsiteRange(websiteId, '30d');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { range, setRange, rangeQs, timezone } = useWebsiteRange(websiteId, '30d');
   const { canEdit } = useWebsitePermissions(websiteId, 'analytics');
-  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
-  const [editingProperties, setEditingProperties] = useState(false);
-  const [propertiesDraft, setPropertiesDraft] = useState('');
-  const [propertiesError, setPropertiesError] = useState('');
+  const [identityFilter, setIdentityFilter] = useState<IdentityFilter>('all');
+  const [sort, setSort] = useState<SortState<PeopleSortKey>>({ key: 'lastSeen', direction: 'desc' });
   const debouncedSearch = useDebouncedValue(search, 300);
+  const openPersonId = searchParams.get('person');
 
   const peopleQuery = useQuery({
     queryKey: ['people', websiteId, rangeQs, debouncedSearch],
     enabled: Boolean(websiteId),
+    // Typing a search or changing the range keeps the current rows until the new ones arrive.
+    placeholderData: keepPreviousForWebsite(websiteId),
     queryFn: () => {
       const params = new URLSearchParams(rangeQs);
       if (debouncedSearch.trim()) params.set('q', debouncedSearch.trim());
@@ -68,274 +88,173 @@ export default function WebsitePeoplePage() {
   });
 
   const people = peopleQuery.data?.people ?? [];
-  const { setSelectedId: setSelectedPersonId, selectedItem: selectedPerson } =
-    useMasterDetailSelection(people, (person) => person.personId, { defaultToFirst: true });
+  const rows = useMemo(() => {
+    const filtered =
+      identityFilter === 'all'
+        ? people
+        : people.filter((person) => isIdentified(person) === (identityFilter === 'identified'));
+    const value = SORT_VALUE[sort.key];
+    const sign = sort.direction === 'asc' ? 1 : -1;
+    return [...filtered].sort((a, b) => sign * (value(a) - value(b)));
+  }, [people, identityFilter, sort]);
 
-  const detailQuery = useQuery({
-    queryKey: ['person-detail', websiteId, selectedPerson?.personId],
-    enabled: Boolean(websiteId && selectedPerson?.personId),
-    queryFn: () =>
-      api<PersonDetailResponse>(
-        `/api/websites/${websiteId}/people/${encodeURIComponent(selectedPerson!.personId)}`,
-      ),
-  });
+  const filtersActive = Boolean(debouncedSearch.trim()) || identityFilter !== 'all';
+  const initialLoading = peopleQuery.isLoading && !peopleQuery.data;
+  const refreshing = peopleQuery.isFetching && peopleQuery.isPlaceholderData;
+  const openSummary = openPersonId ? people.find((person) => person.personId === openPersonId) : undefined;
 
-  const savePropertiesMutation = useMutation({
-    mutationFn: ({ personId, properties }: { personId: string; properties: Record<string, unknown> }) =>
-      api<PersonDetailResponse>(
-        `/api/websites/${websiteId}/people/${encodeURIComponent(personId)}`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify({ properties }),
-        },
-      ),
-    onSuccess: (data, variables) => {
-      // Use the personId from the mutation, not the current selection — the
-      // selected person may have changed by the time the request completes.
-      const personId = data?.personId ?? variables.personId;
-      queryClient.setQueryData(['person-detail', websiteId, personId], data);
-      setEditingProperties(false);
-      setPropertiesError('');
-    },
-  });
-
-  function startEditingProperties() {
-    const rows = detailQuery.data?.properties ?? [];
-    setPropertiesDraft(propertiesToJson(rows));
-    setPropertiesError('');
-    setEditingProperties(true);
+  function openPerson(personId: string) {
+    const next = new URLSearchParams(searchParams);
+    next.set('person', personId);
+    setSearchParams(next, { replace: true });
   }
 
-  function cancelEditingProperties() {
-    setEditingProperties(false);
-    setPropertiesError('');
+  function closePerson() {
+    const next = new URLSearchParams(searchParams);
+    next.delete('person');
+    setSearchParams(next, { replace: true });
   }
 
-  function saveProperties() {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(propertiesDraft);
-    } catch {
-      setPropertiesError(t('peoplePropertiesInvalid'));
-      return;
-    }
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      setPropertiesError(t('peoplePropertiesInvalid'));
-      return;
-    }
-    if (!selectedPerson?.personId) return;
-    savePropertiesMutation.mutate({
-      personId: selectedPerson.personId,
-      properties: parsed as Record<string, unknown>,
-    });
+  function clearFilters() {
+    setSearch('');
+    setIdentityFilter('all');
   }
+
+  const sortHeader = (key: PeopleSortKey, label: string, className?: string) => (
+    <SortHeader label={label} sortKey={key} sort={sort} onSort={setSort} numeric className={className} />
+  );
 
   return (
     <Page className="page-people">
-      <PageHeader title={t('people')} lead={t('peopleLead')} />
+      <PageHeader
+        title={t('people')}
+        lead={t('peopleLead')}
+        actions={<DateRangePicker value={range} onChange={setRange} popover timezone={timezone} />}
+        toolbar={
+          <>
+            <ResourceSearchField
+              value={search}
+              onChange={setSearch}
+              placeholder={t('peopleSearchPlaceholder')}
+              aria-label={t('peopleSearchPlaceholder')}
+              className="audience-search"
+            />
+            <Segmented
+              aria-label={t('audienceIdentityFilter')}
+              value={identityFilter}
+              onChange={setIdentityFilter}
+              options={[
+                { id: 'all', label: t('all') },
+                { id: 'identified', label: t('audienceFilterIdentified') },
+                { id: 'anonymous', label: t('audienceFilterAnonymous') },
+              ]}
+            />
+            <span className="toolbar-spacer" />
+            {!initialLoading && !peopleQuery.isError ? (
+              <span className="toolbar-meta" aria-live="polite">
+                {t('audiencePeopleCount').replace('{count}', formatNumber(rows.length))}
+              </span>
+            ) : null}
+          </>
+        }
+      />
 
       <PageBody>
-
-      <section className="panel section-gap">
-        <ResourceSearchField
-          value={search}
-          onChange={setSearch}
-          placeholder={t('peopleSearchPlaceholder')}
-          aria-label={t('peopleSearchPlaceholder')}
-          className="people-search"
-        />
-      </section>
-
-      <section className="section-gap">
         <DataViewState
-          loading={peopleQuery.isLoading && !peopleQuery.data}
-          error={peopleQuery.isError ? peopleQuery.error : null}
+          error={peopleQuery.isError && !peopleQuery.data ? peopleQuery.error : null}
           onRetry={() => peopleQuery.refetch()}
-          isEmpty={!peopleQuery.isLoading && !people.length}
-          emptyTitle={t('peopleEmptyTitle')}
-          emptyDescription={t('peopleEmptyBody')}
         >
-          <MasterDetailLayout
-            list={people.map((person) => (
-              <MasterDetailListItem
-                key={person.personId}
-                selected={person.personId === selectedPerson?.personId}
-                onSelect={() => {
-                  setSelectedPersonId(person.personId);
-                  setEditingProperties(false);
-                }}
-                icon={<UserRound size={16} strokeWidth={2} aria-hidden />}
-                title={personLabel(person)}
-                subtitle={person.personId}
-                meta={
-                  <>
-                    <span className="badge">
-                      {formatNumber(person.sessions)} {t('sessions')}
-                    </span>
-                    <span className="text-muted">{formatDateOnly(person.lastSeenAt)}</span>
-                  </>
+          {!initialLoading && rows.length === 0 ? (
+            filtersActive ? (
+              <EmptyState
+                variant="rich"
+                icon={<SearchX />}
+                title={t('audienceNoMatchTitle')}
+                description={t('audienceNoMatchBody')}
+                action={
+                  <Button type="button" variant="outline" size="sm" onClick={clearFilters}>
+                    {t('reset')}
+                  </Button>
                 }
               />
-            ))}
-            detail={
-              selectedPerson ? (
-                <MasterDetailPane
-                  title={personLabel(selectedPerson)}
-                  description={personDetailMeta(selectedPerson)}
-                >
-                  <div className="experiment-summary-grid">
-                    <StatCard label={t('peopleSessions')} value={formatNumber(selectedPerson.sessions)} />
-                    <StatCard label={t('visits')} value={formatNumber(selectedPerson.visits)} />
-                    <StatCard label={t('pageviews')} value={formatNumber(selectedPerson.pageviews)} />
-                  </div>
-
-                  <div className="workflow-insights-grid">
-                    <div className="detail-section">
-                      <div className="panel-header compact-panel-header">
-                        <div>
-                          <h3 className="section-title experiment-title">{t('peopleProperties')}</h3>
-                          <p className="text-muted">{t('peoplePropertiesLead')}</p>
-                        </div>
-                        {canEdit ? (
-                          <div className="page-header-actions">
-                            {editingProperties ? (
-                              <>
-                                <Button type="button" variant="ghost" size="sm" onClick={cancelEditingProperties}>
-                                  {t('cancel')}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="primary"
-                                  size="sm"
-                                  onClick={saveProperties}
-                                  disabled={savePropertiesMutation.isPending}
-                                >
-                                  {t('peopleSaveProperties')}
-                                </Button>
-                              </>
-                            ) : (
-                              <Button type="button" variant="secondary" size="sm" onClick={startEditingProperties}>
-                                {t('peopleEditProperties')}
-                              </Button>
-                            )}
-                          </div>
-                        ) : null}
-                      </div>
-                      {editingProperties ? (
-                        <div className="field">
-                          <label className="field-label" htmlFor="people-properties-json">
-                            {t('peoplePropertiesJson')}
-                          </label>
-                          <textarea
-                            id="people-properties-json"
-                            className="textarea"
-                            rows={8}
-                            value={propertiesDraft}
-                            onChange={(event) => setPropertiesDraft(event.target.value)}
-                          />
-                          {propertiesError ? <p className="text-danger">{propertiesError}</p> : null}
-                          {savePropertiesMutation.isSuccess && !propertiesError ? (
-                            <p className="text-muted">{t('peoplePropertiesSaved')}</p>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <div className="table-scroll">
-                          <table className="data-table">
-                            <tbody>
-                              {(detailQuery.data?.properties ?? []).length ? (
-                                detailQuery.data!.properties.map((property) => (
-                                  <tr key={property.key}>
-                                    <th>{property.key}</th>
-                                    <td>{property.value ?? '-'}</td>
-                                  </tr>
-                                ))
-                              ) : (
-                                <tr>
-                                  <td className="text-muted">{t('peopleNoProperties')}</td>
-                                </tr>
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="detail-section">
-                      <div className="panel-header compact-panel-header">
-                        <div>
-                          <h3 className="section-title experiment-title">{t('peopleSessions')}</h3>
-                          <p className="text-muted">{t('peopleSessionsLead')}</p>
-                        </div>
-                      </div>
-                      <div className="workflow-event-list">
-                        {(detailQuery.data?.sessions ?? []).slice(0, 8).map((session) => (
-                          <div key={session.id} className="workflow-event-row">
-                            <div>
-                              <Link to={`/websites/${websiteId}/sessions/${session.id}`} className="inline-link">
-                                {session.id.slice(0, 10)}
-                                <ExternalLink size={12} strokeWidth={2} aria-hidden />
-                              </Link>
-                              <p className="text-muted">
-                                {[session.browser, session.os, session.country].filter(Boolean).join(' · ') || '-'}
-                              </p>
-                            </div>
-                            <span className="badge">{formatNumber(session.events)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="detail-section">
-                    <div className="panel-header compact-panel-header">
-                      <div>
-                        <h3 className="section-title experiment-title">{t('peopleRecentEvents')}</h3>
-                        <p className="text-muted">{t('peopleRecentEventsLead')}</p>
-                      </div>
-                    </div>
-                    <div className="table-scroll">
-                      <table className="data-table">
-                        <thead>
-                          <tr>
-                            <th>{t('event')}</th>
-                            <th>{t('page')}</th>
-                            <th>{t('session')}</th>
-                            <th>{t('created')}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(detailQuery.data?.events ?? []).length ? (
-                            detailQuery.data!.events.slice(0, 25).map((event) => (
-                              <tr key={event.id}>
-                                <td>{event.eventName ? eventDisplayName(event.eventName) : event.eventType === 1 ? t('pageview') : '-'}</td>
-                                <td className="text-muted">{event.urlPath ?? '-'}</td>
-                                <td>
-                                  <Link to={`/websites/${websiteId}/sessions/${event.sessionId}`} className="inline-link">
-                                    {event.sessionId.slice(0, 8)}
-                                    <ExternalLink size={12} strokeWidth={2} aria-hidden />
-                                  </Link>
-                                </td>
-                                <td className="text-muted">{formatDateTime(event.createdAt)}</td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td colSpan={4} className="text-muted">
-                                {detailQuery.isLoading ? t('loading') : t('peopleNoEvents')}
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </MasterDetailPane>
-              ) : null
-            }
-          />
+            ) : (
+              <EmptyState
+                variant="rich"
+                icon={<UsersRound />}
+                title={t('peopleEmptyTitle')}
+                description={t('peopleEmptyBody')}
+              />
+            )
+          ) : (
+            <SectionCard
+              flush
+              footer={
+                people.length >= PEOPLE_LIMIT ? (
+                  <span>{t('audiencePeopleLimitHint').replace('{count}', formatNumber(PEOPLE_LIMIT))}</span>
+                ) : undefined
+              }
+            >
+              <div className={cn('table-scroll', refreshing && 'audience-refreshing')} aria-busy={refreshing || undefined}>
+                <table className="data-table data-table--interactive audience-table">
+                  <thead>
+                    <tr>
+                      <th className="audience-col-identity">{t('audiencePerson')}</th>
+                      <th className="audience-col-location audience-hide-sm">{t('location')}</th>
+                      {sortHeader('sessions', t('sessions'))}
+                      {sortHeader('pageviews', t('pageviews'), 'audience-hide-sm')}
+                      {sortHeader('events', t('events'), 'audience-hide-sm')}
+                      {sortHeader('lastSeen', t('lastSeen'))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {initialLoading ? (
+                      <TableSkeletonRows columns={6} hideOnPhone={[1, 3, 4]} />
+                    ) : (
+                      rows.map((person) => (
+                        <tr
+                          key={person.personId}
+                          className={person.personId === openPersonId ? 'active-row' : undefined}
+                          onClick={() => openPerson(person.personId)}
+                        >
+                          <td>
+                            <button
+                              type="button"
+                              className="audience-row-button"
+                              aria-label={personIdentity(person).title}
+                              aria-haspopup="dialog"
+                            >
+                              <PersonCell person={person} />
+                            </button>
+                          </td>
+                          <td className="audience-col-location audience-hide-sm">
+                            <LocationLabel country={person.country} city={person.city} />
+                          </td>
+                          <td className="num">{formatNumber(person.sessions)}</td>
+                          <td className="num audience-hide-sm">{formatNumber(person.pageviews)}</td>
+                          <td className="num audience-hide-sm">{formatNumber(person.events)}</td>
+                          <td className="num text-muted">
+                            <RelativeTime value={person.lastSeenAt} />
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </SectionCard>
+          )}
         </DataViewState>
-      </section>
       </PageBody>
+
+      {websiteId ? (
+        <PersonSheet
+          websiteId={websiteId}
+          personId={openPersonId}
+          summary={openSummary}
+          canEdit={canEdit}
+          onClose={closePerson}
+        />
+      ) : null}
     </Page>
   );
 }

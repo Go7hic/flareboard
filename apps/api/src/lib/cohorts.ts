@@ -126,12 +126,14 @@ export async function getCohortSizeOverTime(
       ? `date(e.created_at / 1000, 'unixepoch', 'weekday 0')`
       : `date(e.created_at / 1000, 'unixepoch')`;
 
+  // Anonymous placeholders only: the member subquery's `?`s come first in the text, so numbered
+  // ones (?1…) would point back at the cohort's own parameters.
   const rows = await siteDb(env, cohort.websiteId).prepare(
     `SELECT ${dateExpr} as bucket, COUNT(DISTINCT e.session_id) as users
      FROM website_event e
      INNER JOIN (${memberQuery.intersectSql}) m ON m.session_id = e.session_id
-     WHERE e.website_id = ?1
-       AND e.created_at >= ?2 AND e.created_at <= ?3
+     WHERE e.website_id = ?
+       AND e.created_at >= ? AND e.created_at <= ?
      GROUP BY bucket
      ORDER BY bucket`,
   )

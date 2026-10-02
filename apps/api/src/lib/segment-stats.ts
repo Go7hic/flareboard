@@ -6,6 +6,7 @@ import type { CohortMemberJoin } from './cohorts';
 import type { PageMetricRow, TrafficHeatmapData } from './queries';
 import { queryPeriodStats } from './period-stats';
 import { buildSegmentSql, type SegmentParams } from './segment-filters';
+import { siteDb } from './site-db';
 
 export function cohortJoinSql(cohortJoin?: CohortMemberJoin | null) {
   if (!cohortJoin) {
@@ -74,7 +75,7 @@ async function countFiltered(
       : mode === 'visits'
         ? 'COUNT(DISTINCT e.visit_id)'
         : 'COUNT(*)';
-  const row = await env.DB.prepare(`SELECT ${col} as count FROM website_event e${joins} WHERE ${where}`)
+  const row = await siteDb(env, websiteId).prepare(`SELECT ${col} as count FROM website_event e${joins} WHERE ${where}`)
     .bind(...binds)
     .first<{ count: number }>();
   return row?.count ?? 0;
@@ -101,7 +102,7 @@ async function sumTotalTimeFiltered(
   ];
   const binds: (string | number)[] = [...cohort.binds, websiteId, startAt, endAt, ...seg.binds];
 
-  const row = await env.DB.prepare(
+  const row = await siteDb(env, websiteId).prepare(
     `SELECT COALESCE(SUM(duration_ms), 0) as total FROM (
       SELECT (MAX(e.created_at) - MIN(e.created_at)) as duration_ms
       FROM website_event e${joins}
@@ -130,11 +131,11 @@ async function countBouncesFiltered(
   const extraSql = extra.length ? ` AND ${extra.join(' AND ')}` : '';
   const binds = [...cohort.binds, websiteId, EVENT_TYPE.pageView, startAt, endAt, ...seg.binds];
 
-  const row = await env.DB.prepare(
+  const row = await siteDb(env, websiteId).prepare(
     `SELECT COUNT(*) as count FROM (
       SELECT e.session_id FROM website_event e${sessionJoin}
-      WHERE e.website_id = ?1 AND e.event_type = ?2
-        AND e.created_at >= ?3 AND e.created_at <= ?4${extraSql}
+      WHERE e.website_id = ? AND e.event_type = ?
+        AND e.created_at >= ? AND e.created_at <= ?${extraSql}
       GROUP BY e.session_id HAVING COUNT(*) = 1
     )`,
   )
@@ -247,7 +248,7 @@ export async function getPageviewsFiltered(
     ...seg.binds,
   ];
 
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT strftime('${format}', datetime(${siteLocalMsSql('e.created_at', startAt, endAt, seriesTimezone(unit, timezone))} / 1000, 'unixepoch')) as x,
             COUNT(*) as y
      FROM website_event e${joins}
@@ -298,7 +299,7 @@ export async function getWebsiteMetricsSeriesFiltered(
     EVENT_TYPE.pageView,
   ];
 
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT strftime('${format}', datetime(${siteLocalMsSql('e.created_at', startAt, endAt, seriesTimezone(unit, timezone))} / 1000, 'unixepoch')) as x,
             SUM(CASE WHEN e.event_type = ? THEN 1 ELSE 0 END) as pageviews,
             COUNT(DISTINCT e.session_id) as visitors
@@ -350,7 +351,7 @@ export async function getMetricsFiltered(
 
   if (type === 'entry' || type === 'exit') {
     const order = type === 'entry' ? 'ASC' : 'DESC';
-    const rows = await env.DB.prepare(
+    const rows = await siteDb(env, websiteId).prepare(
       `WITH ranked AS (
          SELECT e.url_path,
            ROW_NUMBER() OVER (PARTITION BY e.visit_id ORDER BY e.created_at ${order}) as rn
@@ -371,7 +372,7 @@ export async function getMetricsFiltered(
 
   if (type === 'channel') {
     const channelExpr = channelCaseSql('e');
-    const rows = await env.DB.prepare(
+    const rows = await siteDb(env, websiteId).prepare(
       `SELECT ${channelExpr} as x, COUNT(*) as y
        FROM website_event e${joins}
        WHERE ${where}
@@ -405,7 +406,7 @@ export async function getMetricsFiltered(
                       ? 's.city'
                       : 'e.url_path';
 
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT COALESCE(${col}, 'Unknown') as x, COUNT(*) as y
      FROM website_event e${joins}
      WHERE ${where}
@@ -447,7 +448,7 @@ export async function getTrafficHeatmapFiltered(
     ...seg.binds,
   ];
 
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `SELECT CAST(strftime('%w', datetime(${local} / 1000, 'unixepoch')) AS INTEGER) as dow,
             CAST(strftime('%H', datetime(${local} / 1000, 'unixepoch')) AS INTEGER) as hour,
             COUNT(*) as count
@@ -495,7 +496,7 @@ export async function getPageMetricsFiltered(
   const orderCol =
     sortBy === 'visitors' ? 'visitors' : sortBy === 'time' ? 'avg_time_sec' : 'views';
 
-  const rows = await env.DB.prepare(
+  const rows = await siteDb(env, websiteId).prepare(
     `WITH page_events AS (
        SELECT e.url_path, e.session_id, e.visit_id, e.created_at,
          LEAD(e.created_at) OVER (PARTITION BY e.visit_id ORDER BY e.created_at) as next_at

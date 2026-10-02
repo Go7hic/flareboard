@@ -1035,7 +1035,7 @@ async function utmDimensionBreakdown(
                GROUP BY name
                ORDER BY pageviews DESC
                LIMIT 50`;
-  const rows = await env.DB.prepare(sql)
+  const rows = await siteDb(env, websiteId).prepare(sql)
     .bind(emptyLabel, ...binds)
     .all<{ name: string; pageviews: number }>();
   return rows.results ?? [];

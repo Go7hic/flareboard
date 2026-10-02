@@ -71,7 +71,12 @@ export class EventStore extends DurableObject<Env> {
    * costs microseconds per table, so it runs on every wake and in the daily alarm.
    */
   private optimize() {
-    this.sql.exec('PRAGMA optimize=0x10002');
+    try {
+      this.sql.exec('PRAGMA optimize=0x10002');
+    } catch (error) {
+      // Statistics are an optimization: never let them keep the store from starting.
+      console.warn('EventStore: PRAGMA optimize failed', error);
+    }
   }
 
   /**

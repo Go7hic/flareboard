@@ -10,6 +10,7 @@ import { AppTopBar } from './AppTopBar';
 import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { DemoSessionBanner } from './DemoSessionBanner';
 import { Button } from './ui/button';
+import '../styles/console-pages';
 
 const SECURITY_PATH = '/account/security';
 

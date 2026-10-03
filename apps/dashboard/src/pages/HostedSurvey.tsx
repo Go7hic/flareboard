@@ -7,6 +7,7 @@ import { SurveyRenderer } from '../components/surveys/SurveyRenderer';
 import { INGEST_URL } from '../lib/api';
 import { t } from '../lib/i18n';
 import { useResolvedTheme } from '../lib/useResolvedTheme';
+import '../styles/console-pages';
 
 type HostedSurveyDefinition = {
   id: string;

@@ -12,6 +12,7 @@ import { API_URL } from '../lib/api';
 import { formatDateTime, formatDurationMs, formatShortDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
 import { linkAtTime, parseStartParam } from '../lib/replay-timeline';
+import '../styles/console-pages';
 
 type SharedReplayData = {
   website: { name: string; domain?: string | null };

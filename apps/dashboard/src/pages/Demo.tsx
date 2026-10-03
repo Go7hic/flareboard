@@ -21,9 +21,11 @@ import {
   type MetricsSeries,
 } from '../lib/chartTimeseries';
 import { presetToRange, rangeQueryString, type DateRangePreset } from '../lib/dateRange';
+import { preloadConsole } from '../lib/consoleChunks';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
 import { fetchMe } from '../lib/useDemoSession';
+import '../styles/console-pages';
 
 type DemoWebsite = {
   name: string;
@@ -253,6 +255,8 @@ export default function DemoPage() {
     // Once per visit (StrictMode runs effects twice in development).
     if (started.current) return;
     started.current = true;
+    // The demo opens in the console: fetch it alongside the session requests.
+    preloadConsole();
     void (async () => {
       if (await bootstrapSession()) {
         const me = await fetchMe().catch(() => null);

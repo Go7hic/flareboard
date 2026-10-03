@@ -24,6 +24,7 @@ import { type DateRangePreset, presetToRange, rangeQueryString } from '../lib/da
 import { formatMetricLabel } from '../lib/metric-labels';
 import { t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
+import '../styles/console-pages';
 
 type PublicWebsiteShare = WebsiteStats & {
   website: { id: string; name: string; domain?: string; timezone?: string };

@@ -1,25 +1,10 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from './ui/dialog';
-import { Button } from './ui/button';
+import { createContext, lazy, Suspense, useCallback, useContext, useState, type ReactNode } from 'react';
 import { t } from '../lib/i18n';
 
-/** Shared confirmation for destructive actions (replaces window.confirm and one-click deletes). */
-export function ConfirmDialog({
-  open,
-  onOpenChange,
-  title,
-  description,
-  confirmLabel = t('delete'),
-  onConfirm,
-  pending = false,
-}: {
+// Base UI's dialog is a chunk of its own: most pages (the marketing pages included) never confirm.
+const ConfirmDialogView = lazy(() => import('./ConfirmDialogView'));
+
+export type ConfirmDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
@@ -27,24 +12,18 @@ export function ConfirmDialog({
   confirmLabel?: string;
   onConfirm: () => void;
   pending?: boolean;
-}) {
+};
+
+/** Shared confirmation for destructive actions (replaces window.confirm and one-click deletes). */
+export function ConfirmDialog(props: ConfirmDialogProps) {
+  // Mounted from the first open on, so later opens and the exit animation need no reload.
+  const [used, setUsed] = useState(props.open);
+  if (props.open && !used) setUsed(true);
+  if (!used) return null;
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent showCloseButton={false}>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          {description ? <DialogDescription>{description}</DialogDescription> : null}
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {t('cancel')}
-          </Button>
-          <Button variant="danger" disabled={pending} onClick={onConfirm}>
-            {confirmLabel}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Suspense fallback={null}>
+      <ConfirmDialogView {...props} />
+    </Suspense>
   );
 }
 

@@ -6,16 +6,11 @@ import App from './App';
 import { ConfirmProvider } from './components/ConfirmDialog';
 import { RouteErrorBoundary } from './components/RouteErrorBoundary';
 import { ApiError } from './lib/api';
+import { localeReady } from './lib/i18n';
 import { initTheme } from './lib/theme';
 import { initFlareboardTracking } from './lib/tracking';
 import './styles/global.css';
 import './styles/console.css';
-import './styles/pages/traffic.css';
-import './styles/pages/behavior.css';
-import './styles/pages/audience.css';
-import './styles/pages/product.css';
-import './styles/pages/quality.css';
-import './styles/pages/workspace.css';
 
 initTheme();
 initFlareboardTracking();
@@ -35,17 +30,20 @@ const queryClient = new QueryClient({
   },
 });
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <ConfirmProvider>
-          {/* Last resort for eager routes; lazy routes have their own boundary in App. */}
-          <RouteErrorBoundary>
-            <App />
-          </RouteErrorBoundary>
-        </ConfirmProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
-  </StrictMode>,
-);
+// English is built in; other languages are a chunk that must arrive before the first screen.
+void localeReady.then(() => {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <ConfirmProvider>
+            {/* Last resort for eager routes; lazy routes have their own boundary in App. */}
+            <RouteErrorBoundary>
+              <App />
+            </RouteErrorBoundary>
+          </ConfirmProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </StrictMode>,
+  );
+});

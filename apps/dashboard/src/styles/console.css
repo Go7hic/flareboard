@@ -268,11 +268,6 @@ button.kpi-cell:focus-visible {
   text-overflow: ellipsis;
 }
 
-.kpi-spark {
-  margin-top: 0.15rem;
-  height: 28px;
-}
-
 /* Wrap to even rows: 4 → 2 × 2, 5/6 → 3 per row, then 2 per row on phones. */
 @media (max-width: 1100px) {
   .kpi-strip[data-cols='4'] {

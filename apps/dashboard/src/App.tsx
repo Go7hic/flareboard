@@ -1,7 +1,5 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { AppShell } from './components/AppShell';
-import { WebsiteShell } from './components/WebsiteShell';
 import { LazyRouteFallback } from './components/LazyRouteFallback';
 import { RouteErrorBoundary } from './components/RouteErrorBoundary';
 import Features from './pages/Features';
@@ -10,6 +8,14 @@ import Landing from './pages/Landing';
 import Pricing from './pages/Pricing';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import { loadAppShell, loadWebsiteShell, preloadConsole } from './lib/consoleChunks';
+
+const AppShell = lazy(() => {
+  // A deep link into a website needs both shells: fetch them side by side.
+  preloadConsole();
+  return loadAppShell().then((module) => ({ default: module.AppShell }));
+});
+const WebsiteShell = lazy(() => loadWebsiteShell().then((module) => ({ default: module.WebsiteShell })));
 
 const SharePublic = lazy(() => import('./pages/SharePublic'));
 const SharedReplay = lazy(() => import('./pages/SharedReplay'));
@@ -138,7 +144,13 @@ export default function App() {
             </LazyPage>
           }
         />
-        <Route element={<AppShell />}>
+        <Route
+          element={
+            <Suspense fallback={<LazyRouteFallback />}>
+              <AppShell />
+            </Suspense>
+          }
+        >
           <Route
             path="/dashboard"
             element={

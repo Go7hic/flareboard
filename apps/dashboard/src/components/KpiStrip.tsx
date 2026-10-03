@@ -1,6 +1,4 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { Area, AreaChart, ResponsiveContainer } from 'recharts';
-import { useChartColors } from '../lib/useChartColors';
 import { cn } from '../lib/utils';
 import { Skeleton } from './ui/skeleton';
 
@@ -39,16 +37,12 @@ export function KpiStrip({
   );
 }
 
-export type KpiSparkPoint = { value: number };
-
 export function KpiCell({
   label,
   value,
   unit,
   delta,
   hint,
-  spark,
-  sparkColor,
   keyColor,
   keyShape = 'line',
   selected,
@@ -62,10 +56,6 @@ export function KpiCell({
   /** Usually <StatChangeDelta />. */
   delta?: ReactNode;
   hint?: ReactNode;
-  /** Optional sparkline points (current period); drawn in the cell's series color. */
-  spark?: KpiSparkPoint[];
-  /** Resolved color (SVG attributes cannot read CSS variables); defaults to series slot 1. */
-  sparkColor?: string;
   /** Series color key beside the label when the cell drives a chart series. */
   keyColor?: string;
   /** Match the chart's legend: a line key for lines, a square for bars. */
@@ -75,8 +65,6 @@ export function KpiCell({
   /** Full value for the tooltip when `value` is compacted. */
   title?: string;
 }) {
-  const chartColors = useChartColors();
-  const stroke = sparkColor ?? chartColors.accent;
   const body = (
     <>
       <span className="kpi-label">
@@ -97,24 +85,6 @@ export function KpiCell({
         {delta}
       </span>
       {hint ? <span className="kpi-hint">{hint}</span> : null}
-      {spark && spark.length > 1 ? (
-        <span className="kpi-spark" aria-hidden>
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={spark} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-              <Area
-                type="monotone"
-                dataKey="value"
-                stroke={stroke}
-                strokeWidth={1.5}
-                fill={stroke}
-                fillOpacity={0.1}
-                isAnimationActive={false}
-                dot={false}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </span>
-      ) : null}
     </>
   );
 

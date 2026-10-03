@@ -78,7 +78,7 @@ Content      cards on a 12-column grid (.layout-grid, .span-4/.span-6/.span-8/.s
 |-------|-------------------|-------|
 | Page frame | `Page`, `PageBody`, `PageHeader` | `PageHeader actions` for create buttons; `toolbar` for filters |
 | Card | `Panel` / `.panel`, `PanelHeader title description actions` | header 16px 20px, body 20px, `variant="flush"` for tables/lists |
-| KPI strip | `KpiStrip` + `KpiCell` | label, value, delta, optional sparkline; `selected` + `onSelect` to switch a chart |
+| KPI strip | `KpiStrip` + `KpiCell` | label, value, delta, hint; `selected` + `onSelect` to switch a chart |
 | Single stat | `StatCard` | only when a strip is wrong (e.g. one figure in a side column) |
 | Chart | `AnalyticsChart` + `ChartLegend` | rules in §6 |
 | Ranked list | `BreakdownList` (`.breakdown-*`) | label + share bar behind + right-aligned values; "View all" opens a sheet |

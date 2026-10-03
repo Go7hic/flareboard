@@ -7,7 +7,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { niceSignedTicks, plottedRange } from '../lib/chartTicks';
+import { plottedRange } from '../lib/chartRange';
+import { niceSignedTicks } from '../lib/chartTicks';
 import { formatNumber } from '../lib/format';
 import { useChartColors } from '../lib/useChartColors';
 import { ChartTooltipContent } from './ChartTooltipContent';

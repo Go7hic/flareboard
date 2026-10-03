@@ -6,6 +6,7 @@ import { TwoFactorCodeField } from '../components/TwoFactorCodeField';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { preloadConsole } from '../lib/consoleChunks';
 import {
   api,
   ApiError,
@@ -57,6 +58,9 @@ export default function Login() {
   const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+
+  // Signing in leads into the console: fetch it while the form is filled in.
+  useEffect(preloadConsole, []);
 
   /** Finish a first-step response: either signed in, or on to the two-factor step. */
   function completeSignIn(res: LoginResult, next: string, { replace = false } = {}) {

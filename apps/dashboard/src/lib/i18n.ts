@@ -2916,7 +2916,8 @@ const enUS: Record<string, string> = {
   productFlagOff: 'Off',
   productFlagRollout: '{percent}% rollout',
   productRollout: 'Rollout',
-  productFlagListSummary: '{count} flags · {on} on',
+  productFlagListSummary_one: '{count} flag · {on} on',
+  productFlagListSummary_other: '{count} flags · {on} on',
   productSelectFlag: 'Select a flag to see its rollout and exposures.',
   productExposuresCount: '{count} exposures',
   productLastCall: 'Last call',
@@ -2979,7 +2980,8 @@ const enUS: Record<string, string> = {
   productTestStatus_failed: 'Failed',
   productTestStatus_not_reached: 'Not reached',
   productExpSearch: 'Search experiments',
-  productExpListSummary: '{count} experiments · {running} running',
+  productExpListSummary_one: '{count} experiment · {running} running',
+  productExpListSummary_other: '{count} experiments · {running} running',
   productSelectExperiment: 'Select an experiment to see its results.',
   productExpNotStarted: 'Not started',
   productExpCreateLead: 'Pick the flag that splits users into variants and the metric that decides the winner. New experiments start as drafts.',
@@ -3012,7 +3014,8 @@ const enUS: Record<string, string> = {
   productExpRecentLead: 'The latest users who saw the experiment.',
   productExposed: 'Exposed',
   productSurveySearch: 'Search surveys',
-  productSurveyListSummary: '{count} surveys · {active} active',
+  productSurveyListSummary_one: '{count} survey · {active} active',
+  productSurveyListSummary_other: '{count} surveys · {active} active',
   productResponsesCount: '{count} responses',
   productSelectSurvey: 'Select a survey to see its responses.',
   productSurveyOpenHosted: 'Open survey page',
@@ -3047,7 +3050,8 @@ const enUS: Record<string, string> = {
   productSurveyAlways: 'Always on',
   productSurveyHostedOff: 'Off',
   productWorkflowSearch: 'Search workflows',
-  productWorkflowListSummary: '{count} workflows · {on} on',
+  productWorkflowListSummary_one: '{count} workflow · {on} on',
+  productWorkflowListSummary_other: '{count} workflows · {on} on',
   productRunsCount: '{count} runs',
   productSelectWorkflow: 'Select a workflow to see its steps and runs.',
   productWorkflowCreateLead: 'Choose the event that starts it, then add steps. Without steps, runs are only recorded.',
@@ -6284,7 +6288,8 @@ const zhCN: Partial<Record<string, string>> = {
   productFlagOff: '关闭',
   productFlagRollout: '灰度 {percent}%',
   productRollout: '灰度比例',
-  productFlagListSummary: '{count} 个开关 · {on} 个开启',
+  productFlagListSummary_one: '{count} 个开关 · {on} 个开启',
+  productFlagListSummary_other: '{count} 个开关 · {on} 个开启',
   productSelectFlag: '选择一个开关，查看灰度与曝光。',
   productExposuresCount: '{count} 次曝光',
   productLastCall: '最近调用',
@@ -6347,7 +6352,8 @@ const zhCN: Partial<Record<string, string>> = {
   productTestStatus_failed: '失败',
   productTestStatus_not_reached: '未执行到',
   productExpSearch: '搜索实验',
-  productExpListSummary: '{count} 个实验 · {running} 个运行中',
+  productExpListSummary_one: '{count} 个实验 · {running} 个运行中',
+  productExpListSummary_other: '{count} 个实验 · {running} 个运行中',
   productSelectExperiment: '选择一个实验，查看结果。',
   productExpNotStarted: '未开始',
   productExpCreateLead: '选择用于分流的功能开关，以及决定胜出方的指标。新实验以草稿状态创建。',
@@ -6380,7 +6386,8 @@ const zhCN: Partial<Record<string, string>> = {
   productExpRecentLead: '最近进入实验的用户。',
   productExposed: '曝光时间',
   productSurveySearch: '搜索问卷',
-  productSurveyListSummary: '{count} 个问卷 · {active} 个进行中',
+  productSurveyListSummary_one: '{count} 个问卷 · {active} 个进行中',
+  productSurveyListSummary_other: '{count} 个问卷 · {active} 个进行中',
   productResponsesCount: '{count} 条回答',
   productSelectSurvey: '选择一个问卷，查看回答。',
   productSurveyOpenHosted: '打开问卷页面',
@@ -6415,7 +6422,8 @@ const zhCN: Partial<Record<string, string>> = {
   productSurveyAlways: '长期有效',
   productSurveyHostedOff: '未开启',
   productWorkflowSearch: '搜索工作流',
-  productWorkflowListSummary: '{count} 个工作流 · {on} 个已启用',
+  productWorkflowListSummary_one: '{count} 个工作流 · {on} 个已启用',
+  productWorkflowListSummary_other: '{count} 个工作流 · {on} 个已启用',
   productRunsCount: '{count} 次运行',
   productSelectWorkflow: '选择一个工作流，查看步骤与运行记录。',
   productWorkflowCreateLead: '选择触发事件，再添加步骤。没有步骤时只记录运行。',
@@ -6855,4 +6863,9 @@ export function setLocale(next: Locale) {
 
 export function t(key: string): string {
   return messages[locale][key] ?? messages['en-US'][key] ?? key;
+}
+
+/** `key_one` or `key_other` for `count` under the current locale's plural rules (CLDR). */
+export function pluralKey(key: string, count: number): string {
+  return new Intl.PluralRules(locale).select(count) === 'one' ? `${key}_one` : `${key}_other`;
 }

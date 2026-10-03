@@ -25,7 +25,7 @@ import { SurveyResults } from '../components/surveys/SurveyResults';
 import { Button } from '../components/ui/button';
 import { api, type Survey } from '../lib/api';
 import { formatNumber } from '../lib/format';
-import { t } from '../lib/i18n';
+import { pluralKey, t } from '../lib/i18n';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 
 /** "NPS · 3 questions" */
@@ -348,7 +348,7 @@ export default function WebsiteSurveysPage() {
                   search={search}
                   onSearch={setSearch}
                   placeholder={t('productSurveySearch')}
-                  summary={tf('productSurveyListSummary', {
+                  summary={tf(pluralKey('productSurveyListSummary', surveys.length), {
                     count: formatNumber(surveys.length),
                     active: formatNumber(active),
                   })}

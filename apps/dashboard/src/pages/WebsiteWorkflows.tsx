@@ -40,7 +40,7 @@ import {
 import { cssVarValue } from '../lib/chart-colors';
 import { STACK_MARK } from '../lib/chartMarks';
 import { formatNumber, formatShortDate, formatShortDateTime } from '../lib/format';
-import { t } from '../lib/i18n';
+import { pluralKey, t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
@@ -924,7 +924,7 @@ export default function WebsiteWorkflowsPage() {
                   search={search}
                   onSearch={setSearch}
                   placeholder={t('productWorkflowSearch')}
-                  summary={tf('productWorkflowListSummary', {
+                  summary={tf(pluralKey('productWorkflowListSummary', workflows.length), {
                     count: formatNumber(workflows.length),
                     on: formatNumber(enabledCount),
                   })}

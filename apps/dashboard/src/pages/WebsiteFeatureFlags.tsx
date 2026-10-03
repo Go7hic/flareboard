@@ -33,7 +33,7 @@ import { Button } from '../components/ui/button';
 import { api, type FeatureFlag } from '../lib/api';
 import { areaMark } from '../lib/chartMarks';
 import { formatNumber, formatShortDate } from '../lib/format';
-import { t } from '../lib/i18n';
+import { pluralKey, t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 
@@ -545,7 +545,7 @@ export default function WebsiteFeatureFlagsPage() {
                   search={search}
                   onSearch={setSearch}
                   placeholder={t('featureFlagSearch')}
-                  summary={t('productFlagListSummary')
+                  summary={t(pluralKey('productFlagListSummary', flags.length))
                     .replace('{count}', formatNumber(flags.length))
                     .replace('{on}', formatNumber(enabledCount))}
                 />

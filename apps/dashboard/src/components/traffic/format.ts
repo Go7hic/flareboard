@@ -1,13 +1,12 @@
 import { formatNumber, formatPercent, formatRelativeTime } from '../../lib/format';
-import { getLocale, t } from '../../lib/i18n';
+import { getLocale, pluralKey, t } from '../../lib/i18n';
 
 /**
  * A `{count}` message with plural forms: `${key}_one` / `${key}_other` (CLDR rule of the
  * current locale, so French "0 page" and English "0 pages" both come out right).
  */
 export function countLabel(key: string, count: number): string {
-  const rule = new Intl.PluralRules(getLocale()).select(count);
-  const message = t(rule === 'one' ? `${key}_one` : `${key}_other`);
+  const message = t(pluralKey(key, count));
   return message.replace('{count}', formatNumber(count));
 }
 

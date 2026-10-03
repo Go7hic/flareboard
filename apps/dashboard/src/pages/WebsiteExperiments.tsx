@@ -61,7 +61,7 @@ import {
 } from '../lib/api';
 import { BAR_MARK, lineMark } from '../lib/chartMarks';
 import { formatNumber, formatPercent, formatShortDate, formatShortDateTime } from '../lib/format';
-import { t } from '../lib/i18n';
+import { pluralKey, t } from '../lib/i18n';
 import { useChartColors } from '../lib/useChartColors';
 import { useWebsitePermissions } from '../lib/useWebsitePermissions';
 
@@ -944,7 +944,7 @@ export default function WebsiteExperimentsPage() {
                   search={search}
                   onSearch={setSearch}
                   placeholder={t('productExpSearch')}
-                  summary={tf('productExpListSummary', {
+                  summary={tf(pluralKey('productExpListSummary', experiments.length), {
                     count: formatNumber(experiments.length),
                     running: formatNumber(running),
                   })}

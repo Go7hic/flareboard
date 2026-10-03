@@ -6,7 +6,7 @@ name: Publish @flareboard/js
 #
 # Release: bump "version" in packages/sdk-js/package.json on main, then push the tag
 #   git tag sdk-js-v<version> && git push origin sdk-js-v<version>
-# Running the workflow by hand only does a dry run (tests, build, npm publish --dry-run).
+# Running the workflow by hand only does a dry run (tests, build, npm pack --dry-run).
 on:
   push:
     tags:
@@ -61,7 +61,13 @@ jobs:
           DRY_RUN: ${{ github.event_name != 'push' }}
         run: |
           if [ "$DRY_RUN" = "true" ]; then
-            npm publish --dry-run
+            # npm publish --dry-run refuses a version that is already on npm, so check the
+            # tarball instead and only report whether this version still needs a release.
+            npm pack --dry-run
+            version=$(node -p "require('./package.json').version")
+            if npm view "@flareboard/js@$version" version > /dev/null 2>&1; then
+              echo "::notice::@flareboard/js@$version is already on npm; bump the version to release."
+            fi
           else
             npm publish
           fi

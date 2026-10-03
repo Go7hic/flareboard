@@ -8,7 +8,7 @@ Flareboard focuses on privacy-friendly product analytics, first-party ownership,
 
 ## Flareboard vs Umami
 
-Umami is simple web analytics. Flareboard covers core analytics plus product analytics workflows such as feature flags, experiments, surveys, replay, heatmaps, errors, OpenTelemetry logs, LLM analytics, and warehouse queries.
+Umami is privacy-friendly web analytics; recent versions include funnels, journeys, retention, goals, UTM, revenue and attribution reports, session replays and heatmaps. Flareboard covers the same analytics and adds feature flags, experiments, surveys, error tracking, OpenTelemetry logs and traces, LLM analytics, workflows and read-only SQL over the same events. Flareboard's tracker also accepts Umami's `data-umami-event` attributes.
 
 ## Flareboard vs Plausible
 

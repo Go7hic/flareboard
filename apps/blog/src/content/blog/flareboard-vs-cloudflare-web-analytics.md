@@ -1,44 +1,46 @@
 ---
 title: Flareboard vs Cloudflare Web Analytics
-description: Cloudflare Web Analytics is a useful free overview — Flareboard is a dedicated analytics product with full counts, UTM, goals, and data you own in D1/R2.
+description: Cloudflare Web Analytics is a useful free traffic overview. Flareboard is a full analytics product on the same platform, with exact counts, UTM, custom events, funnels and more.
 pubDate: 2026-06-08
+updatedDate: 2026-10-03
 author: Flareboard
 tags:
   - cloudflare
   - comparison
 ---
 
-Cloudflare Web Analytics is privacy-friendly and free — a solid traffic overview if you're already on Cloudflare. But it's a **side feature**, not a full analytics product.
+Cloudflare Web Analytics is privacy-friendly and free, and it is a solid traffic overview if your site is already on Cloudflare. It is a side feature of Cloudflare, though, not a full analytics product.
 
-Flareboard runs on the same Cloudflare primitives (Workers, D1, KV, R2, Queues) while targeting teams that need **accurate, actionable** data.
+Flareboard runs on the same platform, on Workers, Durable Objects, D1, R2, KV and Queues, and is built for teams that need exact numbers and product analytics.
 
 ## Sampling and retention
 
-Per [Cloudflare's docs](https://developers.cloudflare.com/web-analytics/faq/), Web Analytics keeps unsampled beacons for about **7 days**, then aggregates long-term storage to roughly **10%** of volume. Dashboard queries may apply additional adaptive sampling.
+Cloudflare's [Web Analytics FAQ](https://developers.cloudflare.com/web-analytics/faq/) says it keeps unsampled data for the past 7 days, and after that aggregates it down to around 10%.
 
-Flareboard stores **every event** you send — no extrapolation — and when self-hosted, retention is whatever you configure in D1/R2.
+Flareboard keeps every event you send, with no sampling or extrapolation. On Flareboard Cloud, data is kept for 1 year on the free plan, 2 years on Cloud and 3 years on Business. When you self-host, you decide.
 
 ## Feature depth
 
-Cloudflare Web Analytics covers basics: page views, referrers, countries, devices. It does **not** yet support UTM parameters or custom events in the public docs.
+Cloudflare Web Analytics covers the basics: pageviews, referrers, countries, devices and Web Vitals. Its FAQ says custom events and UTM parameters are not supported yet.
 
-Flareboard includes:
+Flareboard adds:
 
-- **UTM and attribution** reports
-- **Goals, funnels, retention, journeys, cohorts**
-- **Realtime globe** with live visitor map
-- **Session replay and heatmaps** (Cloud plan)
+- Custom events, UTM and attribution reports
+- Goals, funnels, journeys, retention, stickiness and cohorts
+- A realtime globe with the visitors on your site right now
+- Session replay and heatmaps on paid plans
+- Feature flags, experiments, surveys, error tracking and logs
 
 ## When to use which
 
 | Use case | Cloudflare Web Analytics | Flareboard |
 | --- | --- | --- |
-| Quick free overview | ✅ | ✅ (free tier) |
-| Year-over-year trends on exact counts | ⚠️ sampled | ✅ |
-| Campaign / UTM tracking | ❌ | ✅ |
-| Product analytics (funnels, goals) | ❌ | ✅ |
-| Own the data in your CF account | Partial | ✅ self-host |
+| A quick, free traffic overview | Yes | Yes, on the free plan |
+| Exact counts over months and years | Sampled after 7 days | Yes |
+| Campaign and UTM tracking | Not yet | Yes |
+| Custom events, funnels and goals | Not yet | Yes |
+| Data in your own Cloudflare account | Cloudflare's own service | When you self-host |
 
 ## Try both
 
-Many teams run Cloudflare Web Analytics alongside a dedicated tool during migration. [Compare all alternatives](https://flareboard.dev/compare) or [start with Flareboard Cloud](https://flareboard.dev/register).
+Many teams keep Cloudflare Web Analytics on while they evaluate a dedicated tool. [Open the live demo](https://flareboard.dev/demo), [compare all alternatives](https://flareboard.dev/compare) or [start free on Flareboard Cloud](https://flareboard.dev/register).

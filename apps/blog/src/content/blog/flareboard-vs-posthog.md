@@ -1,7 +1,8 @@
 ---
 title: Flareboard vs PostHog
-description: PostHog-style product analytics on Cloudflare — without ClickHouse, Kubernetes, or per-seat product bundles.
+description: PostHog-style product analytics on Cloudflare, without ClickHouse, Kafka or Kubernetes. What matches, where PostHog is still ahead, and how to switch.
 pubDate: 2026-07-06
+updatedDate: 2026-10-03
 author: Flareboard
 tags:
   - posthog
@@ -10,60 +11,50 @@ tags:
   - comparison
 ---
 
-[PostHog](https://posthog.com) set the bar for product analytics: events, funnels, feature flags, experiments, session replay, error tracking, and warehouse-style queries in one product. Flareboard targets the **same operating surface** for teams that already run on Cloudflare and want that workflow without operating a heavyweight analytics cluster.
+[PostHog](https://posthog.com) set the bar for product analytics in one place: events, funnels, feature flags, experiments, session replay, error tracking and warehouse queries. Flareboard targets the same kind of product for teams that would rather not operate an analytics cluster, or that already build on Cloudflare.
 
 ## Same product shape, different data plane
 
-Both tools cover product analytics end to end. The difference is where the data lives and how you operate it.
-
 | Topic | PostHog | Flareboard |
 | --- | --- | --- |
-| Hosting | PostHog Cloud or self-hosted (ClickHouse, Kafka, etc.) | Flareboard Cloud or self-host on **Workers, D1, KV, R2, Queues** |
-| Deploy path | Docker / Kubernetes for self-host | **Wrangler** deploy to your Cloudflare account |
-| Session replay storage | PostHog infrastructure | Your **R2** bucket when self-hosted |
-| Pricing model | Per-seat product bundles on Cloud | **Free tier + Cloud plan**; noncommercial self-host option |
+| Hosting | PostHog Cloud, or self-hosted on ClickHouse, Kafka and Postgres | Flareboard Cloud, or self-hosted on your Cloudflare account |
+| Storage | A shared ClickHouse cluster | One SQLite database per website, in a Durable Object |
+| Deploy path for self-hosting | Docker or Kubernetes | Wrangler deploys to Workers |
+| Pricing | Usage-based per product, with a free monthly allowance for each | Free plan, then $19 or $99 per month with event and replay allowances |
 
-Flareboard is not a pixel-perfect PostHog clone. It is a **PostHog-like suite** on a Cloudflare-native stack.
+Flareboard is not a PostHog clone. It covers the core of PostHog's product on a different architecture, and it is a much younger product.
 
-## What Flareboard includes today
+## What Flareboard includes
 
-In one dashboard shell you get:
+- **Product analytics.** Events, sessions, realtime, funnels, journeys, retention, stickiness, cohorts, people and groups, UTM, attribution, revenue and Web Vitals.
+- **Replay and heatmaps.** Recordings stored in R2 with inputs masked by default.
+- **Flags and experiments.** Targeting rules, rollouts, variants and payloads; experiments with frequentist and Bayesian results.
+- **Surveys and workflows.** NPS, CSAT and open-text surveys; workflows with delays, branches, webhooks, email and Slack.
+- **Quality.** Error issues with source maps and alerts, OpenTelemetry logs and traces, LLM cost and latency.
+- **Data access.** Read-only SQL over your events, a Stripe import for revenue, and an MCP server for AI tools.
 
-- **Website analytics** — pageviews, visitors, sessions, realtime globe
-- **Reports** — funnels, retention, journeys, cohorts, UTM, attribution, goals
-- **Experimentation** — feature flags, flag-linked A/B experiments, surveys
-- **Quality** — error issues, logs/traces, AI observability views
-- **Data** — D1 warehouse SQL, saved queries, HTTP import
-- **Collaboration** — teams, share links, custom boards
-
-Privacy-first defaults remain: cookieless collection, first-party ingest, and data that stays in **your** Cloudflare account when you self-host.
+Privacy defaults are cookieless: visitors are counted with a hash whose salt changes every month, and IP addresses are never stored.
 
 ## Where PostHog is still ahead
 
-Flareboard is in active beta. Be honest about gaps before you migrate:
+- **Scale and track record.** PostHog has run very large workloads for years. Flareboard is new.
+- **Data pipelines.** PostHog has a large catalog of sources and destinations. Flareboard imports from Stripe and HTTP and offers read-only SQL, but not general ETL.
+- **People tooling.** Flareboard has identify, alias and person profiles, but no UI for merging duplicate people yet.
+- **SDK coverage.** PostHog maintains SDKs for many platforms. Flareboard has its own browser SDK and accepts events from PostHog's SDKs, but has no native mobile SDKs of its own.
 
-- **Warehouse connectors** — Flareboard has D1 SQL and HTTP import, not full ETL pipelines or streaming warehouse sync
-- **People CRM** — identify, alias, and person profiles exist; full merge/dedupe UI does not yet
-- **Workflow graphs** — event-triggered webhooks and email actions exist; delayed/branching graphs do not
-- **Experiment design** — flag-linked A/B with apply-winner works; multivariate design tooling is not built yet
-
-If you need PostHog's entire enterprise catalog on day one, PostHog may still be the better fit. If you want **most product workflows on Cloudflare you already pay for**, Flareboard is worth a look.
+If you need PostHog's whole catalog today, PostHog is the safer choice.
 
 ## When Flareboard is the better fit
 
-Choose Flareboard when:
+1. You build on Cloudflare and want analytics in the same platform, deployed with Wrangler.
+2. You want to self-host for noncommercial use without running ClickHouse and Kafka.
+3. You want each website's data in its own database, so a busy site never slows another one down.
+4. You prefer a small set of fixed monthly plans over per-product usage pricing.
 
-1. Your stack is already on **Cloudflare** and you want analytics beside ingest, not in a separate VPC
-2. You want **Wrangler deploys**, not Kubernetes and ClickHouse ops
-3. You need **replay in R2**, D1 rollups, and KV caching under your account boundary
-4. You prefer **straightforward Cloud pricing** over per-seat analytics bundles
+## Switching
 
-Choose PostHog when you need their full warehouse connector catalog, mature person-merge tooling, or a vendor with years of production scale on ClickHouse.
+PostHog's SDKs can send to Flareboard if you change two settings, the API key and the host. The [compatibility guide](https://github.com/Go7hic/flareboard/blob/main/docs/ingest-posthog-compat.md) covers what is supported, including pageviews, custom events, identify, groups and feature flag calls. Many teams run both in parallel during an evaluation.
 
-## Try it
-
-- [Feature overview](https://flareboard.dev/features)
+- [Open the live demo](https://flareboard.dev/demo)
 - [Full comparison grid](https://flareboard.dev/compare)
 - [Start free on Flareboard Cloud](https://flareboard.dev/register)
-
-Many teams run a parallel ingest during evaluation. Flareboard accepts the same event patterns PostHog users expect — pageviews, custom events, identify, and group calls — so migration is mostly a snippet and dashboard cutover.

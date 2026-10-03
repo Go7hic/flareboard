@@ -1,7 +1,8 @@
 ---
 title: Flareboard vs Umami
-description: Umami is excellent lightweight web analytics. Flareboard adds product workflows — flags, experiments, replay, errors, logs, and warehouse — on Cloudflare.
+description: Umami is excellent privacy-friendly web analytics, now with replays and heatmaps. Flareboard adds feature flags, experiments, surveys, error tracking and logs, and runs on Cloudflare.
 pubDate: 2026-07-08
+updatedDate: 2026-10-03
 author: Flareboard
 tags:
   - umami
@@ -10,63 +11,59 @@ tags:
   - comparison
 ---
 
-[Umami](https://umami.is) is one of the best privacy-focused web analytics tools available. It is fast, simple, and easy to self-host. Flareboard starts from a similar place — cookieless pageview analytics on your own infrastructure — but targets teams that have **outgrown traffic dashboards** and need product analytics workflows in the same shell.
+[Umami](https://umami.is) is one of the best privacy-focused analytics tools around. It is fast, simple and easy to self-host, and it has grown well past traffic dashboards: recent versions add funnels, journeys, retention, goals, UTM, revenue and attribution reports, plus session replays and heatmaps.
 
-## Lightweight analytics vs product analytics
+Flareboard starts from a similar place, cookieless analytics with first-party ingest, and goes further into product work: feature flags, experiments, surveys, error tracking, logs and LLM observability, all on the same event stream.
+
+## Side by side
 
 | Use case | Umami | Flareboard |
 | --- | --- | --- |
-| Pageviews, referrers, realtime | ✅ | ✅ |
-| Funnels, retention, journeys, cohorts | Limited / basic | ✅ |
-| Feature flags & experiments | ❌ | ✅ |
-| Surveys | ❌ | ✅ |
-| Session replay & heatmaps | ❌ | ✅ (Cloud plan) |
-| Error tracking & logs | ❌ | ✅ |
-| D1 warehouse SQL | ❌ | ✅ |
-| Cloudflare-native stack | Via Docker/VPS | **Workers, D1, KV, R2, Queues** |
+| Pageviews, referrers, realtime | Yes | Yes |
+| Funnels, journeys, retention, goals | Yes | Yes, plus stickiness and account groups |
+| Session replay and heatmaps | Yes | Yes, on paid plans |
+| Feature flags and experiments | No | Yes |
+| Surveys | No | Yes |
+| Error tracking, logs and traces | No | Yes |
+| Built-in SQL editor | No | Yes, read-only |
+| Where it runs | A Node app with PostgreSQL | Cloudflare Workers and Durable Objects |
 
-Umami optimizes for **clarity and minimalism**. Flareboard optimizes for **product teams** that want PostHog-style workflows without leaving Cloudflare.
+If you only need analytics reports, both tools do the job. Flareboard is worth a look when you also run flags, experiments or error tracking as separate products and want them on the same events.
 
-## Migration-friendly details
+## Moving from Umami
 
-Flareboard does not require you to throw away Umami habits:
+You don't have to rewrite your tracking:
 
-- **Declarative click tracking** — `data-umami-event` attributes work alongside `data-flareboard-event`
-- **Self-host on Cloudflare** — no separate VPS if you already run Workers
-- **Same privacy posture** — cookieless defaults, first-party ingest, data in your account
+- `data-umami-event` attributes keep working. The Flareboard tracker reads them next to its own `data-flareboard-event` attributes, including the `-event-<property>` extras.
+- The privacy model is similar. Flareboard sets no cookies, never stores IP addresses and counts visitors with a hash whose salt changes every month.
+- You can run both side by side while you compare numbers.
 
-If Umami covers everything you need today, keep using it. If you are adding replay, flags, or error tracking as bolt-on tools, Flareboard consolidates those paths.
+## Infrastructure
 
-## Infrastructure comparison
+Umami usually runs as a Node app with a PostgreSQL database on a server or container platform.
 
-Umami typically runs as a Node app with PostgreSQL or MySQL on a VPS or container platform.
+Flareboard runs on Cloudflare:
 
-Flareboard runs entirely on Cloudflare:
+- An ingest Worker receives events at the edge location closest to the visitor.
+- Queues buffer spikes, and an aggregator Worker writes events in batches.
+- Each website has its own SQLite database in a Durable Object, which holds events, sessions, people, logs and rollups.
+- D1 keeps accounts, websites and settings. R2 stores replay recordings. KV holds realtime counters and caches.
 
-- **Ingest Worker** at the edge, closest PoP to visitors
-- **D1** for analytics storage and rollups
-- **R2** for session replay chunks
-- **Queues + aggregator** for spike buffering and batch writes
-- **KV** for realtime counters and API cache
-
-Teams already paying for Cloudflare can colocate analytics with the rest of their edge stack instead of operating a separate analytics server.
+On Flareboard Cloud all of this is run for you. If you self-host for noncommercial use, it lives in your own Cloudflare account.
 
 ## When to choose which
 
-**Stay on Umami** if you want the smallest possible analytics footprint and only need traffic reporting.
+Stay on Umami if it covers your reports today and you want the smallest analytics footprint.
 
-**Move to Flareboard** if you need:
+Choose Flareboard if you want:
 
-- Product analytics reports beyond top pages and referrers
-- Feature flags or experiments tied to the same event stream
-- Session replay stored in your own R2 bucket
-- Error and log views next to funnel and retention charts
-- A path to Flareboard Cloud without maintaining a VPS
+- Feature flags and experiments that read the same events as your funnels
+- Surveys, error tracking, logs and traces next to your product analytics
+- Read-only SQL over your events, or an MCP server for AI tools
+- Analytics that run on Cloudflare instead of a separate server
 
 ## Next steps
 
 - [Compare all alternatives](https://flareboard.dev/compare)
-- [See the full feature list](https://flareboard.dev/features)
+- [Open the live demo](https://flareboard.dev/demo)
 - [Create a free account](https://flareboard.dev/register)
-
-Start with one site, paste the snippet, and keep Umami running in parallel until your dashboards cover the workflows you need.

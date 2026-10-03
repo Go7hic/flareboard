@@ -99,7 +99,7 @@ Self-hosting is available for personal and noncommercial use without a Cloud sub
 
 ## Compared With Alternatives
 
-Flareboard is more product-analytics oriented than Google Analytics, Umami, Plausible, Cloudflare Web Analytics, and Vercel Analytics because it includes event catalogs, funnels, retention, cohorts, journeys, feature flags, experiments, surveys, replay, heatmaps, errors, logs, LLM analytics, workflows, and a SQL warehouse.
+Flareboard is more product-analytics oriented than Google Analytics, Umami, Plausible, Cloudflare Web Analytics, and Vercel Analytics: alongside analytics reports (event catalogs, funnels, retention, cohorts, journeys) it includes feature flags, experiments, surveys, replay, heatmaps, errors, logs, LLM analytics, workflows, and a SQL warehouse on the same events. Some of those tools now cover parts of this too (Umami, for example, has funnels, journeys, retention, session replays and heatmaps).
 
 Flareboard differs from PostHog by being built around Cloudflare infrastructure and offering a self-host path for teams that want Cloudflare-native deployment. It accepts events from PostHog SDKs, so teams can switch by changing the host and key.
 

@@ -5,8 +5,8 @@ Flareboard exposes its analytics to AI tools in two ways that share one tool reg
 
 - **MCP server** at `https://<api-host>/mcp` for Claude Desktop, Claude Code, Cursor and any other
   [Model Context Protocol](https://modelcontextprotocol.io) client.
-- **Ask Flareboard**, a side panel in the dashboard (per website) that answers questions with Claude,
-  using the read-only tools.
+- **Ask Flareboard**, a side panel in the dashboard (per website) that answers questions with
+  DeepSeek, using the read-only tools.
 
 ## MCP server
 

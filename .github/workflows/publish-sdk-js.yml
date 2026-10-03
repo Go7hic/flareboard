@@ -1,0 +1,67 @@
+name: Publish @flareboard/js
+
+# Releases the browser SDK (packages/sdk-js) to npm with trusted publishing: GitHub's OIDC token
+# proves the run comes from this repository and workflow, so no npm token is stored anywhere,
+# and npm attaches a provenance attestation.
+#
+# Release: bump "version" in packages/sdk-js/package.json on main, then push the tag
+#   git tag sdk-js-v<version> && git push origin sdk-js-v<version>
+# Running the workflow by hand only does a dry run (tests, build, npm publish --dry-run).
+on:
+  push:
+    tags:
+      - 'sdk-js-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # npm trusted publishing (OIDC)
+
+concurrency:
+  group: publish-sdk-js
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4 # version from packageManager in package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm 11.5.1 or later.
+      - run: npm install -g npm@latest
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Tag matches the package version
+        if: github.event_name == 'push'
+        run: |
+          version=$(node -p "require('./packages/sdk-js/package.json').version")
+          if [ "$GITHUB_REF_NAME" != "sdk-js-v$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match packages/sdk-js version $version (expected sdk-js-v$version)"
+            exit 1
+          fi
+
+      - run: pnpm --filter @flareboard/js typecheck
+      - run: pnpm --filter @flareboard/js test
+      # The SDK queues calls that the tracker script replays: run both halves together.
+      - run: pnpm --filter @flareboard/ingest test:tracker
+      - run: pnpm --filter @flareboard/js build
+
+      - name: Publish
+        working-directory: packages/sdk-js
+        env:
+          DRY_RUN: ${{ github.event_name != 'push' }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            npm publish --dry-run
+          else
+            npm publish
+          fi

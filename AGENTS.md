@@ -103,6 +103,10 @@ Header chrome: `--shell-bg` + `backdrop-filter` on `.shell-nav` / `.landing-nav`
 
 `apps/blog` shares Geist tokens (`apps/blog/src/styles/geist-tokens.css`). Stay CSS-first (Astro); do not pull dashboard React/shadcn into the blog.
 
+## Browser SDK (`@flareboard/js`)
+
+`packages/sdk-js` is published to npm by `.github/workflows/publish-sdk-js.yml` with trusted publishing (GitHub OIDC, no npm token). To release, bump its `version`, merge to main, then push the tag `sdk-js-v<version>`; a manual run of the workflow is a dry run. Its queue protocol must keep matching the tracker (`apps/ingest/test-node/sdk-contract.test.ts`).
+
 ## Commands
 
 ```bash

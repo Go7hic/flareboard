@@ -12,6 +12,7 @@ coverage/
 .wrangler/
 .dev.vars
 .dev.vars.*
+!.dev.vars.example
 .mf/
 worker-configuration.d.ts
 

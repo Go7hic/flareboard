@@ -1,0 +1,13 @@
+# Local secrets for `wrangler dev`: copy to .dev.vars (never commit .dev.vars).
+# APP_SECRET signs sessions and tracking tokens; use the same value in apps/ingest/.dev.vars.
+APP_SECRET=change-me-to-a-long-random-string
+# false: self-hosted mode (no billing or plan limits). true: hosted mode with Stripe plans.
+HOSTED_MODE=false
+DASHBOARD_URL=http://localhost:5173
+EMAIL_FROM=flareboard@localhost
+
+# Optional
+# DEEPSEEK_API_KEY=            # "Ask Flareboard" assistant
+# GOOGLE_CLIENT_ID= / GOOGLE_CLIENT_SECRET=   # Google sign-in
+# GITHUB_CLIENT_ID= / GITHUB_CLIENT_SECRET=   # GitHub sign-in
+# STRIPE_SECRET_KEY= / STRIPE_WEBHOOK_SECRET= / STRIPE_PRICE_CLOUD= / STRIPE_PRICE_BUSINESS=   # hosted billing

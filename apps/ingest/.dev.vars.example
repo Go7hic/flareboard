@@ -1,0 +1,4 @@
+# Local secrets for `wrangler dev`: copy to .dev.vars (never commit .dev.vars).
+# Must match APP_SECRET in apps/api/.dev.vars.
+APP_SECRET=change-me-to-a-long-random-string
+HOSTED_MODE=false

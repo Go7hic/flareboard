@@ -6,6 +6,10 @@ super properties, consent and feature flags, with optional React bindings.
 The package is a small typed loader. It injects the tracker script from your Flareboard ingest
 host and queues every call made before the script has loaded, so you can call it right away.
 
+You need a website ID: sign up at [flareboard.dev](https://flareboard.dev) (there is a free plan),
+add your site and copy its ID from Settings → Tracking code. Or look around the
+[live demo](https://flareboard.dev/demo) first.
+
 ## Install
 
 ```bash
@@ -136,3 +140,9 @@ pnpm --filter @flareboard/js build # emits dist/ (ESM + .d.ts)
 
 The tracker script itself lives in `apps/ingest/src/tracker/script.ts`;
 `apps/ingest/test-node/sdk-contract.test.ts` runs this package against it.
+
+## Links
+
+- [flareboard.dev](https://flareboard.dev) · [Live demo](https://flareboard.dev/demo) · [Pricing](https://flareboard.dev/pricing)
+- [Source](https://github.com/Go7hic/flareboard/tree/main/packages/sdk-js) ·
+  [Tracking reference](https://github.com/Go7hic/flareboard/blob/main/docs/ingest.md)

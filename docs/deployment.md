@@ -1,6 +1,6 @@
 # Deployment
 
-Flareboard runs as four Cloudflare Workers plus D1, R2, KV, Queues, and Durable Objects.
+Flareboard runs as Cloudflare Workers (ingest, API, aggregator, dashboard, blog) plus D1, R2, KV, Queues, and Durable Objects. Each website's analytics live in their own SQLite-backed `EventStore` Durable Object (`EVENT_STORE=do`); D1 keeps accounts, websites, configuration and usage.
 
 ## Prerequisites
 
@@ -33,7 +33,7 @@ wrangler queues create flareboard-workflow-triggers-dlq
 
 The DLQ is declared in `workers/aggregator/wrangler.jsonc`. Create it once before deploying the aggregator.
 
-**Durable Objects:** API and ingest each export a `RateLimiter` Durable Object (`@flareboard/rate-limiter`) for edge rate limiting on login, ingest, and other public endpoints. Bindings and the SQLite DO migration (`new_sqlite_classes: ["RateLimiter"]`) are already in `apps/api/wrangler.jsonc` and `apps/ingest/wrangler.jsonc`. No separate resource to create — deploy those workers and Wrangler provisions the class.
+**Durable Objects:** API and ingest each export a `RateLimiter` Durable Object (`@flareboard/rate-limiter`) for edge rate limiting on login, ingest, and other public endpoints. The API worker also exports `EventStore`, one SQLite store per website, which ingest and the aggregator bind as `SITE_STORE` through `script_name` — so deploy the API before ingest and the aggregator. Bindings and SQLite DO migrations (`new_sqlite_classes`) are already in the `wrangler.jsonc` files. No separate resource to create — Wrangler provisions the classes on deploy.
 
 Update `REPLACE_WITH_D1_ID` and `REPLACE_WITH_KV_ID` in:
 

@@ -1,73 +1,111 @@
 # Flareboard
 
-Cloudflare-native product analytics for teams that want a PostHog-like operating surface without running ClickHouse or Kubernetes. Flareboard combines website analytics, session replay, feature flags, experiments, surveys, error tracking, logs, workflows, and a D1-backed warehouse on Workers, D1, R2, KV, Queues, and Durable Objects.
+Product analytics that runs entirely on Cloudflare: website analytics, session replay, feature
+flags, experiments, surveys, error tracking, logs and LLM observability in one place, without
+ClickHouse or Kubernetes. A PostHog-like product surface on Workers, Durable Objects, D1, R2, KV
+and Queues.
 
-## Product surface
+**[flareboard.dev](https://flareboard.dev)** · [Live demo](https://flareboard.dev/demo) ·
+[Pricing](https://flareboard.dev/pricing) · [Blog](https://flareboard.dev/blog) ·
+[`@flareboard/js` on npm](https://www.npmjs.com/package/@flareboard/js)
 
-- Product analytics: pageviews, events, sessions, realtime, segments, cohorts, funnels, retention, journeys, attribution, revenue, web vitals, and saved insights.
-- Session UX: rrweb replay stored in R2, saved replays, heatmaps, session context, and public share links.
-- Experimentation: feature flags with targeting and evaluation, flag-linked experiments, exposure events, and winner application.
-- Feedback and automation: surveys, feedback inbox, annotations, actions, event-triggered workflows, and custom boards.
-- Quality and observability: error issues, source map metadata, error and log alert rules, log traces, services, AI observations, and session-level context.
-- Data and administration: D1 warehouse queries, saved queries, history, schedules, data source metadata, teams, website permissions, audit logs, admin console, and optional Google/GitHub login.
+## Product
 
-## Current stage
+- **Product analytics:** overview, events, actions, sessions, realtime, funnels, journeys,
+  retention, stickiness, people and groups, segments, cohorts, UTM, attribution, revenue (with
+  Stripe MRR), Web Vitals at p75, insights, boards, notebooks and reports.
+- **Session replay and heatmaps:** rrweb replays stored in R2 with inputs masked by default,
+  saved and shared replays, click and scroll heatmaps.
+- **Feature flags and experiments:** targeting rules, rollouts, variants and payloads, flag-linked
+  experiments with frequentist and Bayesian results.
+- **Surveys and workflows:** NPS, CSAT and open feedback surveys; event-triggered workflows with
+  delays, branches, webhooks, email and Slack.
+- **Errors, logs and traces:** error issues with source maps and alerts, OpenTelemetry (OTLP) logs
+  and traces, AI / LLM observability (cost, tokens, latency, traces).
+- **For teams and agents:** "Ask Flareboard" assistant, an [MCP server](docs/mcp.md), read-only SQL
+  over your data, teams and roles, SSO, audit log and personal API keys.
 
-The repository is in a PostHog-like beta stage. Core product domains ship with routes, schema, dashboard pages, cron-driven alert and warehouse loops, workflow delivery, source map resolution, permission-aware UI, person storage with identify and alias ingest, dashboard PATCH for people properties, ingest-time action tagging with optional historical backfill, warehouse HTTP JSON and CSV import, ingest documentation, Phase 3 dashboard UX polish, and broad route tests. Remaining scope is full ETL pipelines, streaming warehouse connectors, and CRM-style person merge tooling.
+Privacy: cookieless by default (a monthly-salted hash of IP and user agent; IPs are never stored),
+autocapture never records field values.
 
-## Stack
+## Add it to a site
+
+```html
+<script defer src="https://t.flareboard.dev/script.js" data-website-id="YOUR_WEBSITE_ID"></script>
+```
+
+Or with npm (typed, with React hooks for feature flags) — see the
+[`@flareboard/js` README](packages/sdk-js/README.md):
+
+```bash
+npm install @flareboard/js
+```
+
+PostHog SDKs can send to Flareboard too: [PostHog compatibility](docs/ingest-posthog-compat.md).
+
+## Architecture
 
 | Component | Dev port | Role |
 |-----------|----------|------|
-| `apps/ingest` | 8787 | Tracking (`/api/send`, `/script.js`, replay ingest) |
-| `apps/api` | 8788 | Authenticated REST API |
-| `workers/aggregator` | — | Queue consumer → D1 |
-| `apps/dashboard` | 5173 | React dashboard |
+| `apps/ingest` | 8787 | Tracking: `/script.js`, `/api/send`, replay, OTLP logs and traces, PostHog-compatible capture, short links and pixels |
+| `apps/api` | 8788 | Authenticated REST API, MCP server, scheduled jobs (alerts, retention, deletion) |
+| `workers/aggregator` | — | Queue consumer: writes events to each website's store, keeps rollups and monthly usage |
+| `apps/dashboard` | 5173 | React dashboard (Vite, shadcn/Base UI, Geist) |
+| `apps/blog` | — | Astro blog |
+| `packages/sdk-js` | — | `@flareboard/js` browser SDK |
 
-**Cloudflare bindings:** D1 (analytics + warehouse), R2 (session replay), KV (realtime counters + API cache), Queues with aggregator (spike buffering and rollups), Durable Objects (edge rate limiting on API and ingest).
+**Storage:** every website's analytics (events, sessions, people, logs, spans, rollups) lives in
+its own SQLite-backed Durable Object; D1 holds accounts, websites, configuration and usage; R2
+stores replay recordings; KV caches realtime counters and API responses; Queues absorb ingest
+spikes. Shared packages: `@flareboard/db`, `@flareboard/shared`, `@flareboard/rate-limiter`.
 
-Monorepo packages: `@flareboard/db`, `@flareboard/shared`, `@flareboard/rate-limiter` (Durable Object).
-
-## Quick start
+## Local development
 
 Requires Node.js 20+ and pnpm 9+.
 
 ```bash
 pnpm install
+cp apps/api/.dev.vars.example apps/api/.dev.vars
+cp apps/ingest/.dev.vars.example apps/ingest/.dev.vars
 pnpm db:migrate
 pnpm seed
-pnpm dev:api       # :8788
-pnpm dev:ingest    # :8787
-pnpm dev:dashboard # :5173
+```
+
+Then run each in its own terminal:
+
+```bash
+pnpm dev:api        # :8788
+pnpm dev:ingest     # :8787
+pnpm dev:dashboard  # :5173
 pnpm dev:aggregator
 ```
 
-Create `apps/dashboard/.env`:
-
-```bash
-VITE_API_URL=http://localhost:8788
-VITE_INGEST_URL=http://localhost:8787
-```
-
-Copy `.dev.vars.example` → `.dev.vars` in `apps/api` and `apps/ingest`.
-
-Open http://localhost:5173 and sign in with the credentials from `pnpm seed` (`scripts/seed.ts --help` for overrides).
+Open http://localhost:5173 and sign in with the credentials `pnpm seed` prints
+(`scripts/seed.ts --help` for overrides). `pnpm typecheck` and `pnpm test` cover every package.
 
 ## Deploy
 
 Production setup (Cloudflare resources, secrets, custom domains): **[Deployment guide](docs/deployment.md)**.
-
-Forkers: replace D1, KV, R2, Queues, and Durable Object bindings in each app's `wrangler.jsonc` with your own resources before deploying.
+Forkers: replace the D1, KV, R2, Queues and Durable Object bindings in each app's
+`wrangler.jsonc` with your own resources before deploying.
 
 ## Docs
 
 | | |
 |---|---|
-| [Development](docs/development.md) | Local dev, scripts, smoke tests, planned work |
+| [Development](docs/development.md) | Local dev, scripts, smoke tests |
 | [API reference](docs/api.md) | REST and ingest endpoints |
+| [Tracking and ingest](docs/ingest.md) | Endpoints, payloads, tracker script, recorder, flags, surveys |
+| [PostHog compatibility](docs/ingest-posthog-compat.md) | Sending from PostHog SDKs |
+| [Logs and traces](docs/logs-otlp.md) | OpenTelemetry (OTLP) ingest |
+| [LLM observability](docs/llm-observability.md) | AI generations, cost and traces |
+| [MCP server](docs/mcp.md) | Flareboard tools for AI agents |
+| [SSO](docs/sso.md) | Single sign-on |
+| [Dashboard design system](docs/dashboard-design-system.md) | Console UI rules |
 | [Database](packages/db/README.md) | Schema and migrations |
 | [Security](SECURITY.md) | Vulnerability reporting |
 
 ## License
 
-[PolyForm Noncommercial License 1.0.0](LICENSE) — free for personal, educational, and other noncommercial use. Commercial use requires separate permission from the copyright holders.
+[PolyForm Noncommercial License 1.0.0](LICENSE) — free for personal, educational, and other
+noncommercial use. Commercial use requires separate permission from the copyright holders.

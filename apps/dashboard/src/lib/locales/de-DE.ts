@@ -1855,8 +1855,6 @@ export const deDELocale: Record<string, string> = {
   landingNavPricing: "Preise",
   landingNavBlog: "Blog",
   landingNavDocs: "Dokumentation",
-  landingDataStatAvgSession: "Ø Sitzung",
-  landingHeroSample: "Beispiel",
   demoSampleBadge: "Beispieldaten",
   demoBannerTitle: "Dies ist eine Beispielkonsole",
   demoBannerBody: "Die Zahlen stammen vom Demo Store, nicht von Ihrer Site. Zeitraum ändern — Summen und Tabellen aktualisieren sich.",

@@ -17,7 +17,7 @@ import { t } from '../lib/i18n';
 function exportMetricsCsv(rows: MetricRow[], filename: string, showPageStats: boolean) {
   const headers = showPageStats
     ? [t('metricName'), t('pagesSort_views'), t('pagesSort_visitors'), t('pagesSort_time')]
-    : [t('metricName'), t('views')];
+    : [t('metricName'), t('pagesSort_views')];
 
   const lines = [
     csvRow(headers),

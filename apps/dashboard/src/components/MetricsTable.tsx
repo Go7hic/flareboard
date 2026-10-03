@@ -93,7 +93,7 @@ export function MetricsTable({
       ]
     : [
         {
-          label: primaryMetric === 'visitors' ? t('visitors') : t('views'),
+          label: primaryMetric === 'visitors' ? t('visitors') : t('pagesSort_views'),
           ...sortColumnFor(primaryMetric === 'visitors' ? 'visitors' : 'views'),
         },
       ];

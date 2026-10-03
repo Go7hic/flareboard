@@ -1855,8 +1855,6 @@ export const jaJPLocale: Record<string, string> = {
   landingNavPricing: "料金",
   landingNavBlog: "ブログ",
   landingNavDocs: "ドキュメント",
-  landingDataStatAvgSession: "平均セッション",
-  landingHeroSample: "サンプル",
   demoSampleBadge: "サンプルデータ",
   demoBannerTitle: "これはサンプルのコンソールです",
   demoBannerBody: "数値は Demo Store のもので、あなたのサイトではありません。期間を変えると合計と表が更新されます。",

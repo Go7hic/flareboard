@@ -116,7 +116,9 @@ Content      cards on a 12-column grid (.layout-grid, .span-4/.span-6/.span-8/.s
 ## 7. Patterns by page type
 
 - **Report pages** (overview, performance, retention, revenue…): header → toolbar → KPI strip →
-  primary chart card → breakdown grid.
+  primary chart card → breakdown grid. The homepage hero (`landing/LandingProductPreview.tsx`) is
+  a still of the website overview built from the same components and sidebar groups; check it
+  after changing the overview.
 - **Query pages** (funnel, journeys, stickiness, attribution, insights): a query card at the top
   (steps/filters in one compact block), the result card below with its own KPI line.
 - **Catalogs and configs** (events, actions, flags, experiments, surveys, workflows, cohorts,

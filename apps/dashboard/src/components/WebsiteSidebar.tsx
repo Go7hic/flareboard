@@ -9,7 +9,7 @@ type WebsiteNavItem = {
   end?: boolean;
 };
 
-type WebsiteNavGroup = {
+export type WebsiteNavGroup = {
   labelKey?: string;
   items: WebsiteNavItem[];
 };
@@ -20,13 +20,9 @@ type WebsiteSidebarProps = {
   isDemo?: boolean;
 };
 
-export function WebsiteSidebar({ onNavigate, isDemo = false }: WebsiteSidebarProps) {
-  const { websiteId } = useParams<{ websiteId: string }>();
-  if (!websiteId) return null;
-
-  const base = `/websites/${websiteId}`;
-
-  const groups: WebsiteNavGroup[] = [
+/** Website navigation, also drawn by the landing page's product preview. */
+export function websiteNavGroups(base: string, isDemo = false): WebsiteNavGroup[] {
+  return [
     {
       labelKey: 'navGroupTraffic',
       items: [
@@ -104,6 +100,13 @@ export function WebsiteSidebar({ onNavigate, isDemo = false }: WebsiteSidebarPro
       ],
     },
   ];
+}
+
+export function WebsiteSidebar({ onNavigate, isDemo = false }: WebsiteSidebarProps) {
+  const { websiteId } = useParams<{ websiteId: string }>();
+  if (!websiteId) return null;
+
+  const groups = websiteNavGroups(`/websites/${websiteId}`, isDemo);
 
   return (
     <>

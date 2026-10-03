@@ -1855,8 +1855,6 @@ export const frFRLocale: Record<string, string> = {
   landingNavPricing: "Tarifs",
   landingNavBlog: "Blog",
   landingNavDocs: "Documentation",
-  landingDataStatAvgSession: "Session moy.",
-  landingHeroSample: "Exemple",
   demoSampleBadge: "Données d’exemple",
   demoBannerTitle: "Ceci est une console d’exemple",
   demoBannerBody: "Les chiffres viennent de Demo Store, pas de votre site. Changez la période — totaux et tableaux se mettent à jour.",

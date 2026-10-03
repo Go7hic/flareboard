@@ -1,16 +1,3 @@
-import { getLocale } from '../../lib/i18n';
-
-let compactFormatter: Intl.NumberFormat | null = null;
-
-/** Locale-aware short numbers for marketing samples (e.g. 90.4K, 9万). */
-export function compactNumber(value: number): string {
-  compactFormatter ??= new Intl.NumberFormat(getLocale(), {
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  });
-  return compactFormatter.format(value);
-}
-
 /** Catmull-Rom spline through the points, emitted as an SVG cubic path. */
 export function smoothPath(points: [number, number][]): string {
   if (points.length === 0) return '';

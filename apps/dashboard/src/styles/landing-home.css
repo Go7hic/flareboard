@@ -170,15 +170,18 @@
 
 /* ── Product preview ── */
 
+/* A still of the console overview (LandingProductPreview). The frame and layout live here; the
+   parts inside use the console's own classes (kpi-strip, breakdown, sidebar-link, page-header). */
 .home-preview {
   position: relative;
   display: block;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--bg-elevated);
+  background: var(--bg);
   box-shadow: var(--shadow-lg);
   color: var(--text);
+  text-align: left;
   text-decoration: none;
   transition: border-color var(--transition);
 }
@@ -192,252 +195,99 @@
   outline-offset: 3px;
 }
 
-.home-preview-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  height: 3rem;
-  padding: 0 1rem;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.home-preview-site,
-.home-preview-top-end {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.home-preview-site img {
-  border-radius: 4px;
-}
-
-.home-preview-site-name {
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
-.home-preview-site-domain {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--text-faint);
-}
-
-.home-preview-sample {
-  padding: 0.125rem 0.4rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: 0.6875rem;
-  color: var(--text-muted);
-}
-
-.home-preview-range {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  height: 1.75rem;
-  padding: 0 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: 0.75rem;
-  color: var(--text);
-  white-space: nowrap;
-}
-
-.home-preview-range svg {
-  width: 0.875rem;
-  height: 0.875rem;
-  color: var(--text-muted);
-}
-
-.home-preview-body {
+.home-preview-app {
   display: grid;
-  grid-template-columns: 12.5rem minmax(0, 1fr);
+  grid-template-columns: 15rem minmax(0, 1fr);
+}
+
+/* The sidebar is as tall as the page next to it and clips the rest of the nav. */
+.home-preview-sidebar {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-elevated);
+  border-right: 1px solid var(--border-subtle);
+}
+
+.home-preview-sidebar-inner {
+  position: absolute;
+  inset: 0;
+}
+
+.home-preview-brand {
+  padding: 1rem 0.85rem 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.975rem;
+  letter-spacing: -0.03em;
 }
 
 .home-preview-nav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 0.75rem 0.625rem;
-  border-right: 1px solid var(--border-subtle);
-}
-
-.home-preview-nav-item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  padding: 0.45rem 0.625rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.8125rem;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-.home-preview-nav-item svg {
-  width: 1rem;
-  height: 1rem;
-  flex-shrink: 0;
-}
-
-/* Same active state as the dashboard sidebar (.sidebar-link.active in global.css). */
-.home-preview-nav-item.is-active {
-  background: var(--accent-muted);
-  color: var(--text);
-  font-weight: 500;
-}
-
-.home-preview-nav-item.is-active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0.35rem;
-  bottom: 0.35rem;
-  width: 2px;
-  background: var(--geist-gray-1000);
+  gap: 1rem;
+  padding: 0.65rem;
 }
 
 .home-preview-main {
-  display: grid;
-  gap: 0.75rem;
   min-width: 0;
-  padding: 1rem;
+  padding: 0 1.5rem 1.5rem;
 }
 
-.home-preview-kpis {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.625rem;
-}
-
-.home-preview-kpi {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-  padding: 0.7rem 0.8rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-
-.home-preview-kpi-label {
-  overflow: hidden;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-muted);
-}
-
-.home-preview-kpi-value {
-  font-family: var(--font-mono);
-  font-size: 1.25rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-}
-
-.home-preview-kpi-delta {
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  color: var(--text-muted);
-}
-
-.home-preview-kpi-delta.is-good {
-  color: var(--geist-green-900);
-}
-
-.home-preview-panel {
-  min-width: 0;
-  padding: 0.75rem 0.875rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-elevated);
-}
-
-.home-preview-panel-head {
-  display: flex;
-  align-items: center;
+.home-preview .website-content-header {
   justify-content: space-between;
-  gap: 1rem;
+  margin-bottom: 1.15rem;
 }
 
-.home-preview-panel-title {
-  margin: 0;
-  font-size: 0.8125rem;
-  font-weight: 600;
+.home-preview-sample {
+  flex-shrink: 0;
 }
 
-.home-preview-legend {
-  display: flex;
-  gap: 0.875rem;
+/* Short card titles: keep the tabs on the title row in the narrower preview cards. */
+.home-preview .card-header-copy {
+  flex-basis: auto;
 }
 
-.home-preview-legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  font-size: 0.6875rem;
-  color: var(--text-muted);
+.home-preview-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--section-gap);
 }
 
-.home-preview-legend-item::before {
-  content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-}
-
-.home-preview-legend-pageviews::before {
-  background: var(--chart-pageviews);
-}
-
-.home-preview-legend-visitors::before {
-  background: var(--chart-visitors);
-}
-
+/* Trend chart in AnalyticsChart's frame: muted 12px ticks, solid hairline grid, 2px lines. */
 .home-preview-chart {
   display: grid;
   grid-template-columns: 2.25rem minmax(0, 1fr);
-  gap: 0.375rem;
-  margin-top: 0.625rem;
+  grid-template-rows: 200px auto;
+  gap: 0.5rem 0.75rem;
 }
 
-/* Tick labels sit on the grid lines: 168px plot, 6px vertical padding. */
-.home-preview-chart-y {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  height: 168px;
-  font-family: var(--font-mono);
-  font-size: 0.625rem;
-  line-height: 12px;
-  text-align: right;
+.home-preview-chart-y,
+.home-preview-chart-plot,
+.home-preview-chart-x {
+  position: relative;
+}
+
+.home-preview-chart-y > span {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-size: 0.75rem;
+  line-height: 1;
   color: var(--chart-axis);
 }
 
+.home-preview-chart-grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--chart-grid);
+}
+
 .home-preview-chart-plot svg {
-  display: block;
+  position: absolute;
+  inset: 0;
   width: 100%;
-  height: 168px;
+  height: 100%;
   overflow: visible;
-}
-
-.home-preview-grid {
-  stroke: var(--chart-grid);
-  stroke-width: 1;
-  stroke-dasharray: 3 3;
-}
-
-.home-preview-area {
-  fill: var(--chart-pageviews);
-  fill-opacity: 0.08;
 }
 
 .home-preview-line {
@@ -447,61 +297,27 @@
   stroke-linejoin: round;
 }
 
-.home-preview-line-pageviews {
+.home-preview-line.is-pageviews {
   stroke: var(--chart-pageviews);
 }
 
-.home-preview-line-visitors {
+.home-preview-line.is-visitors {
   stroke: var(--chart-visitors);
 }
 
 .home-preview-chart-x {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 0.375rem;
-  font-family: var(--font-mono);
-  font-size: 0.625rem;
-  color: var(--chart-axis);
+  grid-column: 2;
+  height: 1rem;
 }
 
-.home-preview-split {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
-}
-
-.home-preview-ranked {
-  display: grid;
-  gap: 0.55rem;
-  margin: 0.625rem 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.home-preview-ranked li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.3rem 0.5rem;
+.home-preview-chart-x > span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
   font-size: 0.75rem;
-}
-
-.home-preview-ranked-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1;
   white-space: nowrap;
-}
-
-.home-preview-ranked-value {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-muted);
-}
-
-.home-preview-ranked-bar {
-  grid-column: 1 / -1;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--chart-1);
+  color: var(--chart-axis);
 }
 
 .home-preview-open {
@@ -1639,11 +1455,11 @@
 /* ── Responsive ── */
 
 @media (max-width: 1080px) {
-  .home-preview-body {
+  .home-preview-app {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .home-preview-nav {
+  .home-preview-sidebar {
     display: none;
   }
 
@@ -1724,21 +1540,22 @@
     margin-bottom: 2rem;
   }
 
-  .home-preview-site-domain,
-  .home-preview-sample {
+  .home-preview-main {
+    padding: 0 1rem 1rem;
+  }
+
+  /* landing-home.css loads before global.css, so these need the extra class to win. */
+  .home-preview .home-preview-wide-only,
+  .home-preview .kpi-cell:nth-child(n + 5) {
     display: none;
   }
 
-  .home-preview-main {
-    padding: 0.75rem;
-  }
-
-  .home-preview-kpis {
+  .home-preview .kpi-strip[data-cols] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .home-preview-kpi:nth-child(n + 5) {
-    display: none;
+  .home-preview-chart {
+    grid-template-rows: 150px auto;
   }
 
   .home-preview-split {

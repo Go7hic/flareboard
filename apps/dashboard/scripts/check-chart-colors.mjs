@@ -85,22 +85,15 @@ assert(
 assert(/--chart-2:\s*var\(--cf-orange\)/.test(tokens), '--chart-2 should be CF orange');
 assert(/--chart-line:\s*var\(--chart-1\)/.test(tokens), '--chart-line must alias --chart-1');
 
-const globalCss = readFileSync(globalCssPath, 'utf8');
+// ChartLegend takes CSS colors: the overview legend keys must name the tokens its lines use.
+const trendCard = readFileSync(join(srcRoot, 'components/OverviewTrendCard.tsx'), 'utf8');
 assert(
-  /\.dashboard-aggregate-legend-swatch--pageviews\s*\{[^}]*var\(--chart-pageviews\)/s.test(
-    globalCss,
-  ),
-  'legend pageviews swatch must use --chart-pageviews',
+  /label: t\('pageviews'\), color: 'var\(--chart-pageviews\)'/.test(trendCard),
+  'overview legend pageviews key must use --chart-pageviews',
 );
 assert(
-  /\.dashboard-aggregate-legend-swatch--visitors\s*\{[^}]*var\(--chart-visitors\)/s.test(
-    globalCss,
-  ),
-  'legend visitors swatch must use --chart-visitors',
-);
-assert(
-  /\.dashboard-aggregate-legend-swatch--visits\s*\{[^}]*var\(--chart-visits\)/s.test(globalCss),
-  'legend visits swatch must use --chart-visits',
+  /label: t\('visitors'\), color: 'var\(--chart-visitors\)'/.test(trendCard),
+  'overview legend visitors key must use --chart-visitors',
 );
 
 const chartColorsSrc = readFileSync(chartColorsPath, 'utf8');
@@ -234,5 +227,5 @@ if (process.exitCode) {
 }
 
 console.log('OK: chart series palette + Overview legend/stroke tokens aligned');
-console.log(JSON.stringify({ resolved, legendCss: 'uses same --chart-pageviews|visitors|visits' }, null, 2));
+console.log(JSON.stringify({ resolved }, null, 2));
 

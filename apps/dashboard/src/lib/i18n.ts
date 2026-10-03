@@ -1882,8 +1882,6 @@ const enUS: Record<string, string> = {
   landingNavPricing: 'Pricing',
   landingNavBlog: 'Blog',
   landingNavDocs: 'Docs',
-  landingDataStatAvgSession: 'Avg. session',
-  landingHeroSample: 'Sample',
   demoSampleBadge: 'Sample data',
   demoBannerTitle: 'This is a sample console',
   demoBannerBody:
@@ -5296,8 +5294,6 @@ const zhCN: Partial<Record<string, string>> = {
   landingNavPricing: '定价',
   landingNavBlog: '博客',
   landingNavDocs: '文档',
-  landingDataStatAvgSession: '平均会话',
-  landingHeroSample: '示例',
   demoSampleBadge: '示例数据',
   demoBannerTitle: '这是示例控制台',
   demoBannerBody: '数据来自 Demo Store，不是你的站点。改时间范围，数字和表格会跟着变。',

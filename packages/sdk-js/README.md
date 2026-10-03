@@ -141,6 +141,11 @@ pnpm --filter @flareboard/js build # emits dist/ (ESM + .d.ts)
 The tracker script itself lives in `apps/ingest/src/tracker/script.ts`;
 `apps/ingest/test-node/sdk-contract.test.ts` runs this package against it.
 
+## License
+
+MIT (see [LICENSE](LICENSE)), so you can use it in any project, commercial or not. The rest of
+the Flareboard repository (server, dashboard) is under the PolyForm Noncommercial license.
+
 ## Links
 
 - [flareboard.dev](https://flareboard.dev) · [Live demo](https://flareboard.dev/demo) · [Pricing](https://flareboard.dev/pricing)

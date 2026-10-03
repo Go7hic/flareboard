@@ -1,8 +1,8 @@
 {
   "name": "@flareboard/js",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Flareboard product analytics for the browser: tracking, autocapture, identity, consent and feature flags, with React bindings.",
-  "license": "PolyForm-Noncommercial-1.0.0",
+  "license": "MIT",
   "homepage": "https://flareboard.dev",
   "repository": {
     "type": "git",
@@ -25,7 +25,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "publishConfig": {
     "access": "public",

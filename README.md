@@ -109,3 +109,7 @@ Forkers: replace the D1, KV, R2, Queues and Durable Object bindings in each app'
 
 [PolyForm Noncommercial License 1.0.0](LICENSE) — free for personal, educational, and other
 noncommercial use. Commercial use requires separate permission from the copyright holders.
+
+The browser SDK [`@flareboard/js`](packages/sdk-js) is [MIT-licensed](packages/sdk-js/LICENSE),
+so you can add it to any site, commercial or not. Using the hosted service at flareboard.dev is
+covered by its [Terms of Service](https://flareboard.dev/terms).

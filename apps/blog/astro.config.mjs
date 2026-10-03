@@ -12,6 +12,10 @@ export default defineConfig({
   outDir: './dist/blog',
   trailingSlash: 'never',
   output: 'static',
+  markdown: {
+    // Light colors inline, dark ones as --shiki-dark variables (switched in global.css).
+    shikiConfig: { themes: { light: 'github-light', dark: 'github-dark' } },
+  },
   integrations: [
     mdx(),
     sitemap({

@@ -495,44 +495,44 @@ img {
   color: var(--text);
 }
 
-.post-body :global(h2) {
+.post-body h2 {
   margin: 2rem 0 0.75rem;
   font-size: 1.375rem;
   font-weight: 600;
   letter-spacing: -0.02em;
 }
 
-.post-body :global(h3) {
+.post-body h3 {
   margin: 1.5rem 0 0.5rem;
   font-size: 1.125rem;
   font-weight: 600;
 }
 
-.post-body :global(p) {
+.post-body p {
   margin: 0 0 1rem;
 }
 
-.post-body :global(ul),
-.post-body :global(ol) {
+.post-body ul,
+.post-body ol {
   margin: 0 0 1rem;
   padding-left: 1.35rem;
 }
 
-.post-body :global(li) {
+.post-body li {
   margin-bottom: 0.35rem;
 }
 
-.post-body :global(a) {
+.post-body a {
   color: var(--link);
   font-weight: 500;
 }
 
-.post-body :global(a:hover) {
+.post-body a:hover {
   color: var(--link-hover);
   text-decoration: underline;
 }
 
-.post-body :global(blockquote) {
+.post-body blockquote {
   margin: 1.25rem 0;
   padding: 0.75rem 1rem;
   border: 1px solid var(--border);
@@ -541,7 +541,7 @@ img {
   color: var(--text-muted);
 }
 
-.post-body :global(code) {
+.post-body code {
   font-family: var(--font-mono);
   font-size: 0.875em;
   padding: 0.12rem 0.35rem;
@@ -549,7 +549,7 @@ img {
   background: var(--bg-subtle);
 }
 
-.post-body :global(pre) {
+.post-body pre {
   margin: 1.25rem 0;
   padding: 1rem;
   overflow-x: auto;
@@ -558,9 +558,54 @@ img {
   background: var(--bg-subtle);
 }
 
-.post-body :global(pre code) {
+.post-body pre code {
   padding: 0;
   background: none;
+}
+
+/* Shiki renders code with the light theme inline; dark mode switches to its --shiki-dark colors. */
+[data-theme='dark'] .post-body .astro-code,
+[data-theme='dark'] .post-body .astro-code span {
+  color: var(--shiki-dark) !important;
+  background-color: var(--shiki-dark-bg) !important;
+}
+
+.post-body table {
+  width: 100%;
+  margin: 1.25rem 0 1.5rem;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.post-body th,
+.post-body td {
+  padding: 0.55rem 0.75rem 0.55rem 0;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.post-body th {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.post-body img {
+  display: block;
+  margin: 1.5rem 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+/* Narrow screens: tables keep one line per cell and scroll inside the post instead of wrapping. */
+@media (max-width: 640px) {
+  .post-body table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
 }
 
 .post-back {

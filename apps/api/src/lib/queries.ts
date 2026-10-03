@@ -757,13 +757,58 @@ async function getRealtimeFromKv(
   return { visitors: Math.max(active.length, sessions.length), sessions };
 }
 
+/** Per-isolate memo for demo realtime: the dashboard streams realtime every second. */
+const demoRealtimeMemo = new Map<string, { at: number; value: { visitors: number; sessions: RealtimeSessionRow[] } | null }>();
+const DEMO_REALTIME_MEMO_MS = 10_000;
+
+/**
+ * Demo websites are filled by the daily generator, which writes straight into the store and
+ * never touches the realtime keys ingest keeps in KV, so their "active now" would always be
+ * empty. Read it from the store instead: sessions with a pageview in the window, newest first.
+ */
+async function getDemoRealtimeFromStore(
+  env: Env,
+  websiteId: string,
+  since: number,
+  now: number,
+): Promise<{ visitors: number; sessions: RealtimeSessionRow[] } | null> {
+  const memo = demoRealtimeMemo.get(websiteId);
+  if (memo && now - memo.at < DEMO_REALTIME_MEMO_MS) return memo.value;
+  // MAX() makes SQLite take url_path and referrer from each session's latest pageview.
+  const rows = await siteDb(env, websiteId)
+    .prepare(
+      `SELECT e.session_id AS sessionId, e.url_path AS urlPath, e.referrer_domain AS referrerDomain,
+              s.country AS country, MAX(e.created_at) AS createdAt
+       FROM website_event e
+       LEFT JOIN session s ON s.session_id = e.session_id
+       WHERE e.website_id = ?1 AND e.event_type = ?2 AND e.created_at >= ?3 AND e.created_at <= ?4
+       GROUP BY e.session_id
+       ORDER BY createdAt DESC
+       LIMIT 500`,
+    )
+    .bind(websiteId, EVENT_TYPE.pageView, since, now)
+    .all<RealtimeSessionRow>();
+  const sessions = (rows.results ?? []).map((row) => ({
+    sessionId: row.sessionId,
+    urlPath: row.urlPath ?? '',
+    referrerDomain: row.referrerDomain ?? null,
+    country: row.country ?? null,
+    createdAt: Number(row.createdAt),
+  }));
+  const value = sessions.length ? { visitors: sessions.length, sessions: sessions.slice(0, REALTIME_SESSION_LIMIT) } : null;
+  demoRealtimeMemo.set(websiteId, { at: now, value });
+  return value;
+}
+
 export async function getRealtime(env: Env, websiteId: string) {
   const since = Date.now() - REALTIME_WINDOW_MS;
   const endAt = Date.now();
   const start30 = endAt - 30 * 60 * 1000;
 
   const [kv, window30] = await Promise.all([
-    getRealtimeFromKv(env, websiteId, since),
+    isDemoWebsiteId(websiteId)
+      ? getDemoRealtimeFromStore(env, websiteId, since, endAt)
+      : getRealtimeFromKv(env, websiteId, since),
     cachedRead(env, `realtime-30m:${websiteId}`, 30, async () => {
       const row = await siteDb(env, websiteId).prepare(
         `SELECT

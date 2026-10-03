@@ -61,7 +61,9 @@ type PerformanceTrendPoint = {
   samples: number;
 };
 
+/** Vital values (summary, trend points, breakdown rows) are the 75th percentile of the samples. */
 interface PerformanceReport {
+  statistic?: 'p75';
   lcp: number | null;
   inp: number | null;
   cls: number | null;
@@ -219,7 +221,9 @@ export default function PerformancePage() {
                       label={
                         <>
                           <abbr title={t(VITAL_NAME_KEYS[key])}>{key.toUpperCase()}</abbr>
-                          <span className="traffic-kpi-label-note">{t('trafficAvg')}</span>
+                          <span className="traffic-kpi-label-note" title={t('trafficP75Hint')}>
+                            {t('trafficP75')}
+                          </span>
                           <RatingBadge dist={dist} />
                         </>
                       }
@@ -238,7 +242,7 @@ export default function PerformancePage() {
 
               <SectionCard
                 title={t('trafficMetricOverTime').replace('{metric}', metric.toUpperCase())}
-                description={`${metricName} · ${(unit === 'hour' ? t('trafficAvgPerHour') : t('trafficAvgPerDay')).replace(
+                description={`${metricName} · ${(unit === 'hour' ? t('trafficP75PerHour') : t('trafficP75PerDay')).replace(
                   '{samples}',
                   formatNumber(samples),
                 )}`}

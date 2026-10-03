@@ -610,6 +610,7 @@ export type VitalDistribution = {
   total: number;
 };
 
+/** Vital values are the 75th percentile (p75) of the samples, as Core Web Vitals are assessed. */
 export type PerformanceBreakdownRow = {
   dimension: string;
   samples: number;
@@ -621,6 +622,7 @@ export type PerformanceBreakdownRow = {
   clsDistribution: VitalDistribution;
 };
 
+/** p75 of each vital in the bucket. */
 export type PerformanceTrendPoint = {
   x: string;
   lcp: number | null;
@@ -697,6 +699,72 @@ function performanceTrendUnit(startAt: number, endAt: number) {
   return rangeMs <= 48 * 60 * 60 * 1000 ? 'hour' : 'day';
 }
 
+type VitalKey = 'lcp' | 'inp' | 'cls' | 'fcp' | 'ttfb';
+const VITAL_KEYS: readonly VitalKey[] = ['lcp', 'inp', 'cls', 'fcp', 'ttfb'];
+type VitalValues = Record<VitalKey, number | null>;
+
+function emptyVitals(): VitalValues {
+  return { lcp: null, inp: null, cls: null, fcp: null, ttfb: null };
+}
+
+/** Map key for a group value (SQL NULL and '' both group as ''). */
+function groupKey(value: unknown) {
+  return value == null ? '' : String(value);
+}
+
+/**
+ * The 75th percentile of each vital per group — nearest rank, the ⌈0.75·n⌉-th smallest sample,
+ * which is how Core Web Vitals are assessed (good when 75% of page loads are good). SQLite has
+ * no percentile function, so the samples are ranked per group and metric.
+ */
+async function vitalP75ByGroup(
+  env: Env,
+  websiteId: string,
+  joins: string,
+  where: string,
+  binds: (string | number)[],
+  groupExpr: string,
+  metrics: readonly VitalKey[] = VITAL_KEYS,
+  /** Only these groups (by `groupKey`), e.g. the top rows of a breakdown. */
+  onlyGroups?: readonly string[],
+): Promise<Map<string, VitalValues>> {
+  const groupFilter = onlyGroups?.length
+    ? ` AND COALESCE(${groupExpr}, '') IN (${onlyGroups.map(() => '?').join(', ')})`
+    : '';
+  const arms = metrics
+    .map((metric) => `SELECT g, '${metric}' AS m, ${metric} AS v FROM perf WHERE ${metric} IS NOT NULL`)
+    .join('\n       UNION ALL ');
+  const rows = await siteDb(env, websiteId)
+    .prepare(
+      `WITH perf AS (
+         SELECT ${groupExpr} AS g, ${metrics.map((metric) => `e.${metric} AS ${metric}`).join(', ')}
+         FROM website_event e${joins}
+         WHERE ${where} AND ${PERF_EVENT_FILTER}${groupFilter}
+       ),
+       vals AS (
+         ${arms}
+       ),
+       ranked AS (
+         SELECT g, m, v,
+                ROW_NUMBER() OVER (PARTITION BY g, m ORDER BY v) AS rn,
+                COUNT(*) OVER (PARTITION BY g, m) AS n
+         FROM vals
+       )
+       SELECT g, m, v FROM ranked WHERE rn = (3 * n + 3) / 4`,
+    )
+    .bind(...binds, ...(onlyGroups?.length ? onlyGroups : []))
+    .all<{ g: unknown; m: VitalKey; v: number }>();
+  const byGroup = new Map<string, VitalValues>();
+  for (const row of rows.results ?? []) {
+    const key = groupKey(row.g);
+    const values = byGroup.get(key) ?? emptyVitals();
+    const digits = row.m === 'cls' ? 10_000 : 100;
+    values[row.m] = Math.round(Number(row.v) * digits) / digits;
+    byGroup.set(key, values);
+  }
+  return byGroup;
+}
+
 async function getPerformanceBreakdown(
   env: Env,
   websiteId: string,
@@ -709,9 +777,6 @@ async function getPerformanceBreakdown(
   const rows = await siteDb(env, websiteId).prepare(
     `SELECT ${groupExpr} as dimension,
       COUNT(*) as samples,
-      ROUND(AVG(e.lcp), 2) as lcp,
-      ROUND(AVG(e.inp), 2) as inp,
-      ROUND(AVG(e.cls), 4) as cls,
       SUM(CASE WHEN e.lcp IS NOT NULL AND e.lcp <= 2500 THEN 1 ELSE 0 END) as lcp_good,
       SUM(CASE WHEN e.lcp IS NOT NULL AND e.lcp > 2500 AND e.lcp <= 4000 THEN 1 ELSE 0 END) as lcp_ni,
       SUM(CASE WHEN e.lcp IS NOT NULL AND e.lcp > 4000 THEN 1 ELSE 0 END) as lcp_poor,
@@ -731,22 +796,18 @@ async function getPerformanceBreakdown(
      LIMIT ?`,
   )
     .bind(...binds, limit)
-    .all<
-      DistributionRow & {
-        dimension: string;
-        samples: number;
-        lcp: number | null;
-        inp: number | null;
-        cls: number | null;
-      }
-    >();
+    .all<DistributionRow & { dimension: string; samples: number }>();
+  const top = rows.results ?? [];
+  const p75 = top.length
+    ? await vitalP75ByGroup(env, websiteId, joins, where, binds, groupExpr, ['lcp', 'inp', 'cls'], top.map((row) => groupKey(row.dimension)))
+    : new Map<string, VitalValues>();
 
-  return (rows.results ?? []).map((row) => ({
+  return top.map((row) => ({
     dimension: row.dimension || 'Unknown',
     samples: row.samples,
-    lcp: row.lcp,
-    inp: row.inp,
-    cls: row.cls,
+    lcp: p75.get(groupKey(row.dimension))?.lcp ?? null,
+    inp: p75.get(groupKey(row.dimension))?.inp ?? null,
+    cls: p75.get(groupKey(row.dimension))?.cls ?? null,
     lcpDistribution: mapDistribution(row, 'lcp'),
     inpDistribution: mapDistribution(row, 'inp'),
     clsDistribution: mapDistribution(row, 'cls'),
@@ -764,11 +825,6 @@ export async function getPerformanceReport(
   const perfWhere = `${where} AND ${PERF_EVENT_FILTER}`;
 
   const summarySql = `SELECT
-      ROUND(AVG(e.lcp), 2) as lcp,
-      ROUND(AVG(e.inp), 2) as inp,
-      ROUND(AVG(e.cls), 4) as cls,
-      ROUND(AVG(e.fcp), 2) as fcp,
-      ROUND(AVG(e.ttfb), 2) as ttfb,
       COUNT(*) as samples,
       COUNT(e.lcp) as lcp_samples,
       COUNT(e.inp) as inp_samples,
@@ -783,11 +839,6 @@ export async function getPerformanceReport(
     .bind(...binds)
     .first<
       DistributionRow & {
-        lcp: number | null;
-        inp: number | null;
-        cls: number | null;
-        fcp: number | null;
-        ttfb: number | null;
         samples: number;
         lcp_samples: number;
         inp_samples: number;
@@ -799,21 +850,27 @@ export async function getPerformanceReport(
 
   const unit = performanceTrendUnit(startAt, endAt);
   const trendFormat = unit === 'hour' ? '%Y-%m-%d %H:00' : '%Y-%m-%d';
-  const trendRows = await siteDb(env, websiteId).prepare(
-    `SELECT strftime('${trendFormat}', datetime(e.created_at / 1000, 'unixepoch')) as x,
-      ROUND(AVG(e.lcp), 2) as lcp,
-      ROUND(AVG(e.inp), 2) as inp,
-      ROUND(AVG(e.cls), 4) as cls,
-      ROUND(AVG(e.fcp), 2) as fcp,
-      ROUND(AVG(e.ttfb), 2) as ttfb,
-      COUNT(*) as samples
-     FROM website_event e${joins}
-     WHERE ${perfWhere}
-     GROUP BY x
-     ORDER BY x ASC`,
-  )
-    .bind(...binds)
-    .all<PerformanceTrendPoint>();
+  const bucketExpr = `strftime('${trendFormat}', datetime(e.created_at / 1000, 'unixepoch'))`;
+  const [trendRows, overallP75, trendP75] = await Promise.all([
+    siteDb(env, websiteId)
+      .prepare(
+        `SELECT ${bucketExpr} as x, COUNT(*) as samples
+         FROM website_event e${joins}
+         WHERE ${perfWhere}
+         GROUP BY x
+         ORDER BY x ASC`,
+      )
+      .bind(...binds)
+      .all<{ x: string; samples: number }>(),
+    vitalP75ByGroup(env, websiteId, joins, where, binds, "''"),
+    vitalP75ByGroup(env, websiteId, joins, where, binds, bucketExpr),
+  ]);
+  const overall = overallP75.get('') ?? emptyVitals();
+  const trendPoints: PerformanceTrendPoint[] = (trendRows.results ?? []).map((point) => ({
+    x: point.x,
+    ...(trendP75.get(groupKey(point.x)) ?? emptyVitals()),
+    samples: point.samples,
+  }));
 
   const sessionJoins = joins.includes('session s')
     ? joins
@@ -828,11 +885,13 @@ export async function getPerformanceReport(
   const distRow = row ?? ({} as DistributionRow);
 
   return {
-    lcp: row?.lcp ?? null,
-    inp: row?.inp ?? null,
-    cls: row?.cls ?? null,
-    fcp: row?.fcp ?? null,
-    ttfb: row?.ttfb ?? null,
+    /** The vital values below are the 75th percentile of the samples. */
+    statistic: 'p75' as const,
+    lcp: overall.lcp,
+    inp: overall.inp,
+    cls: overall.cls,
+    fcp: overall.fcp,
+    ttfb: overall.ttfb,
     samples: row?.samples ?? 0,
     lcpSamples: row?.lcp_samples ?? 0,
     inpSamples: row?.inp_samples ?? 0,
@@ -848,7 +907,7 @@ export async function getPerformanceReport(
     },
     trends: {
       unit,
-      points: trendRows.results ?? [],
+      points: trendPoints,
     },
     breakdown: {
       url: byUrl,

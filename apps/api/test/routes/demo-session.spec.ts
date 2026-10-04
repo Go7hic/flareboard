@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
+  createSecureToken,
   DEMO_DOCS_WEBSITE_ID,
   DEMO_TEAM_ID,
   DEMO_USER_ID,
@@ -358,6 +359,35 @@ describe('read-only demo session', () => {
     expect(preview.status).toBe(404);
     const dashboard = await asDemo(token, '/api/dashboard');
     expect(JSON.stringify(dashboard.body)).not.toContain(OTHER_SITE);
+  });
+
+  it('keeps the demo websites out of a real account\'s overview, its owner\'s included', async () => {
+    const ownSite = 'demo-spec-own-site';
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO website (website_id, name, domain, user_id, created_at, updated_at)
+       VALUES (?1, 'Own site', 'own.example.com', ?2, ?3, ?3)`,
+    )
+      .bind(ownSite, OWNER_ID, NOW)
+      .run();
+    await testSiteDb(ownSite)
+      .prepare(
+        `INSERT OR REPLACE INTO website_event (event_id, website_id, session_id, visit_id, created_at, url_path, event_type)
+         VALUES ('demo-spec-own-view', ?1, 'own-session', 'own-visit', ?2, '/', ?3)`,
+      )
+      .bind(ownSite, NOW - 500, EVENT_TYPE.pageView)
+      .run();
+    const owner = await createSecureToken({ userId: OWNER_ID, role: ROLES.user }, env.APP_SECRET);
+    const response = await fetchWorker(`/api/dashboard?${RANGE}`, { headers: { Authorization: `Bearer ${owner}` } });
+    expect(response.status).toBe(200);
+    const overview = (await response.json()) as { siteCount: number; totals: { pageviews: number }; websites: Array<{ id: string }> };
+    expect(overview.siteCount).toBe(1);
+    expect(overview.websites.map((site) => site.id)).toEqual([ownSite]);
+    expect(overview.totals.pageviews).toBe(1);
+
+    const demo = await asDemo(token, `/api/dashboard?${RANGE}`);
+    expect(demo.status).toBe(200);
+    expect(demo.body.websites.map((site: { id: string }) => site.id)).toContain(PUBLIC_DEMO_WEBSITE_ID);
+    expect(demo.body.totals.pageviews).toBe(1);
   });
 
   it('cannot sign in with a password or an API key', async () => {

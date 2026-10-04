@@ -8,6 +8,7 @@ import {
   getPageviews,
 } from '../lib/queries';
 import { cachedRead } from '../lib/cache';
+import { isDemoUserId, isDemoWebsiteId } from '../lib/demo-access';
 import { json } from '../lib/response';
 import type { ApiVariables } from '../middleware/auth';
 
@@ -55,7 +56,11 @@ export async function handleDashboard(c: Ctx) {
   const unit = chartUnit(startAt, endAt);
 
   return cachedRead(c.env, `dashboard-overview:${userId}:${cacheKey}:${unit}`, CACHE_TTL, async () => {
-    const accessible = await getAccessibleWebsites(c.env, userId);
+    // The demo websites are generated sample data: they stay out of a real account's overview,
+    // its owner's included. The shared demo account keeps them, as they are all it can see.
+    const accessible = (await getAccessibleWebsites(c.env, userId)).filter(
+      (website) => isDemoUserId(userId) || !isDemoWebsiteId(website.websiteId),
+    );
     const siteCount = accessible.length;
     const capped = accessible.slice(0, MAX_SITES);
     const websiteIds = capped.map((w) => w.websiteId);

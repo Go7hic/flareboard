@@ -84,6 +84,7 @@ export function LanguageSelector() {
                 role="option"
                 aria-selected={loc === current}
                 className={`locale-selector-option${loc === current ? ' is-active' : ''}`}
+                lang={loc}
                 onClick={() => select(loc)}
               >
                 {LOCALE_LABELS[loc]}

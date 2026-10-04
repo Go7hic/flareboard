@@ -334,8 +334,8 @@ export async function handleStorageRebuildRollups(c: Ctx) {
     : (await getAllWebsitesAdmin(c.env)).filter((w) => !w.deletedAt).map((w) => w.websiteId);
   const results = [];
   for (const websiteId of ids) {
-    const { pageviews } = await siteStoreStub(c.env, websiteId).rebuildRollups(websiteId);
-    results.push({ websiteId, pageviews });
+    const { pageviews, rowsWritten } = await siteStoreStub(c.env, websiteId).rebuildRollups(websiteId);
+    results.push({ websiteId, pageviews, rowsWritten });
   }
   await logAdminAction(c.env, c.get('user').userId, 'rebuild_rollups', 'website', body?.websiteId ?? null, { count: ids.length });
   return json({ rebuilt: results });

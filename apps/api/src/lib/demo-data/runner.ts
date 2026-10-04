@@ -107,7 +107,16 @@ function countChunks(hours: HourData[]) {
 
 export type DemoTickResult = {
   skipped?: 'disabled' | 'store-mode';
-  websites: Array<{ websiteId: string; hours?: number; events?: number; until?: string; skipped?: string; error?: string }>;
+  websites: Array<{
+    websiteId: string;
+    hours?: number;
+    events?: number;
+    /** Rows the rollup refresh wrote (storage bills rows written). */
+    rollupRowsWritten?: number;
+    until?: string;
+    skipped?: string;
+    error?: string;
+  }>;
 };
 
 /**
@@ -146,9 +155,18 @@ export async function runDemoDataGenerator(env: Env, now = Date.now(), options: 
       // cut short by its budget leaves the watermark behind and the next hourly run continues.
       const range = await generateRange(env, demoSite(website), from, dayEnd, { deadline, maxHours: options.maxHoursPerSite ?? 30, maxReplayChunks: 400 });
       await env.CACHE.put(WATERMARK_KEY(websiteId), String(range.cursor));
-      if (range.hours) await siteStoreStub(env, websiteId).rebuildRollups(websiteId);
+      // Only the new days and the expired ones: a full rebuild rewrote 90 days of rollups daily.
+      const rollups = range.hours
+        ? await siteStoreStub(env, websiteId).refreshRollups(websiteId, { since: from, keepFrom: now - DEMO_HISTORY_DAYS * DAY_MS })
+        : null;
       await pruneDemoData(env, website, now);
-      results.push({ websiteId, hours: range.hours, events: range.events, until: new Date(range.cursor).toISOString() });
+      results.push({
+        websiteId,
+        hours: range.hours,
+        events: range.events,
+        rollupRowsWritten: rollups?.rowsWritten,
+        until: new Date(range.cursor).toISOString(),
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(JSON.stringify({ event: 'demo_data_failed', websiteId, error: message }));

@@ -21,6 +21,33 @@ const HEATMAP_DEDUP_TTL_MS = 2 * DAY_MS;
 /** Rows deleted per table and alarm; a larger backlog is worked off by a follow-up alarm. */
 const OTEL_PURGE_BATCH = 10_000;
 const OTEL_PURGE_BACKLOG_DELAY_MS = 60 * 1000;
+/** Rollup tables derived from raw rows (rebuildRollups / refreshRollups). Heatmap cells are not. */
+const ROLLUP_TABLES = [
+  'rollup_session_day',
+  'rollup_stats_daily',
+  'rollup_pageview_series',
+  'rollup_series_bucket',
+  'rollup_dimension_daily',
+  'rollup_event_daily',
+] as const;
+const REPLAY_SUMMARY_COLUMNS = `MIN(session_id), MIN(started_at), MAX(ended_at), SUM(event_count), COUNT(*),
+  SUM(click_count), SUM(input_count), SUM(console_log_count), SUM(console_warn_count),
+  SUM(console_error_count), SUM(network_error_count)`;
+
+/** Rollup bucket of a millisecond column, in UTC (the aggregator's dayKey/hourBucket/...). */
+function utcBucket(format: string, column = 'created_at') {
+  return `strftime('${format}', ${column} / 1000, 'unixepoch')`;
+}
+
+function utcDay(ms: number) {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/** A time inlined into SQL; only whole milliseconds pass. */
+function sqlTime(ms: number) {
+  if (!Number.isSafeInteger(ms)) throw new Error(`Invalid time: ${ms}`);
+  return String(ms);
+}
 
 /**
  * One website's analytics store: a SQLite-backed Durable Object addressed by
@@ -242,91 +269,231 @@ export class EventStore extends DurableObject<Env> {
    * readers never see a half-built state. Mirrors the aggregator's incremental rules
    * (workers/aggregator/src). Heatmap cells are not derivable from events and are left alone.
    */
-  rebuildRollups(websiteId: string): { pageviews: number } {
+  rebuildRollups(websiteId: string): { pageviews: number; rowsWritten: number } {
     this.claim(websiteId);
-    const bucket = (format: string, column = 'created_at') =>
-      `strftime('${format}', ${column} / 1000, 'unixepoch')`;
-    const DAY = bucket('%Y-%m-%d');
-    const DAY_E = bucket('%Y-%m-%d', 'e.created_at');
-    const units: Array<[string, string]> = [
-      ['day', DAY],
-      ['hour', bucket('%Y-%m-%d %H:00')],
-      ['month', bucket('%Y-%m')],
-      ['year', bucket('%Y')],
-    ];
     return this.ctx.storage.transactionSync(() => {
-      for (const table of [
-        'rollup_session_day',
-        'rollup_stats_daily',
-        'rollup_pageview_series',
-        'rollup_series_bucket',
-        'rollup_dimension_daily',
-        'rollup_event_daily',
-        'session_replay_summary',
-      ]) {
-        this.sql.exec(`DELETE FROM ${table}`);
+      let rowsWritten = 0;
+      for (const table of [...ROLLUP_TABLES, 'session_replay_summary']) {
+        rowsWritten += this.write(`DELETE FROM ${table}`);
       }
-      this.sql.exec(
-        `INSERT INTO rollup_session_day (website_id, day, session_id, visit_id, pageviews, first_at, last_at)
-         SELECT website_id, ${DAY}, session_id, visit_id, COUNT(*), MIN(created_at), MAX(created_at)
-         FROM website_event WHERE event_type = 1 AND created_at IS NOT NULL
-         GROUP BY ${DAY}, session_id, visit_id`,
-      );
-      this.sql.exec(
-        `INSERT INTO rollup_stats_daily (website_id, day, pageviews, visitors, visits, bounces, totaltime_sec)
-         SELECT website_id, day, SUM(pageviews), COUNT(DISTINCT session_id), COUNT(*),
-                SUM(CASE WHEN pageviews = 1 THEN 1 ELSE 0 END), COALESCE(SUM((last_at - first_at) / 1000), 0)
-         FROM rollup_session_day GROUP BY day`,
-      );
-      for (const [unit, expr] of units) {
-        this.sql.exec(
-          `INSERT INTO rollup_pageview_series (website_id, unit, bucket, pageviews)
-           SELECT website_id, ?, ${expr}, COUNT(*)
-           FROM website_event WHERE event_type = 1 AND created_at IS NOT NULL GROUP BY ${expr}`,
-          unit,
-        );
-        this.sql.exec(
-          `INSERT INTO rollup_series_bucket (website_id, unit, bucket, session_id, visit_id)
-           SELECT DISTINCT website_id, ?, ${expr}, session_id, visit_id
-           FROM website_event WHERE event_type = 1 AND created_at IS NOT NULL`,
-          unit,
-        );
-      }
-      const dimension = (name: string, value: string, join = '') =>
-        this.sql.exec(
-          `INSERT INTO rollup_dimension_daily (website_id, day, dimension, value, count)
-           SELECT e.website_id, ${DAY_E}, ?, ${value}, COUNT(*)
-           FROM website_event e ${join}
-           WHERE e.event_type = 1 AND e.created_at IS NOT NULL
-           GROUP BY ${DAY_E}, ${value}`,
-          name,
-        );
-      dimension('path', "COALESCE(e.url_path, '')");
-      dimension('referrer', "COALESCE(NULLIF(e.referrer_domain, ''), 'Direct')");
-      // Session dimensions only when the session row exists, as in the aggregator.
-      for (const column of ['browser', 'os', 'device', 'language', 'country']) {
-        dimension(column, `COALESCE(NULLIF(s.${column}, ''), 'Unknown')`, 'JOIN session s ON s.session_id = e.session_id');
-      }
-      this.sql.exec(
-        `INSERT INTO rollup_event_daily (website_id, day, event_name, count)
-         SELECT website_id, ${DAY}, event_name, COUNT(*)
-         FROM website_event
-         WHERE event_type = 2 AND event_name IS NOT NULL AND event_name <> '' AND created_at IS NOT NULL
-         GROUP BY ${DAY}, event_name`,
-      );
-      this.sql.exec(
+      rowsWritten += this.insertDailyRollups(websiteId, null);
+      rowsWritten += this.insertMonthYearRollups(websiteId, null, null);
+      rowsWritten += this.write(
         `INSERT INTO session_replay_summary (website_id, visit_id, session_id, started_at, ended_at, event_count, chunks,
            click_count, input_count, console_log_count, console_warn_count, console_error_count, network_error_count)
-         SELECT website_id, visit_id, MIN(session_id), MIN(started_at), MAX(ended_at), SUM(event_count), COUNT(*),
-                SUM(click_count), SUM(input_count), SUM(console_log_count), SUM(console_warn_count),
-                SUM(console_error_count), SUM(network_error_count)
+         SELECT website_id, visit_id, ${REPLAY_SUMMARY_COLUMNS}
          FROM session_replay GROUP BY visit_id`,
       );
       const pageviews = this.sql
         .exec<{ n: number }>('SELECT COUNT(*) AS n FROM website_event WHERE event_type = 1')
         .one().n;
-      return { pageviews: Number(pageviews) || 0 };
+      return { pageviews: Number(pageviews) || 0, rowsWritten };
     });
+  }
+
+  /**
+   * Brings the rollups up to date for an append-only writer (the demo generator) that added rows
+   * from `since` on, and drops what lies before `keepFrom` (past retention), both rounded down to
+   * the UTC day. rebuildRollups rewrites every rollup row each time; this recomputes day and hour
+   * rows from the day of `since` only, adds the new visits to the month and year visitor sets and
+   * removes visits whose pageviews in that month or year have all expired. The result matches
+   * rebuildRollups over the raw rows from the day of `keepFrom` on (store-rollups-parity.spec.ts).
+   */
+  refreshRollups(websiteId: string, range: { since: number; keepFrom: number }): { rowsWritten: number } {
+    this.claim(websiteId);
+    const keepFrom = Math.floor(range.keepFrom / DAY_MS) * DAY_MS;
+    // Days before keepFrom are expired, so recomputing never starts earlier than that.
+    const from = Math.max(Math.floor(range.since / DAY_MS) * DAY_MS, keepFrom);
+    const keepDay = utcDay(keepFrom);
+    const fromDay = utcDay(from);
+    const kept = new Date(keepFrom);
+    // The month and year keepFrom falls in are partly expired: their visitor sets need a check.
+    const partlyExpired: Array<[unit: string, bucket: string, end: number]> = [
+      ['month', keepDay.slice(0, 7), Date.UTC(kept.getUTCFullYear(), kept.getUTCMonth() + 1, 1)],
+      ['year', keepDay.slice(0, 4), Date.UTC(kept.getUTCFullYear() + 1, 0, 1)],
+    ];
+
+    return this.ctx.storage.transactionSync(() => {
+      let rowsWritten = 0;
+      for (const [unit, bucket, end] of partlyExpired) {
+        rowsWritten += this.write(
+          `DELETE FROM rollup_series_bucket WHERE website_id = ? AND unit = ? AND bucket < ?`,
+          websiteId,
+          unit,
+          bucket,
+        );
+        // Visits found on expired days (their day rows go below) that have no pageview left in
+        // the kept part of this month or year.
+        rowsWritten += this.write(
+          `DELETE FROM rollup_series_bucket
+           WHERE website_id = ? AND unit = ? AND bucket = ?
+             AND (session_id, visit_id) IN (
+               SELECT session_id, visit_id FROM rollup_series_bucket
+               WHERE website_id = ? AND unit = 'day' AND bucket < ?)
+             AND NOT EXISTS (
+               SELECT 1 FROM website_event e
+               WHERE e.visit_id = rollup_series_bucket.visit_id AND e.session_id = rollup_series_bucket.session_id
+                 AND e.event_type = 1 AND e.created_at >= ? AND e.created_at < ?)`,
+          websiteId,
+          unit,
+          bucket,
+          websiteId,
+          keepDay,
+          keepFrom,
+          end,
+        );
+      }
+      for (const table of ['rollup_session_day', 'rollup_stats_daily', 'rollup_dimension_daily', 'rollup_event_daily']) {
+        rowsWritten += this.write(
+          `DELETE FROM ${table} WHERE website_id = ? AND (day < ? OR day >= ?)`,
+          websiteId,
+          keepDay,
+          fromDay,
+        );
+      }
+      rowsWritten += this.write(
+        `DELETE FROM rollup_series_bucket
+         WHERE website_id = ? AND unit IN ('day', 'hour') AND (bucket < ? OR bucket >= ?)`,
+        websiteId,
+        keepDay,
+        fromDay,
+      );
+      // Month and year pageview counts are a handful of rows: recount them from what is kept.
+      rowsWritten += this.write(
+        `DELETE FROM rollup_pageview_series
+         WHERE website_id = ? AND (unit IN ('month', 'year') OR bucket < ? OR bucket >= ?)`,
+        websiteId,
+        keepDay,
+        fromDay,
+      );
+      rowsWritten += this.insertDailyRollups(websiteId, from);
+      rowsWritten += this.insertMonthYearRollups(websiteId, keepFrom, from);
+      // Replay summaries of the visits with new chunks; expired ones go with the retention job.
+      const touched = `SELECT visit_id FROM session_replay WHERE website_id = ? AND created_at >= ?`;
+      rowsWritten += this.write(
+        `DELETE FROM session_replay_summary WHERE website_id = ? AND visit_id IN (${touched})`,
+        websiteId,
+        websiteId,
+        from,
+      );
+      rowsWritten += this.write(
+        `INSERT INTO session_replay_summary (website_id, visit_id, session_id, started_at, ended_at, event_count, chunks,
+           click_count, input_count, console_log_count, console_warn_count, console_error_count, network_error_count)
+         SELECT website_id, visit_id, ${REPLAY_SUMMARY_COLUMNS}
+         FROM session_replay WHERE website_id = ? AND visit_id IN (${touched})
+         GROUP BY visit_id`,
+        websiteId,
+        websiteId,
+        from,
+      );
+      return { rowsWritten };
+    });
+  }
+
+  /**
+   * Day-keyed rollups and the day and hour series, from the rows at or after `from` (all rows
+   * when null). Callers delete the rows being replaced first.
+   */
+  private insertDailyRollups(websiteId: string, from: number | null): number {
+    const recent = (column: string) => (from === null ? `${column} IS NOT NULL` : `${column} >= ${sqlTime(from)}`);
+    const DAY = utcBucket('%Y-%m-%d');
+    const DAY_E = utcBucket('%Y-%m-%d', 'e.created_at');
+    let rowsWritten = this.write(
+      `INSERT INTO rollup_session_day (website_id, day, session_id, visit_id, pageviews, first_at, last_at)
+       SELECT website_id, ${DAY}, session_id, visit_id, COUNT(*), MIN(created_at), MAX(created_at)
+       FROM website_event WHERE website_id = ? AND event_type = 1 AND ${recent('created_at')}
+       GROUP BY ${DAY}, session_id, visit_id`,
+      websiteId,
+    );
+    rowsWritten += this.write(
+      `INSERT INTO rollup_stats_daily (website_id, day, pageviews, visitors, visits, bounces, totaltime_sec)
+       SELECT website_id, day, SUM(pageviews), COUNT(DISTINCT session_id), COUNT(*),
+              SUM(CASE WHEN pageviews = 1 THEN 1 ELSE 0 END), COALESCE(SUM((last_at - first_at) / 1000), 0)
+       FROM rollup_session_day WHERE website_id = ? AND day >= ? GROUP BY day`,
+      websiteId,
+      from === null ? '' : utcDay(from),
+    );
+    for (const [unit, expr] of [
+      ['day', DAY],
+      ['hour', utcBucket('%Y-%m-%d %H:00')],
+    ] as const) {
+      rowsWritten += this.write(
+        `INSERT INTO rollup_pageview_series (website_id, unit, bucket, pageviews)
+         SELECT website_id, ?, ${expr}, COUNT(*)
+         FROM website_event WHERE website_id = ? AND event_type = 1 AND ${recent('created_at')} GROUP BY ${expr}`,
+        unit,
+        websiteId,
+      );
+      rowsWritten += this.write(
+        `INSERT INTO rollup_series_bucket (website_id, unit, bucket, session_id, visit_id)
+         SELECT DISTINCT website_id, ?, ${expr}, session_id, visit_id
+         FROM website_event WHERE website_id = ? AND event_type = 1 AND ${recent('created_at')}`,
+        unit,
+        websiteId,
+      );
+    }
+    const dimension = (name: string, value: string, join = '') =>
+      this.write(
+        `INSERT INTO rollup_dimension_daily (website_id, day, dimension, value, count)
+         SELECT e.website_id, ${DAY_E}, ?, ${value}, COUNT(*)
+         FROM website_event e ${join}
+         WHERE e.website_id = ? AND e.event_type = 1 AND ${recent('e.created_at')}
+         GROUP BY ${DAY_E}, ${value}`,
+        name,
+        websiteId,
+      );
+    rowsWritten += dimension('path', "COALESCE(e.url_path, '')");
+    rowsWritten += dimension('referrer', "COALESCE(NULLIF(e.referrer_domain, ''), 'Direct')");
+    // Session dimensions only when the session row exists, as in the aggregator.
+    for (const column of ['browser', 'os', 'device', 'language', 'country']) {
+      rowsWritten += dimension(column, `COALESCE(NULLIF(s.${column}, ''), 'Unknown')`, 'JOIN session s ON s.session_id = e.session_id');
+    }
+    rowsWritten += this.write(
+      `INSERT INTO rollup_event_daily (website_id, day, event_name, count)
+       SELECT website_id, ${DAY}, event_name, COUNT(*)
+       FROM website_event
+       WHERE website_id = ? AND event_type = 2 AND event_name IS NOT NULL AND event_name <> '' AND ${recent('created_at')}
+       GROUP BY ${DAY}, event_name`,
+      websiteId,
+    );
+    return rowsWritten;
+  }
+
+  /**
+   * Month and year rollups: pageview counts over the rows at or after `pageviewsFrom`, and the
+   * visits with a pageview at or after `visitsFrom` added to the visitor sets (visits already in
+   * a set stay; null means all rows). Callers delete the count rows being replaced first.
+   */
+  private insertMonthYearRollups(websiteId: string, pageviewsFrom: number | null, visitsFrom: number | null): number {
+    const recent = (from: number | null) => (from === null ? 'created_at IS NOT NULL' : `created_at >= ${sqlTime(from)}`);
+    let rowsWritten = 0;
+    for (const [unit, expr] of [
+      ['month', utcBucket('%Y-%m')],
+      ['year', utcBucket('%Y')],
+    ] as const) {
+      rowsWritten += this.write(
+        `INSERT INTO rollup_pageview_series (website_id, unit, bucket, pageviews)
+         SELECT website_id, ?, ${expr}, COUNT(*)
+         FROM website_event WHERE website_id = ? AND event_type = 1 AND ${recent(pageviewsFrom)} GROUP BY ${expr}`,
+        unit,
+        websiteId,
+      );
+      rowsWritten += this.write(
+        `INSERT OR IGNORE INTO rollup_series_bucket (website_id, unit, bucket, session_id, visit_id)
+         SELECT DISTINCT website_id, ?, ${expr}, session_id, visit_id
+         FROM website_event WHERE website_id = ? AND event_type = 1 AND ${recent(visitsFrom)}`,
+        unit,
+        websiteId,
+      );
+    }
+    return rowsWritten;
+  }
+
+  /** Runs a write statement to completion and returns the rows it wrote (what storage bills). */
+  private write(query: string, ...bindings: unknown[]): number {
+    const cursor = this.sql.exec(query, ...bindings);
+    cursor.toArray();
+    return cursor.rowsWritten;
   }
 
   /** Erases everything this website stored (used by the deletion job). */

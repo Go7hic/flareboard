@@ -58,6 +58,8 @@ export default function Login() {
   const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  /** The account's email is not verified (sign-in refused or the link expired): offer a new link. */
+  const [unverified, setUnverified] = useState(false);
 
   // Signing in leads into the console: fetch it while the form is filled in.
   useEffect(preloadConsole, []);
@@ -96,8 +98,9 @@ export default function Login() {
           });
           setSearchParams({}, { replace: true });
           completeSignIn(res, POST_LOGIN_PATH, { replace: true });
-        } catch (err) {
-          setError(err instanceof Error ? err.message : t('requestFailed'));
+        } catch {
+          setError(t('verifyLinkInvalid'));
+          setUnverified(true);
           setSearchParams({}, { replace: true });
         }
       })();
@@ -150,6 +153,7 @@ export default function Login() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setMessage(null);
     try {
       const res = await api<LoginResult>('/api/auth/login', {
         method: 'POST',
@@ -157,7 +161,26 @@ export default function Login() {
       });
       completeSignIn(res, safeNextPath(searchParams.get('next')));
     } catch (err) {
+      if (err instanceof ApiError && err.data?.code === 'email_unverified') {
+        setUnverified(true);
+        setError(t('loginEmailUnverified'));
+        return;
+      }
       setError(err instanceof Error ? err.message : t('loginFailed'));
+    }
+  }
+
+  async function onResendVerification() {
+    setError(null);
+    setMessage(null);
+    try {
+      await api('/api/auth/resend-verification', {
+        method: 'POST',
+        body: JSON.stringify({ email: username.trim() }),
+      });
+      setMessage(t('verificationResent'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('requestFailed'));
     }
   }
 
@@ -287,6 +310,19 @@ export default function Login() {
                 </div>
                 {error ? <p className="text-danger mb-4">{error}</p> : null}
                 {message ? <p className="text-muted mb-4">{message}</p> : null}
+                {unverified ? (
+                  <p className="login-resend text-muted mb-4">
+                    {t('resendVerificationPrompt')}{' '}
+                    <button
+                      type="button"
+                      className="login-inline-link"
+                      disabled={!username.includes('@')}
+                      onClick={() => void onResendVerification()}
+                    >
+                      {t('resendVerification')}
+                    </button>
+                  </p>
+                ) : null}
                 <Button variant="primary" size="lg" className="w-full" type="submit">
                   {t('continueToDashboard')}
                 </Button>

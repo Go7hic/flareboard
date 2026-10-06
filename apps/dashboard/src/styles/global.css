@@ -1852,6 +1852,25 @@ code {
   color: var(--text);
 }
 
+/* "Didn't get the email? Send a new link": the action reads as a link. */
+.login-resend {
+  font-size: 0.8125rem;
+}
+
+.login-resend .login-inline-link {
+  color: var(--link);
+}
+
+.login-resend .login-inline-link:hover {
+  text-decoration: underline;
+}
+
+.login-resend .login-inline-link:disabled {
+  color: var(--text-muted);
+  text-decoration: none;
+  cursor: not-allowed;
+}
+
 @media (max-width: 480px) {
   .login-card {
     padding: 1.5rem 1.25rem;

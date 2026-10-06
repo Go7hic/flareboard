@@ -39,11 +39,21 @@ export default function Register() {
     setError(null);
     setMessage(null);
     try {
-      const res = await api<{ message?: string }>('/api/auth/register', {
+      await api('/api/auth/register', {
         method: 'POST',
         body: JSON.stringify({ email, password, displayName: displayName || undefined }),
       });
-      setMessage(res.message ?? t('registerSuccess'));
+      setMessage(t('registerSuccess'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('requestFailed'));
+    }
+  }
+
+  async function onResendVerification() {
+    setError(null);
+    try {
+      await api('/api/auth/resend-verification', { method: 'POST', body: JSON.stringify({ email }) });
+      setMessage(t('verificationResent'));
     } catch (err) {
       setError(err instanceof Error ? err.message : t('requestFailed'));
     }
@@ -69,6 +79,13 @@ export default function Register() {
           {message ? (
             <>
               <p className="text-muted mb-4">{message}</p>
+              {error ? <p className="text-danger mb-4">{error}</p> : null}
+              <p className="login-resend text-muted mb-4">
+                {t('resendVerificationPrompt')}{' '}
+                <button type="button" className="login-inline-link" onClick={() => void onResendVerification()}>
+                  {t('resendVerification')}
+                </button>
+              </p>
               <Button variant="primary" className="w-full" asChild>
                 <Link to="/login">{t('backToSignIn')}</Link>
               </Button>

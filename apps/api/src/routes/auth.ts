@@ -7,6 +7,7 @@ import {
   hashPassword,
   loginSchema,
   registerSchema,
+  resendVerificationSchema,
   resetPasswordSchema,
   ROLES,
   ssoSchema,
@@ -170,12 +171,42 @@ export async function handleRegister(c: Ctx) {
   });
   await ensureSubscriptionRow(c.env, userId);
 
+  // The account exists from here on: a failed send must not end in an error, or the address
+  // could neither sign in nor register again. The person can ask for another link.
+  await sendVerificationLink(c, userId, email);
+
+  return json({ ok: true, message: 'Check your email to verify your account.' }, 201);
+}
+
+/** Emails a fresh 24-hour verification link (a link that cannot be emailed is logged, token-free). */
+async function sendVerificationLink(c: Ctx, userId: string, email: string) {
   const token = uuid();
   await c.env.CACHE.put(`verify:${token}`, userId, { expirationTtl: VERIFY_TTL });
   const verifyUrl = `${dashboardBase(c)}/login?verify=${encodeURIComponent(token)}`;
-  await sendVerificationEmail(c.env, email, verifyUrl);
+  const delivered = await sendVerificationEmail(c.env, email, verifyUrl).catch(() => false);
+  if (!delivered) logUndeliveredLink(c.env, 'verify-email', userId, verifyUrl);
+}
 
-  return json({ ok: true, message: 'Check your email to verify your account.' }, 201);
+/**
+ * Sends a new verification link to an account that has not verified its email yet (the first
+ * one expired, went to spam or never arrived). Answers the same way whether or not such an
+ * account exists, and sends at most a few links per account an hour, so it can be used neither
+ * to find accounts nor to flood someone's inbox.
+ */
+export async function handleResendVerification(c: Ctx) {
+  const limited = await rateLimited(c, 'resend-verification', 5, 900);
+  if (limited) return limited;
+
+  const body = await c.req.json().catch(() => null);
+  const parsed = resendVerificationSchema.safeParse(body);
+  if (!parsed.success) return badRequest(parsed.error.message);
+
+  const user = await resolveLoginUser(c.env, parsed.data.email);
+  if (user?.email && !user.emailVerifiedAt && !isDemoUserId(user.userId)) {
+    const perAccount = await checkIpRateLimit(c.env, 'resend-verification-account', user.userId, 3, 3600);
+    if (perAccount.allowed) await sendVerificationLink(c, user.userId, user.email);
+  }
+  return json({ ok: true, message: 'If the account still needs verifying, a new link was sent.' });
 }
 
 export async function handleVerifyEmail(c: Ctx) {
@@ -234,7 +265,7 @@ export async function handleLogin(c: Ctx) {
   await clearPasswordFailures(c.env, secret, identifier);
 
   if (requiresEmailVerification(c.env) && user.email && !user.emailVerifiedAt) {
-    return json({ message: 'Please verify your email before signing in.' }, 403);
+    return json({ code: 'email_unverified', message: 'Please verify your email before signing in.' }, 403);
   }
 
   return completeFirstFactor(c, { userId: user.userId, role: user.role, username: user.username }, 'password');
@@ -496,10 +527,17 @@ export async function handleResetPassword(c: Ctx) {
   const userId = await c.env.CACHE.get(`reset:${parsed.data.token}`);
   if (!userId) return badRequest('Invalid or expired reset token');
 
+  // The reset link went to the account's email, so using it also proves the address.
+  const user = await getUserById(c.env, userId);
+  const now = new Date();
   const db = createDb(c.env.DB);
   await db
     .update(schema.user)
-    .set({ password: hashPassword(parsed.data.password), updatedAt: new Date() })
+    .set({
+      password: hashPassword(parsed.data.password),
+      ...(user?.email && !user.emailVerifiedAt ? { emailVerifiedAt: now } : {}),
+      updatedAt: now,
+    })
     .where(eq(schema.user.userId, userId));
 
   // A reset signs out every device. Two-factor authentication stays on: the next sign-in
@@ -515,6 +553,7 @@ export function getAuth() {
   const auth = new Hono<{ Bindings: Env }>();
   auth.post('/register', handleRegister);
   auth.post('/verify-email', handleVerifyEmail);
+  auth.post('/resend-verification', handleResendVerification);
   auth.post('/login', handleLogin);
   auth.post('/login/2fa', handleLoginSecondFactor);
   auth.post('/sso', handleSso);

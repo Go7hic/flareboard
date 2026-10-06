@@ -207,6 +207,11 @@ export const verifyEmailSchema = z.object({
   token: z.string().min(1),
 });
 
+/** Email (or the username it signs in with) of an account whose verification link is lost. */
+export const resendVerificationSchema = z.object({
+  email: z.string().trim().min(1).max(254),
+});
+
 export const ssoSchema = z.object({
   token: z.string().min(1),
 });

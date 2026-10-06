@@ -55,6 +55,10 @@ describe('billing helpers', () => {
       name: 'Cloud',
       maxWebsites: null,
       maxEventsPerMonth: 1_000_000,
+      maxReplaysPerMonth: 5_000,
+      maxOtelRowsPerMonth: 500_000,
+      maxRetentionDays: 730,
+      usageGraceMultiple: 1.2,
       replayEnabled: true,
       emailReportsEnabled: true,
       heatmapsEnabled: true,
@@ -63,7 +67,7 @@ describe('billing helpers', () => {
       warehouseEnabled: true,
       experimentationEnabled: true,
       surveysEnabled: true,
-      monthlyPriceUsd: 15,
+      monthlyPriceUsd: 19,
     });
     expect('stripePriceEnvKey' in pub).toBe(false);
   });

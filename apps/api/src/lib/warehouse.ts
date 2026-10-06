@@ -1412,10 +1412,14 @@ export async function deleteWarehouseDataSource(env: Env, websiteId: string, dat
     .bind(websiteId, dataSourceId)
     .run();
   if (eventStoreMode(env) !== 'd1') {
-    // Rows written before the store migration may still sit in D1.
+    // Rows written before the store migration may still sit in D1, unless its old analytics
+    // tables have been dropped since.
     await env.DB.prepare(`DELETE FROM warehouse_import WHERE website_id = ?1 AND data_source_id = ?2`)
       .bind(websiteId, dataSourceId)
-      .run();
+      .run()
+      .catch((error: unknown) => {
+        if (!/no such table/i.test(String(error))) throw error;
+      });
   }
   if (existing.type === 'stripe') await deleteStripeSourceData(env, websiteId, dataSourceId);
   await deleteWarehouseCredential(env, websiteId, dataSourceId);

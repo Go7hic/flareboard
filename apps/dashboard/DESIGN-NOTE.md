@@ -8,7 +8,7 @@
 | Tagline | Product analytics on Cloudflare |
 | Logo | `BrandLogo` — mark in `public/logo.avif`; wordmark Geist Sans via `.brand-logo-wordmark` |
 | Favicon | `public/logo.avif` |
-| OG image | `public/og-image.webp` (1200×630) |
+| OG image | `public/og-image.jpg` (1200×630 JPEG, under 300 KB for chat apps): the homepage preview in light theme and en-US beside the tagline; regenerate it when the console look changes |
 | Design language | **Vercel Geist** tokens + shadcn Base UI primitives |
 
 ## Design read

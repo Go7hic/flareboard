@@ -9,6 +9,7 @@ import {
   secondFactorLockStatus,
 } from '../lib/login-guard';
 import { getUserById } from '../lib/queries';
+import { hasKnownPassword, listLinkedIdentities } from '../lib/sign-in-methods';
 import { getAppSecret, json, notFound, unauthorized } from '../lib/response';
 import { clearSessionCookie, setSessionCookie } from '../lib/session-cookie';
 import {
@@ -21,7 +22,6 @@ import {
 } from '../lib/two-factor';
 import { extendUserSession, listUserSessions, revokeOtherUserSessions, revokeUserSession } from '../lib/user-sessions';
 import type { ApiVariables } from '../middleware/auth';
-import { hasOauthIdentity } from './me';
 
 type Ctx = Context<{ Bindings: Env; Variables: ApiVariables }>;
 
@@ -96,7 +96,7 @@ export async function handleTwoFactorDisable(c: Ctx) {
   if (!status.enabled && !status.pending) return json({ ok: true });
 
   if (status.enabled) {
-    if (!(await hasOauthIdentity(c.env, userId))) {
+    if (await hasKnownPassword(c.env, user)) {
       if (typeof body.password !== 'string' || !checkPassword(body.password, user.password)) {
         return unauthorized({ code: 'invalid_password', message: 'Password is incorrect' });
       }
@@ -189,4 +189,35 @@ export async function handleAccountAuditLog(c: Ctx) {
   const page = Math.max(1, Number(c.req.query('page') ?? 1) || 1);
   const pageSize = Math.min(100, Math.max(1, Number(c.req.query('pageSize') ?? 50) || 50));
   return json(await listUserAuditLog(c.env, c.get('user').userId, page, pageSize));
+}
+
+/** The Google / GitHub accounts linked to this user, for the sign-in methods card. */
+export async function handleListIdentities(c: Ctx) {
+  const identities = await listLinkedIdentities(c.env, c.get('user').userId);
+  return json(identities.map(({ provider, linkedAt }) => ({ provider, linkedAt })));
+}
+
+/**
+ * Unlinks a provider. Refused when it is the last way into an account without a known password:
+ * the user would be locked out until a reset link (if the account even has an email).
+ */
+export async function handleUnlinkIdentity(c: Ctx) {
+  const { userId } = c.get('user');
+  const provider = c.req.param('provider') ?? '';
+  const user = await getUserById(c.env, userId);
+  if (!user) return unauthorized();
+  const identities = await listLinkedIdentities(c.env, userId);
+  const target = identities.filter((identity) => identity.provider === provider);
+  if (!target.length) return notFound();
+  if (identities.length === target.length && !(await hasKnownPassword(c.env, user))) {
+    return json(
+      { code: 'last_sign_in_method', message: 'This is your only way to sign in. Set a password before unlinking it.' },
+      409,
+    );
+  }
+  await c.env.DB.prepare(`DELETE FROM user_oauth_identity WHERE user_id = ?1 AND provider = ?2`).bind(userId, provider).run();
+  // Links once lived only in KV, and a leftover key would bring this one back at the next sign-in.
+  await Promise.all(target.map((identity) => c.env.CACHE.delete(`oauth:${provider}:${identity.providerUserId}`)));
+  await logAdminAction(c.env, userId, 'unlink', 'oauth_identity', userId, { provider });
+  return json({ ok: true });
 }

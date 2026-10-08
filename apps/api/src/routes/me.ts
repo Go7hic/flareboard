@@ -11,6 +11,7 @@ import { DELETION_GRACE_DAYS } from '../lib/data-deletion';
 import { isDemoUserId } from '../lib/demo-access';
 import { badRequest, json, unauthorized } from '../lib/response';
 import { clearSessionCookie, setSessionCookie } from '../lib/session-cookie';
+import { hasKnownPassword } from '../lib/sign-in-methods';
 import { hasTwoFactor } from '../lib/two-factor';
 import { extendUserSession, revokeOtherUserSessions } from '../lib/user-sessions';
 import type { ApiVariables } from '../middleware/auth';
@@ -32,23 +33,13 @@ export async function handleMe(c: Ctx) {
     displayName: user.displayName,
     createdAt: user.createdAt,
     // Accounts created through Google/GitHub have no password the user knows.
-    passwordRequired: !(await hasOauthIdentity(c.env, user.userId)),
+    passwordRequired: await hasKnownPassword(c.env, user),
     twoFactorEnabled: await hasTwoFactor(c.env, user.userId),
     // Teams that stay locked until this user enables two-factor authentication.
     twoFactorRequiredBy: await twoFactorBlockedTeams(c.env, user.userId),
     // The shared read-only demo account: the dashboard shows the demo banner and hides changes.
     isDemo: isDemoUserId(user.userId),
   });
-}
-
-export async function hasOauthIdentity(env: Env, userId: string) {
-  const db = createDb(env.DB);
-  const [identity] = await db
-    .select({ provider: schema.userOauthIdentity.provider })
-    .from(schema.userOauthIdentity)
-    .where(eq(schema.userOauthIdentity.userId, userId))
-    .limit(1);
-  return Boolean(identity);
 }
 
 const LIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing', 'past_due', 'unpaid']);
@@ -71,7 +62,7 @@ export async function handleDeleteAccount(c: Ctx) {
   if (typeof body?.confirm !== 'string' || body.confirm.trim().toLowerCase() !== user.username.toLowerCase()) {
     return badRequest('Type your username to confirm.');
   }
-  if (!(await hasOauthIdentity(c.env, user.userId))) {
+  if (await hasKnownPassword(c.env, user)) {
     if (typeof body.password !== 'string' || !checkPassword(body.password, user.password)) {
       return unauthorized({ message: 'Password is incorrect' });
     }

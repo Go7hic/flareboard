@@ -121,7 +121,8 @@ export default function Login() {
           });
           setSearchParams({}, { replace: true });
           if (!isTwoFactorChallenge(res) && res.oauth?.provider) {
-            trackProductEvent(res.oauth.created ? 'oauth_signup' : 'oauth_signin', { provider: res.oauth.provider });
+            const event = res.oauth.created ? 'oauth_signup' : res.oauth.linked ? 'oauth_linked' : 'oauth_signin';
+            trackProductEvent(event, { provider: res.oauth.provider });
           }
           completeSignIn(res, next, { replace: true });
         } catch {

@@ -3355,7 +3355,20 @@
     "productWorkflowListSummary_other": "{count} 件のワークフロー · オン {on} 件",
     "signUpWithGitHub": "GitHub で続ける",
     "signUpWithGoogle": "Google で続ける",
-    "orSignUpWithEmail": "またはメールアドレスで登録"
+    "orSignUpWithEmail": "またはメールアドレスで登録",
+    "signInMethodsTitle": "ログイン方法",
+    "signInMethodsLead": "このアカウントにログインできる外部アカウント。",
+    "signInMethodAccount": "アカウント",
+    "signInMethodLinkedAt": "連携日時",
+    "signInMethodLinked": "連携済み",
+    "signInMethodNotLinked": "未連携",
+    "signInMethodLink": "連携",
+    "signInMethodUnlink": "連携を解除",
+    "signInMethodUnlinkTitle": "{provider} の連携を解除しますか？",
+    "signInMethodUnlinkBody": "この {provider} アカウントではログインできなくなります。いつでも再連携できます。",
+    "signInMethodLinkedNotice": "{provider} を連携しました。これでログインに使えます。",
+    "signInMethodLastMethod": "これが唯一のログイン方法です。先にログイン画面の「パスワードをお忘れですか」でパスワードを設定してから連携を解除してください。",
+    "auditOauthIdentityUnlink": "ログイン方法の連携を解除"
   },
   "de-DE": {
     "language": "Sprache",
@@ -6713,7 +6726,20 @@
     "productWorkflowListSummary_other": "{count} Workflows · {on} an",
     "signUpWithGitHub": "Weiter mit GitHub",
     "signUpWithGoogle": "Weiter mit Google",
-    "orSignUpWithEmail": "oder mit E-Mail registrieren"
+    "orSignUpWithEmail": "oder mit E-Mail registrieren",
+    "signInMethodsTitle": "Anmeldemethoden",
+    "signInMethodsLead": "Andere Konten, mit denen du dich bei diesem Konto anmelden kannst.",
+    "signInMethodAccount": "Konto",
+    "signInMethodLinkedAt": "Verknüpft am",
+    "signInMethodLinked": "Verknüpft",
+    "signInMethodNotLinked": "Nicht verknüpft",
+    "signInMethodLink": "Verknüpfen",
+    "signInMethodUnlink": "Trennen",
+    "signInMethodUnlinkTitle": "{provider} trennen?",
+    "signInMethodUnlinkBody": "Du kannst dich dann nicht mehr mit diesem {provider}-Konto anmelden. Du kannst es jederzeit wieder verknüpfen.",
+    "signInMethodLinkedNotice": "{provider} ist verknüpft. Du kannst dich jetzt damit anmelden.",
+    "signInMethodLastMethod": "Das ist deine einzige Anmeldemethode. Lege zuerst über „Passwort vergessen“ auf der Anmeldeseite ein Passwort fest und trenne sie dann.",
+    "auditOauthIdentityUnlink": "Anmeldeanbieter getrennt"
   },
   "fr-FR": {
     "language": "Langue",
@@ -10071,6 +10097,19 @@
     "productWorkflowListSummary_other": "{count} workflows · {on} activés",
     "signUpWithGitHub": "Continuer avec GitHub",
     "signUpWithGoogle": "Continuer avec Google",
-    "orSignUpWithEmail": "ou s’inscrire avec un e-mail"
+    "orSignUpWithEmail": "ou s’inscrire avec un e-mail",
+    "signInMethodsTitle": "Méthodes de connexion",
+    "signInMethodsLead": "Autres comptes permettant de se connecter à ce compte.",
+    "signInMethodAccount": "Compte",
+    "signInMethodLinkedAt": "Associé le",
+    "signInMethodLinked": "Associé",
+    "signInMethodNotLinked": "Non associé",
+    "signInMethodLink": "Associer",
+    "signInMethodUnlink": "Dissocier",
+    "signInMethodUnlinkTitle": "Dissocier {provider} ?",
+    "signInMethodUnlinkBody": "Vous ne pourrez plus vous connecter avec ce compte {provider}. Vous pourrez l’associer à nouveau à tout moment.",
+    "signInMethodLinkedNotice": "{provider} est associé. Vous pouvez maintenant l’utiliser pour vous connecter.",
+    "signInMethodLastMethod": "C’est votre seule méthode de connexion. Définissez d’abord un mot de passe avec « Mot de passe oublié » sur la page de connexion, puis dissociez-la.",
+    "auditOauthIdentityUnlink": "Fournisseur de connexion dissocié"
   }
 }

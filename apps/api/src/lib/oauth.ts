@@ -1,4 +1,4 @@
-import { hashPassword, ROLES, uuid } from '@flareboard/shared';
+import { ROLES, uuid } from '@flareboard/shared';
 import { createDb, schema } from '@flareboard/db';
 import type { Env } from '../env';
 import { isDemoUserId } from './demo-access';
@@ -271,7 +271,8 @@ async function resolveOAuthUser(
     .values({
       userId,
       username: await availableUsername(env, profile.username),
-      password: hashPassword(crypto.randomUUID()),
+      // No password: the provider is how this account signs in (see hasKnownPassword).
+      password: '',
       role: ROLES.user,
       ...(email && emailFree ? { email, emailVerifiedAt: now } : {}),
       createdAt: now,

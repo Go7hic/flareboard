@@ -1,6 +1,7 @@
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { API_URL } from '../lib/api';
+import { api, IDENTITIES_KEY, linkOAuthHref, OAUTH_PROVIDER_LABELS, type LinkedIdentity } from '../lib/api';
 import { getLocale, LOCALE_LABELS, LOCALES, setLocale, t, type Locale } from '../lib/i18n';
 import { resolveTheme, setTheme, themeChangeEventName, type Theme } from '../lib/theme';
 
@@ -16,7 +17,6 @@ type SidebarUserMenuProps = {
   onNavigate?: () => void;
 };
 
-const OAUTH_PROVIDER_LABELS: Record<string, string> = { github: 'GitHub', google: 'Google' };
 
 type Flyout = 'language' | 'theme';
 
@@ -91,6 +91,15 @@ export function SidebarUserMenu({
 }: SidebarUserMenuProps) {
   const [open, setOpen] = useState(false);
   const [activeFlyout, setActiveFlyout] = useState<Flyout | null>(null);
+  // "Link GitHub account" only while it is not linked yet; Account security shows the linked ones.
+  const identitiesQuery = useQuery({
+    queryKey: IDENTITIES_KEY,
+    queryFn: () => api<LinkedIdentity[]>('/api/me/identities'),
+    enabled: oauthProviders.length > 0 && !isDemo,
+    staleTime: 60_000,
+  });
+  const linked = new Set(identitiesQuery.data?.map((identity) => identity.provider));
+  const unlinkedProviders = isDemo || !identitiesQuery.isSuccess ? [] : oauthProviders.filter((provider) => !linked.has(provider));
   const [theme, setThemeState] = useState<Theme>(() =>
     typeof document !== 'undefined' ? resolveTheme() : 'light',
   );
@@ -287,16 +296,11 @@ export function SidebarUserMenu({
             ) : null}
           </div>
 
-          {oauthProviders.length && !isDemo ? (
+          {unlinkedProviders.length ? (
             <>
               <div className="sidebar-user-menu-separator" role="separator" />
-              {oauthProviders.map((provider) => (
-                <a
-                  key={provider}
-                  role="menuitem"
-                  className="sidebar-user-menu-item"
-                  href={`${API_URL}/api/auth/oauth/${provider}?link=1&returnTo=${encodeURIComponent('/dashboard')}`}
-                >
+              {unlinkedProviders.map((provider) => (
+                <a key={provider} role="menuitem" className="sidebar-user-menu-item" href={linkOAuthHref(provider)}>
                   <span className="sidebar-user-menu-item-label">
                     {t('oauthLinkProvider').replace('{provider}', OAUTH_PROVIDER_LABELS[provider] ?? provider)}
                   </span>

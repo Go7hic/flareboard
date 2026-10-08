@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { History, Laptop, LogOut, Smartphone } from 'lucide-react';
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AuditLogTable } from '../components/AuditLogTable';
 import { useConfirm } from '../components/ConfirmDialog';
 import { DataViewState } from '../components/DataViewState';
@@ -14,11 +15,21 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Skeleton } from '../components/ui/skeleton';
-import { api, type AuditLogPage, type MeResponse } from '../lib/api';
+import {
+  api,
+  ApiError,
+  IDENTITIES_KEY,
+  linkOAuthHref,
+  OAUTH_PROVIDER_LABELS,
+  type AuditLogPage,
+  type LinkedIdentity,
+  type MeResponse,
+} from '../lib/api';
 import { signInMethodLabel } from '../lib/audit-labels';
 import { formatDateTime, formatNumber, formatRelativeTime, formatShortDateTime } from '../lib/format';
 import { t } from '../lib/i18n';
 import { twoFactorErrorMessage } from '../lib/two-factor';
+import { useAppConfig } from '../lib/useAppConfig';
 
 type AccountSession = {
   id: string;
@@ -57,6 +68,7 @@ export default function AccountSecurityPage() {
           ) : null}
           {me && me.passwordRequired !== false ? <PasswordPanel /> : null}
           {me ? <TwoFactorPanel username={me.username} passwordRequired={me.passwordRequired !== false} /> : null}
+          {me && !me.isDemo ? <SignInMethodsPanel /> : null}
           <SessionsPanel />
           <ActivityPanel />
         </div>
@@ -165,6 +177,133 @@ function PasswordPanel() {
 
 function deviceIcon(device: string | null) {
   return /iphone|android|mobile|ipad/i.test(device ?? '') ? Smartphone : Laptop;
+}
+
+/** Google / GitHub accounts that sign in to this account: linked or not, link and unlink. */
+function SignInMethodsPanel() {
+  const confirm = useConfirm();
+  const queryClient = useQueryClient();
+  const { oauth: enabled = [] } = useAppConfig();
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Linking comes back here with ?linked=<provider>: say so once, then drop the parameter.
+  const [justLinked] = useState(() => searchParams.get('linked'));
+  useEffect(() => {
+    if (!searchParams.has('linked')) return;
+    setSearchParams({}, { replace: true });
+    void queryClient.invalidateQueries({ queryKey: IDENTITIES_KEY });
+    void queryClient.invalidateQueries({ queryKey: ACTIVITY_KEY });
+  }, [searchParams, setSearchParams, queryClient]);
+
+  const identitiesQuery = useQuery({
+    queryKey: IDENTITIES_KEY,
+    queryFn: () => api<LinkedIdentity[]>('/api/me/identities'),
+  });
+
+  const unlinkMutation = useMutation({
+    mutationFn: (provider: string) => api(`/api/me/identities/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: IDENTITIES_KEY });
+      void queryClient.invalidateQueries({ queryKey: ACTIVITY_KEY });
+      void queryClient.invalidateQueries({ queryKey: ['me'] });
+    },
+  });
+
+  const identities = identitiesQuery.data ?? [];
+  const linkedAt = new Map(identities.map((identity) => [identity.provider, identity.linkedAt]));
+  const providers = ['github', 'google'].filter((provider) => enabled.includes(provider) || linkedAt.has(provider));
+  if (!providers.length) return null;
+
+  const label = (provider: string) => OAUTH_PROVIDER_LABELS[provider] ?? provider;
+
+  function unlink(provider: string) {
+    confirm({
+      title: t('signInMethodUnlinkTitle').replace('{provider}', label(provider)),
+      description: t('signInMethodUnlinkBody').replace('{provider}', label(provider)),
+      confirmLabel: t('signInMethodUnlink'),
+      onConfirm: () => unlinkMutation.mutate(provider),
+    });
+  }
+
+  const error = unlinkMutation.error;
+  const errorMessage =
+    error instanceof ApiError && error.data?.code === 'last_sign_in_method'
+      ? t('signInMethodLastMethod')
+      : error
+        ? (error as Error).message
+        : null;
+
+  return (
+    <SectionCard flush id="sign-in-methods" title={t('signInMethodsTitle')} description={t('signInMethodsLead')}>
+      {justLinked && linkedAt.has(justLinked) ? (
+        <p className="ws-card-status" role="status">
+          {t('signInMethodLinkedNotice').replace('{provider}', label(justLinked))}
+        </p>
+      ) : null}
+      <DataViewState
+        loading={identitiesQuery.isLoading}
+        error={identitiesQuery.isError ? identitiesQuery.error : null}
+        onRetry={() => identitiesQuery.refetch()}
+        loadingFallback={<Skeleton className="m-5 h-16" />}
+      >
+        <div className="table-scroll">
+          <table className="data-table ws-settings-table">
+            <thead>
+              <tr>
+                <th>{t('signInMethodAccount')}</th>
+                <th>{t('status')}</th>
+                <th>{t('signInMethodLinkedAt')}</th>
+                <th className="ws-row-actions">
+                  <span className="visually-hidden">{t('signInMethodLink')}</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {providers.map((provider) => {
+                const at = linkedAt.get(provider);
+                return (
+                  <tr key={provider}>
+                    <td>{label(provider)}</td>
+                    <td>
+                      {at ? (
+                        <StatusBadge tone="success">{t('signInMethodLinked')}</StatusBadge>
+                      ) : (
+                        <span className="text-muted">{t('signInMethodNotLinked')}</span>
+                      )}
+                    </td>
+                    <td className="text-muted ws-nowrap" title={at ? formatDateTime(at) : undefined}>
+                      {at ? formatShortDateTime(at) : '—'}
+                    </td>
+                    <td className="ws-row-actions">
+                      {at ? (
+                        <Button
+                          type="button"
+                          variant="destructive-ghost"
+                          size="sm"
+                          disabled={unlinkMutation.isPending}
+                          onClick={() => unlink(provider)}
+                        >
+                          {t('signInMethodUnlink')}
+                        </Button>
+                      ) : enabled.includes(provider) ? (
+                        <Button asChild variant="outline" size="sm">
+                          <a href={linkOAuthHref(provider)}>{t('signInMethodLink')}</a>
+                        </Button>
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </DataViewState>
+      {errorMessage ? (
+        <p className="text-danger ws-card-status" role="alert">
+          {errorMessage}
+        </p>
+      ) : null}
+    </SectionCard>
+  );
 }
 
 function SessionsPanel() {

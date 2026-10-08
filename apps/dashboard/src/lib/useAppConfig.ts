@@ -7,6 +7,8 @@ export type PublicAppConfig = {
   hosted?: boolean;
   registrationEnabled?: boolean;
   plans?: LandingPlan[];
+  /** Sign-in providers configured on this install. */
+  oauth?: string[];
 };
 
 /** Shared, cached `/api/config` so nav, page body, and plan cards make one request. */

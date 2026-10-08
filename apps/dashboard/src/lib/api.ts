@@ -220,8 +220,23 @@ export interface LoginResponse {
   token?: string;
   /** Returned by `/api/auth/login/2fa` when a recovery code was used. */
   recoveryCodesRemaining?: number;
-  /** Returned by `/api/auth/oauth/exchange`: which provider, and whether it created the account. */
-  oauth?: { provider: string | null; created: boolean };
+  /** Returned by `/api/auth/oauth/exchange`: which provider, and whether it created the account or linked it. */
+  oauth?: { provider: string | null; created: boolean; linked?: boolean };
+}
+
+/** A Google or GitHub account linked to the signed-in user (`GET /api/me/identities`). */
+export interface LinkedIdentity {
+  provider: string;
+  linkedAt: number;
+}
+
+export const IDENTITIES_KEY = ['me-identities'];
+export const OAUTH_PROVIDER_LABELS: Record<string, string> = { github: 'GitHub', google: 'Google' };
+
+/** Where linking a provider to the signed-in account starts; it comes back to the security page. */
+export function linkOAuthHref(provider: string) {
+  const returnTo = `/account/security?linked=${encodeURIComponent(provider)}`;
+  return `${API_URL}/api/auth/oauth/${provider}?link=1&returnTo=${encodeURIComponent(returnTo)}`;
 }
 
 /** Starts a Google or GitHub sign-in (which signs up on Flareboard Cloud); lands on `returnTo` after. */

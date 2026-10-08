@@ -159,6 +159,8 @@ app.get('/api/me/sessions', accountSecurity.handleListSessions);
 app.post('/api/me/sessions/revoke-others', accountSecurity.handleRevokeOtherSessions);
 app.delete('/api/me/sessions/:sessionId', accountSecurity.handleRevokeSession);
 app.get('/api/me/audit-log', accountSecurity.handleAccountAuditLog);
+app.get('/api/me/identities', accountSecurity.handleListIdentities);
+app.delete('/api/me/identities/:provider', accountSecurity.handleUnlinkIdentity);
 
 app.use('/api/dashboard', jwtAuth);
 app.get('/api/dashboard', dashboardOverview.handleDashboard);

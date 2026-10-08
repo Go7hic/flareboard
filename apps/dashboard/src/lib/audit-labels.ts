@@ -20,6 +20,7 @@ const AUDIT_LABEL_KEYS: Record<string, string> = {
   'personal_api_key.create': 'auditApiKeyCreate',
   'personal_api_key.delete': 'auditApiKeyDelete',
   'oauth_identity.link': 'auditOauthIdentityLink',
+  'oauth_identity.unlink': 'auditOauthIdentityUnlink',
   'team.member_join': 'auditTeamMemberJoin',
   'team.member_remove': 'auditTeamMemberRemove',
   'team.member_role_change': 'auditTeamMemberRoleChange',

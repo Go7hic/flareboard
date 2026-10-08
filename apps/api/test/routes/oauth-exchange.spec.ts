@@ -31,7 +31,7 @@ describe('oauth code exchange', () => {
     });
     expect(first.response.status).toBe(200);
     expect(first.body.user.id).toBe(USER_ID);
-    expect(first.body.oauth).toEqual({ provider: 'github', created: true });
+    expect(first.body.oauth).toEqual({ provider: 'github', created: true, linked: false });
     expect(first.response.headers.get('Set-Cookie')).toContain(`${SESSION_COOKIE}=`);
 
     const second = await fetchWorkerJson('/api/auth/oauth/exchange', {

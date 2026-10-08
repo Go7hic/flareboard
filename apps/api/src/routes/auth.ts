@@ -438,10 +438,12 @@ export async function handleOAuthCallback(c: Ctx) {
     });
   }
   // Linking from a signed-in session already passed the second factor; sign-ins are stepped up.
+  // `oauth` tells the dashboard whether this was a sign-up, for its own funnel events.
+  const oauth = { provider: method, created: result.created };
   const exchange =
     result.linked !== 'session' && (await hasTwoFactor(c.env, user.userId))
-      ? { challenge: await createLoginChallenge(c.env, getAppSecret(c), user.userId, method) }
-      : { token: (await signIn(c, user, method, false)).token };
+      ? { challenge: await createLoginChallenge(c.env, getAppSecret(c), user.userId, method), oauth }
+      : { token: (await signIn(c, user, method, false)).token, oauth };
 
   const dest = result.returnTo ?? '/dashboard';
   // Hand the browser a short-lived one-time code, not the token itself, so the
@@ -467,7 +469,7 @@ export async function handleOAuthExchange(c: Ctx) {
   if (!stored) return unauthorized({ message: 'Invalid or expired code' });
   await c.env.CACHE.delete(key);
 
-  let exchange: { token?: unknown; challenge?: unknown };
+  let exchange: { token?: unknown; challenge?: unknown; oauth?: { provider?: unknown; created?: unknown } };
   try {
     exchange = JSON.parse(stored) as typeof exchange;
   } catch {
@@ -488,6 +490,10 @@ export async function handleOAuthExchange(c: Ctx) {
       id: session.userId,
       username: user?.username ?? session.userId,
       role: session.role,
+    },
+    oauth: {
+      provider: typeof exchange.oauth?.provider === 'string' ? exchange.oauth.provider : null,
+      created: exchange.oauth?.created === true,
     },
   });
 }

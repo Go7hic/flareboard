@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, bootstrapSession, hasSession, logoutSession, markDemoSession } from '../lib/api';
 import { LazyRouteFallback } from './LazyRouteFallback';
 import { t } from '../lib/i18n';
+import { trackProductEvent } from '../lib/tracking';
 import { demoRedirectTarget, fetchMe, isDemoHiddenPath } from '../lib/useDemoSession';
 import { AppSidebar } from './AppSidebar';
 import { AppTopBar } from './AppTopBar';
@@ -152,7 +153,10 @@ export function SidebarShell() {
           {isDemo ? (
             <DemoSessionBanner
               // Registration is open on hosted installs only; elsewhere accounts come from an admin.
-              onCreateAccount={() => void leaveDemoFor(hosted ? '/register?from=demo' : '/login')}
+              onCreateAccount={() => {
+                trackProductEvent('demo_create_account', { place: 'console' });
+                void leaveDemoFor(hosted ? '/register?from=demo' : '/login');
+              }}
               onExit={() => void leaveDemoFor('/')}
             />
           ) : null}

@@ -220,6 +220,13 @@ export interface LoginResponse {
   token?: string;
   /** Returned by `/api/auth/login/2fa` when a recovery code was used. */
   recoveryCodesRemaining?: number;
+  /** Returned by `/api/auth/oauth/exchange`: which provider, and whether it created the account. */
+  oauth?: { provider: string | null; created: boolean };
+}
+
+/** Starts a Google or GitHub sign-in (which signs up on Flareboard Cloud); lands on `returnTo` after. */
+export function startOAuth(provider: string, returnTo: string) {
+  window.location.href = `${API_URL}/api/auth/oauth/${provider}?returnTo=${encodeURIComponent(returnTo)}`;
 }
 
 /** Returned instead of a session (HTTP 200, no cookie) when the account has two-factor on. */

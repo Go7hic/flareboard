@@ -23,6 +23,7 @@ import {
 import { presetToRange, rangeQueryString, type DateRangePreset } from '../lib/dateRange';
 import { preloadConsole } from '../lib/consoleChunks';
 import { t } from '../lib/i18n';
+import { trackProductEvent } from '../lib/tracking';
 import { useChartColors } from '../lib/useChartColors';
 import { fetchMe } from '../lib/useDemoSession';
 import '../styles/console-pages';
@@ -96,6 +97,7 @@ function DemoOverview() {
 
   const website = metaQuery.data?.website;
   const registerHref = `${startHref}?from=demo`;
+  const onCreateAccount = (place: string) => () => trackProductEvent('demo_create_account', { place });
 
   const overviewLoadingFallback = (
     <>
@@ -116,7 +118,7 @@ function DemoOverview() {
             <LanguageSelector />
             <ThemeToggle />
             <Button asChild variant="primary" size="sm">
-              <Link to={registerHref}>{t('demoBannerCta')}</Link>
+              <Link to={registerHref} onClick={onCreateAccount('nav')}>{t('demoBannerCta')}</Link>
             </Button>
           </div>
         </div>
@@ -129,7 +131,7 @@ function DemoOverview() {
             <p className="demo-banner-body">{t('demoBannerBody')}</p>
           </div>
           <Button asChild variant="primary" size="sm">
-            <Link to={registerHref}>{t('demoBannerCta')}</Link>
+            <Link to={registerHref} onClick={onCreateAccount('banner')}>{t('demoBannerCta')}</Link>
           </Button>
         </div>
       </div>
@@ -141,7 +143,7 @@ function DemoOverview() {
             <p className="page-subtitle">{t('demoNotReadyBody')}</p>
             <div className="demo-not-ready-actions">
               <Button asChild variant="primary">
-                <Link to={registerHref}>{t('landingCreateFreeAccount')}</Link>
+                <Link to={registerHref} onClick={onCreateAccount('not_ready')}>{t('landingCreateFreeAccount')}</Link>
               </Button>
               <Button asChild variant="outline">
                 <Link to="/">{t('demoBackHome')}</Link>

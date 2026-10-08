@@ -20,15 +20,18 @@ describe('oauth code exchange', () => {
 
   it('swaps a one-time code for a session cookie exactly once', async () => {
     const jwt = await createSecureToken({ userId: USER_ID, role: 'admin', tv: 0 }, env.APP_SECRET);
-    await env.CACHE.put('oauth-code:sample-code', JSON.stringify({ token: jwt }), { expirationTtl: 60 });
+    await env.CACHE.put('oauth-code:sample-code', JSON.stringify({ token: jwt, oauth: { provider: 'github', created: true } }), {
+      expirationTtl: 60,
+    });
 
-    const first = await fetchWorkerJson<{ user: { id: string; username: string } }>('/api/auth/oauth/exchange', {
+    const first = await fetchWorkerJson<{ user: { id: string; username: string }; oauth: unknown }>('/api/auth/oauth/exchange', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code: 'sample-code' }),
     });
     expect(first.response.status).toBe(200);
     expect(first.body.user.id).toBe(USER_ID);
+    expect(first.body.oauth).toEqual({ provider: 'github', created: true });
     expect(first.response.headers.get('Set-Cookie')).toContain(`${SESSION_COOKIE}=`);
 
     const second = await fetchWorkerJson('/api/auth/oauth/exchange', {

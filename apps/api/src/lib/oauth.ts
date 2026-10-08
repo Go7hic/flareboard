@@ -211,7 +211,7 @@ async function availableUsername(env: Env, login: string) {
 export type OAuthLinkKind = 'session' | 'email';
 
 type LinkResult =
-  | { user: NonNullable<Awaited<ReturnType<typeof getUserById>>>; linked: OAuthLinkKind | null }
+  | { user: NonNullable<Awaited<ReturnType<typeof getUserById>>>; linked: OAuthLinkKind | null; created?: true }
   | { error: 'oauth_account_not_linked' | 'oauth_identity_in_use' | 'User creation failed' };
 
 /**
@@ -259,6 +259,11 @@ async function resolveOAuthUser(
 
   if (!isHostedMode(env)) return { error: 'oauth_account_not_linked' };
 
+  // Keep the provider's verified address so usage notices, billing mail and password resets reach
+  // the new account. An unverified local account may already hold it (the unique index forbids a
+  // second copy); then the new account starts without an email, as before.
+  const email = profile.verifiedEmail?.trim().toLowerCase();
+  const emailFree = email ? !(await getUserByEmail(env, email)) : false;
   const userId = uuid();
   const now = new Date();
   await createDb(env.DB)
@@ -268,12 +273,13 @@ async function resolveOAuthUser(
       username: await availableUsername(env, profile.username),
       password: hashPassword(crypto.randomUUID()),
       role: ROLES.user,
+      ...(email && emailFree ? { email, emailVerifiedAt: now } : {}),
       createdAt: now,
       updatedAt: now,
     });
   await saveIdentity(env, provider, profile.id, userId);
   const user = await getUserById(env, userId);
-  return user ? { user, linked: null } : { error: 'User creation failed' };
+  return user ? { user, linked: null, created: true } : { error: 'User creation failed' };
 }
 
 export async function handleOAuthCallbackFlow(
@@ -300,7 +306,13 @@ export async function handleOAuthCallbackFlow(
   const resolved = await resolveOAuthUser(env, providerParam, profile, stored.linkUserId);
   if ('error' in resolved) return { error: resolved.error };
 
-  return { user: resolved.user, returnTo: stored.returnTo, provider: providerParam, linked: resolved.linked };
+  return {
+    user: resolved.user,
+    returnTo: stored.returnTo,
+    provider: providerParam,
+    linked: resolved.linked,
+    created: resolved.created === true,
+  };
 }
 
 export { isProvider };

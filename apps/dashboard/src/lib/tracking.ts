@@ -17,3 +17,21 @@ export function initFlareboardTracking(): void {
   script.setAttribute('data-flareboard-tracking', '1');
   document.head.appendChild(script);
 }
+
+/**
+ * A product event on flareboard.dev itself (sign-up funnel, sign-in). Only pass coarse labels and
+ * status codes, never an email address, password or other personal data: the Privacy Policy says so.
+ */
+export function trackProductEvent(event: string, data?: Record<string, string | number>): void {
+  window.flareboard?.track(event, data);
+}
+
+/** The error's machine-readable code, else its HTTP status, for a `*_failed` event. */
+export function failureReason(err: unknown): string {
+  if (err && typeof err === 'object') {
+    const { data, status } = err as { data?: Record<string, unknown>; status?: unknown };
+    if (typeof data?.code === 'string') return data.code;
+    if (typeof status === 'number') return String(status);
+  }
+  return 'network';
+}

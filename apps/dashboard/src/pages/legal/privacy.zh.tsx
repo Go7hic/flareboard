@@ -113,7 +113,7 @@ const sections: LegalSection[] = [
           <li>
             <strong>Flareboard 本身。</strong>我们自己的采集脚本记录的数据类型与下文
             <a href="#analytics-data">分析数据</a>
-            中描述的相同（浏览的页面、来源、浏览器、设备类型、大致位置），另外还会记录少量产品事件，例如登录成功。
+            中描述的相同（浏览的页面、来源、浏览器、设备类型、大致位置），另外还会记录少量产品事件，例如开始注册、验证邮箱或登录成功。这些事件最多只带一个标签和错误码，从不包含你的邮箱地址或密码。
           </li>
           <li>
             <strong>Cloudflare Web Analytics。</strong>Cloudflare 会统计页面加载性能和汇总访问量。详见{' '}

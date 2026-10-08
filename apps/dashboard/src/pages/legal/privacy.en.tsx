@@ -149,7 +149,9 @@ const sections: LegalSection[] = [
           <li>
             <strong>Flareboard itself.</strong> Our own tracking script records the same kinds of data described in{' '}
             <a href="#analytics-data">Analytics data</a> below (pages viewed, referrer, browser, device type,
-            approximate location), plus a small number of product events such as a successful sign-in.
+            approximate location), plus a small number of product events such as starting a sign-up, verifying
+            an email address or a successful sign-in. These events carry a label and an error code at most, never
+            your email address or password.
           </li>
           <li>
             <strong>Cloudflare Web Analytics.</strong> Cloudflare measures page load performance and aggregate

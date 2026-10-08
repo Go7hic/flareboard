@@ -3352,7 +3352,10 @@
     "productSurveyListSummary_one": "{count} 件のアンケート · 公開中 {active} 件",
     "productSurveyListSummary_other": "{count} 件のアンケート · 公開中 {active} 件",
     "productWorkflowListSummary_one": "{count} 件のワークフロー · オン {on} 件",
-    "productWorkflowListSummary_other": "{count} 件のワークフロー · オン {on} 件"
+    "productWorkflowListSummary_other": "{count} 件のワークフロー · オン {on} 件",
+    "signUpWithGitHub": "GitHub で続ける",
+    "signUpWithGoogle": "Google で続ける",
+    "orSignUpWithEmail": "またはメールアドレスで登録"
   },
   "de-DE": {
     "language": "Sprache",
@@ -6707,7 +6710,10 @@
     "productSurveyListSummary_one": "{count} Umfrage · {active} aktiv",
     "productSurveyListSummary_other": "{count} Umfragen · {active} aktiv",
     "productWorkflowListSummary_one": "{count} Workflow · {on} an",
-    "productWorkflowListSummary_other": "{count} Workflows · {on} an"
+    "productWorkflowListSummary_other": "{count} Workflows · {on} an",
+    "signUpWithGitHub": "Weiter mit GitHub",
+    "signUpWithGoogle": "Weiter mit Google",
+    "orSignUpWithEmail": "oder mit E-Mail registrieren"
   },
   "fr-FR": {
     "language": "Langue",
@@ -10062,6 +10068,9 @@
     "productSurveyListSummary_one": "{count} sondage · {active} actif",
     "productSurveyListSummary_other": "{count} sondages · {active} actifs",
     "productWorkflowListSummary_one": "{count} workflow · {on} activé",
-    "productWorkflowListSummary_other": "{count} workflows · {on} activés"
+    "productWorkflowListSummary_other": "{count} workflows · {on} activés",
+    "signUpWithGitHub": "Continuer avec GitHub",
+    "signUpWithGoogle": "Continuer avec Google",
+    "orSignUpWithEmail": "ou s’inscrire avec un e-mail"
   }
 }

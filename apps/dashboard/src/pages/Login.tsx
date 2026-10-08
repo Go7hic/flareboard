@@ -10,14 +10,15 @@ import { preloadConsole } from '../lib/consoleChunks';
 import {
   api,
   ApiError,
-  API_URL,
   bootstrapSession,
   isTwoFactorChallenge,
   markSession,
+  startOAuth,
   type LoginResponse,
   type LoginResult,
 } from '../lib/api';
 import { t } from '../lib/i18n';
+import { failureReason, trackProductEvent } from '../lib/tracking';
 import { normalizeTwoFactorCode, twoFactorErrorMessage } from '../lib/two-factor';
 
 const POST_LOGIN_PATH = '/dashboard';
@@ -75,7 +76,7 @@ export default function Login() {
       return;
     }
     markSession(true);
-    window.flareboard?.track('login_success');
+    trackProductEvent('login_success');
     navigate(next, { replace });
   }
 
@@ -97,8 +98,10 @@ export default function Login() {
             body: JSON.stringify({ token: verify }),
           });
           setSearchParams({}, { replace: true });
+          trackProductEvent('email_verified');
           completeSignIn(res, POST_LOGIN_PATH, { replace: true });
-        } catch {
+        } catch (err) {
+          trackProductEvent('email_verify_failed', { reason: failureReason(err) });
           setError(t('verifyLinkInvalid'));
           setUnverified(true);
           setSearchParams({}, { replace: true });
@@ -117,6 +120,9 @@ export default function Login() {
             body: JSON.stringify({ code }),
           });
           setSearchParams({}, { replace: true });
+          if (!isTwoFactorChallenge(res) && res.oauth?.provider) {
+            trackProductEvent(res.oauth.created ? 'oauth_signup' : 'oauth_signin', { provider: res.oauth.provider });
+          }
           completeSignIn(res, next, { replace: true });
         } catch {
           setError(t('requestFailed'));
@@ -162,6 +168,7 @@ export default function Login() {
       completeSignIn(res, safeNextPath(searchParams.get('next')));
     } catch (err) {
       if (err instanceof ApiError && err.data?.code === 'email_unverified') {
+        trackProductEvent('login_unverified');
         setUnverified(true);
         setError(t('loginEmailUnverified'));
         return;
@@ -178,6 +185,7 @@ export default function Login() {
         method: 'POST',
         body: JSON.stringify({ email: username.trim() }),
       });
+      trackProductEvent('verification_resent', { page: 'login' });
       setMessage(t('verificationResent'));
     } catch (err) {
       setError(err instanceof Error ? err.message : t('requestFailed'));
@@ -196,7 +204,7 @@ export default function Login() {
         body: JSON.stringify({ challenge: twoFactor.challenge, code }),
       });
       markSession(true);
-      window.flareboard?.track('login_success');
+      trackProductEvent('login_success');
       navigate(twoFactor.next, { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.data?.code === 'challenge_expired') {
@@ -250,8 +258,8 @@ export default function Login() {
   }
 
   function oauthStart(provider: string) {
-    const returnTo = safeNextPath(searchParams.get('next'));
-    window.location.href = `${API_URL}/api/auth/oauth/${provider}?returnTo=${encodeURIComponent(returnTo)}`;
+    trackProductEvent('oauth_started', { provider, page: 'login' });
+    startOAuth(provider, safeNextPath(searchParams.get('next')));
   }
 
   const emailLoginUi = registrationEnabled && environment === 'production';

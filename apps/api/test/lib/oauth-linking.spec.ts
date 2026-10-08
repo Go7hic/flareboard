@@ -158,3 +158,65 @@ describe('OAuth sign-in linked by verified email', () => {
     expect('user' in linked && linked.user.userId).toBe(VERIFIED_ID);
   });
 });
+
+describe('OAuth sign-up on Flareboard Cloud', () => {
+  const TAKEN_ID = 'oauth-signup-unverified-holder';
+  const hostedGithub = () => ({ ...env, GITHUB_CLIENT_ID: 'gh-id', GITHUB_CLIENT_SECRET: 'gh-secret', HOSTED_MODE: 'true' });
+
+  function stubGithubAccount(profile: { id: number; login: string }, primaryEmail: string) {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes('login/oauth/access_token')) return Response.json({ access_token: 'gh-token' });
+      if (url.includes('api.github.com/user/emails')) return Response.json([{ email: primaryEmail, primary: true, verified: true }]);
+      if (url.includes('api.github.com/user')) return Response.json(profile);
+      return new Response('unexpected', { status: 500 });
+    });
+  }
+
+  async function signIn() {
+    const state = crypto.randomUUID();
+    await storeOAuthState(hostedGithub(), state, { provider: 'github' });
+    return handleOAuthCallbackFlow(hostedGithub(), 'github', 'code', state, 'https://api.example');
+  }
+
+  async function emailOf(userId: string) {
+    return env.DB.prepare('SELECT email, email_verified_at AS verifiedAt FROM user WHERE user_id = ?1')
+      .bind(userId)
+      .first<{ email: string | null; verifiedAt: number | null }>();
+  }
+
+  beforeAll(async () => {
+    await applyTestMigrations(env.DB);
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO user (user_id, username, password, role, email, email_verified_at, created_at, updated_at)
+       VALUES (?1, 'signup-unverified', ?2, 'user', 'taken@example.com', NULL, ?3, ?3)`,
+    )
+      .bind(TAKEN_ID, hashPassword('pw', 4), NOW)
+      .run();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('keeps the verified GitHub email on the new account and reports the sign-up once', async () => {
+    stubGithubAccount({ id: 9200, login: 'new-dev' }, 'New.Dev@example.com');
+    const first = await signIn();
+    if (!('user' in first) || !first.user) throw new Error('expected a user');
+    expect(first.created).toBe(true);
+    expect(await emailOf(first.user.userId)).toEqual({ email: 'new.dev@example.com', verifiedAt: expect.any(Number) });
+
+    const again = await signIn();
+    expect('user' in again && again.user.userId).toBe(first.user.userId);
+    expect('created' in again && again.created).toBe(false);
+  });
+
+  it('still signs up when an unverified account holds the same email, without the email', async () => {
+    stubGithubAccount({ id: 9201, login: 'claimant' }, 'taken@example.com');
+    const result = await signIn();
+    if (!('user' in result) || !result.user) throw new Error('expected a user');
+    expect(result.user.userId).not.toBe(TAKEN_ID);
+    expect(result.created).toBe(true);
+    expect(await emailOf(result.user.userId)).toEqual({ email: null, verifiedAt: null });
+  });
+});

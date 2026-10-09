@@ -10,7 +10,9 @@ export default defineConfig({
   // Serves /blog and /docs (one Workers route each). Built files keep their public paths under
   // dist/, and shared assets live under /blog/_astro, which the /blog* route already reaches.
   outDir: './dist',
-  build: { assets: 'blog/_astro' },
+  // Pages as files (docs/quickstart.html) are served at /docs/quickstart without a redirect to
+  // a trailing slash, matching the canonical URLs and every internal link.
+  build: { assets: 'blog/_astro', format: 'file' },
   trailingSlash: 'never',
   output: 'static',
   // Images ship as committed (keep them small): Sharp is not a dependency of the blog, and with

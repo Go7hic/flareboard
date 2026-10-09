@@ -193,6 +193,17 @@ export async function verifyStripeSignature(
   return parts.v1.some((v) => timingSafeEqualHex(v, expected));
 }
 
+/**
+ * While a payment is `past_due` Stripe keeps retrying it and the customer can fix their card, so
+ * the plan stays. Only when Stripe gives up (`unpaid`, `canceled`, an expired first payment) does
+ * the account move to Free, as the Terms say: "if a payment fails and is not resolved".
+ */
+const PAID_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing', 'past_due']);
+
+export function planForSubscriptionStatus(env: Env, status: string | undefined, priceId: string | null): PlanId {
+  return status && PAID_SUBSCRIPTION_STATUSES.has(status) ? planIdFromStripePrice(env, priceId) : 'free';
+}
+
 export async function handleStripeWebhook(c: Ctx) {
   if (!c.env.STRIPE_WEBHOOK_SECRET) return json({ message: 'Webhook not configured' }, 503);
 
@@ -256,8 +267,7 @@ export async function handleStripeWebhook(c: Ctx) {
       userId = row?.user_id;
     }
     if (userId) {
-      const active = sub.status === 'active' || sub.status === 'trialing';
-      const planId = active ? planIdFromStripePrice(c.env, priceId) : 'free';
+      const planId = planForSubscriptionStatus(c.env, sub.status, priceId);
       await upsertSubscriptionFromStripe(c.env, userId, {
         planId,
         stripeCustomerId: sub.customer ?? null,

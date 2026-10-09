@@ -88,7 +88,7 @@ If you already have a paid plan and move to a higher one, the new plan applies r
 
 ## Cancel or change billing details
 
-Click **Manage billing** on the **Billing** page to open Stripe's billing portal. The button appears once you have a billing account. Cancelling takes effect at the end of the current billing period. After that your account is on the Free plan, and features the Free plan does not include stop working. Your data is not deleted because of the downgrade, except raw data older than the Free plan's retention period. If a payment fails and is not resolved, the subscription can be cancelled and the account moved to the Free plan. Fees are generally not refunded. The [Terms of Service](https://flareboard.dev/terms) have the details.
+Click **Manage billing** on the **Billing** page to open Stripe's billing portal. The button appears once you have a billing account. Cancelling takes effect at the end of the current billing period. After that your account is on the Free plan, and features the Free plan does not include stop working. Your data is not deleted because of the downgrade, except raw data older than the Free plan's retention period. If a payment fails, Stripe retries it for a while: your plan stays, and **Billing** shows **Payment due** until you update your payment method in **Manage billing**. If the payment is not resolved, the subscription can be cancelled and the account moved to the Free plan. Fees are generally not refunded. The [Terms of Service](https://flareboard.dev/terms) have the details.
 
 ## Self-hosted installs
 

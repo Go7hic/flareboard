@@ -41,7 +41,7 @@ type TriggerRow = { workflowId: string; triggerEvent: string; triggerFilters: st
  */
 export async function enqueueWorkflowTriggers(
   env: Env,
-  input: { websiteId: string; trustedIp: string; events: WorkflowTriggerEvent[] },
+  input: { websiteId: string; trustedIp: string; fromServer?: boolean; events: WorkflowTriggerEvent[] },
 ) {
   const names = [...new Set(input.events.map((event) => event.eventName).filter(Boolean))];
   if (!names.length) return 0;
@@ -88,6 +88,12 @@ export async function enqueueWorkflowTriggers(
 
   const admitted: WorkflowTriggerMessage[] = [];
   for (const message of messages) {
+    // A request signed with the site's own API key is its server, not a visitor: one IP sends
+    // everything, so only the per-website caps in the API worker apply.
+    if (input.fromServer) {
+      admitted.push(message);
+      continue;
+    }
     const global = await checkIpRateLimit(env, 'workflow-trigger', input.trustedIp, WORKFLOW_TRIGGER_PER_IP_MIN, 60);
     if (!global.allowed) break;
     const perSite = await checkIpRateLimit(

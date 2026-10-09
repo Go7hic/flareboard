@@ -192,7 +192,7 @@ https://example.com/?utm_source=newsletter&utm_medium=email&utm_campaign=spring_
 | **浏览** | 仅页面浏览 | `WEBSITE_ID-pageviews.csv` |
 | **事件** | 所有事件，包括自定义事件 | `WEBSITE_ID-events.csv` |
 
-列：`createdAt`、`sessionId`、`visitId`、`urlPath`、`eventName`、`referrer`、`country`。文件包含该范围内最新的 10,000 行，所以对流量大的网站，请缩小日期范围。
+列：`createdAt`、`sessionId`、`visitId`、`urlPath`、`eventName`、`referrer`、`country`。文件包含该范围内最新的 10,000 行。如果较早的行被截掉，页面上会提示；缩小日期范围即可导出其余数据。
 
 在 Flareboard Cloud 上，导出需要 Cloud 或 Business 套餐。在 Free 套餐上，**导出** 按钮是禁用的，API 会返回 `403` 和 `CSV export requires a paid plan.`。
 

@@ -12,7 +12,7 @@ To open it, open the account menu (your name at the bottom of the sidebar) and c
 The **Password** card changes the password you sign in with.
 
 1. Enter your **Current password**.
-2. Enter a **New password** (at least 6 characters) and repeat it in **Confirm new password**.
+2. Enter a **New password** (at least 8 characters) and repeat it in **Confirm new password**.
 3. Click **Change password**.
 
 Changing your password signs out every other device. This device stays signed in.

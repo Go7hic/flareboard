@@ -76,7 +76,7 @@ description: Flareboard 采集地址上的所有公开端点，包括方法、�
 | `group` | `id`、`groupType`（最多 80）、`groupKey`（最多 200）、`data`。 |
 | `performance` | `lcp`、`inp`、`cls`、`fcp`、`ttfb`，放在顶层或 `data` 中均可。 |
 | `heatmap` | `kind`（`click` 或 `scroll`）、`url`、`hostname`；点击还需要 `x`、`y`、`viewportWidth`、`viewportHeight`，滚动还需要 `scrollDepth`（0 到 100）。`website` 必须是网站 ID 或项目密钥。 |
-| `error` | `message`（最多 1,000）、`errorName`、`stack`（最多 12,000）、`source`、`lineno`、`colno`、`severity`（`fatal`、`error`、`warning`、`info`）、`handled`、`release`、`environment`、`data`。 |
+| `error` | `message`、`errorName`、`stack`、`source`（超长时分别截断到 1,000、200、12,000 和 1,000 个字符，不会被拒绝）、`lineno`、`colno`、`severity`（`fatal`、`error`、`warning`、`info`）、`handled`、`release`、`environment`、`data`。 |
 | `log` | `level`（`trace`、`debug`、`info`、`warn`、`error`、`fatal`）、`message`、`traceId`、`spanId`、`parentSpanId`、`service`、`operation`、`durationMs`、`status`、`release`、`environment`、`data`。 |
 | `ai` | `kind`（`generation`、`span`、`trace`、`embedding`）、`provider`、`model`、`name`、`inputTokens`、`outputTokens`、`totalTokens`、`cacheReadTokens`、`cacheWriteTokens`、`costUsd`、`latencyMs`、`status`（`success` 或 `error`）、`message`、`quality`、`traceId`、`spanId`、`parentSpanId`、`operation`、`input`、`output`（任意 JSON，各 32 KB；网站不保存内容时会被丢弃）、`release`、`environment`、`data`。 |
 
@@ -94,10 +94,13 @@ description: Flareboard 采集地址上的所有公开端点，包括方法、�
 | `400` | `{ "message": "Invalid JSON" }` | 请求体不是 JSON。 |
 | `400` | `{ "message": "Website not found." }` | 网站 ID 或项目密钥未知。 |
 | `400` | `{ "message": "…" }` | 某个字段未通过校验。 |
+| `401` | `{ "message": "Invalid API key: …" }` | 发送了 `Authorization` 请求头，但它不是带 **写入** 权限范围、且所属用户能访问该网站的个人 API 密钥。不带这个请求头的请求不受影响。 |
 | `402` | `{ "message": "Monthly event limit exceeded." }` | Cloud 额度已用完。 |
 | `429` | `{ "message": "Rate limit exceeded" }` | 超过速率限制。 |
 
 **限制。** 每个请求 64 KB。使用网站 ID 时：每个 IP 地址和网站每分钟 100 个请求。使用项目密钥时：每个密钥每分钟 30,000 个。
+
+**可选的 `Authorization` 请求头。** 服务端可以发送 `Authorization: Bearer YOUR_API_KEY`，使用带写入权限范围的个人 API 密钥。这样它的事件就不受工作流触发的按 IP 限制。见 [用 API 密钥签名请求](/docs/zh/install/server#用-api-密钥签名请求)。
 
 ## POST /api/batch
 

@@ -2,6 +2,7 @@ import type { Context } from 'hono';
 import { featureFlagNeedsServerEvaluation, type FeatureFlagJsonValue } from '@flareboard/shared';
 import type { Env } from '../env';
 import { flagConfig, getEnabledFlags, type FlagRow } from '../lib/feature-flags';
+import { heatmapsAllowedByPlan } from '../lib/hosted-limits';
 import { getWebsiteById } from '../lib/queries';
 import { resolveWebsiteRef } from '../lib/project-keys';
 import { listActiveSurveys } from '../lib/surveys';
@@ -94,7 +95,11 @@ export async function getTrackerConfigJson(env: Env, websiteId: string): Promise
   const heatmapConfig = (website.heatmapConfig ?? {}) as { sampleRate?: number; enabled?: boolean };
   const replayConfig = (website.replayConfig ?? {}) as { heatmapSampleRate?: number };
   const sampleRate = heatmapConfig.sampleRate ?? replayConfig.heatmapSampleRate ?? 0.1;
-  const [flags, surveys] = await Promise.all([getEnabledFlags(env, websiteId), listActiveSurveys(env, websiteId)]);
+  const [flags, surveys, heatmapsAllowed] = await Promise.all([
+    getEnabledFlags(env, websiteId),
+    listActiveSurveys(env, websiteId),
+    heatmapsAllowedByPlan(env, websiteId),
+  ]);
 
   const payload = {
     websiteId: website.websiteId,
@@ -105,7 +110,7 @@ export async function getTrackerConfigJson(env: Env, websiteId: string): Promise
     respectDnt: website.respectDnt === true,
     replay: replaySettings(website.replayConfig),
     heatmapSampleRate: Math.min(1, Math.max(0, sampleRate)),
-    heatmapEnabled: heatmapConfig.enabled !== false,
+    heatmapEnabled: heatmapsAllowed && heatmapConfig.enabled !== false,
     featureFlags: flags.map(trackerFlag),
     earlyAccessFeatures: flags
       .filter((flag) => Boolean(flag.earlyAccess))

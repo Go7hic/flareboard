@@ -17,7 +17,8 @@ import {
 /**
  * Collected page context is truncated rather than rejected: landing URLs with ad click
  * ids or long email-redirect referrers routinely pass 500 chars, and a 400 there
- * silently loses the pageview. (The request body itself is capped at 64 KB.)
+ * silently loses the pageview. The same goes for error and log text: a long message or stack
+ * would drop the whole error. (The request body itself is capped at 64 KB.)
  */
 const truncatedString = (max: number) => z.string().transform((value) => value.slice(0, max));
 
@@ -110,7 +111,7 @@ export const sendPayloadSchema = z
     viewportWidth: z.coerce.number().int().min(1).max(10000).optional(),
     viewportHeight: z.coerce.number().int().min(1).max(10000).optional(),
     scrollDepth: z.coerce.number().int().min(0).max(100).optional(),
-    message: z.string().max(1000).optional(),
+    message: truncatedString(1000).optional(),
     level: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).optional(),
     traceId: z.string().max(200).optional(),
     spanId: z.string().max(200).optional(),
@@ -118,9 +119,9 @@ export const sendPayloadSchema = z
     service: z.string().max(120).optional(),
     operation: z.string().max(200).optional(),
     durationMs: z.coerce.number().int().nonnegative().max(86400000).optional(),
-    errorName: z.string().max(200).optional(),
-    stack: z.string().max(12000).optional(),
-    source: z.string().max(1000).optional(),
+    errorName: truncatedString(200).optional(),
+    stack: truncatedString(12000).optional(),
+    source: truncatedString(1000).optional(),
     lineno: z.coerce.number().int().min(0).max(10000000).optional(),
     colno: z.coerce.number().int().min(0).max(10000000).optional(),
     severity: z.enum(['fatal', 'error', 'warning', 'info']).optional(),
@@ -1033,12 +1034,13 @@ export const forgotPasswordSchema = z.object({
 
 export const resetPasswordSchema = z.object({
   token: z.string().min(1),
-  password: z.string().min(6).max(100),
+  // Same rule as sign-up: a reset or changed password is never weaker than a new one.
+  password: z.string().min(8).max(128),
 });
 
 export const updatePasswordSchema = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(6).max(100),
+  newPassword: z.string().min(8).max(128),
 });
 
 export const createSavedReplaySchema = z.object({

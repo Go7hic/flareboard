@@ -288,6 +288,7 @@ export async function handleDataSourceSync(c: Ctx) {
   // Interactive: a smaller Stripe request budget than the cron; a long backfill continues there.
   const result = await syncWarehouseDataSource(c.env, website!.websiteId, dataSourceId, Date.now(), {
     stripe: { maxRequests: 25 },
+    manual: true,
   });
   return json(result);
 }

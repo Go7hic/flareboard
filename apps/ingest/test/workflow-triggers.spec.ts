@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { beforeAll, describe, expect, it } from 'vitest';
-import type { WorkflowTriggerMessage } from '@flareboard/shared';
-import { applyTestMigrations, seedTestWebsite, TEST_WEBSITE_ID } from './helpers/migrations';
+import { generatePersonalApiKey, hashApiKey, type WorkflowTriggerMessage } from '@flareboard/shared';
+import { applyTestMigrations, seedTestWebsite, TEST_USER_ID, TEST_WEBSITE_ID } from './helpers/migrations';
 import { fetchWorkerWithEnv, recordingQueue, seedProjectKey } from './helpers/queue';
 
 const KEY = `fb_pk_${'WorkflowTriggerKey'.padEnd(24, '0')}`;
@@ -27,13 +27,17 @@ function workflowQueue() {
 
 async function sendEvent(
   queue: ReturnType<typeof workflowQueue>['queue'],
-  input: { name: string; ip: string; data?: Record<string, unknown>; url?: string; id?: string },
+  input: { name: string; ip: string; data?: Record<string, unknown>; url?: string; id?: string; apiKey?: string },
 ) {
   return fetchWorkerWithEnv(
     '/api/send',
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'cf-connecting-ip': input.ip },
+      headers: {
+        'Content-Type': 'application/json',
+        'cf-connecting-ip': input.ip,
+        ...(input.apiKey ? { Authorization: `Bearer ${input.apiKey}` } : {}),
+      },
       body: JSON.stringify({
         type: 'event',
         payload: {
@@ -105,6 +109,35 @@ describe('workflow triggers from ingest', () => {
       expect(response.status).toBe(200);
     }
     expect(messages()).toHaveLength(10);
+  });
+
+  it('lets a server signed with a personal API key for the site past the per-IP limit', async () => {
+    const personalKey = async (userId: string, scopes: string) => {
+      const key = generatePersonalApiKey();
+      await env.DB.prepare(
+        `INSERT INTO personal_api_key (key_id, user_id, name, key_hash, key_prefix, scopes, created_at) VALUES (?1, ?2, 'server', ?3, ?4, ?5, ?6)`,
+      )
+        .bind(crypto.randomUUID(), userId, await hashApiKey(key), key.slice(0, 10), scopes, Date.now())
+        .run();
+      return key;
+    };
+    await env.DB.prepare(`INSERT OR IGNORE INTO user (user_id, username, password, role, created_at, updated_at) VALUES ('wf-stranger', 'wf-stranger', 'hash', 'user', 1, 1)`).run();
+    const ownWrite = await personalKey(TEST_USER_ID, 'read,write');
+    const ownRead = await personalKey(TEST_USER_ID, 'read');
+    const stranger = await personalKey('wf-stranger', 'read,write');
+    await createWorkflow('wf_server_renewal');
+
+    const { queue, messages } = workflowQueue();
+    for (let i = 0; i < 15; i++) {
+      expect((await sendEvent(queue, { name: 'wf_server_renewal', ip: '203.0.113.40', apiKey: ownWrite })).status).toBe(200);
+    }
+    expect(messages()).toHaveLength(15);
+
+    // A key that cannot write, belongs to someone else or is not a key is refused, not ignored.
+    for (const apiKey of [ownRead, stranger, 'fb_sk_not-a-real-key']) {
+      expect((await sendEvent(queue, { name: 'wf_server_renewal', ip: '203.0.113.41', apiKey })).status).toBe(401);
+    }
+    expect(messages()).toHaveLength(15);
   });
 
   it('queues triggers from PostHog-compatible batches', async () => {

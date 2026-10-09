@@ -230,9 +230,22 @@ export default function WebsiteWarehousePage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['warehouse-sources', websiteId] }),
   });
 
+  // Why the last Sync now did nothing, per source (a skip changes nothing the list would show).
+  const [syncNotice, setSyncNotice] = useState<Record<string, string>>({});
   const syncSourceMutation = useMutation({
-    mutationFn: (id: string) => api(`/api/websites/${websiteId}/warehouse/data-sources/${id}/sync`, { method: 'POST' }),
-    onSuccess: () => {
+    mutationFn: (id: string) =>
+      api<{ skipped?: boolean; reason?: 'too_soon' | 'disabled' }>(`/api/websites/${websiteId}/warehouse/data-sources/${id}/sync`, {
+        method: 'POST',
+      }),
+    onSuccess: (result, id) => {
+      const notice =
+        result.reason === 'too_soon' ? t('warehouseSyncTooSoon') : result.reason === 'disabled' ? t('warehouseSyncDisabled') : null;
+      setSyncNotice((current) => {
+        const next = { ...current };
+        if (notice) next[id] = notice;
+        else delete next[id];
+        return next;
+      });
       queryClient.invalidateQueries({ queryKey: ['warehouse-sources', websiteId] });
       queryClient.invalidateQueries({ queryKey: ['warehouse-schema', websiteId] });
     },
@@ -763,6 +776,11 @@ export default function WebsiteWarehousePage() {
                             <td className="q-col-when">
                               <RelativeTime value={item.lastSyncAt} />
                               {item.lastError ? <span className="q-cell-error">{item.lastError}</span> : null}
+                              {syncNotice[item.id] ? (
+                                <span className="q-issue-meta" role="status">
+                                  {syncNotice[item.id]}
+                                </span>
+                              ) : null}
                             </td>
                             <td className="q-col-when">
                               <RelativeTime value={item.createdAt} />

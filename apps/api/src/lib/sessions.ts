@@ -182,6 +182,9 @@ export async function getSessionReplays(env: Env, websiteId: string, sessionId: 
   return rows.results ?? [];
 }
 
+/** Newest rows first; X-Truncated tells the console when older rows were left out. */
+export const EVENTS_EXPORT_ROW_CAP = 10_000;
+
 export async function exportEventsCsv(
   env: Env,
   websiteId: string,
@@ -210,7 +213,7 @@ export async function exportEventsCsv(
      LEFT JOIN session s ON s.session_id = e.session_id AND s.website_id = e.website_id${cohort.sql}
      WHERE ${clauses.join(' AND ')}
      ORDER BY e.created_at DESC
-     LIMIT 10000`,
+     LIMIT ${EVENTS_EXPORT_ROW_CAP + 1}`,
   )
     .bind(...binds)
     .all<{
@@ -224,8 +227,10 @@ export async function exportEventsCsv(
     }>();
 
   const header = 'createdAt,sessionId,visitId,urlPath,eventName,referrer,country\n';
-  const lines = (rows.results ?? []).map((r) =>
-    csvRow([r.created_at, r.session_id, r.visit_id, r.url_path, r.event_name, r.referrer_domain, r.country]),
-  );
-  return header + lines.join('\n');
+  // One row past the cap only tells us the export was cut; it is not written.
+  const results = rows.results ?? [];
+  const lines = results
+    .slice(0, EVENTS_EXPORT_ROW_CAP)
+    .map((r) => csvRow([r.created_at, r.session_id, r.visit_id, r.url_path, r.event_name, r.referrer_domain, r.country]));
+  return { csv: header + lines.join('\n'), truncated: results.length > EVENTS_EXPORT_ROW_CAP };
 }

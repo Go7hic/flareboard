@@ -20,7 +20,7 @@ Make one request:
 
 - **Method and URL:** `POST https://t.flareboard.dev/api/send`
 - **Headers:** `Content-Type: application/json`
-- **Authentication:** the key is the only credential. Put the project key (or website ID) in `payload.website`. No `Authorization` header is needed.
+- **Authentication:** put the project key (or website ID) in `payload.website`. An `Authorization` header is optional; add one when your server's events trigger workflows (see [Sign requests with an API key](#sign-requests-with-an-api-key)).
 
 ```bash
 curl -X POST https://t.flareboard.dev/api/send \
@@ -178,6 +178,31 @@ track_server_event('subscription_renewed', 'user_123', {'plan': 'pro'})
 ```
 
 Keep the call off your request path where you can: send from a queue or a background task, and do not let a failed call break your own code.
+
+## Sign requests with an API key
+
+Anyone can send events with a website's public key, so events that trigger [workflows](/docs/workflows) are limited per client IP address: 10 triggers an hour for each website. Everything your server sends comes from one IP address. If your server's events start workflows, sign the requests so they are not held to that limit:
+
+1. Create a personal API key with the **Write** scope: open the account menu (your name at the bottom of the sidebar), then **API keys**. Use an account that can access the website.
+2. Send it in an `Authorization` header on `/api/send` and `/api/batch`:
+
+```bash
+curl -X POST https://t.flareboard.dev/api/send \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer YOUR_API_KEY' \
+  -d '{
+    "type": "event",
+    "payload": {
+      "website": "YOUR_PROJECT_KEY",
+      "hostname": "example.com",
+      "url": "/billing",
+      "name": "subscription_renewed",
+      "id": "user_123"
+    }
+  }'
+```
+
+Signed requests skip the per-IP trigger limit. The per-website caps still apply: 1,000 workflow runs and 60 deliveries an hour. A key that is wrong, lacks the **Write** scope or belongs to a user who cannot access the website gets `401` (in `/api/batch`, that item fails), so a mistake shows up instead of being ignored. Keep the key on your server. Never put it in a web page or a mobile app.
 
 ## How events are attributed
 

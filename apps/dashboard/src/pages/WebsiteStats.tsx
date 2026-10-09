@@ -46,7 +46,7 @@ export default function WebsiteStatsPage() {
   const cohortQs = cohortId ? `&cohort=${encodeURIComponent(cohortId)}` : '';
   const qs = `${rangeQs}${segmentQs}${cohortQs}`;
   // Export exactly what the page shows, including the active segment and cohort.
-  const exportCsv = useWebsiteExport(websiteId, qs);
+  const { exportCsv, exportNotice, dismissExportNotice } = useWebsiteExport(websiteId, qs);
   const compareRange = useMemo(
     () => computeCompareRange(range.startAt, range.endAt, compareMode),
     [range.startAt, range.endAt, compareMode],
@@ -203,6 +203,15 @@ export default function WebsiteStatsPage() {
       />
 
       <PageBody className="stack">
+      {exportNotice ? (
+        <div className="cohort-filter-banner" role={exportNotice.tone === 'error' ? 'alert' : 'status'}>
+          <span className={exportNotice.tone === 'error' ? 'text-danger' : undefined}>{exportNotice.text}</span>
+          <Button type="button" variant="ghost" size="sm" onClick={dismissExportNotice}>
+            {t('close')}
+          </Button>
+        </div>
+      ) : null}
+
       {activeSegmentId ? (
         <div className="cohort-filter-banner">
           <span>

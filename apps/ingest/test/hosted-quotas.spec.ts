@@ -123,6 +123,38 @@ describe('hosted monthly allowances', () => {
     await env.CACHE.delete(`website:${SITE}`);
   });
 
+  it('keeps heatmaps to plans that include them, in the data and in tracker-config', async () => {
+    const click = async () => {
+      const recorder = recordingQueue();
+      const response = await fetchWorkerWithEnv(
+        '/api/send',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'user-agent': UA, 'cf-connecting-ip': '192.0.2.175' },
+          body: JSON.stringify({
+            type: 'heatmap',
+            payload: { website: SITE, hostname: 'quota.example.com', url: '/', kind: 'click', x: 10, y: 20, viewportWidth: 1280, viewportHeight: 800 },
+          }),
+        },
+        { EVENT_QUEUE: recorder.queue, ...HOSTED },
+      );
+      return { status: response.status, heatmaps: recorder.messages.filter((message) => message.type === 'heatmap') };
+    };
+    const trackerConfig = async () => {
+      await env.CACHE.delete(`tracker-config:${SITE}`);
+      const response = await fetchWorkerWithEnv(`/api/tracker-config?website=${SITE}`, {}, HOSTED);
+      return ((await response.json()) as { heatmapEnabled: boolean }).heatmapEnabled;
+    };
+
+    await setAccount('free', {});
+    expect(await click()).toEqual({ status: 200, heatmaps: [] });
+    expect(await trackerConfig()).toBe(false);
+
+    await setAccount('cloud', {});
+    expect((await click()).heatmaps).toHaveLength(1);
+    expect(await trackerConfig()).toBe(true);
+  });
+
   it('stops Free at its event allowance', async () => {
     await setAccount('free', { events: 99_999 });
     expect((await send()).status).toBe(200);

@@ -185,7 +185,7 @@ Runs and their attempt logs are kept for 90 days. Deleting a workflow deletes it
 | --- | --- |
 | Runs started per website | 1,000 per hour. More triggers are dropped |
 | Deliveries per website (first attempts of webhook, email and Slack steps) | 60 per hour. Retries do not count |
-| Triggers from one client IP | 30 per minute overall, and 10 per hour for one website. Events sent from your server count against your server's IP |
+| Triggers from one client IP | 30 per minute overall, and 10 per hour for one website. Events from your server count against your server's IP unless you [sign them with an API key](/docs/install/server#sign-requests-with-an-api-key) |
 | Webhook and Slack request time | 10 seconds. A slower request counts as a failed attempt |
 | Attempts per delivery | 5, with waits of 30 seconds, 2 minutes, 8 minutes and 32 minutes |
 | Steps | 20, at most 10 of them webhook, email or Slack |

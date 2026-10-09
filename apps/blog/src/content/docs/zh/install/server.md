@@ -20,7 +20,7 @@ description: 用普通 HTTP 请求从后端向 Flareboard 发送事件、identif
 
 - **方法和 URL：** `POST https://t.flareboard.dev/api/send`
 - **请求头：** `Content-Type: application/json`
-- **认证：** 密钥是唯一的凭据。把项目密钥（或网站 ID）放在 `payload.website` 中，不需要 `Authorization` 请求头。
+- **认证：** 把项目密钥（或网站 ID）放在 `payload.website` 中。`Authorization` 请求头是可选的；当你的服务端事件会触发工作流时再加上（见 [用 API 密钥签名请求](#用-api-密钥签名请求)）。
 
 ```bash
 curl -X POST https://t.flareboard.dev/api/send \
@@ -178,6 +178,31 @@ track_server_event('subscription_renewed', 'user_123', {'plan': 'pro'})
 ```
 
 尽量不要让这个调用阻塞你的请求链路：从队列或后台任务中发送，并且不要让调用失败影响你自己的代码。
+
+## 用 API 密钥签名请求
+
+任何人都能用网站的公开密钥发送事件，所以会触发 [工作流](/docs/zh/workflows) 的事件按客户端 IP 地址限流：每个网站每小时 10 次触发。你的服务端发出的所有事件都来自同一个 IP 地址。如果服务端事件会启动工作流，请给请求签名，这样就不受这个限制：
+
+1. 创建一个带 **写入** 权限范围的个人 API 密钥：打开账户菜单（侧边栏底部你的名字），然后选择 **API 密钥**。使用一个能访问该网站的账户。
+2. 在 `/api/send` 和 `/api/batch` 请求中放进 `Authorization` 请求头：
+
+```bash
+curl -X POST https://t.flareboard.dev/api/send \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer YOUR_API_KEY' \
+  -d '{
+    "type": "event",
+    "payload": {
+      "website": "YOUR_PROJECT_KEY",
+      "hostname": "example.com",
+      "url": "/billing",
+      "name": "subscription_renewed",
+      "id": "user_123"
+    }
+  }'
+```
+
+签名的请求不受按 IP 的触发限制，但每个网站的上限仍然有效：每小时 1,000 次工作流运行和 60 次投递。密钥错误、没有 **写入** 权限范围，或所属用户无权访问该网站时，返回 `401`（在 `/api/batch` 中则是该条目失败），这样出错时你能看到，而不是被悄悄忽略。密钥只能放在你的服务端，绝不要放进网页或移动应用。
 
 ## 事件如何归属
 

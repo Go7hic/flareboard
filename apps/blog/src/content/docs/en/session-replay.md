@@ -40,7 +40,7 @@ The PostHog SDKs do not record sessions here. The console snippet for them sets 
 
 ## 3. Choose what is recorded
 
-All options are in **Settings**, in the **Session replay** card. Changes can take about two minutes to reach visitors' browsers, because the website's settings are cached for 60 seconds on the server and again for 60 seconds in the browser.
+All options are in **Settings**, in the **Session replay** card. Changes usually reach visitors' browsers within a minute or two: saving clears the server's copy of the settings, and each browser keeps its own copy for up to about a minute.
 
 ### Sampling
 

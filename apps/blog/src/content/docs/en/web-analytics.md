@@ -192,7 +192,7 @@ The **Export** menu on **Overview** downloads a CSV of the selected range. It ap
 | **Browsing** | Pageviews only | `WEBSITE_ID-pageviews.csv` |
 | **Events** | Every event, including custom events | `WEBSITE_ID-events.csv` |
 
-Columns: `createdAt`, `sessionId`, `visitId`, `urlPath`, `eventName`, `referrer`, `country`. The file holds the newest 10,000 rows of the range, so narrow the date range for busy sites.
+Columns: `createdAt`, `sessionId`, `visitId`, `urlPath`, `eventName`, `referrer`, `country`. The file holds the newest 10,000 rows of the range. When older rows were left out, the page says so; narrow the date range to export the rest.
 
 On Flareboard Cloud, export needs the Cloud or Business plan. On the Free plan the **Export** button is disabled, and the API answers `403` with `CSV export requires a paid plan.`
 

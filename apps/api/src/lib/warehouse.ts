@@ -1430,6 +1430,8 @@ export async function deleteWarehouseDataSource(env: Env, websiteId: string, dat
   return true;
 }
 
+const MANUAL_SYNC_COOLDOWN_MS = 60_000;
+
 function syncIntervalMs(config: Record<string, unknown>): number | null {
   const minutes = config.syncIntervalMinutes;
   if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes <= 0) return null;
@@ -1664,17 +1666,19 @@ export async function syncWarehouseDataSource(
   websiteId: string,
   dataSourceId: string,
   now = Date.now(),
-  options: { stripe?: StripeSyncOptions } = {},
+  options: { stripe?: StripeSyncOptions; manual?: boolean } = {},
 ) {
   const source = await getWarehouseDataSource(env, websiteId, dataSourceId);
-  if (!source?.enabled) return { ok: false as const, skipped: true };
+  if (!source?.enabled) return { ok: false as const, skipped: true, reason: 'disabled' as const };
 
-  const intervalMs = syncIntervalMs(source.config);
+  // Sync now ignores the schedule's interval and only waits out a short cooldown, so a person
+  // pressing it gets a sync and repeated clicks still cannot hammer the source.
+  const intervalMs = options.manual ? MANUAL_SYNC_COOLDOWN_MS : syncIntervalMs(source.config);
   // An unfinished Stripe backfill continues on every run regardless of the interval.
   const backfilling =
     source.type === 'stripe' && (await loadStripeSyncState(env, websiteId, dataSourceId)).phase === 'backfill';
   if (intervalMs && !backfilling && source.lastSyncAt && now - source.lastSyncAt < intervalMs) {
-    return { ok: true as const, skipped: true };
+    return { ok: true as const, skipped: true, reason: 'too_soon' as const, retryAt: source.lastSyncAt + intervalMs };
   }
 
   await updateWarehouseDataSource(env, websiteId, dataSourceId, { lastStatus: 'syncing', lastError: null });

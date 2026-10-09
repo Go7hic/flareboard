@@ -2007,7 +2007,7 @@
     "securityPasswordLead": "パスワードを変更すると、他のすべてのデバイスからサインアウトされます。このデバイスはサインインしたままです。",
     "securityCurrentPassword": "現在のパスワード",
     "securityConfirmPassword": "新しいパスワード（確認）",
-    "securityPasswordTooShort": "6 文字以上にしてください。",
+    "securityPasswordTooShort": "8 文字以上にしてください。",
     "securityPasswordMismatch": "パスワードが一致しません。",
     "securityChangePassword": "パスワードを変更",
     "securityPasswordChanged": "パスワードを変更しました。他のデバイスはサインアウトされました。",
@@ -3368,7 +3368,10 @@
     "signInMethodUnlinkBody": "この {provider} アカウントではログインできなくなります。いつでも再連携できます。",
     "signInMethodLinkedNotice": "{provider} を連携しました。これでログインに使えます。",
     "signInMethodLastMethod": "これが唯一のログイン方法です。先にログイン画面の「パスワードをお忘れですか」でパスワードを設定してから連携を解除してください。",
-    "auditOauthIdentityUnlink": "ログイン方法の連携を解除"
+    "auditOauthIdentityUnlink": "ログイン方法の連携を解除",
+    "warehouseSyncTooSoon": "1 分以内に同期済みです。少し待ってからもう一度お試しください。",
+    "warehouseSyncDisabled": "このデータソースはオフのため、同期されませんでした。",
+    "exportTruncated": "CSV には最新の {count} 行だけが含まれます。残りは期間を短くして分けて書き出してください。"
   },
   "de-DE": {
     "language": "Sprache",
@@ -5378,7 +5381,7 @@
     "securityPasswordLead": "Wenn du dein Passwort änderst, werden alle anderen Geräte abgemeldet. Dieses Gerät bleibt angemeldet.",
     "securityCurrentPassword": "Aktuelles Passwort",
     "securityConfirmPassword": "Neues Passwort bestätigen",
-    "securityPasswordTooShort": "Mindestens 6 Zeichen.",
+    "securityPasswordTooShort": "Mindestens 8 Zeichen.",
     "securityPasswordMismatch": "Die Passwörter stimmen nicht überein.",
     "securityChangePassword": "Passwort ändern",
     "securityPasswordChanged": "Passwort geändert. Andere Geräte wurden abgemeldet.",
@@ -6739,7 +6742,10 @@
     "signInMethodUnlinkBody": "Du kannst dich dann nicht mehr mit diesem {provider}-Konto anmelden. Du kannst es jederzeit wieder verknüpfen.",
     "signInMethodLinkedNotice": "{provider} ist verknüpft. Du kannst dich jetzt damit anmelden.",
     "signInMethodLastMethod": "Das ist deine einzige Anmeldemethode. Lege zuerst über „Passwort vergessen“ auf der Anmeldeseite ein Passwort fest und trenne sie dann.",
-    "auditOauthIdentityUnlink": "Anmeldeanbieter getrennt"
+    "auditOauthIdentityUnlink": "Anmeldeanbieter getrennt",
+    "warehouseSyncTooSoon": "Vor weniger als einer Minute synchronisiert. Versuche es gleich noch einmal.",
+    "warehouseSyncDisabled": "Diese Datenquelle ist ausgeschaltet und wurde nicht synchronisiert.",
+    "exportTruncated": "Die CSV enthält nur die neuesten {count} Zeilen. Wähle einen kürzeren Zeitraum, um den Rest in Teilen zu exportieren."
   },
   "fr-FR": {
     "language": "Langue",
@@ -8749,7 +8755,7 @@
     "securityPasswordLead": "Changer de mot de passe déconnecte tous les autres appareils. Cet appareil reste connecté.",
     "securityCurrentPassword": "Mot de passe actuel",
     "securityConfirmPassword": "Confirmer le nouveau mot de passe",
-    "securityPasswordTooShort": "Au moins 6 caractères.",
+    "securityPasswordTooShort": "Au moins 8 caractères.",
     "securityPasswordMismatch": "Les mots de passe ne correspondent pas.",
     "securityChangePassword": "Changer le mot de passe",
     "securityPasswordChanged": "Mot de passe modifié. Les autres appareils ont été déconnectés.",
@@ -10110,6 +10116,9 @@
     "signInMethodUnlinkBody": "Vous ne pourrez plus vous connecter avec ce compte {provider}. Vous pourrez l’associer à nouveau à tout moment.",
     "signInMethodLinkedNotice": "{provider} est associé. Vous pouvez maintenant l’utiliser pour vous connecter.",
     "signInMethodLastMethod": "C’est votre seule méthode de connexion. Définissez d’abord un mot de passe avec « Mot de passe oublié » sur la page de connexion, puis dissociez-la.",
-    "auditOauthIdentityUnlink": "Fournisseur de connexion dissocié"
+    "auditOauthIdentityUnlink": "Fournisseur de connexion dissocié",
+    "warehouseSyncTooSoon": "Synchronisé il y a moins d’une minute. Réessayez dans un instant.",
+    "warehouseSyncDisabled": "Cette source de données est désactivée, elle n’a donc pas été synchronisée.",
+    "exportTruncated": "Le CSV ne contient que les {count} lignes les plus récentes. Choisissez une période plus courte pour exporter le reste en plusieurs fois."
   }
 }

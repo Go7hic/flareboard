@@ -118,6 +118,14 @@ export async function replayAllowedByPlan(env: Env, websiteId: string): Promise<
   return getPlan((await getQuotaState(env, userId)).planId).replayEnabled;
 }
 
+/** Heatmaps are a paid feature on Cloud too: the Free plan can neither turn them on nor see them. */
+export async function heatmapsAllowedByPlan(env: Env, websiteId: string): Promise<boolean> {
+  if (!isHostedMode(env)) return true;
+  const userId = await getWebsiteOwnerId(env, websiteId);
+  if (!userId) return false;
+  return getPlan((await getQuotaState(env, userId)).planId).heatmapsEnabled;
+}
+
 /** Counts replays and OpenTelemetry rows (product events are counted by the aggregator). */
 export async function recordUsage(env: Env, userId: string, metric: Exclude<UsageMetric, 'events'>, delta: number) {
   if (!isHostedMode(env) || !userId || delta <= 0) return;

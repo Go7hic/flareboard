@@ -7,7 +7,7 @@ A heatmap adds up where visitors click and how far they scroll on one page. Use 
 
 ## Before you start
 
-- **Plan.** On Flareboard Cloud, heatmaps need the Cloud or Business plan. On the Free plan the **Heatmaps** page shows `Heatmaps are available on the Cloud plan.` and the API answers `403`. Self-hosted installs have no plan limits.
+- **Plan.** On Flareboard Cloud, heatmaps need the Cloud or Business plan. On the Free plan the **Heatmaps** page shows `Heatmaps are available on the Cloud plan.` and the API answers `403`. The script does not collect heatmap data on the Free plan either, so a heatmap starts filling from the moment you upgrade. Self-hosted installs have no plan limits.
 - **The tracking script.** Heatmap data comes from [`script.js`](/docs/install/script). No extra script is needed, unlike [Session replay](/docs/session-replay).
 - Collection is on by default. You only change settings to lower or switch off sampling, or to set a preview page.
 
@@ -98,7 +98,7 @@ Because the optional **Preview URL** is used for every page, it suits a single i
 ## Check that it works
 
 1. Open a page of your site and click around. Scroll to the bottom.
-2. With the default `0.1` rate most of your test clicks are not kept. For a quick test, set `sampleRate` to `1` in **Heatmap sampling**, save, wait about two minutes for the setting to reach the script, and reload your page before clicking.
+2. With the default `0.1` rate most of your test clicks are not kept. For a quick test, set `sampleRate` to `1` in **Heatmap sampling**, save, wait a minute or two for the setting to reach the script, and reload your page before clicking.
 3. Open **Heatmaps** for the website, pick the page and **Clicks**. Your clicks appear. Switch to **Scroll depth** to see the depth you reached.
 4. Set the rate back to a lower value after the test.
 

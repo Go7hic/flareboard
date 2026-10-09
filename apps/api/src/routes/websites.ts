@@ -212,10 +212,16 @@ export async function handleUpdate(c: Ctx) {
     })
     .where(eq(schema.website.websiteId, website.websiteId));
 
+  // Anything the tracker or recorder reads from /api/tracker-config, so a change reaches browsers
+  // within their own one-minute cache instead of waiting for the server copy to expire first.
+  const changed = (next: unknown, current: unknown) => next !== undefined && JSON.stringify(next) !== JSON.stringify(current ?? null);
   const trackerSettingsChanged =
-    (parsed.data.autocapture !== undefined && parsed.data.autocapture !== website.autocapture) ||
-    (parsed.data.persistVisitors !== undefined && parsed.data.persistVisitors !== website.persistVisitors) ||
-    (parsed.data.respectDnt !== undefined && parsed.data.respectDnt !== website.respectDnt);
+    changed(parsed.data.autocapture, website.autocapture) ||
+    changed(parsed.data.persistVisitors, website.persistVisitors) ||
+    changed(parsed.data.respectDnt, website.respectDnt) ||
+    changed(parsed.data.replayEnabled, website.replayEnabled) ||
+    changed(parsed.data.replayConfig, website.replayConfig) ||
+    changed(parsed.data.heatmapConfig, website.heatmapConfig);
   if (trackerSettingsChanged) await forgetTrackerCaches(c.env, website.websiteId);
 
   if (parsed.data.timezone) {

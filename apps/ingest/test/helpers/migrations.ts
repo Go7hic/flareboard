@@ -6,7 +6,7 @@ const migrationModules = import.meta.glob('../../../../packages/db/migrations/*.
 
 let applied = false;
 
-const TEST_USER_ID = '00000000-0000-0000-0000-000000000001';
+export const TEST_USER_ID = '00000000-0000-0000-0000-000000000001';
 export const TEST_WEBSITE_ID = '00000000-0000-0000-0000-000000000099';
 
 async function execMigration(db: D1Database, sql: string) {

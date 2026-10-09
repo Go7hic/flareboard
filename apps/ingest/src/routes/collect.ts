@@ -33,8 +33,9 @@ import { getWebsiteById } from '../lib/queries';
 import { hitAllowed, recordHit, sourceExists, type HitSource } from '../lib/link-pixel-hits';
 import { bumpRealtimeVisitor } from '../lib/realtime-kv';
 import { appendMatchedActionTags } from '../lib/actions';
-import { assertEventAllowed } from '../lib/hosted-limits';
+import { assertEventAllowed, heatmapsAllowedByPlan } from '../lib/hosted-limits';
 import { checkIpRateLimit, checkProjectKeyRateLimit, checkRateLimit, getTrustedClientIp } from '../lib/rate-limit';
+import { checkServerKey } from '../lib/server-key';
 import { enqueueWorkflowTriggers } from '../lib/workflows';
 import { buildErrorEventDataPayload, reportPossibleRegression } from '../lib/error-tracking';
 import { resolveDistinctId } from '../lib/tracker-settings';
@@ -124,6 +125,8 @@ type ProcessSendOpts = {
   cacheToken?: string;
   /** The payload named its website by project key: rate limit per key instead of per IP. */
   projectKey?: string;
+  /** Signed with a personal API key for this website (see lib/server-key.ts). */
+  fromServer?: boolean;
   waitUntil: (promise: Promise<void>) => void;
 };
 
@@ -274,6 +277,8 @@ async function processSend(
         });
       }
       if (!(await websiteExists(env, websiteId))) return badRequest('Website not found.');
+      // Nothing to store for a plan without heatmaps (tracker-config tells its script to stop).
+      if (!(await heatmapsAllowedByPlan(env, websiteId))) return json({ ok: true, skipped: true });
       const client = getClientInfoFromRequest(req, {});
 
       const createdAt = parseEventTimestamp(payload.timestamp) ?? new Date();
@@ -574,6 +579,7 @@ async function processSend(
           enqueueWorkflowTriggers(env, {
             websiteId,
             trustedIp,
+            fromServer: opts.fromServer,
             events: [
               {
                 eventId,
@@ -773,6 +779,13 @@ export function parseDevice(ua: string): string {
   return 'desktop';
 }
 
+const INVALID_SERVER_KEY =
+  'Invalid API key: use a personal API key with the write scope from a user who can access this website, or send no Authorization header.';
+
+function invalidServerKey() {
+  return json({ message: INVALID_SERVER_KEY }, 401);
+}
+
 export async function handleSend(c: Context<{ Bindings: Env }>) {
   const contentLength = c.req.header('content-length');
   if (contentLength && parseInt(contentLength, 10) > SEND_BODY_MAX_BYTES) {
@@ -796,6 +809,9 @@ export async function handleSend(c: Context<{ Bindings: Env }>) {
   const parsed = parseSendRequest(raw);
   if ('error' in parsed) return badRequest(parsed.error);
 
+  const serverKey = await checkServerKey(c.env, c.req.raw, parsed.body.payload.website);
+  if (serverKey === 'invalid') return invalidServerKey();
+
   const waitUntil = (promise: Promise<void>) => {
     c.executionCtx.waitUntil(promise);
   };
@@ -803,6 +819,7 @@ export async function handleSend(c: Context<{ Bindings: Env }>) {
   return processSend(c.env, c.req.raw, parsed.body, envSecret(c), {
     cacheToken: parsed.cacheToken,
     projectKey: website.projectKey,
+    fromServer: serverKey === 'valid',
     waitUntil,
   });
 }
@@ -862,6 +879,13 @@ export async function handleBatch(c: Context<{ Bindings: Env }>) {
         continue;
       }
 
+      const serverKey = await checkServerKey(c.env, c.req.raw, parsed.data.payload.website);
+      if (serverKey === 'invalid') {
+        errors.push({ index, response: { message: INVALID_SERVER_KEY } });
+        index++;
+        continue;
+      }
+
       const headers = new Headers(c.req.raw.headers);
       headers.set('content-type', 'application/json');
       headers.delete('content-length');
@@ -872,6 +896,7 @@ export async function handleBatch(c: Context<{ Bindings: Env }>) {
       };
       const res = await processSend(c.env, req, parsed.data, envSecret(c), {
         projectKey: website.projectKey,
+        fromServer: serverKey === 'valid',
         waitUntil,
       });
       const resJson = await res.json();

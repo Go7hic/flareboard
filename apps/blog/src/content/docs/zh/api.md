@@ -339,7 +339,7 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
 | `type` | `events` 或 `pageviews` | `events` | `events` 导出所有事件，包括页面浏览。`pageviews` 只导出页面浏览。 |
 | `startAt`、`endAt` | number | 最近 30 天 | 时间段，单位为毫秒。 |
 
-响应是 `text/csv`，列为 `createdAt`、`sessionId`、`visitId`、`urlPath`、`eventName`、`referrer` 和 `country`，最新的在前，最多 10,000 行。响应中没有任何内容表明行被截断，所以访问量大的网站请使用更短的时间段。它需要网站所有者的账号使用 Cloud 或 Business 套餐，并会记录在网站的审计日志中。
+响应是 `text/csv`，列为 `createdAt`、`sessionId`、`visitId`、`urlPath`、`eventName`、`referrer` 和 `country`，最新的在前，最多 10,000 行。如果上限截掉了较早的行，响应会带上 `X-Truncated: true` 响应头（以及 `X-Row-Cap: 10000`），请用更短的时间段导出其余数据。它需要网站所有者的账号使用 Cloud 或 Business 套餐，并会记录在网站的审计日志中。
 
 ## 分页
 

@@ -110,7 +110,7 @@ LIMIT 24
 
 ## 2. Add data sources
 
-Open **Data warehouse**, then **Sources**, and click **New data source**. Choose a **Source type**. Each source shows its status (**Connected**, **Syncing** or **Failed**) and **Last sync**. Click **Sync now** to sync at once (unless the source's `syncIntervalMinutes` has not passed yet). Enabled sources also sync on the hourly cron.
+Open **Data warehouse**, then **Sources**, and click **New data source**. Choose a **Source type**. Each source shows its status (**Connected**, **Syncing** or **Failed**) and **Last sync**. Click **Sync now** to sync at once. It ignores `syncIntervalMinutes`, but waits a minute after the last sync, and says so if you click too soon. Enabled sources also sync on the hourly cron.
 
 ### HTTP JSON and HTTP CSV
 
@@ -128,7 +128,7 @@ Enter the **Configuration (JSON)**:
 | --- | --- | --- |
 | `url` | none, required | A public `http` or `https` address. Flareboard fetches it with `GET`, without headers or redirects. It must not contain a username or password, and private, loopback and internal hosts are refused |
 | `primaryKey` | `id` | The field that identifies a row. Rows without a value for it are skipped |
-| `syncIntervalMinutes` | none | Skips syncs, **Sync now** included, until this many minutes have passed since the last one. Values above 1,440 count as 1,440 |
+| `syncIntervalMinutes` | none | The hourly cron skips the source until this many minutes have passed since the last sync. **Sync now** is not affected. Values above 1,440 count as 1,440 |
 
 An **HTTP JSON** source must return a JSON array of objects. An **HTTP CSV** source must return a CSV with a header row. A response can have up to 10,000 rows and be up to 5 MB, and the request times out after 15 seconds. Each sync upserts rows by primary key.
 

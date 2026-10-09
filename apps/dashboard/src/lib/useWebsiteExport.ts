@@ -1,33 +1,28 @@
-import { useCallback } from 'react';
-import { authenticatedFetch } from './api';
+import { useCallback, useState } from 'react';
+import { downloadCsv } from './downloadCsv';
+import { formatNumber } from './format';
 import { t } from './i18n';
 
-/** `filterQs`: range plus any segment / cohort params, as sent to the stats endpoints. */
+/**
+ * CSV export of a website's events or pageviews. `filterQs`: range plus any segment / cohort
+ * params, as sent to the stats endpoints. `notice` says what went wrong, or that the export
+ * stopped at its row cap, for the page to show inline.
+ */
 export function useWebsiteExport(websiteId: string | undefined, filterQs: string) {
-  return useCallback(
+  const [notice, setNotice] = useState<{ tone: 'info' | 'error'; text: string } | null>(null);
+  const exportCsv = useCallback(
     (type: 'events' | 'pageviews') => {
       if (!websiteId) return;
-      const path = `/api/websites/${websiteId}/export?type=${type}&${filterQs}`;
-      authenticatedFetch(path)
-        .then(async (r) => {
-          if (!r.ok) {
-            const err = await r.json().catch(() => ({ message: r.statusText }));
-            throw new Error((err as { message?: string }).message || t('exportFailed'));
+      setNotice(null);
+      downloadCsv(`/api/websites/${websiteId}/export?type=${type}&${filterQs}`, `${websiteId}-${type}.csv`)
+        .then((outcome) => {
+          if (outcome.truncated) {
+            setNotice({ tone: 'info', text: t('exportTruncated').replace('{count}', formatNumber(outcome.rowCap ?? 0)) });
           }
-          return r.blob();
         })
-        .then((blob) => {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${websiteId}-${type}.csv`;
-          a.click();
-          setTimeout(() => URL.revokeObjectURL(url), 0);
-        })
-        .catch((err) => {
-          window.alert(err instanceof Error ? err.message : t('exportFailed'));
-        });
+        .catch((err: unknown) => setNotice({ tone: 'error', text: err instanceof Error ? err.message : t('exportFailed') }));
     },
     [websiteId, filterQs],
   );
+  return { exportCsv, exportNotice: notice, dismissExportNotice: () => setNotice(null) };
 }

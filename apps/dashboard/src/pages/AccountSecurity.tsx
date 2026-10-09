@@ -42,7 +42,7 @@ type AccountSession = {
 
 const SESSIONS_KEY = ['me-sessions'];
 const ACTIVITY_KEY = ['me-audit-log'];
-const MIN_PASSWORD_LENGTH = 6;
+const MIN_PASSWORD_LENGTH = 8;
 /** Sessions shown before "Show all": the current device and the most recent others. */
 const SESSIONS_PREVIEW = 8;
 const ACTIVITY_PREVIEW = 12;
@@ -137,7 +137,7 @@ function PasswordPanel() {
               onChange={(e) => setNewPassword(e.target.value)}
               autoComplete="new-password"
               minLength={MIN_PASSWORD_LENGTH}
-              maxLength={100}
+              maxLength={128}
               aria-invalid={tooShort || undefined}
             />
             {tooShort ? <p className="field-hint">{t('securityPasswordTooShort')}</p> : null}

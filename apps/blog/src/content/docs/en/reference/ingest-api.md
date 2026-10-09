@@ -76,7 +76,7 @@ Collects one event, identify call, group call, error, log, AI call, web vital or
 | `group` | `id`, `groupType` (up to 80), `groupKey` (up to 200), `data`. |
 | `performance` | `lcp`, `inp`, `cls`, `fcp`, `ttfb`, either at the top level or in `data`. |
 | `heatmap` | `kind` (`click` or `scroll`), `url`, `hostname`, and for clicks `x`, `y`, `viewportWidth`, `viewportHeight`, and for scrolls `scrollDepth` (0 to 100). `website` must be a website ID or project key. |
-| `error` | `message` (up to 1,000), `errorName`, `stack` (up to 12,000), `source`, `lineno`, `colno`, `severity` (`fatal`, `error`, `warning`, `info`), `handled`, `release`, `environment`, `data`. |
+| `error` | `message`, `errorName`, `stack`, `source` (longer text is cut to 1,000, 200, 12,000 and 1,000 characters, not rejected), `lineno`, `colno`, `severity` (`fatal`, `error`, `warning`, `info`), `handled`, `release`, `environment`, `data`. |
 | `log` | `level` (`trace`, `debug`, `info`, `warn`, `error`, `fatal`), `message`, `traceId`, `spanId`, `parentSpanId`, `service`, `operation`, `durationMs`, `status`, `release`, `environment`, `data`. |
 | `ai` | `kind` (`generation`, `span`, `trace`, `embedding`), `provider`, `model`, `name`, `inputTokens`, `outputTokens`, `totalTokens`, `cacheReadTokens`, `cacheWriteTokens`, `costUsd`, `latencyMs`, `status` (`success` or `error`), `message`, `quality`, `traceId`, `spanId`, `parentSpanId`, `operation`, `input`, `output` (any JSON, 32 KB each, dropped when the website stores no content), `release`, `environment`, `data`. |
 
@@ -94,10 +94,13 @@ A heatmap hit, or a link or pixel hit, answers `{ "ok": true }`. A request from 
 | `400` | `{ "message": "Invalid JSON" }` | The body is not JSON. |
 | `400` | `{ "message": "Website not found." }` | Unknown website ID or project key. |
 | `400` | `{ "message": "…" }` | A field failed validation. |
+| `401` | `{ "message": "Invalid API key: …" }` | An `Authorization` header was sent, but it is not a personal API key with the **Write** scope from a user who can access the website. Requests without the header are not affected. |
 | `402` | `{ "message": "Monthly event limit exceeded." }` | Cloud allowance used up. |
 | `429` | `{ "message": "Rate limit exceeded" }` | Over the rate limit. |
 
 **Limits.** 64 KB per request. With a website ID: 100 requests per minute per IP address and website. With a project key: 30,000 per minute per key.
+
+**Optional `Authorization` header.** A server can send `Authorization: Bearer YOUR_API_KEY` with a personal API key (Write scope). Its events then skip the per-IP limit on workflow triggers. See [Sign requests with an API key](/docs/install/server#sign-requests-with-an-api-key).
 
 ## POST /api/batch
 

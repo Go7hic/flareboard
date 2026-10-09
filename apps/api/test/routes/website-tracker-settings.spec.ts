@@ -64,6 +64,34 @@ describe('website tracker settings', () => {
     expect(renamed.body).toMatchObject({ autocapture: false, persistVisitors: true, respectDnt: true });
   });
 
+  it('clears the tracker config when replay or heatmap settings change', async () => {
+    const created = await fetchWorkerJson<WebsiteBody>('/api/websites', {
+      method: 'POST',
+      headers: await authHeader(),
+      body: JSON.stringify({ name: 'Tracker settings 4', domain: 'tracker4.example' }),
+    });
+    const id = created.body.id;
+    for (const change of [{ heatmapConfig: { enabled: true, sampleRate: 1 } }, { replayEnabled: true }, { replayConfig: { maskAllInputs: false } }]) {
+      await env.CACHE.put(`tracker-config:${id}`, '{"stale":true}');
+      const { response } = await fetchWorkerJson(`/api/websites/${id}`, {
+        method: 'PATCH',
+        headers: await authHeader(),
+        body: JSON.stringify(change),
+      });
+      expect(response.status).toBe(200);
+      expect(await env.CACHE.get(`tracker-config:${id}`), JSON.stringify(change)).toBeNull();
+    }
+
+    // Saving the same heatmap settings again leaves the cache alone.
+    await env.CACHE.put(`tracker-config:${id}`, '{"fresh":true}');
+    await fetchWorkerJson(`/api/websites/${id}`, {
+      method: 'PATCH',
+      headers: await authHeader(),
+      body: JSON.stringify({ heatmapConfig: { enabled: true, sampleRate: 1 } }),
+    });
+    expect(await env.CACHE.get(`tracker-config:${id}`)).toBe('{"fresh":true}');
+  });
+
   it('rejects non-boolean values', async () => {
     const created = await fetchWorkerJson<WebsiteBody>('/api/websites', {
       method: 'POST',

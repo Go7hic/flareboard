@@ -5,6 +5,7 @@ import { getWebsitePlanId, isHostedMode } from '../lib/billing';
 import { cohortJoinFromQuery, segmentParamsFromQuery } from '../lib/report-filters';
 import { parseStatsRange } from '../lib/parse-range';
 import {
+  EVENTS_EXPORT_ROW_CAP,
   exportEventsCsv,
   getSession,
   getSessionActivity,
@@ -128,7 +129,7 @@ export async function handleExport(c: Ctx) {
     segmentParamsFromQuery(c, website!.websiteId),
     cohortJoinFromQuery(c, website!.websiteId),
   ]);
-  const csv = await exportEventsCsv(c.env, website!.websiteId, startAt, endAt, type, segment, cohort);
+  const { csv, truncated } = await exportEventsCsv(c.env, website!.websiteId, startAt, endAt, type, segment, cohort);
   await logAdminAction(c.env, c.get('user').userId, 'export', 'website', website!.websiteId, {
     type,
     format: 'csv',
@@ -139,6 +140,8 @@ export async function handleExport(c: Ctx) {
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
       'Content-Disposition': `attachment; filename="${website!.websiteId}-${type}.csv"`,
+      'X-Row-Cap': String(EVENTS_EXPORT_ROW_CAP),
+      'X-Truncated': String(truncated),
     },
   });
 }

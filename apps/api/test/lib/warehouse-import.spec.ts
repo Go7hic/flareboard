@@ -62,6 +62,36 @@ describe('syncWarehouseDataSource', () => {
     fetchMock.mockRestore();
   });
 
+  it('lets Sync now run inside the schedule interval, after a one-minute cooldown', async () => {
+    const now = Date.UTC(2026, 0, 22, 12);
+    const dataSourceId = 'warehouse-source-hourly';
+    await env.DB.prepare(
+      `INSERT INTO warehouse_data_source
+       (data_source_id, website_id, name, type, enabled, config_json, created_at, updated_at)
+       VALUES (?1, ?2, 'Hourly CRM', 'http_json', 1, ?3, ?4, ?4)`,
+    )
+      .bind(dataSourceId, TEST_WEBSITE_ID, JSON.stringify({ url: 'https://example.com/hourly.json', primaryKey: 'userId', syncIntervalMinutes: 60 }), now)
+      .run();
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => new Response(JSON.stringify([{ userId: 'u-1' }]), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    expect(await syncWarehouseDataSource(env, TEST_WEBSITE_ID, dataSourceId, now)).toMatchObject({ skipped: false });
+    // The schedule waits for its hour; a person pressing Sync now waits a minute.
+    expect(await syncWarehouseDataSource(env, TEST_WEBSITE_ID, dataSourceId, now + 5 * 60_000)).toMatchObject({ skipped: true });
+    expect(await syncWarehouseDataSource(env, TEST_WEBSITE_ID, dataSourceId, now + 30_000, { manual: true })).toEqual({
+      ok: true,
+      skipped: true,
+      reason: 'too_soon',
+      retryAt: expect.any(Number),
+    });
+    expect(await syncWarehouseDataSource(env, TEST_WEBSITE_ID, dataSourceId, now + 5 * 60_000, { manual: true })).toMatchObject({
+      skipped: false,
+      imported: 1,
+    });
+    fetchMock.mockRestore();
+  });
+
   it('imports http_csv rows into warehouse_import with header parsing', async () => {
     const now = Date.UTC(2026, 0, 22, 12);
     const dataSourceId = 'warehouse-source-csv';

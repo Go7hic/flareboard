@@ -81,6 +81,23 @@ describe('error ingest', () => {
     expect(row?.stringValue).toBe(computeErrorFingerprint({ type: 'TypeError', stack: STACK('C3sPvF1q') }).fingerprint);
   });
 
+  it('keeps an error whose message or stack is too long, cut to the limit', async () => {
+    const sent = captureQueue();
+    const message = `Request failed: ${'x'.repeat(3000)}`;
+    const { response } = await fetchWorkerJson('/api/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'cf-connecting-ip': '198.51.100.30', 'user-agent': 'Mozilla/5.0 (Macintosh) Chrome/126.0' },
+      body: JSON.stringify({
+        type: 'error',
+        payload: { website: TEST_WEBSITE_ID, hostname: 'shop.example.com', url: '/cart', message, errorName: 'E'.repeat(300), stack: 'at a\n'.repeat(4000) },
+      }),
+    });
+    expect(response.status).toBe(200);
+    const queued = JSON.stringify(sent.find((item) => item.type === 'event'));
+    expect(queued).toContain(message.slice(0, 1000));
+    expect(queued).not.toContain(message.slice(0, 1001));
+  });
+
   it('reports an occurrence of a resolved issue to the API once per minute', async () => {
     captureQueue();
     const fingerprint = computeErrorFingerprint({ type: 'TypeError', stack: STACK('C3sPvF1q') }).fingerprint;

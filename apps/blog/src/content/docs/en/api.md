@@ -339,7 +339,7 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
 | `type` | `events` or `pageviews` | `events` | `events` exports every event, pageviews included. `pageviews` exports only pageviews. |
 | `startAt`, `endAt` | number | last 30 days | Period, as milliseconds. |
 
-The response is `text/csv` with the columns `createdAt`, `sessionId`, `visitId`, `urlPath`, `eventName`, `referrer` and `country`, newest first, at most 10,000 rows. Nothing in the response says when rows were cut off, so use shorter periods for busy websites. It needs the Cloud or Business plan on the website owner's account and is recorded in the website's audit log.
+The response is `text/csv` with the columns `createdAt`, `sessionId`, `visitId`, `urlPath`, `eventName`, `referrer` and `country`, newest first, at most 10,000 rows. When the cap cut older rows off, the response has the header `X-Truncated: true` (and `X-Row-Cap: 10000`); export the rest with shorter periods. It needs the Cloud or Business plan on the website owner's account and is recorded in the website's audit log.
 
 ## Pagination
 

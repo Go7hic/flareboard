@@ -1,8 +1,17 @@
 import type { BillingPlanId } from './api';
+import { getLocale } from './i18n';
 
 export const FLAREBOARD_GITHUB = 'https://github.com/Go7hic/flareboard';
-export const FLAREBOARD_README = `${FLAREBOARD_GITHUB}#readme`;
-export const FLAREBOARD_DEPLOY_DOCS = `${FLAREBOARD_GITHUB}/blob/main/docs/deployment.md`;
+const FLAREBOARD_DOCS = 'https://flareboard.dev/docs';
+
+/**
+ * A page of the public docs (`docsUrl('self-host/deploy')`), in Chinese for Chinese readers. Call it
+ * while rendering: the locale is not known at module load. Self-hosted consoles link here too.
+ */
+export function docsUrl(path = ''): string {
+  const base = getLocale() === 'zh-CN' ? `${FLAREBOARD_DOCS}/zh` : FLAREBOARD_DOCS;
+  return path ? `${base}/${path}` : base;
+}
 export const FLAREBOARD_ENTERPRISE_EMAIL = 'hello@flareboard.dev';
 
 /** Display prices (USD per month). Stripe is the source of truth at checkout. */

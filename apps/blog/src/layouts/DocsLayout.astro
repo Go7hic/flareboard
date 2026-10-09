@@ -1,0 +1,153 @@
+---
+import type { MarkdownHeading } from 'astro';
+import '../styles/global.css';
+import '../styles/docs.css';
+import SiteFooter from '../components/SiteFooter.astro';
+import SiteHead from '../components/SiteHead.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import { DOCS_UI } from '../docs/nav';
+import { docsHref, sidebarFor, type DocsPage } from '../docs/pages';
+
+type Props = {
+  page: DocsPage;
+  pages: DocsPage[];
+  headings: MarkdownHeading[];
+};
+
+const { page, pages, headings } = Astro.props;
+const { lang, slug, entry } = page;
+const ui = DOCS_UI[lang];
+const sidebar = sidebarFor(pages, lang);
+const ordered = sidebar.flatMap((group) => group.pages);
+const index = ordered.findIndex((item) => item.slug === slug);
+const prev = index > 0 ? ordered[index - 1] : undefined;
+const next = index >= 0 && index < ordered.length - 1 ? ordered[index + 1] : undefined;
+const group = sidebar.find((item) => item.pages.some((p) => p.slug === slug));
+const other = pages.find((item) => item.slug === slug && item.lang !== lang);
+const toc = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
+const title = slug === 'index' ? `Flareboard ${ui.docs}` : `${entry.data.title} - Flareboard ${ui.docs}`;
+const label = (item: DocsPage) => item.entry.data.sidebarTitle ?? item.entry.data.title;
+---
+
+<!doctype html>
+<html lang={lang === 'zh' ? 'zh-CN' : 'en'}>
+  <head>
+    <SiteHead title={title} description={entry.data.description}>
+      <link rel="alternate" type="text/markdown" href={page.mdHref} title="Markdown" />
+      <link rel="alternate" hreflang={lang === 'zh' ? 'zh-CN' : 'en'} href={new URL(page.href, Astro.site)} />
+      {other && <link rel="alternate" hreflang={other.lang === 'zh' ? 'zh-CN' : 'en'} href={new URL(other.href, Astro.site)} />}
+    </SiteHead>
+  </head>
+  <body>
+    <div class="landing">
+      <SiteHeader activeNav="docs" lang={lang} />
+      <div class="docs">
+        <aside class="docs-sidebar" aria-label={ui.docs}>
+          <details class="docs-sidebar-menu" open>
+            <summary>{ui.menu}</summary>
+            <nav>
+              {
+                sidebar.map((item) => (
+                  <div class="docs-nav-group">
+                    <p class="docs-nav-title">{item.title}</p>
+                    <ul>
+                      {item.pages.map((p) => (
+                        <li>
+                          <a href={p.href} class:list={['docs-nav-link', { active: p.slug === slug }]} aria-current={p.slug === slug ? 'page' : undefined}>
+                            {label(p)}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))
+              }
+            </nav>
+          </details>
+        </aside>
+
+        <main class="docs-main">
+          <article class="docs-article">
+            <header class="docs-header">
+              {group && slug !== 'index' && <p class="docs-eyebrow">{group.title}</p>}
+              <h1 class="docs-title">{entry.data.title}</h1>
+              <p class="docs-desc">{entry.data.description}</p>
+              <div class="docs-actions">
+                <button type="button" class="docs-action" data-copy-md={page.mdHref} data-copied={ui.copied}>{ui.copyMarkdown}</button>
+                <a class="docs-action" href={page.mdHref}>{ui.viewMarkdown}</a>
+                {other && <a class="docs-action" href={other.href} hreflang={other.lang === 'zh' ? 'zh-CN' : 'en'}>{ui.otherLang}</a>}
+              </div>
+            </header>
+
+            <div class="post-body docs-body">
+              <slot />
+            </div>
+
+            <nav class="docs-pager" aria-label={`${ui.previous} / ${ui.next}`}>
+              {prev ? <a class="docs-pager-link" href={prev.href}><span>{ui.previous}</span>{label(prev)}</a> : <span />}
+              {next ? <a class="docs-pager-link docs-pager-next" href={next.href}><span>{ui.next}</span>{label(next)}</a> : <span />}
+            </nav>
+            <p class="docs-agent-hint">{ui.agentHint}</p>
+          </article>
+        </main>
+
+        <aside class="docs-toc" aria-label={ui.onThisPage}>
+          {
+            toc.length > 1 && (
+              <>
+                <p class="docs-nav-title">{ui.onThisPage}</p>
+                <ul>
+                  {toc.map((heading) => (
+                    <li class:list={{ 'docs-toc-sub': heading.depth === 3 }}>
+                      <a href={`#${heading.slug}`}>{heading.text}</a>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )
+          }
+        </aside>
+      </div>
+      <SiteFooter />
+    </div>
+
+    <script>
+      // "Copy as Markdown" for pasting a page into an AI chat.
+      for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy-md]')) {
+        button.addEventListener('click', async () => {
+          const label = button.textContent;
+          try {
+            const text = await fetch(button.dataset.copyMd!).then((res) => res.text());
+            await navigator.clipboard.writeText(text);
+            button.textContent = button.dataset.copied ?? label;
+            setTimeout(() => (button.textContent = label), 1500);
+          } catch {
+            window.location.href = button.dataset.copyMd!;
+          }
+        });
+      }
+
+      // A copy button on every code block.
+      for (const pre of document.querySelectorAll<HTMLPreElement>('.docs-body pre')) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'docs-code-copy';
+        button.textContent = document.documentElement.lang === 'zh-CN' ? '复制' : 'Copy';
+        button.addEventListener('click', async () => {
+          const label = button.textContent;
+          await navigator.clipboard.writeText(pre.querySelector('code')?.innerText ?? pre.innerText);
+          button.textContent = document.documentElement.lang === 'zh-CN' ? '已复制' : 'Copied';
+          setTimeout(() => (button.textContent = label), 1500);
+        });
+        pre.append(button);
+      }
+
+      // The sidebar is a collapsible menu on narrow screens and always open on wide ones.
+      const menu = document.querySelector<HTMLDetailsElement>('.docs-sidebar-menu');
+      const wide = window.matchMedia('(min-width: 960px)');
+      const syncMenu = () => menu && (menu.open = wide.matches);
+      syncMenu();
+      wide.addEventListener('change', syncMenu);
+    </script>
+  </body>
+</html>

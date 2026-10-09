@@ -32,4 +32,5 @@ The Free Cloud plan includes one website, 100K events and 50K OpenTelemetry log 
 - Hosted app: https://flareboard.dev/
 - Pricing: https://flareboard.dev/pricing
 - GitHub: https://github.com/Go7hic/flareboard
-- Deployment docs: https://github.com/Go7hic/flareboard/blob/main/docs/deployment.md
+- Documentation: https://flareboard.dev/docs (Markdown index for agents: https://flareboard.dev/docs/llms.txt)
+- Self-hosting guide: https://flareboard.dev/docs/self-host/deploy

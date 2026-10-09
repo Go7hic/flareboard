@@ -118,8 +118,9 @@ window (30 days) are rejected and reported in `partialSuccess`.
 | Events and links per span | 128 each |
 | Requests per project key | `PROJECT_KEY_RATE_LIMIT` per minute (default 30,000), a budget separate from event capture |
 
-Hosted plans count every stored log record and span toward the monthly event quota; an account over
-quota gets `402`.
+Hosted plans count every stored log record and span toward their own monthly allowance
+(`maxOtelRowsPerMonth` in `packages/shared/src/billing.ts`), separate from events; an account over
+it gets `402`.
 
 ## Responses
 

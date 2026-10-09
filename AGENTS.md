@@ -104,9 +104,11 @@ The main bundle carries the marketing pages (Landing, Features, Compare, Pricing
 - **Plan allowances:** `packages/shared/src/billing.ts` (events, replays, log/span rows, retention, grace). Usage lives in D1 `usage_monthly`: the aggregator counts events, ingest counts replays (first chunk) and OTLP rows; ingest only reads it through a 60 s KV cache (`assertEventAllowed`). Never count per event in KV (one write per second per key). Emails at 80 % / 100 % / stop come from `lib/usage-notices.ts`; hosted retention is capped by the owner's plan in `lib/retention.ts`. Changing allowances means updating pricing copy and both policies.
 - **Warehouse credentials:** Stripe keys are restricted keys only, stored encrypted (`warehouse_credential`) and removed with the data source; never return or log them.
 
-## Blog
+## Blog and docs
 
-`apps/blog` shares Geist tokens (`apps/blog/src/styles/geist-tokens.css`). Stay CSS-first (Astro); do not pull dashboard React/shadcn into the blog.
+`apps/blog` serves both `flareboard.dev/blog` and `flareboard.dev/docs` (one Workers route each, `/blog*` and `/docs*`; shared assets under `/blog/_astro`). It shares Geist tokens (`apps/blog/src/styles/geist-tokens.css`). Stay CSS-first (Astro); do not pull dashboard React/shadcn into it.
+
+**Docs** are Markdown in `apps/blog/src/content/docs/en|zh/<slug>.md`, ordered by `src/docs/nav.ts`, written to `apps/blog/DOCS-GUIDE.md`. Each page is also served as Markdown (`/docs/<slug>.md`) and listed in `/docs/llms.txt`, because agents set Flareboard up from them. When you change something users see (tracker attributes or API, ingest or REST endpoints, console labels, plans, setup steps), update the English and Chinese pages in the same change, then run `pnpm --filter @flareboard/blog build && node apps/blog/scripts/check-docs-links.mjs`.
 
 ## Browser SDK (`@flareboard/js`)
 

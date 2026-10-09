@@ -1,0 +1,47 @@
+---
+import { MARKETING_ORIGIN } from '../consts';
+
+type Props = {
+  title: string;
+  description: string;
+  ogType?: 'website' | 'article';
+};
+
+const { title, description, ogType = 'website' } = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+const ogImage = new URL('/og-image.jpg', MARKETING_ORIGIN).href;
+---
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{title}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={canonical} />
+<link rel="icon" type="image/avif" href={`${MARKETING_ORIGIN}/logo.avif`} />
+<meta property="og:type" content={ogType} />
+<meta property="og:site_name" content="Flareboard" />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:url" content={canonical} />
+<meta property="og:image" content={ogImage} />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={title} />
+<meta name="twitter:description" content={description} />
+<meta name="twitter:image" content={ogImage} />
+<slot />
+<script is:inline>
+  (function () {
+    try {
+      var s = localStorage.getItem('flareboard-theme');
+      var t =
+        s === 'light' || s === 'dark'
+          ? s
+          : window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark'
+            : 'light';
+      document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  })();
+</script>

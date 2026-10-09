@@ -92,6 +92,11 @@ describe('project keys in place of website ids', () => {
     expect(await config.response.json()).toHaveProperty('featureFlags');
     expect((await call('/api/tracker-config?website=fb_pk_000000000000000000000000')).response.status).toBe(404);
 
+    // script.js with data-project-key asks with ?key= and starts tracking with the returned websiteId.
+    const byKey = await call(`/api/tracker-config?key=${KEY}`);
+    expect(byKey.response.status).toBe(200);
+    expect(await byKey.response.json()).toMatchObject({ websiteId: SITE });
+
     const flags = await call('/api/feature-flags/evaluate', {
       method: 'POST',
       body: JSON.stringify({ website: KEY, keys: ['missing'], context: {} }),

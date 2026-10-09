@@ -70,7 +70,7 @@ flareboard.init({ host: 'https://t.flareboard.dev', websiteId: 'YOUR_WEBSITE_ID'
 flareboard.track('signup', { plan: 'pro' });
 ```
 
-The package is MIT-licensed, so you can ship it in any project, commercial or not. If you already use PostHog's SDKs, you can point them at Flareboard by changing the API key and host. The [compatibility guide](https://github.com/Go7hic/flareboard/blob/main/docs/ingest-posthog-compat.md) has the details.
+The package is MIT-licensed, so you can ship it in any project, commercial or not. If you already use PostHog's SDKs, you can point them at Flareboard by changing the API key and host. The [compatibility guide](/docs/install/posthog) has the details.
 
 ## Pricing
 

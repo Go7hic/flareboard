@@ -5,7 +5,7 @@ flags, experiments, surveys, error tracking, logs and LLM observability in one p
 ClickHouse or Kubernetes. A PostHog-like product surface on Workers, Durable Objects, D1, R2, KV
 and Queues.
 
-**[flareboard.dev](https://flareboard.dev)** · [Live demo](https://flareboard.dev/demo) ·
+**[flareboard.dev](https://flareboard.dev)** · [Docs](https://flareboard.dev/docs) · [Live demo](https://flareboard.dev/demo) ·
 [Pricing](https://flareboard.dev/pricing) · [Blog](https://flareboard.dev/blog) ·
 [`@flareboard/js` on npm](https://www.npmjs.com/package/@flareboard/js)
 
@@ -85,7 +85,7 @@ Open http://localhost:5173 and sign in with the credentials `pnpm seed` prints
 
 ## Deploy
 
-Production setup (Cloudflare resources, secrets, custom domains): **[Deployment guide](docs/deployment.md)**.
+Production setup (Cloudflare resources, secrets, custom domains): **[Self-hosting guide](https://flareboard.dev/docs/self-host/deploy)** (repository copy: [docs/deployment.md](docs/deployment.md)).
 Forkers: replace the D1, KV, R2, Queues and Durable Object bindings in each app's
 `wrangler.jsonc` with your own resources before deploying.
 

@@ -1,7 +1,7 @@
 ---
-import BaseLayout from '../layouts/BaseLayout.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
 import { getCollection } from 'astro:content';
-import { SITE } from '../consts';
+import { BLOG_BASE, SITE } from '../../consts';
 
 const posts = (await getCollection('blog'))
   .filter((post) => !post.data.draft)
@@ -32,7 +32,7 @@ function formatDate(date: Date) {
     {
       posts.map((post) => (
         <li>
-          <a class="blog-card" href={`${import.meta.env.BASE_URL}/${post.id}`}>
+          <a class="blog-card" href={`${BLOG_BASE}/${post.id}`}>
             <h2 class="blog-card-title">{post.data.title}</h2>
             <p class="blog-card-desc">{post.data.description}</p>
             <p class="blog-card-meta">

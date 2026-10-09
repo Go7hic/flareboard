@@ -1,6 +1,7 @@
 ---
 import { getCollection, render } from 'astro:content';
-import BaseLayout from '../layouts/BaseLayout.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { BLOG_BASE } from '../../consts';
 
 export async function getStaticPaths() {
   const posts = await getCollection('blog', ({ data }) => !data.draft);
@@ -29,7 +30,7 @@ function formatDate(date: Date) {
   pubDate={post.data.pubDate}
   author={post.data.author}
 >
-  <a class="post-back" href={import.meta.env.BASE_URL}>← Back to blog</a>
+  <a class="post-back" href={BLOG_BASE}>← Back to blog</a>
 
   <header class="post-header">
     <h1 class="post-title">{post.data.title}</h1>

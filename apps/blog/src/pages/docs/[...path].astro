@@ -1,0 +1,21 @@
+---
+import { render } from 'astro:content';
+import DocsLayout from '../../layouts/DocsLayout.astro';
+import { getDocsPages, type DocsPage } from '../../docs/pages';
+
+export async function getStaticPaths() {
+  const pages = await getDocsPages();
+  return pages.map((page) => ({
+    // /docs → undefined, /docs/zh → 'zh', /docs/quickstart → 'quickstart'
+    params: { path: page.href.replace(/^\/docs\/?/, '') || undefined },
+    props: { page, pages },
+  }));
+}
+
+const { page, pages } = Astro.props as { page: DocsPage; pages: DocsPage[] };
+const { Content, headings } = await render(page.entry);
+---
+
+<DocsLayout page={page} pages={pages} headings={headings}>
+  <Content />
+</DocsLayout>

@@ -26,7 +26,7 @@ function isPasswordUpdate(path: string, method: string) {
 
 /** Account security a read-only user must still manage for themselves. */
 function isOwnSecurityPath(path: string) {
-  return path.startsWith('/api/me/2fa') || path.startsWith('/api/me/sessions');
+  return path.startsWith('/api/me/2fa') || path.startsWith('/api/me/sessions') || path.startsWith('/api/me/identities');
 }
 
 /**
@@ -40,7 +40,7 @@ function isOwnAssistantWrite(path: string) {
 /**
  * Credential and account management needs a signed-in session: a leaked personal API key must
  * not be able to mint more keys, change the password, turn off two-factor authentication,
- * revoke sessions or delete the account.
+ * revoke sessions, unlink sign-in providers or delete the account.
  */
 function sessionOnlyPath(path: string) {
   return (

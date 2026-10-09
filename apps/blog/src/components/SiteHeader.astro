@@ -1,21 +1,22 @@
 ---
-import { GITHUB_URL, MARKETING_ORIGIN } from '../consts';
+import { BLOG_BASE, DOCS_BASE, MARKETING_ORIGIN } from '../consts';
 
 type Props = {
-  activeNav?: 'blog';
+  activeNav?: 'blog' | 'docs';
+  /** The docs come in Chinese too; the blog is English only. */
+  lang?: 'en' | 'zh';
 };
 
-const { activeNav } = Astro.props;
-const docsUrl = `${GITHUB_URL}#readme`;
-const blogUrl = import.meta.env.BASE_URL.replace(/\/$/, '') || '/blog';
+const { activeNav, lang = 'en' } = Astro.props;
+const zh = lang === 'zh';
 
 const nav = [
-  { href: MARKETING_ORIGIN, label: 'Home', key: 'home' },
-  { href: `${MARKETING_ORIGIN}/features`, label: 'Features', key: 'features' },
-  { href: `${MARKETING_ORIGIN}/compare`, label: 'Compare', key: 'compare' },
-  { href: `${MARKETING_ORIGIN}/pricing`, label: 'Pricing', key: 'pricing' },
-  { href: blogUrl, label: 'Blog', key: 'blog' },
-  { href: docsUrl, label: 'Docs', key: 'docs', external: true },
+  { href: MARKETING_ORIGIN, label: zh ? '首页' : 'Home', key: 'home' },
+  { href: `${MARKETING_ORIGIN}/features`, label: zh ? '功能' : 'Features', key: 'features' },
+  { href: `${MARKETING_ORIGIN}/compare`, label: zh ? '对比' : 'Compare', key: 'compare' },
+  { href: `${MARKETING_ORIGIN}/pricing`, label: zh ? '定价' : 'Pricing', key: 'pricing' },
+  { href: BLOG_BASE, label: zh ? '博客' : 'Blog', key: 'blog' },
+  { href: zh ? `${DOCS_BASE}/zh` : DOCS_BASE, label: zh ? '文档' : 'Docs', key: 'docs' },
 ];
 ---
 
@@ -37,12 +38,7 @@ const nav = [
     <nav class="landing-nav-links shell-links" aria-label="Primary">
       {
         nav.map((item) => (
-          <a
-            href={item.href}
-            class:list={['shell-link', { active: activeNav === item.key }]}
-            target={item.external ? '_blank' : undefined}
-            rel={item.external ? 'noopener noreferrer' : undefined}
-          >
+          <a href={item.href} class:list={['shell-link', { active: activeNav === item.key }]}>
             {item.label}
           </a>
         ))
@@ -50,7 +46,7 @@ const nav = [
     </nav>
 
     <div class="landing-nav-actions shell-nav-end">
-      <button type="button" class="theme-toggle" aria-label="Toggle theme" id="theme-toggle">
+      <button type="button" class="theme-toggle" aria-label={zh ? '切换主题' : 'Toggle theme'} id="theme-toggle">
         <span class="theme-toggle-track" aria-hidden="true">
           <span class="theme-toggle-icons">
             <svg class="theme-toggle-sun" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -64,8 +60,8 @@ const nav = [
           <span class="theme-toggle-thumb" id="theme-toggle-thumb" />
         </span>
       </button>
-      <a class="btn btn-ghost btn-sm" href={`${MARKETING_ORIGIN}/login`}>Sign in</a>
-      <a class="btn btn-primary btn-sm" href={`${MARKETING_ORIGIN}/register`}>Get started</a>
+      <a class="btn btn-ghost btn-sm" href={`${MARKETING_ORIGIN}/login`}>{zh ? '登录' : 'Sign in'}</a>
+      <a class="btn btn-primary btn-sm" href={`${MARKETING_ORIGIN}/register`}>{zh ? '免费开始' : 'Get started'}</a>
     </div>
   </div>
 </header>

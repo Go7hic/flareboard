@@ -71,6 +71,21 @@ describe('sign-in methods', () => {
     expect((await login('provider-only', '')).response.status).not.toBe(200);
   });
 
+  it('keeps sign-in methods away from personal API keys', async () => {
+    const userId = await createTestUser('identities-api-key', 'correct horse');
+    const token = await tokenFor('identities-api-key', 'correct horse');
+    await link(userId, 'github', 'gh-api-key', Date.now() + 3_600_000);
+    const key = await call('/api/me/api-keys', token, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'CI', scopes: ['read', 'write'] }),
+    });
+    expect(key.response.status).toBe(201);
+
+    expect((await call('/api/me/identities', key.body.key as string)).response.status).toBe(403);
+    expect((await call('/api/me/identities/github', key.body.key as string, { method: 'DELETE' })).response.status).toBe(403);
+    expect((await call('/api/me/identities', token)).body).toHaveLength(1);
+  });
+
   it('still treats an account a provider created before the change as having no password', async () => {
     const userId = await createTestUser('legacy-provider-account', 'random-unknown');
     const token = await tokenFor('legacy-provider-account', 'random-unknown');

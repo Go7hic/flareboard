@@ -15,4 +15,17 @@ const blog = defineCollection({
   }),
 });
 
-export const collections = { blog };
+const docs = defineCollection({
+  // Ids keep the path as written (en/index, en/install/script); the default would fold index away.
+  loader: glob({ base: './src/content/docs', pattern: '**/*.md', generateId: ({ entry }) => entry.replace(/\.md$/, '') }),
+  schema: z.object({
+    title: z.string(),
+    /** One or two sentences: the page summary, the meta description and the llms.txt line. */
+    description: z.string(),
+    /** Shorter label for the sidebar when the title is long. */
+    sidebarTitle: z.string().optional(),
+    draft: z.boolean().default(false),
+  }),
+});
+
+export const collections = { blog, docs };

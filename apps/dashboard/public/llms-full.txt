@@ -111,7 +111,8 @@ Flareboard differs from PostHog by being built around Cloudflare infrastructure 
 - Compare: https://flareboard.dev/compare
 - GitHub: https://github.com/Go7hic/flareboard
 - README: https://github.com/Go7hic/flareboard#readme
-- Deployment docs: https://github.com/Go7hic/flareboard/blob/main/docs/deployment.md
+- Documentation: https://flareboard.dev/docs (Markdown index for agents: https://flareboard.dev/docs/llms.txt)
+- Self-hosting guide: https://flareboard.dev/docs/self-host/deploy
 - Contact: hello@flareboard.dev
 
 ## Suggested Target Queries

@@ -53,7 +53,7 @@ If you need PostHog's whole catalog today, PostHog is the safer choice.
 
 ## Switching
 
-PostHog's SDKs can send to Flareboard if you change two settings, the API key and the host. The [compatibility guide](https://github.com/Go7hic/flareboard/blob/main/docs/ingest-posthog-compat.md) covers what is supported, including pageviews, custom events, identify, groups and feature flag calls. Many teams run both in parallel during an evaluation.
+PostHog's SDKs can send to Flareboard if you change two settings, the API key and the host. The [compatibility guide](/docs/install/posthog) covers what is supported, including pageviews, custom events, identify, groups and feature flag calls. Many teams run both in parallel during an evaluation.
 
 - [Open the live demo](https://flareboard.dev/demo)
 - [Full comparison grid](https://flareboard.dev/compare)

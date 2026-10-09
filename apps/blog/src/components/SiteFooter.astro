@@ -1,5 +1,5 @@
 ---
-import { GITHUB_URL, MARKETING_ORIGIN } from '../consts';
+import { BLOG_BASE, GITHUB_URL, MARKETING_ORIGIN } from '../consts';
 
 const year = new Date().getFullYear();
 ---
@@ -9,7 +9,7 @@ const year = new Date().getFullYear();
     <span>© {year} Flareboard</span>
     <div class="site-footer-links">
       <a href={MARKETING_ORIGIN}>Home</a>
-      <a href={`${import.meta.env.BASE_URL}/rss.xml`}>RSS</a>
+      <a href={`${BLOG_BASE}/rss.xml`}>RSS</a>
       <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer">GitHub</a>
       <a href={`${MARKETING_ORIGIN}/terms`}>Terms</a>
       <a href={`${MARKETING_ORIGIN}/privacy`}>Privacy</a>

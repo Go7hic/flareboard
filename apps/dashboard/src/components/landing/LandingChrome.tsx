@@ -5,11 +5,7 @@ import { LanguageSelector } from '../LanguageSelector';
 import { ThemeToggle } from '../ThemeToggle';
 import { Button } from '../ui/button';
 import { bootstrapSession } from '../../lib/api';
-import {
-  FLAREBOARD_DEPLOY_DOCS,
-  FLAREBOARD_GITHUB,
-  FLAREBOARD_README,
-} from '../../lib/landing-links';
+import { docsUrl, FLAREBOARD_GITHUB } from '../../lib/landing-links';
 import { t } from '../../lib/i18n';
 import { useStartHref } from '../../lib/useAppConfig';
 
@@ -122,7 +118,7 @@ export function LandingChrome({ children, activeNav = 'home' }: LandingChromePro
     { kind: 'route', href: '/compare', labelKey: 'landingNavCompare', active: activeNav === 'compare' },
     { kind: 'route', href: '/pricing', labelKey: 'landingNavPricing', active: activeNav === 'pricing' },
     { kind: 'external', href: '/blog', labelKey: 'landingNavBlog' },
-    { kind: 'external', href: FLAREBOARD_README, labelKey: 'landingNavDocs' },
+    { kind: 'href', href: docsUrl(), labelKey: 'landingNavDocs' },
   ];
 
   return (
@@ -174,13 +170,9 @@ export function LandingChrome({ children, activeNav = 'home' }: LandingChromePro
             </div>
             <div className="landing-footer-col">
               <p className="landing-footer-heading">{t('homeFooterResources')}</p>
-              <a href={FLAREBOARD_README} target="_blank" rel="noopener noreferrer">
-                {t('landingNavDocs')}
-              </a>
+              <a href={docsUrl()}>{t('landingNavDocs')}</a>
               <a href="/blog">{t('landingNavBlog')}</a>
-              <a href={FLAREBOARD_DEPLOY_DOCS} target="_blank" rel="noopener noreferrer">
-                {t('landingSelfHost')}
-              </a>
+              <a href={docsUrl('self-host/deploy')}>{t('landingSelfHost')}</a>
               <a href={FLAREBOARD_GITHUB} target="_blank" rel="noopener noreferrer">
                 {t('landingFooterGithub')}
               </a>

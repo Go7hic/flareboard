@@ -4,3 +4,4 @@ Allow: /
 Disallow: /s/
 
 Sitemap: https://flareboard.dev/sitemap.xml
+Sitemap: https://flareboard.dev/blog/sitemap-index.xml

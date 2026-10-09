@@ -5,7 +5,7 @@ import { useStartHref } from '../lib/useAppConfig';
 import { Button } from '../components/ui/button';
 import { t } from '../lib/i18n';
 import {
-  FLAREBOARD_DEPLOY_DOCS,
+  docsUrl,
   FLAREBOARD_ENTERPRISE_EMAIL,
   LANDING_PLANS,
 } from '../lib/landing-links';
@@ -30,7 +30,7 @@ export default function Pricing() {
           <h1 className="landing-headline">{t('pricingPageTitle')}</h1>
           <p className="landing-lead pricing-hero-lead">
             {t('pricingPageLead')}{' '}
-            <a href={FLAREBOARD_DEPLOY_DOCS} target="_blank" rel="noopener noreferrer">
+            <a href={docsUrl('self-host/deploy')}>
               {t('landingPathDeployGuide')}
             </a>
             .
@@ -126,7 +126,7 @@ export default function Pricing() {
           </div>
           <p className="pricing-self-host-note">
             {t('pricingSelfHostNote')}{' '}
-            <a href={FLAREBOARD_DEPLOY_DOCS} target="_blank" rel="noopener noreferrer">
+            <a href={docsUrl('self-host/deploy')}>
               {t('landingPathDeployGuide')}
             </a>
             .

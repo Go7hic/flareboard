@@ -9,7 +9,7 @@ import { LandingProductPreview } from '../components/landing/LandingProductPrevi
 import { Button } from '../components/ui/button';
 import { BILLING_PLAN_IDS } from '../lib/api';
 import { t } from '../lib/i18n';
-import { FLAREBOARD_DEPLOY_DOCS, FLAREBOARD_ENTERPRISE_EMAIL, LANDING_PLANS } from '../lib/landing-links';
+import { docsUrl, FLAREBOARD_ENTERPRISE_EMAIL, LANDING_PLANS } from '../lib/landing-links';
 import { useAppConfig, useStartHref } from '../lib/useAppConfig';
 import '../styles/landing-home.css';
 
@@ -75,7 +75,7 @@ function SelfHostCard() {
         ))}
       </ul>
       <Button asChild variant="secondary" className="landing-plan-cta">
-        <a href={FLAREBOARD_DEPLOY_DOCS} target="_blank" rel="noopener noreferrer">
+        <a href={docsUrl('self-host/deploy')}>
           {t('landingPathDeployGuide')}
         </a>
       </Button>

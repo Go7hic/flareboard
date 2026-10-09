@@ -9,7 +9,8 @@
 - [Pricing](https://flareboard.dev/pricing): Free, Cloud and Business plan comparison.
 - [Compare](https://flareboard.dev/compare): Comparison with Google Analytics, Umami, Plausible, Cloudflare Web Analytics, Vercel Analytics, Matomo, and PostHog.
 - [GitHub](https://github.com/Go7hic/flareboard): Source repository.
-- [Deployment docs](https://github.com/Go7hic/flareboard/blob/main/docs/deployment.md): Self-hosting and deployment guide.
+- [Documentation](https://flareboard.dev/docs): Install, events, features, API, MCP and self-hosting. Every page is also Markdown (add .md); the full index for agents is https://flareboard.dev/docs/llms.txt and everything in one file is https://flareboard.dev/docs/llms-full.txt. Chinese: https://flareboard.dev/docs/zh.
+- [Self-hosting guide](https://flareboard.dev/docs/self-host/deploy): Deploy Flareboard to your own Cloudflare account.
 
 ## Markdown Alternates
 

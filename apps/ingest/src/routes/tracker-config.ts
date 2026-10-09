@@ -122,7 +122,8 @@ export async function getTrackerConfigJson(env: Env, websiteId: string): Promise
 }
 
 export async function handleTrackerConfig(c: Context<{ Bindings: Env }>) {
-  const websiteRef = c.req.query('website');
+  // `key` is what script.js sends for data-project-key (and `website` accepts a key as well).
+  const websiteRef = c.req.query('website') ?? c.req.query('key');
   if (!websiteRef) return badRequest('website query param required');
   const websiteId = (await resolveWebsiteRef(c.env, websiteRef))?.websiteId;
   if (!websiteId) return notFound();

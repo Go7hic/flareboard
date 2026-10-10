@@ -1,6 +1,7 @@
 import {
   PLAN_IDS,
   PLANS,
+  ROLES,
   currentMonthKey,
   getPlan,
   isUnlimitedWebsites,
@@ -37,6 +38,38 @@ export async function getWebsitePlanId(env: Env, website: { userId: string | nul
   if (isDemoUserId(fallbackUserId)) return DEMO_PLAN_ID;
   const sub = await getUserSubscription(env, website.userId ?? fallbackUserId);
   return sub.planId;
+}
+
+/**
+ * The team member who takes over a team website's plan and usage when its owner leaves: an
+ * owner or manager (the roles that create team websites) other than ?1, with a paid plan first
+ * (allowances are flat, so this never adds to their bill), then owners, then the longest member.
+ */
+const NEXT_TEAM_WEBSITE_OWNER = `SELECT tu.user_id FROM team_user tu
+  JOIN user u ON u.user_id = tu.user_id AND u.deleted_at IS NULL
+  LEFT JOIN user_subscription s ON s.user_id = tu.user_id
+  WHERE tu.team_id = website.team_id AND tu.user_id <> ?1 AND tu.role IN ('${ROLES.teamOwner}', '${ROLES.teamManager}')
+  ORDER BY CASE WHEN s.plan_id = 'business' THEN 0 WHEN s.plan_id IN ('cloud', 'hobby', 'pro') THEN 1 ELSE 2 END,
+    tu.role <> '${ROLES.teamOwner}', tu.created_at, tu.user_id
+  LIMIT 1`;
+
+/**
+ * Hands the team websites billed to `userId` (website.user_id, which ingest and the aggregator
+ * bill) to another team member, so they keep collecting when that account is deleted.
+ * Personal websites stay: they leave with the account. Returns the websites handed over.
+ */
+export async function handOverTeamWebsites(env: Env, userId: string, now = Date.now()): Promise<string[]> {
+  const { results } = await env.DB.prepare(
+    `UPDATE website SET user_id = (${NEXT_TEAM_WEBSITE_OWNER}), updated_at = ?2
+     WHERE user_id = ?1 AND team_id IS NOT NULL AND (${NEXT_TEAM_WEBSITE_OWNER}) IS NOT NULL
+     RETURNING website_id AS websiteId`,
+  )
+    .bind(userId, now)
+    .all<{ websiteId: string }>();
+  const websiteIds = (results ?? []).map((row) => row.websiteId);
+  // Ingest caches the owner for an hour (hosted-limits.ts).
+  await Promise.all(websiteIds.map((id) => env.CACHE.delete(`website:owner:${id}`)));
+  return websiteIds;
 }
 
 export async function getUserSubscription(env: Env, userId: string) {

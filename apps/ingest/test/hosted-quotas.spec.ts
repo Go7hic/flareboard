@@ -210,3 +210,67 @@ describe('hosted monthly allowances', () => {
     expect((await exportLogs(1)).status).toBe(402);
   });
 });
+
+describe('a team website whose creator was erased', () => {
+  const TEAM = 'quota-team';
+  const TEAM_OWNER = 'quota-team-owner';
+  const TEAM_SITE = '00000000-0000-0000-0000-0000000000d8';
+
+  async function sendToTeamSite() {
+    const recorder = recordingQueue();
+    const response = await fetchWorkerWithEnv(
+      '/api/send',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'user-agent': UA, 'cf-connecting-ip': '192.0.2.172' },
+        body: JSON.stringify({ type: 'event', payload: { website: TEAM_SITE, hostname: 'team.example.com', url: '/' } }),
+      },
+      { EVENT_QUEUE: recorder.queue, ...HOSTED },
+    );
+    return { status: response.status, body: await response.text(), events: recorder.events() };
+  }
+
+  async function setTeamOwnerEvents(events: number) {
+    await env.DB.prepare(
+      `INSERT INTO usage_monthly (user_id, month_key, events_count) VALUES (?1, ?2, ?3)
+       ON CONFLICT(user_id, month_key) DO UPDATE SET events_count = excluded.events_count`,
+    )
+      .bind(TEAM_OWNER, currentMonthKey(), events)
+      .run();
+    await env.CACHE.delete(`quota:${TEAM_OWNER}:${currentMonthKey()}`);
+    forgetIsolateMemo();
+  }
+
+  beforeAll(async () => {
+    await applyTestMigrations(env.DB);
+    const now = Date.now();
+    await env.DB.prepare(`INSERT OR IGNORE INTO user (user_id, username, password, role, created_at, updated_at) VALUES (?1, ?1, 'hash', 'user', ?2, ?2)`)
+      .bind(TEAM_OWNER, now)
+      .run();
+    await env.DB.prepare(`INSERT OR IGNORE INTO team (team_id, name, created_at, updated_at) VALUES (?1, 'Team', ?2, ?2)`).bind(TEAM, now).run();
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO team_user (team_user_id, team_id, user_id, role, created_at, updated_at) VALUES ('quota-tu', ?1, ?2, 'team-owner', ?3, ?3)`,
+    )
+      .bind(TEAM, TEAM_OWNER, now)
+      .run();
+    // As the API's data deletion leaves it: the creator cleared, billing handed to the team owner
+    // (handOverTeamWebsites). A website without user_id is refused as "Website not found".
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO website (website_id, name, domain, user_id, team_id, created_by, created_at, updated_at)
+       VALUES (?1, 'Team site', 'team.example.com', ?2, ?3, NULL, ?4, ?4)`,
+    )
+      .bind(TEAM_SITE, TEAM_OWNER, TEAM, now)
+      .run();
+  });
+
+  it("keeps collecting under the team owner's plan and usage", async () => {
+    await setTeamOwnerEvents(99_999);
+    const collected = await sendToTeamSite();
+    expect(collected.status).toBe(200);
+    expect(collected.events).toHaveLength(1);
+    await setTeamOwnerEvents(100_000);
+    const refused = await sendToTeamSite();
+    expect(refused.status).toBe(402);
+    expect(refused.body).toContain('Monthly event limit exceeded.');
+  });
+});

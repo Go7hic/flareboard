@@ -6,7 +6,7 @@ import type { Env } from '../env';
 import { logAdminAction } from '../lib/audit';
 import { twoFactorBlockedTeams } from '../lib/access';
 import { bumpTokenVersion, issueAuthToken, startSession } from '../lib/auth-token';
-import { stripeRequest } from '../lib/billing';
+import { handOverTeamWebsites, stripeRequest } from '../lib/billing';
 import { DELETION_GRACE_DAYS } from '../lib/data-deletion';
 import { isDemoUserId } from '../lib/demo-access';
 import { badRequest, json, unauthorized } from '../lib/response';
@@ -145,6 +145,8 @@ export async function handleDeleteAccount(c: Ctx) {
     .update(schema.website)
     .set({ deletedAt: now, updatedAt: now })
     .where(and(eq(schema.website.userId, user.userId), isNull(schema.website.teamId), isNull(schema.website.deletedAt)));
+  // Team websites they created were billed to them (and their plan was just cancelled): a teammate takes over.
+  await handOverTeamWebsites(c.env, user.userId, now.getTime());
   await db.delete(schema.teamUser).where(eq(schema.teamUser.userId, user.userId));
   await db.update(schema.user).set({ deletedAt: now, updatedAt: now }).where(eq(schema.user.userId, user.userId));
 

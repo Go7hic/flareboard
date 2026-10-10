@@ -13,6 +13,11 @@ const MEMBER = 'ad-member';
 const OAUTH_USER = 'ad-oauth';
 const SOLO_TEAM = '9c1f2e3d-4b5a-4c6d-8e7f-00000000ad01';
 const SHARED_TEAM = '9c1f2e3d-4b5a-4c6d-8e7f-00000000ad02';
+const BILLED_TEAM = '9c1f2e3d-4b5a-4c6d-8e7f-00000000ad03';
+const CREATOR = 'ad-creator';
+const FREE_OWNER = 'ad-free-owner';
+const PAID_MANAGER = 'ad-paid-manager';
+const PAID_MEMBER = 'ad-paid-member';
 
 async function authHeader(userId: string) {
   const token = await createSecureToken({ userId, role: ROLES.user }, env.APP_SECRET);
@@ -73,6 +78,37 @@ describe('POST /api/me/delete', () => {
     )
       .bind(LEAVER, SOLO_TEAM, BASE)
       .run();
+
+    // A team website billed to the manager who created it; the team keeps an owner on Free.
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO user (user_id, username, password, role, created_at, updated_at) VALUES
+         (?1, 'creator@example.com', ?5, ?6, ?7, ?7), (?2, 'free-owner@example.com', ?5, ?6, ?7, ?7),
+         (?3, 'paid-manager@example.com', ?5, ?6, ?7, ?7), (?4, 'paid-member@example.com', ?5, ?6, ?7, ?7)`,
+    )
+      .bind(CREATOR, FREE_OWNER, PAID_MANAGER, PAID_MEMBER, hash, ROLES.user, BASE)
+      .run();
+    await env.DB.prepare(`INSERT OR IGNORE INTO team (team_id, name, access_code, created_at, updated_at) VALUES (?1, 'Billed team', 'adbilled', ?2, ?2)`)
+      .bind(BILLED_TEAM, BASE)
+      .run();
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO team_user (team_user_id, team_id, user_id, role, created_at, updated_at) VALUES
+         ('ad-tu-4', ?1, ?2, ?6, ?9, ?9), ('ad-tu-5', ?1, ?3, ?7, ?9, ?9),
+         ('ad-tu-6', ?1, ?4, ?6, ?9, ?9), ('ad-tu-7', ?1, ?5, ?8, ?9, ?9)`,
+    )
+      .bind(BILLED_TEAM, CREATOR, FREE_OWNER, PAID_MANAGER, PAID_MEMBER, ROLES.teamManager, ROLES.teamOwner, ROLES.teamMember, BASE)
+      .run();
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO user_subscription (user_id, plan_id, status, created_at, updated_at) VALUES
+         (?1, 'cloud', 'active', ?3, ?3), (?2, 'business', 'active', ?3, ?3)`,
+    )
+      .bind(PAID_MANAGER, PAID_MEMBER, BASE)
+      .run();
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO website (website_id, name, user_id, team_id, created_by, created_at, updated_at) VALUES
+         ('ad-billed-team-site', 'Billed team site', ?1, ?2, ?1, ?3, ?3)`,
+    )
+      .bind(CREATOR, BILLED_TEAM, BASE)
+      .run();
   });
 
   it('requires authentication', async () => {
@@ -122,6 +158,20 @@ describe('POST /api/me/delete', () => {
     // Existing sessions stop working immediately.
     const me = await fetchWorkerJson('/api/me', { headers });
     expect(me.response.status).toBe(401);
+  });
+
+  it('hands the team websites it created to a teammate who can create them, a paying one first', async () => {
+    await env.CACHE.put('website:owner:ad-billed-team-site', CREATOR);
+    const { response } = await deleteAccount(CREATOR, { confirm: 'creator@example.com', password: PASSWORD });
+    expect(response.status).toBe(200);
+
+    const site = await env.DB.prepare('SELECT user_id AS userId, created_by AS createdBy, deleted_at AS deletedAt FROM website WHERE website_id = ?1')
+      .bind('ad-billed-team-site')
+      .first();
+    // The Business member cannot create team websites, so the paying manager takes over from the Free owner.
+    expect(site).toEqual({ userId: PAID_MANAGER, createdBy: CREATOR, deletedAt: null });
+    // Ingest reads the new owner instead of its hour-long cache.
+    expect(await env.CACHE.get('website:owner:ad-billed-team-site')).toBeNull();
   });
 });
 

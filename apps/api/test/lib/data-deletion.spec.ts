@@ -411,11 +411,12 @@ describe('scheduled data deletion', () => {
     expect(audit.results.map((row) => row.id)).toEqual(['dd-other-old', 'dd-signin-new']);
   });
 
-  it('keeps shared team content with the deleted author cleared', async () => {
+  it('keeps shared team content with the deleted author cleared, and the team website billed to a teammate', async () => {
     const teamSite = await env.DB.prepare('SELECT user_id AS userId, created_by AS createdBy, deleted_at AS deletedAt FROM website WHERE website_id = ?1')
       .bind(TEAM_SITE)
       .first<{ userId: string | null; createdBy: string | null; deletedAt: number | null }>();
-    expect(teamSite).toEqual({ userId: null, createdBy: null, deletedAt: null });
+    // Ingest bills website.user_id and refuses events for a website without one.
+    expect(teamSite).toEqual({ userId: TEAMMATE, createdBy: null, deletedAt: null });
     const board = await env.DB.prepare(`SELECT user_id AS userId FROM board WHERE board_id = 'dd-board-team'`).first<{ userId: string | null }>();
     expect(board).toEqual({ userId: null });
     const notebook = await env.DB.prepare(`SELECT created_by AS createdBy, updated_by AS updatedBy FROM notebook WHERE notebook_id = 'dd-notebook'`).first();

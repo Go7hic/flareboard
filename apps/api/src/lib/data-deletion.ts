@@ -1,5 +1,6 @@
 import { DEMO_USER_ID } from '@flareboard/shared';
 import type { Env } from '../env';
+import { handOverTeamWebsites } from './billing';
 import { resolvedIssueKvPrefix } from './error-issue-keys';
 import { eventStoreMode, siteStoreStub } from './site-db';
 import { sourceMapObjectPrefix } from './source-maps';
@@ -232,6 +233,12 @@ async function purgeUser(env: Env, budget: Budget, userId: string) {
   for (const table of USER_OWNED_TABLES) {
     if (!(await drain(env, budget, table, 'user_id = ?1', userId))) return false;
   }
+  // Team websites still billed to the user (an admin deleted the account, or no teammate could take
+  // over at the time) go to a teammate before website.user_id is cleared below: ingest refuses
+  // events for a website without one.
+  if (budget.left <= 0) return false;
+  budget.left -= 2;
+  await handOverTeamWebsites(env, userId);
   for (const [table, column] of USER_REFERENCES) {
     if (budget.left <= 0) return false;
     await exec(env, budget, `UPDATE ${table} SET ${column} = NULL WHERE ${column} = ?1`, userId);

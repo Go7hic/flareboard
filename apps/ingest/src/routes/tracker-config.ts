@@ -1,5 +1,10 @@
 import type { Context } from 'hono';
-import { featureFlagNeedsServerEvaluation, type FeatureFlagJsonValue } from '@flareboard/shared';
+import {
+  featureFlagNeedsServerEvaluation,
+  geoFromCf,
+  resolveSurveyCountryRules,
+  type FeatureFlagJsonValue,
+} from '@flareboard/shared';
 import type { Env } from '../env';
 import { flagConfig, getEnabledFlags, type FlagRow } from '../lib/feature-flags';
 import { heatmapsAllowedByPlan } from '../lib/hosted-limits';
@@ -126,6 +131,17 @@ export async function getTrackerConfigJson(env: Env, websiteId: string): Promise
   return body;
 }
 
+/**
+ * The cached config with the surveys this visitor can see: country display rules are resolved
+ * from the request (the browser cannot know its country) and removed. The result depends on the
+ * requester, so responses are `private`.
+ */
+export function trackerConfigForRequest(body: string, request: Request) {
+  const config = JSON.parse(body) as { surveys?: Array<{ displayRules: Array<{ field: string; operator: string; value: string }> }> };
+  const { country } = geoFromCf((request as Request & { cf?: unknown }).cf);
+  return { ...config, surveys: resolveSurveyCountryRules(config.surveys ?? [], country) };
+}
+
 export async function handleTrackerConfig(c: Context<{ Bindings: Env }>) {
   // `key` is what script.js sends for data-project-key (and `website` accepts a key as well).
   const websiteRef = c.req.query('website') ?? c.req.query('key');
@@ -134,10 +150,10 @@ export async function handleTrackerConfig(c: Context<{ Bindings: Env }>) {
   if (!websiteId) return notFound();
   const body = await getTrackerConfigJson(c.env, websiteId);
   if (!body) return notFound();
-  return new Response(body, {
+  return new Response(JSON.stringify(trackerConfigForRequest(body, c.req.raw)), {
     headers: {
       'Content-Type': 'application/json',
-      'Cache-Control': 'public, max-age=60',
+      'Cache-Control': 'private, max-age=60',
     },
   });
 }

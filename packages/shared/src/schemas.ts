@@ -8,6 +8,8 @@ import {
   type FeatureFlagJsonValue,
 } from './feature-flag-evaluator';
 import {
+  SURVEY_DISPLAY_RULE_FIELDS,
+  SURVEY_DISPLAY_RULE_OPERATORS,
   SURVEY_MAX_QUESTIONS,
   surveyAppearanceSchema,
   surveyQuestionsSchema,
@@ -579,9 +581,9 @@ export const surveyTemplateSchema = z.enum(['nps', 'csat']);
 
 const surveyOptionsSchema = z.array(z.string().min(1).max(120)).max(10);
 export const surveyDisplayRuleSchema = z.object({
-  field: z.enum(['path', 'event', 'property', 'language', 'country', 'device']),
+  field: z.enum(SURVEY_DISPLAY_RULE_FIELDS),
   key: z.string().trim().min(1).max(120).optional(),
-  operator: z.enum(['equals', 'contains', 'starts_with', 'ends_with', 'not_equals', 'not_contains', 'exists', 'not_exists']),
+  operator: z.enum(SURVEY_DISPLAY_RULE_OPERATORS),
   value: z.string().trim().max(500).default(''),
 }).refine((rule) => (rule.field === 'property' ? Boolean(rule.key?.trim()) : true), {
   message: 'Property display rules require a key',

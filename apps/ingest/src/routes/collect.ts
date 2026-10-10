@@ -6,6 +6,7 @@ import {
   EVENT_TYPE,
   HEATMAP_NORM_SIZE,
   createCacheToken,
+  deviceFromUserAgent,
   extractWebVitals,
   getSalt,
   getSecret,
@@ -747,7 +748,7 @@ function getClientInfoFromRequest(
   const geo = geoFromCf((req as Request & { cf?: unknown }).cf);
   const browser = payload.browser ?? parseBrowser(userAgent);
   const os = payload.os ?? parseOs(userAgent);
-  const device = payload.device ?? parseDevice(userAgent);
+  const device = payload.device ?? deviceFromUserAgent(userAgent);
   return { ip, userAgent, browser, os, device, ...geo };
 }
 
@@ -770,13 +771,6 @@ export function parseOs(ua: string): string {
   if (/cros/i.test(ua)) return 'ChromeOS';
   if (/linux/i.test(ua)) return 'Linux';
   return 'Unknown';
-}
-
-export function parseDevice(ua: string): string {
-  // Android tablets omit "Mobile"; iPads say "Mobile" but are tablets.
-  if (/ipad|tablet/i.test(ua) || (/android/i.test(ua) && !/mobile/i.test(ua))) return 'tablet';
-  if (/mobile|iphone|ipod/i.test(ua)) return 'mobile';
-  return 'desktop';
 }
 
 const INVALID_SERVER_KEY =

@@ -1,5 +1,5 @@
 import type { Context } from 'hono';
-import { geoFromCf } from '@flareboard/shared';
+import { deviceFromUserAgent, geoFromCf } from '@flareboard/shared';
 import type { Env } from '../env';
 
 export function json(data: unknown, status = 200) {
@@ -61,7 +61,7 @@ export function getClientInfo(c: Context<{ Bindings: Env }>, payload: { ip?: str
     userAgent,
     browser: payload.browser ?? parseBrowser(userAgent),
     os: payload.os ?? parseOs(userAgent),
-    device: payload.device ?? parseDevice(userAgent),
+    device: payload.device ?? deviceFromUserAgent(userAgent),
     ...geo,
   };
 }
@@ -81,12 +81,6 @@ function parseOs(ua: string): string {
   if (/iphone|ipad/i.test(ua)) return 'iOS';
   if (/linux/i.test(ua)) return 'Linux';
   return 'Unknown';
-}
-
-function parseDevice(ua: string): string {
-  if (/mobile/i.test(ua)) return 'mobile';
-  if (/tablet/i.test(ua)) return 'tablet';
-  return 'desktop';
 }
 
 export function safeDecodeURIComponent(value?: string) {

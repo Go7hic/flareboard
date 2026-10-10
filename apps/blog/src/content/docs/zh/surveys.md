@@ -62,11 +62,25 @@ description: 在你的网站或托管页面上向访客发起简短的多题问�
 
 每行输入一条规则，格式为 `field operator value`。表单接受这些字段：`path`、`event`、`property`、`language`、`country`、`device`（属性写成 `property.KEY`）。它接受这些运算符：`equals`、`contains`、`starts_with`、`ends_with`、`not_equals`、`not_contains`、`exists`、`not_exists`。
 
-追踪器在访客的浏览器中检查规则，并且只认得 `path` 和 `language` 搭配 `equals`、`not_equals`、`contains` 和 `not_contains`。带有它不认得的规则的问卷永远不会显示。其他情况请使用 **触发路径** 和 **触发事件**。
+所有规则都必须满足。各字段比较的值如下：
+
+| 字段 | 值 |
+| --- | --- |
+| `path` | 当前页面路径。 |
+| `language` | 浏览器语言，例如 `en-US`。 |
+| `device` | `mobile`、`tablet` 或 `desktop`，与 **设备** 维度的取值一致。 |
+| `country` | 访客所在国家的两位字母代码，例如 `US` 或 `DE`。由 Flareboard 在服务端判断，国家规则不会发送到浏览器。 |
+| `event` | 触发这次检查的事件名。页面加载时没有事件。 |
+| `property.KEY` | 触发这次检查的 `flareboard.track()` 调用中的这个属性。 |
+
+比较时不区分大小写。值未知时（页面加载时没有事件，或这次调用没有带这个属性），只会匹配 `not_exists`、`not_equals` 和 `not_contains`。带有 `event` 或 `property` 规则的问卷，会在每次调用 `flareboard.track()` 后再检查一次。
 
 ```text
 path contains /checkout
-language equals en-US
+device equals mobile
+country equals US
+event equals checkout_started
+property.plan equals pro
 ```
 
 ### 组件何时出现

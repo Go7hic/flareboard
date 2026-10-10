@@ -62,11 +62,25 @@ Only one survey is on screen at a time. The tracker takes the first matching sur
 
 Type one rule per line as `field operator value`. The form accepts these fields: `path`, `event`, `property`, `language`, `country`, `device` (write `property.KEY` for a property). It accepts these operators: `equals`, `contains`, `starts_with`, `ends_with`, `not_equals`, `not_contains`, `exists`, `not_exists`.
 
-The tracker checks rules in the visitor's browser, and it only understands `path` and `language` with `equals`, `not_equals`, `contains` and `not_contains`. A survey with a rule it does not understand is never shown. Use **Trigger path** and **Trigger event** for anything else.
+Every rule must match. Each field is compared with:
+
+| Field | Value |
+| --- | --- |
+| `path` | The current page path. |
+| `language` | The browser language, such as `en-US`. |
+| `device` | `mobile`, `tablet` or `desktop`, the same labels as the **Device** breakdown. |
+| `country` | The visitor's country as a two-letter code, such as `US` or `DE`. Flareboard resolves it on the server; country rules never reach the browser. |
+| `event` | The name of the event that triggered the check. On page load there is no event. |
+| `property.KEY` | That property of the `flareboard.track()` call that triggered the check. |
+
+Comparisons ignore case. A value that is not known (no event on page load, a property the call did not send) matches only `not_exists`, `not_equals` and `not_contains`. Surveys with `event` or `property` rules are checked again after each `flareboard.track()` call.
 
 ```text
 path contains /checkout
-language equals en-US
+device equals mobile
+country equals US
+event equals checkout_started
+property.plan equals pro
 ```
 
 ### When the widget appears

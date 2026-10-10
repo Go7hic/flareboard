@@ -163,6 +163,9 @@ export type BrowserOptions = {
   script?: Record<string, string>;
   url?: string;
   title?: string;
+  /** navigator.userAgent / navigator.language. */
+  userAgent?: string;
+  language?: string;
   localStorage?: FakeStorage;
   sessionStorage?: FakeStorage;
   doNotTrack?: string;
@@ -293,8 +296,8 @@ export function createBrowser(options: BrowserOptions = {}) {
   });
 
   const navigator = {
-    language: 'en-US',
-    userAgent: 'Mozilla/5.0 (Macintosh) Chrome/128.0 Safari/537.36',
+    language: options.language ?? 'en-US',
+    userAgent: options.userAgent ?? 'Mozilla/5.0 (Macintosh) Chrome/128.0 Safari/537.36',
     doNotTrack: options.doNotTrack ?? null,
     globalPrivacyControl: options.globalPrivacyControl ?? undefined,
     sendBeacon:

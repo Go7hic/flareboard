@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { parseBrowser, parseDevice, parseOs } from '../../src/routes/collect';
+import { deviceFromUserAgent } from '@flareboard/shared';
+import { parseBrowser, parseOs } from '../../src/routes/collect';
 
 const UA = {
   iphone:
@@ -24,11 +25,11 @@ describe('user agent parsing', () => {
   });
 
   it('classifies devices', () => {
-    expect(parseDevice(UA.iphone)).toBe('mobile');
-    expect(parseDevice(UA.ipad)).toBe('tablet');
-    expect(parseDevice(UA.androidPhone)).toBe('mobile');
-    expect(parseDevice(UA.androidTablet)).toBe('tablet');
-    expect(parseDevice(UA.mac)).toBe('desktop');
+    expect(deviceFromUserAgent(UA.iphone)).toBe('mobile');
+    expect(deviceFromUserAgent(UA.ipad)).toBe('tablet');
+    expect(deviceFromUserAgent(UA.androidPhone)).toBe('mobile');
+    expect(deviceFromUserAgent(UA.androidTablet)).toBe('tablet');
+    expect(deviceFromUserAgent(UA.mac)).toBe('desktop');
   });
 
   it('classifies browsers', () => {

@@ -20,7 +20,7 @@ import {
   SURVEY_COLUMNS,
   type SurveyDbRow,
 } from '../lib/surveys';
-import { getTrackerConfigJson } from './tracker-config';
+import { getTrackerConfigJson, trackerConfigForRequest } from './tracker-config';
 
 type Ctx = Context<{ Bindings: Env }>;
 
@@ -170,7 +170,8 @@ export async function handleSurveyResponse(c: Ctx) {
 
 /**
  * GET /api/surveys?website=<id> — headless API: the active surveys for a website, in the same
- * shape as `surveys` in /api/tracker-config (schedule and response limits already applied).
+ * shape as `surveys` in /api/tracker-config (schedule, response limits and country rules already
+ * applied).
  */
 export async function handleActiveSurveys(c: Ctx) {
   const websiteRef = c.req.query('website');
@@ -179,9 +180,9 @@ export async function handleActiveSurveys(c: Ctx) {
   if (!websiteId) return notFound();
   const body = await getTrackerConfigJson(c.env, websiteId);
   if (!body) return notFound();
-  const config = JSON.parse(body) as { surveys?: unknown[] };
-  return new Response(JSON.stringify({ surveys: config.surveys ?? [] }), {
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60' },
+  const { surveys } = trackerConfigForRequest(body, c.req.raw);
+  return new Response(JSON.stringify({ surveys }), {
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, max-age=60' },
   });
 }
 

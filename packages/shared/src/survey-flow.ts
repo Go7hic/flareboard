@@ -492,3 +492,74 @@ export function legacySurveyFields(questions: SurveyQuestion[]): {
       return { question: first.question, type: 'text', options: [] };
   }
 }
+
+/**
+ * Display rules ("show only when <field> <operator> <value>"). Every rule must match. The tracker
+ * evaluates path, event, property, language and device in the browser (svRuleOp in
+ * apps/ingest/src/tracker/script.ts, parity-tested against surveyDisplayRuleMatches). Country is
+ * only known from the request, so /api/tracker-config resolves country rules per request
+ * (resolveSurveyCountryRules) and never sends them to the browser.
+ */
+export const SURVEY_DISPLAY_RULE_FIELDS = ['path', 'event', 'property', 'language', 'country', 'device'] as const;
+export type SurveyDisplayRuleField = (typeof SURVEY_DISPLAY_RULE_FIELDS)[number];
+
+export const SURVEY_DISPLAY_RULE_OPERATORS = [
+  'equals',
+  'contains',
+  'starts_with',
+  'ends_with',
+  'not_equals',
+  'not_contains',
+  'exists',
+  'not_exists',
+] as const;
+export type SurveyDisplayRuleOperator = (typeof SURVEY_DISPLAY_RULE_OPERATORS)[number];
+
+export type SurveyDisplayRule = {
+  field: SurveyDisplayRuleField;
+  /** Property name, for `property` rules. */
+  key?: string;
+  operator: SurveyDisplayRuleOperator;
+  value: string;
+};
+
+/**
+ * Case-insensitive comparison of one rule. `actual` is null (or empty) when the value is unknown:
+ * no event on page load, a property the track() call did not send, no country. A missing value
+ * only satisfies `not_exists`, `not_equals` and `not_contains`.
+ */
+export function surveyDisplayRuleMatches(
+  operator: string,
+  actual: string | null | undefined,
+  expected: string | null | undefined,
+): boolean {
+  const a = actual == null || actual === '' ? null : String(actual).toLowerCase();
+  const b = String(expected ?? '').toLowerCase();
+  if (operator === 'exists') return a != null;
+  if (operator === 'not_exists') return a == null;
+  if (operator === 'not_equals') return a !== b;
+  if (operator === 'not_contains') return a == null || !a.includes(b);
+  if (a == null) return false;
+  if (operator === 'equals') return a === b;
+  if (operator === 'contains') return a.includes(b);
+  if (operator === 'starts_with') return a.startsWith(b);
+  if (operator === 'ends_with') return a.endsWith(b);
+  return false;
+}
+
+/**
+ * Applies a survey's `country` rules for one visitor (ISO 3166-1 alpha-2, e.g. from
+ * request.cf.country): surveys whose country rules fail are dropped, the rest lose their country
+ * rules so the tracker only sees rules it can evaluate.
+ */
+export function resolveSurveyCountryRules<S extends { displayRules: Array<{ field: string; operator: string; value: string }> }>(
+  surveys: S[],
+  country: string | null | undefined,
+): S[] {
+  return surveys.flatMap((survey) => {
+    const countryRules = survey.displayRules.filter((rule) => rule.field === 'country');
+    if (!countryRules.length) return [survey];
+    if (!countryRules.every((rule) => surveyDisplayRuleMatches(rule.operator, country, rule.value))) return [];
+    return [{ ...survey, displayRules: survey.displayRules.filter((rule) => rule.field !== 'country') }];
+  });
+}

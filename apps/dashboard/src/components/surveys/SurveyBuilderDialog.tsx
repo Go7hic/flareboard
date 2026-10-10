@@ -8,6 +8,8 @@ import {
   surveyQuestionIssues,
   surveyRatingRange,
   DEFAULT_SURVEY_APPEARANCE,
+  SURVEY_DISPLAY_RULE_FIELDS,
+  SURVEY_DISPLAY_RULE_OPERATORS,
   SURVEY_END,
   SURVEY_MAX_OPTIONS,
   SURVEY_MAX_QUESTIONS,
@@ -170,18 +172,6 @@ function parseOptions(text: string) {
 }
 
 /* Display rules keep the existing "field operator value" line format. */
-const DISPLAY_RULE_FIELDS = ['path', 'event', 'property', 'language', 'country', 'device'] as const;
-const DISPLAY_RULE_OPERATORS = [
-  'equals',
-  'contains',
-  'starts_with',
-  'ends_with',
-  'not_equals',
-  'not_contains',
-  'exists',
-  'not_exists',
-] as const;
-
 export function parseDisplayRules(value: string): SurveyDisplayRule[] {
   return value
     .split('\n')
@@ -201,8 +191,8 @@ export function parseDisplayRules(value: string): SurveyDisplayRule[] {
     })
     .filter(
       (rule) =>
-        DISPLAY_RULE_FIELDS.includes(rule.field) &&
-        DISPLAY_RULE_OPERATORS.includes(rule.operator) &&
+        SURVEY_DISPLAY_RULE_FIELDS.includes(rule.field) &&
+        SURVEY_DISPLAY_RULE_OPERATORS.includes(rule.operator) &&
         (rule.operator === 'exists' || rule.operator === 'not_exists' || rule.value) &&
         (rule.field === 'property' ? Boolean(rule.key) : true),
     );

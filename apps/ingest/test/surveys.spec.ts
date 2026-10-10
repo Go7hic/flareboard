@@ -108,6 +108,39 @@ describe('survey config for trackers and headless clients', () => {
     expect(survey.appearance.colors.dark).toMatchObject({ background: '#0a0a0a' });
   });
 
+  it('resolves country display rules from the request and never sends them', async () => {
+    const now = Date.now();
+    const rules = [
+      { field: 'path', operator: 'starts_with', value: '/checkout' },
+      { field: 'country', operator: 'equals', value: 'de' },
+    ];
+    await env.DB.prepare(
+      `INSERT INTO survey (survey_id, website_id, name, question, type, enabled, display_rules, created_at, updated_at)
+       VALUES ('cfg-country', ?1, 'Germany', 'Wie war es?', 'text', 1, ?2, ?3, ?3)`,
+    )
+      .bind(TEST_WEBSITE_ID, JSON.stringify(rules), now)
+      .run();
+    await env.CACHE.delete(`tracker-config:${TEST_WEBSITE_ID}`);
+
+    type Config = { surveys: Array<{ id: string; displayRules: unknown[] }> };
+    const fromDe = await fetchWorkerJson<Config>(`/api/tracker-config?website=${TEST_WEBSITE_ID}`, {
+      cf: { country: 'DE' },
+    } as RequestInit);
+    expect(fromDe.response.headers.get('Cache-Control')).toBe('private, max-age=60');
+    expect(fromDe.body.surveys.find((survey) => survey.id === 'cfg-country')?.displayRules).toEqual([rules[0]]);
+
+    const fromUs = await fetchWorkerJson<Config>(`/api/surveys?website=${TEST_WEBSITE_ID}`, {
+      cf: { country: 'US' },
+    } as RequestInit);
+    expect(fromUs.body.surveys.map((survey) => survey.id)).not.toContain('cfg-country');
+    expect(fromUs.body.surveys.map((survey) => survey.id)).toContain('cfg-active');
+
+    // The KV copy keeps the rule; only responses are resolved.
+    expect(await env.CACHE.get(`tracker-config:${TEST_WEBSITE_ID}`)).toContain('"country"');
+    await env.DB.prepare(`DELETE FROM survey WHERE survey_id = 'cfg-country'`).run();
+    await env.CACHE.delete(`tracker-config:${TEST_WEBSITE_ID}`);
+  });
+
   it('serves the same surveys from the headless endpoint', async () => {
     const { response, body } = await fetchWorkerJson<{ surveys: Array<{ id: string }> }>(
       `/api/surveys?website=${TEST_WEBSITE_ID}`,

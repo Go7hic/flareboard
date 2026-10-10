@@ -1,4 +1,5 @@
-import { parseBrowser, parseDevice, parseEventTimestamp, parseOs } from '../../routes/collect';
+import { deviceFromUserAgent } from '@flareboard/shared';
+import { parseBrowser, parseEventTimestamp, parseOs } from '../../routes/collect';
 
 /**
  * Pure mapping from PostHog's wire format to Flareboard's concepts. No I/O here: the pipeline
@@ -229,7 +230,7 @@ export function clientInfo(properties: Json, requestUserAgent: string | null): C
   return {
     browser: normalizeBrowser(properties.$browser) ?? (ua ? parseBrowser(ua) : null),
     os: normalizeOs(properties.$os) ?? (ua ? parseOs(ua) : null),
-    device: deviceType ?? (ua ? parseDevice(ua) : null),
+    device: deviceType ?? (ua ? deviceFromUserAgent(ua) : null),
     screen: screen && screen.length <= 11 ? screen : null,
     language: text(properties.$browser_language, 35) ?? null,
     userAgent: ua,

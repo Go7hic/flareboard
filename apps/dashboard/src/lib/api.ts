@@ -1,5 +1,5 @@
 import type { InsightQuery as InsightQueryV2, InsightType as InsightTypeV2 } from '@flareboard/shared/insight-query';
-import type { SurveyAnswers, SurveyAppearance, SurveyQuestion } from '@flareboard/shared/survey-flow';
+import type { SurveyAnswers, SurveyAppearance, SurveyDisplayRule, SurveyQuestion } from '@flareboard/shared/survey-flow';
 import { apiReturnedHtmlError, apiUrlConfigError, resolveApiUrl } from './api-url';
 
 const LEGACY_TOKEN_KEY = 'flareboard_token';
@@ -1959,20 +1959,7 @@ export interface ErrorAlertRule {
   updatedAt?: number;
 }
 
-export interface SurveyDisplayRule {
-  field: 'path' | 'event' | 'property' | 'language' | 'country' | 'device';
-  key?: string;
-  operator:
-    | 'equals'
-    | 'contains'
-    | 'starts_with'
-    | 'ends_with'
-    | 'not_equals'
-    | 'not_contains'
-    | 'exists'
-    | 'not_exists';
-  value: string;
-}
+export type { SurveyDisplayRule };
 
 export interface FeatureFlagEvaluateResult {
   key: string;

@@ -4,6 +4,7 @@ export * from './billing';
 export * from './constants';
 export * from './cohort-definition';
 export * from './csv';
+export * from './device';
 export * from './delivery';
 export * from './error-fingerprint';
 export * from './core';

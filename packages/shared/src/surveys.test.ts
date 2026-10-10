@@ -8,6 +8,8 @@ import {
   normalizeSurveyAppearance,
   normalizeSurveyQuestions,
   primarySurveyAnswer,
+  resolveSurveyCountryRules,
+  surveyDisplayRuleMatches,
   sanitizeSurveyAnswers,
   surveyPalette,
   surveyQuestionsSchema,
@@ -217,5 +219,41 @@ describe('survey request schemas', () => {
     expect(submitSurveyResponseSchema.safeParse({ website, surveyId: 's', answers: { q1: 'hi' } }).success).toBe(true);
     expect(submitSurveyResponseSchema.safeParse({ website, surveyId: 's', answers: {} }).success).toBe(false);
     expect(submitSurveyResponseSchema.safeParse({ website, surveyId: 's' }).success).toBe(false);
+  });
+});
+
+describe('survey display rules', () => {
+  it('compares case-insensitively and treats a missing value as matching only the negations', () => {
+    expect(surveyDisplayRuleMatches('equals', 'US', 'us')).toBe(true);
+    expect(surveyDisplayRuleMatches('starts_with', '/checkout/pay', '/checkout')).toBe(true);
+    expect(surveyDisplayRuleMatches('ends_with', '/checkout/pay', 'PAY')).toBe(true);
+    expect(surveyDisplayRuleMatches('ends_with', 'ay', 'pay')).toBe(false);
+    expect(surveyDisplayRuleMatches('contains', 'fr-FR', 'fr')).toBe(true);
+    for (const missing of [null, undefined, '']) {
+      expect(surveyDisplayRuleMatches('exists', missing, '')).toBe(false);
+      expect(surveyDisplayRuleMatches('not_exists', missing, '')).toBe(true);
+      expect(surveyDisplayRuleMatches('not_equals', missing, 'x')).toBe(true);
+      expect(surveyDisplayRuleMatches('not_contains', missing, 'x')).toBe(true);
+      for (const op of ['equals', 'contains', 'starts_with', 'ends_with']) {
+        expect(surveyDisplayRuleMatches(op, missing, 'x')).toBe(false);
+      }
+    }
+    expect(surveyDisplayRuleMatches('matches', 'a', 'a')).toBe(false);
+  });
+
+  it('resolves country rules for one visitor and strips them', () => {
+    const path = { field: 'path', operator: 'contains', value: '/checkout' };
+    const surveys = [
+      { id: 'us', displayRules: [path, { field: 'country', operator: 'equals', value: 'us' }] },
+      { id: 'not-de', displayRules: [{ field: 'country', operator: 'not_equals', value: 'DE' }] },
+      { id: 'any', displayRules: [path] },
+    ];
+    expect(resolveSurveyCountryRules(surveys, 'US')).toEqual([
+      { id: 'us', displayRules: [path] },
+      { id: 'not-de', displayRules: [] },
+      { id: 'any', displayRules: [path] },
+    ]);
+    expect(resolveSurveyCountryRules(surveys, 'DE').map((s) => s.id)).toEqual(['any']);
+    expect(resolveSurveyCountryRules(surveys, null).map((s) => s.id)).toEqual(['not-de', 'any']);
   });
 });

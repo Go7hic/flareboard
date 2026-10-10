@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  SURVEY_DISPLAY_RULE_OPERATORS,
+  deviceFromUserAgent,
   nextSurveyQuestion,
+  surveyDisplayRuleMatches,
   surveyPalette,
   surveySampleBucket,
   type SurveyAnswerValue,
@@ -321,5 +324,141 @@ describe('survey appearance', () => {
     expect(box(await styled('light', {}, 'center'))?.style.cssText).toContain('left:50%;top:50%');
     expect(box(await styled('light', {}, 'top-left'))?.style.cssText).toContain('left:18px;top:18px');
     expect(box(await styled('light', {}, 'bottom-right'))?.style.cssText).toContain('right:18px;bottom:18px');
+  });
+});
+
+function trackerFunction<T>(name: string, prelude = '') {
+  const line = TRACKER_SCRIPT.split('\n').find((item) => item.startsWith(`function ${name}(`));
+  expect(line).toBeTruthy();
+  return new Function(`${prelude}${line}; return ${name};`)() as T;
+}
+
+describe('survey display rules', () => {
+  const q = [{ ...base, id: 'q1', type: 'open', question: 'Hi?' }];
+  const rule = (field: string, operator: string, value = '', key?: string) => ({ field, operator, value, ...(key ? { key } : {}) });
+  const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+  const TABLET = 'Mozilla/5.0 (Android 14; Tablet; rv:128.0) Gecko/128.0 Firefox/128.0';
+  const DESKTOP = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
+  const IPAD = 'Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+  const ANDROID_TABLET = 'Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
+  const ANDROID_PHONE = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Mobile Safari/537.36';
+
+  async function shownOnLoad(rules: unknown[], options: Parameters<typeof createBrowser>[0] = {}) {
+    return box(await open([survey(q, { displayRules: rules })], { url: 'https://shop.example.test/checkout/pay', ...options })) != null;
+  }
+
+  /** Loads the page (rules must not match yet), then sends one track() call. */
+  async function shownAfterTrack(rules: unknown[], name: string, data?: Record<string, unknown>) {
+    const b = await open([survey(q, { displayRules: rules })]);
+    expect(box(b)).toBeNull();
+    (b.window.flareboard as { track(n: string, d?: unknown): void }).track(name, data);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await b.flush();
+    return box(b) != null;
+  }
+
+  it('compares like surveyDisplayRuleMatches for every operator', () => {
+    const svRuleOp = trackerFunction<(op: string, v: unknown, x: unknown) => boolean>('svRuleOp');
+    const actual = [null, '', 'Checkout', '/checkout/pay', 'pay', 'fr-FR'];
+    const expected = ['', 'checkout', 'CHECKOUT', '/checkout', 'pay', '/checkout/pay', 'fr', 'zz'];
+    for (const op of [...SURVEY_DISPLAY_RULE_OPERATORS, 'unknown']) {
+      for (const a of actual) {
+        for (const x of expected) expect(svRuleOp(op, a, x), `${a} ${op} ${x}`).toBe(surveyDisplayRuleMatches(op, a, x));
+      }
+    }
+  });
+
+  it('labels devices like the console', () => {
+    const svDevice = trackerFunction<() => string>('svDevice', 'var nv={get userAgent(){return globalThis.__ua}};');
+    for (const ua of [IPHONE, IPAD, ANDROID_TABLET, TABLET, DESKTOP, ANDROID_PHONE, 'Mozilla/5.0 (iPod touch; CPU iPhone OS 15_0 like Mac OS X)', '']) {
+      (globalThis as { __ua?: string }).__ua = ua;
+      expect(svDevice(), ua).toBe(deviceFromUserAgent(ua));
+    }
+    delete (globalThis as { __ua?: string }).__ua;
+  });
+
+  it('matches path with every operator', async () => {
+    const cases: Array<[string, string, boolean]> = [
+      ['equals', '/checkout/pay', true],
+      ['equals', '/checkout', false],
+      ['contains', 'CHECKOUT', true],
+      ['contains', 'pricing', false],
+      ['starts_with', '/checkout', true],
+      ['starts_with', '/pay', false],
+      ['ends_with', '/pay', true],
+      ['ends_with', '/checkout', false],
+      ['not_equals', '/pricing', true],
+      ['not_equals', '/checkout/pay', false],
+      ['not_contains', 'pricing', true],
+      ['not_contains', 'checkout', false],
+      ['exists', '', true],
+      ['not_exists', '', false],
+    ];
+    for (const [operator, value, shown] of cases) {
+      expect(await shownOnLoad([rule('path', operator, value)]), `path ${operator} ${value}`).toBe(shown);
+    }
+  });
+
+  it('matches language', async () => {
+    const french = { language: 'fr-FR' };
+    expect(await shownOnLoad([rule('language', 'equals', 'FR-fr')], french)).toBe(true);
+    expect(await shownOnLoad([rule('language', 'starts_with', 'fr')], french)).toBe(true);
+    expect(await shownOnLoad([rule('language', 'starts_with', 'en')], french)).toBe(false);
+    expect(await shownOnLoad([rule('language', 'not_equals', 'en-US')], french)).toBe(true);
+    expect(await shownOnLoad([rule('language', 'exists')], { language: '' })).toBe(false);
+    expect(await shownOnLoad([rule('language', 'not_exists')], { language: '' })).toBe(true);
+  });
+
+  it('matches device: mobile, tablet or desktop from the user agent', async () => {
+    expect(await shownOnLoad([rule('device', 'equals', 'mobile')], { userAgent: IPHONE })).toBe(true);
+    expect(await shownOnLoad([rule('device', 'equals', 'mobile')], { userAgent: DESKTOP })).toBe(false);
+    expect(await shownOnLoad([rule('device', 'equals', 'tablet')], { userAgent: TABLET })).toBe(true);
+    // iPads say "Mobile" and Android tablets do not: both are tablets, as in the console.
+    expect(await shownOnLoad([rule('device', 'equals', 'tablet')], { userAgent: IPAD })).toBe(true);
+    expect(await shownOnLoad([rule('device', 'equals', 'tablet')], { userAgent: ANDROID_TABLET })).toBe(true);
+    expect(await shownOnLoad([rule('device', 'equals', 'mobile')], { userAgent: ANDROID_PHONE })).toBe(true);
+    expect(await shownOnLoad([rule('device', 'equals', 'desktop')], { userAgent: DESKTOP })).toBe(true);
+    expect(await shownOnLoad([rule('device', 'not_equals', 'desktop')], { userAgent: IPHONE })).toBe(true);
+  });
+
+  it('matches the triggering event, which is absent on page load', async () => {
+    expect(await shownOnLoad([rule('event', 'equals', 'checkout_started')])).toBe(false);
+    expect(await shownOnLoad([rule('event', 'not_exists')])).toBe(true);
+    expect(await shownOnLoad([rule('event', 'not_equals', 'checkout_started')])).toBe(true);
+    expect(await shownAfterTrack([rule('event', 'equals', 'checkout_started')], 'checkout_started')).toBe(true);
+    expect(await shownAfterTrack([rule('event', 'equals', 'checkout_started')], 'signup')).toBe(false);
+    expect(await shownAfterTrack([rule('event', 'starts_with', 'checkout_')], 'checkout_completed')).toBe(true);
+    expect(await shownAfterTrack([rule('event', 'ends_with', '_started')], 'trial_started')).toBe(true);
+    expect(await shownAfterTrack([rule('event', 'contains', 'out')], 'checkout_started')).toBe(true);
+    expect(await shownAfterTrack([rule('event', 'exists')], 'anything')).toBe(true);
+    expect(await shownAfterTrack([rule('event', 'not_contains', 'checkout'), rule('event', 'exists')], 'checkout_started')).toBe(false);
+  });
+
+  it('matches properties of the triggering track() call', async () => {
+    const plan = (operator: string, value = '') => [rule('property', operator, value, 'plan')];
+    expect(await shownOnLoad(plan('equals', 'pro'))).toBe(false);
+    expect(await shownAfterTrack(plan('equals', 'PRO'), 'upgrade', { plan: 'pro' })).toBe(true);
+    expect(await shownAfterTrack(plan('equals', 'pro'), 'upgrade', { plan: 'free' })).toBe(false);
+    expect(await shownAfterTrack(plan('exists'), 'upgrade', { plan: 'team' })).toBe(true);
+    expect(await shownAfterTrack(plan('exists'), 'upgrade', { seats: 3 })).toBe(false);
+    expect(await shownAfterTrack([rule('property', 'equals', '3', 'seats'), rule('event', 'equals', 'upgrade')], 'upgrade', { seats: 3 })).toBe(true);
+    expect(await shownAfterTrack([rule('property', 'equals', 'true', 'trial')], 'upgrade', { trial: true })).toBe(true);
+    // A survey with a trigger event still needs its rules to pass.
+    const b = await open([survey(q, { triggerEvent: 'upgrade', displayRules: plan('not_equals', 'free') })]);
+    expect(box(b)).toBeNull();
+    (b.window.flareboard as { track(n: string, d?: unknown): void }).track('upgrade', { plan: 'free' });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await b.flush();
+    expect(box(b)).toBeNull();
+  });
+
+  it('ignores rules it does not know and requires every rule to match', async () => {
+    expect(await shownOnLoad([rule('country', 'equals', 'us')])).toBe(false);
+    expect(await shownOnLoad([rule('path', 'contains', 'checkout'), rule('language', 'equals', 'de-DE')])).toBe(false);
+    expect(await shownOnLoad([rule('path', 'contains', 'checkout'), rule('language', 'equals', 'en-US')])).toBe(true);
+  });
+
+  it('leaves surveys without event rules to page loads', async () => {
+    expect(await shownAfterTrack([rule('path', 'equals', '/nowhere')], 'signup')).toBe(false);
   });
 });

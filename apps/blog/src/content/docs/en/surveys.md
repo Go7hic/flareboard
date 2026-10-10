@@ -169,7 +169,7 @@ If the widget does not show again when you test twice, that is expected: with **
 | Symptom | Cause and fix |
 | --- | --- |
 | The widget never appears | The survey is **Disabled**, outside its schedule, past its response limit, or the visitor already saw it. Also check **Trigger path**, **Trigger event**, **Show to % of people**, and that the tracking script runs on the page. |
-| It never appears with a display rule | The tracker only understands `path` and `language` rules. Replace others with **Trigger path** or **Trigger event**. |
+| It never appears with a display rule | Every rule must match. An `event` or `property` rule never matches on page load, only after a `flareboard.track()` call, and a `country` rule uses two-letter codes such as `US`. See [Display rules](#display-rules). |
 | It does not appear after a route change in a single-page app | The tracker checks on load and after tracked events. Call `window.flareboard.showSurvey()` after the route change. |
 | A survey you created recently is missing | Only the 10 oldest active surveys are sent to the page. Disable surveys you no longer need. |
 | A change in the console does not show on the site | The tracker config is cached for about a minute. |

@@ -64,7 +64,7 @@ Header chrome: `--shell-bg` + `backdrop-filter` on `.shell-nav` / `.landing-nav`
 
 **Forms:** prefer shadcn `Input` / `Label` / `Select` / `Textarea`. Legacy `.field` + `.input` still work via tokens.
 
-**Nav links:** `.shell-link` / `.sidebar-link.active` (inset gray bar).
+**Nav links:** `.shell-link` / `.sidebar-link.active` (muted fill only, no bar or border).
 
 **Data UI (console v2):** `SectionCard` (title, description, actions, `flush` for tables), `KpiStrip` + `KpiCell` (headline numbers, `StatChangeDelta` chips), `BreakdownList` (ranked rows with share bars), `.data-table` (sentence-case headers), `KvList`, `StatusBadge`, `EmptyState` (icon + next step), master–detail (`MasterDetailLayout listHeader`, `MasterDetailPane meta`). Big numbers use proportional Geist Sans; `tabular-nums` only in columns. Dates: `formatShortDateTime` / `formatRelativeTime`, never a full date as a big value.
 

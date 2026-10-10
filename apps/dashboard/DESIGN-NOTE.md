@@ -71,7 +71,7 @@ Dashboard and landing surfaces use **flat, solid colors only** — no `linear-gr
 
 ## Shell
 
-Authenticated chrome is `SidebarShell` + `AppSidebar` + `AppTopBar` (mobile). Active nav uses a 2px gray inset bar and muted fill, not teal.
+Authenticated chrome is `SidebarShell` + `AppSidebar` + `AppTopBar` (mobile). Active nav uses a muted fill only (no bar or border), not teal.
 
 ## Marketing
 

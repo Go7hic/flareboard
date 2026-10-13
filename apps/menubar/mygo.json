@@ -1,0 +1,17 @@
+{
+  "name": "Flareboard",
+  "identifier": "dev.flareboard.menubar",
+  "version": "0.2.0",
+  "out": "build",
+  "updates": {
+    "publicKey": "BgYg3t5Jw4J1C8E0zui2RZDlP16MS4bLu/37xcZ+tuk=",
+    "github": "Go7hic/flareboard",
+    "tagPrefix": "menubar-v"
+  },
+  "macos": {
+    "signingIdentity": "Developer ID Application: deng yongyuan (CE8N4Z6AQ3)",
+    "notarize": {
+      "keychainProfile": "AC_PASSWORD"
+    }
+  }
+}

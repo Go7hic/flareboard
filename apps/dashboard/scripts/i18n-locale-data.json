@@ -3372,12 +3372,17 @@
     "warehouseSyncTooSoon": "1 分以内に同期済みです。少し待ってからもう一度お試しください。",
     "warehouseSyncDisabled": "このデータソースはオフのため、同期されませんでした。",
     "exportTruncated": "CSV には最新の {count} 行だけが含まれます。残りは期間を短くして分けて書き出してください。",
-    "homeMacTitle": "Flareboard for Mac：",
-    "homeMacLead": "いまサイトにいる人数を、メニューバーからいつでも確認できます。",
+    "homeMacTitle": "トラフィックをメニューバーからワンクリックで",
+    "homeMacLead": "いまサイトにいる人数を時計の横に表示する、小さなネイティブアプリです。",
     "homeMacDownload": "Mac 版をダウンロード",
     "homeMacReleaseNotes": "リリースノート",
-    "homeMacRequirements": "無料 · macOS 14 以降 · Apple シリコンと Intel に対応",
-    "homeFooterMac": "Mac アプリ"
+    "homeMacRequirements": "無料 · 1.8 MB · macOS 14 以降 · Apple シリコンと Intel に対応",
+    "homeFooterMac": "Mac アプリ",
+    "homeMacEyebrow": "Flareboard for Mac",
+    "homeMacPointLive": "現在のオンライン人数を 30 秒ごとに更新",
+    "homeMacPointStats": "24 時間・7 日・30 日の訪問者、ページビュー、訪問、直帰率",
+    "homeMacPointPages": "ホバーで値が見えるグラフと、ワンクリックで開ける上位ページ",
+    "homeMacImageAlt": "Flareboard のメニューバーパネル：訪問者、グラフ、ページビュー、訪問、直帰率、上位ページ"
   },
   "de-DE": {
     "language": "Sprache",
@@ -6752,12 +6757,17 @@
     "warehouseSyncTooSoon": "Vor weniger als einer Minute synchronisiert. Versuche es gleich noch einmal.",
     "warehouseSyncDisabled": "Diese Datenquelle ist ausgeschaltet und wurde nicht synchronisiert.",
     "exportTruncated": "Die CSV enthält nur die neuesten {count} Zeilen. Wähle einen kürzeren Zeitraum, um den Rest in Teilen zu exportieren.",
-    "homeMacTitle": "Flareboard für Mac:",
-    "homeMacLead": "Sehen Sie in der Menüleiste, wie viele Personen gerade auf Ihrer Website sind.",
+    "homeMacTitle": "Ihr Traffic, einen Klick entfernt in der Menüleiste",
+    "homeMacLead": "Eine kleine native App, die neben der Uhr zeigt, wie viele Personen gerade auf Ihrer Website sind.",
     "homeMacDownload": "Für Mac laden",
     "homeMacReleaseNotes": "Versionshinweise",
-    "homeMacRequirements": "Kostenlos · macOS 14 oder neuer · Apple Silicon und Intel",
-    "homeFooterMac": "Mac-App"
+    "homeMacRequirements": "Kostenlos · 1,8 MB · macOS 14 oder neuer · Apple Silicon und Intel",
+    "homeFooterMac": "Mac-App",
+    "homeMacEyebrow": "Flareboard für Mac",
+    "homeMacPointLive": "Personen online, alle 30 Sekunden aktualisiert",
+    "homeMacPointStats": "Besucher, Seitenaufrufe, Besuche und Absprungrate für 24 Stunden, 7 oder 30 Tage",
+    "homeMacPointPages": "Ein Diagramm mit Werten beim Überfahren, und Top-Seiten, die sich mit einem Klick öffnen",
+    "homeMacImageAlt": "Das Flareboard-Menüleistenfenster: Besucher, Diagramm, Seitenaufrufe, Besuche, Absprungrate und Top-Seiten"
   },
   "fr-FR": {
     "language": "Langue",
@@ -10132,11 +10142,16 @@
     "warehouseSyncTooSoon": "Synchronisé il y a moins d’une minute. Réessayez dans un instant.",
     "warehouseSyncDisabled": "Cette source de données est désactivée, elle n’a donc pas été synchronisée.",
     "exportTruncated": "Le CSV ne contient que les {count} lignes les plus récentes. Choisissez une période plus courte pour exporter le reste en plusieurs fois.",
-    "homeMacTitle": "Flareboard pour Mac :",
-    "homeMacLead": "voyez depuis la barre des menus combien de personnes sont sur votre site.",
+    "homeMacTitle": "Votre trafic, à un clic dans la barre des menus",
+    "homeMacLead": "Une petite app native qui affiche, à côté de l’horloge, le nombre de personnes sur votre site en ce moment.",
     "homeMacDownload": "Télécharger pour Mac",
     "homeMacReleaseNotes": "Notes de version",
-    "homeMacRequirements": "Gratuit · macOS 14 ou ultérieur · Apple Silicon et Intel",
-    "homeFooterMac": "App Mac"
+    "homeMacRequirements": "Gratuit · 1,8 Mo · macOS 14 ou ultérieur · Apple Silicon et Intel",
+    "homeFooterMac": "App Mac",
+    "homeMacEyebrow": "Flareboard pour Mac",
+    "homeMacPointLive": "Les personnes en ligne, actualisées toutes les 30 secondes",
+    "homeMacPointStats": "Visiteurs, pages vues, visites et taux de rebond sur 24 heures, 7 ou 30 jours",
+    "homeMacPointPages": "Un graphique à survoler, et les pages populaires qui s’ouvrent en un clic",
+    "homeMacImageAlt": "Le panneau Flareboard de la barre des menus : visiteurs, graphique, pages vues, visites, taux de rebond et pages populaires"
   }
 }

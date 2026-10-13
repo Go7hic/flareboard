@@ -1629,77 +1629,140 @@
   }
 }
 
-/* ── Mac app (a slim strip, low on the page) ── */
+/* ── Mac app (low on the page, after the FAQ) ── */
 
 .home-mac-section {
-  padding-block: 2rem;
-  border-top: 1px solid var(--border-subtle);
+  padding-block: 0 4rem;
 }
 
+/* One card: the copy, and the app's panel rising from its bottom edge. */
 .home-mac {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.home-mac-icon {
-  display: inline-grid;
-  flex: none;
-  place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--bg-elevated);
+  overflow: hidden;
 }
 
-.home-mac-icon img {
-  width: 1rem;
-  height: auto;
+.home-mac-copy {
+  padding: 2.75rem 0 2.75rem 2.75rem;
 }
 
-[data-theme='dark'] .home-mac-icon img {
-  filter: invert(1);
-}
-
-.home-mac-text {
-  flex: 1;
-  margin: 0;
-  font-size: 0.9375rem;
-  line-height: 1.5;
+.home-mac-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 0 1rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
   color: var(--text-muted);
 }
 
-.home-mac-text strong {
+.home-mac-eyebrow img {
+  width: 0.85rem;
+  height: auto;
+  opacity: 0.75;
+}
+
+[data-theme='dark'] .home-mac-eyebrow img {
+  filter: invert(1);
+}
+
+.home-mac-title {
+  margin: 0;
+  font-size: clamp(1.5rem, 2.4vw, 1.875rem);
   font-weight: 600;
-  color: var(--text);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  text-wrap: balance;
 }
 
-.home-mac-requirements {
-  display: block;
-  font-size: 0.8125rem;
+.home-mac-lead {
+  margin: 0.75rem 0 0;
+  max-width: 34em;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  text-wrap: pretty;
 }
 
-.home-mac-requirements a {
-  color: var(--link);
-  text-decoration: none;
+.home-mac-points {
+  display: grid;
+  gap: 0.55rem;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
 }
 
-.home-mac-requirements a:hover {
-  text-decoration: underline;
+.home-mac-points li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  font-size: 0.9375rem;
+  line-height: 1.5;
 }
 
-.home-mac-download svg {
+.home-mac-points svg {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.2rem;
+  color: var(--text-muted);
+}
+
+.home-mac-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.25rem;
+  margin-top: 1.75rem;
+}
+
+.home-mac-actions svg {
   width: 1rem;
   height: 1rem;
 }
 
-@media (max-width: 640px) {
+.home-mac-requirements {
+  margin: 0.85rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.home-mac-visual {
+  position: relative;
+  min-height: 22rem;
+  background: var(--bg);
+  border-left: 1px solid var(--border-subtle);
+}
+
+/* The screenshot carries its own popover shadow; its lower half runs off the card. */
+.home-mac-visual img {
+  position: absolute;
+  top: 2.25rem;
+  left: 50%;
+  width: min(320px, 82%);
+  height: auto;
+  transform: translateX(-50%);
+}
+
+@media (max-width: 860px) {
   .home-mac {
-    flex-wrap: wrap;
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .home-mac-text {
-    flex-basis: calc(100% - 3.25rem);
+  .home-mac-copy {
+    padding: 2rem 1.5rem 1.75rem;
+  }
+
+  .home-mac-visual {
+    min-height: 20rem;
+    border-left: 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .home-mac-visual img {
+    width: min(300px, 80%);
   }
 }

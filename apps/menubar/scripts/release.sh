@@ -38,8 +38,16 @@ if ! gh release view "$tag" --repo "$repo" > /dev/null 2>&1; then
     --title "Flareboard for macOS $version" --notes-file "$notes"
 fi
 
-rm -rf build/darwin-universal
-MYGO_UPDATER_PRIVATE_KEY="$(cat "$key")" go tool mygo build -platform darwin/universal -upload
+# Apple's timestamp and notary services time out now and then: try the build three times.
+for try in 1 2 3; do
+  rm -rf build/darwin-universal
+  if MYGO_UPDATER_PRIVATE_KEY="$(cat "$key")" go tool mygo build -platform darwin/universal -upload; then
+    break
+  fi
+  test "$try" -lt 3 || exit 1
+  echo "Build failed, trying again…" >&2
+  sleep 15
+done
 spctl -a -t install "build/darwin-universal/Flareboard $version.dmg"
 
 gh release edit "$tag" --repo "$repo" --draft=false --latest=false

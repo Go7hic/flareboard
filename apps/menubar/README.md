@@ -1,49 +1,46 @@
-# Flareboard menu bar
+# Flareboard for macOS
 
-A native macOS menu bar app (MyGo, no webview) for one Flareboard website at a glance. It signs in with a personal API key (`fb_sk_…`, read scope).
+A menu bar app for one Flareboard website at a glance, in SwiftUI. It signs in with a personal API key (`fb_sk_…`, read scope), which it keeps in the login keychain.
 
-- The icon shows how many people are on the website now (or the period's visitors, or nothing: **Settings → Next to the icon**). It updates every 30 seconds.
-- The panel shows visitors for 24 hours, 7 days or 30 days with the change against the previous period, a chart (hover for each hour or day), pageviews, visits, bounce rate and the top pages. A click on a page opens it on the website.
-- The website menu (top left) switches websites. **Open dashboard** opens the website in the console.
-- The panel speaks English, Simplified Chinese, Japanese, German and French, as the dashboard does. It follows the system language unless **Settings → Language** picks one. The copy is in `copy.go` (English, Chinese) and `locales.go` (Japanese, German, French), with the dashboard's terms; a test fails when a language misses a text.
-- Shortcuts in the panel: `⌘R` refreshes, `⌘,` opens the settings, `Esc` goes back or closes.
+- The icon shows how many people are on the website now (or the period's visitors, or nothing: **Settings → Next to the icon**), updated every 30 seconds.
+- The panel shows visitors for 24 hours, 7 days or 30 days with the change against the previous period, a chart (hover for each hour or day), pageviews, visits, bounce rate and the top pages. A click on a page opens it on the website. The website menu (top left) switches websites; **Open dashboard** opens the console.
+- English, Simplified Chinese, Japanese, German and French, with the dashboard's terms and local number formats. It follows the system unless **Settings → Language** picks one. The copy is in `Sources/FlareboardCore/Texts.swift` (English, Chinese) and `Locales.swift` (Japanese, German, French); a test fails when a language misses a text.
+- Shortcuts in the panel: `⌘R` refreshes, `⌘,` opens the settings.
+- The first version (MyGo) kept its settings, key included, in `~/Library/Application Support/Flareboard/settings.json`. This one moves them to the preferences and the keychain on its first launch, and removes the key from that file.
 
-## Run
+## Layout
 
-Needs [Go 1.27](https://go.dev/dl/) or later.
+| Path | What |
+|---|---|
+| `Sources/FlareboardCore` | Everything that does not draw: the API client, the app's state (`AppModel`), formatting, copy, the chart's data, storage and updates. Tested. |
+| `Sources/Flareboard` | The status item and its popover (`main.swift`), and the SwiftUI views. |
+| `Packaging` | `Info.plist` (version and build) and the app icon. |
+| `scripts` | `build_app.sh`, `make_dmg.sh` and `release.sh`, adapted from Cleer's. |
+| `resources` | The source images, from the dashboard logo: `icon.png`, `mark.png` and `tray.png` (the F as a template image), embedded in `Sources/Flareboard/Images.swift`. |
+
+## Develop
+
+Needs Xcode 16 or later (Swift 6).
 
 ```bash
 cd apps/menubar
-CGO_ENABLED=0 go test ./...
-go tool mygo vet .
-go tool mygo dev
+swift test
+swift run Flareboard
 ```
 
-Click the menu bar icon and paste an API key from the console: account menu, then **API keys**. The app checks the key before keeping it. Self-hosted installs set their API URL under **Self-hosted server**.
+`swift run Flareboard --snapshots /tmp/flareboard-shots` (debug builds) renders every screen, in every language, light and dark, with sample data, to PNG files for design review.
+
+## Build and release
 
 ```bash
-go tool mygo build          # build/darwin-arm64/Flareboard.app and a .dmg
+scripts/build_app.sh                           # dist/Flareboard.app, universal, signed
+scripts/make_dmg.sh                            # dist/Flareboard <version>.dmg
 ```
 
-The key is stored in the app's user-data directory as `settings.json`, mode `0600`. Development builds (`mygo dev`) use a separate data folder from a packaged app. **Open at login** works for the packaged app in Applications.
+They sign with the Developer ID `Developer ID Application: deng yongyuan (CE8N4Z6AQ3)` (`SIGNING_IDENTITY` overrides it) and, with `DO_NOTARIZE=1`, notarize with the notarytool profile `AC_PASSWORD` of the login keychain (`NOTARY_PROFILE`), as Cleer does.
 
-## Design review
+To release, bump `CFBundleShortVersionString` and `CFBundleVersion` in `Packaging/Info.plist`, add a `## <version>` section to `CHANGELOG.md`, commit and push to main, then run `scripts/release.sh`. It tests, builds, notarizes, and publishes the disk image to the GitHub release `menubar-v<version>`, which is never marked latest (the product's `v1.x` releases keep that).
 
-The views render without a window. This writes every screen, in every language, light and dark, to PNG files:
+## Updates
 
-```bash
-FLAREBOARD_SNAPSHOTS=/tmp/flareboard-shots CGO_ENABLED=0 go test -run TestSnapshots .
-```
-
-The images in `resources/` come from the dashboard logo (`apps/dashboard/public/logo.avif`): `icon.png` is the app icon, `mark.png` the logo in the panel, and `tray.png` the F of the logo as a template image for the menu bar.
-
-## Releases and updates
-
-`scripts/release.sh` releases from this Mac, the way Cleer does: `mygo build` signs the app with the Developer ID in `mygo.json`, notarizes the universal disk image with the `AC_PASSWORD` notarytool profile of the login keychain, signs the update, and uploads both to the GitHub release `menubar-v<version>`. The release is never marked latest, so the product's `v1.x` releases keep that. Installed apps check the newest `menubar-v` release once a day (**Settings → Updates**, or **Check for Updates…** in the icon's right-click menu), show the version's section of `CHANGELOG.md`, and replace themselves. MyGo signs updates with its own key, and the app checks them against `updates.publicKey` in `mygo.json`.
-
-To release:
-
-1. Bump `version` in `mygo.json` and `appVersion` in `view_settings.go` (a test checks they match), and add a `## <version>` section to `CHANGELOG.md`.
-2. Commit and push to main, then run `apps/menubar/scripts/release.sh`.
-
-The secret key that signs updates is in `~/Library/Application Support/mygo/update-keys/` (`MYGO_UPDATE_KEY` points elsewhere). Keep a copy in a password manager: installed apps accept only updates signed with it.
+Installed apps check once a day (**Settings → Updates**, or **Check for Updates…** in the icon's right-click menu) for the newest `menubar-v` release through the GitHub releases API, and offer it in the panel. Installing downloads the disk image, checks it against the SHA-256 GitHub gives every asset, and accepts only an app signed by the same team with this bundle identifier that Gatekeeper accepts. It then swaps the app in place, keeping the old one until the new one is in, and relaunches. The updater is Cleer's (`UpdateInstaller.swift`). The app must be in a folder it can write to, such as Applications.

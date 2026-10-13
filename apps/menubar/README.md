@@ -39,7 +39,7 @@ scripts/make_dmg.sh                            # dist/Flareboard <version>.dmg
 
 They sign with the Developer ID `Developer ID Application: deng yongyuan (CE8N4Z6AQ3)` (`SIGNING_IDENTITY` overrides it) and, with `DO_NOTARIZE=1`, notarize with the notarytool profile `AC_PASSWORD` of the login keychain (`NOTARY_PROFILE`), as Cleer does.
 
-To release, bump `CFBundleShortVersionString` and `CFBundleVersion` in `Packaging/Info.plist`, add a `## <version>` section to `CHANGELOG.md`, commit and push to main, then run `scripts/release.sh`. It tests, builds, notarizes, and publishes the disk image to the GitHub release `menubar-v<version>`, which is never marked latest (the product's `v1.x` releases keep that).
+To release, bump `CFBundleShortVersionString` and `CFBundleVersion` in `Packaging/Info.plist`, add a `## <version>` section to `CHANGELOG.md`, commit and push to main, then run `scripts/release.sh`. Afterwards, bump `MAC_APP_VERSION` in `apps/dashboard/src/lib/landing-links.ts`, which the home page's download button links to. It tests, builds, notarizes, and publishes the disk image to the GitHub release `menubar-v<version>`, which is never marked latest (the product's `v1.x` releases keep that).
 
 ## Updates
 

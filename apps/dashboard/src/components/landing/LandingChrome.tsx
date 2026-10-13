@@ -167,6 +167,7 @@ export function LandingChrome({ children, activeNav = 'home' }: LandingChromePro
               <Link to="/compare">{t('landingNavCompare')}</Link>
               <Link to="/pricing">{t('landingNavPricing')}</Link>
               <Link to="/demo">{t('homeFooterDemo')}</Link>
+              <Link to="/#mac">{t('homeFooterMac')}</Link>
             </div>
             <div className="landing-footer-col">
               <p className="landing-footer-heading">{t('homeFooterResources')}</p>

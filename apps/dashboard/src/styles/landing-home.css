@@ -1628,3 +1628,78 @@
     padding: 2rem 1.5rem;
   }
 }
+
+/* ── Mac app (a slim strip, low on the page) ── */
+
+.home-mac-section {
+  padding-block: 2rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.home-mac {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.home-mac-icon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.home-mac-icon img {
+  width: 1rem;
+  height: auto;
+}
+
+[data-theme='dark'] .home-mac-icon img {
+  filter: invert(1);
+}
+
+.home-mac-text {
+  flex: 1;
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.home-mac-text strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.home-mac-requirements {
+  display: block;
+  font-size: 0.8125rem;
+}
+
+.home-mac-requirements a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+.home-mac-requirements a:hover {
+  text-decoration: underline;
+}
+
+.home-mac-download svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+@media (max-width: 640px) {
+  .home-mac {
+    flex-wrap: wrap;
+  }
+
+  .home-mac-text {
+    flex-basis: calc(100% - 3.25rem);
+  }
+}

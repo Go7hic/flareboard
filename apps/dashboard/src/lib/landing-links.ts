@@ -14,6 +14,15 @@ export function docsUrl(path = ''): string {
 }
 export const FLAREBOARD_ENTERPRISE_EMAIL = 'hello@flareboard.dev';
 
+/**
+ * The macOS menu bar app (apps/menubar). Bump the version with each release: scripts/release.sh
+ * publishes the disk image to the GitHub release menubar-v<version>, where GitHub names it
+ * Flareboard.<version>.dmg.
+ */
+export const MAC_APP_VERSION = '0.2.0';
+export const MAC_APP_DOWNLOAD_URL = `${FLAREBOARD_GITHUB}/releases/download/menubar-v${MAC_APP_VERSION}/Flareboard.${MAC_APP_VERSION}.dmg`;
+export const MAC_APP_RELEASE_URL = `${FLAREBOARD_GITHUB}/releases/tag/menubar-v${MAC_APP_VERSION}`;
+
 /** Display prices (USD per month). Stripe is the source of truth at checkout. */
 export const CLOUD_MONTHLY_USD = 19;
 export const BUSINESS_MONTHLY_USD = 99;

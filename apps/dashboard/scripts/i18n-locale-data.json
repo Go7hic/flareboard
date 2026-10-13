@@ -3371,7 +3371,13 @@
     "auditOauthIdentityUnlink": "ログイン方法の連携を解除",
     "warehouseSyncTooSoon": "1 分以内に同期済みです。少し待ってからもう一度お試しください。",
     "warehouseSyncDisabled": "このデータソースはオフのため、同期されませんでした。",
-    "exportTruncated": "CSV には最新の {count} 行だけが含まれます。残りは期間を短くして分けて書き出してください。"
+    "exportTruncated": "CSV には最新の {count} 行だけが含まれます。残りは期間を短くして分けて書き出してください。",
+    "homeMacTitle": "Flareboard for Mac：",
+    "homeMacLead": "いまサイトにいる人数を、メニューバーからいつでも確認できます。",
+    "homeMacDownload": "Mac 版をダウンロード",
+    "homeMacReleaseNotes": "リリースノート",
+    "homeMacRequirements": "無料 · macOS 14 以降 · Apple シリコンと Intel に対応",
+    "homeFooterMac": "Mac アプリ"
   },
   "de-DE": {
     "language": "Sprache",
@@ -6745,7 +6751,13 @@
     "auditOauthIdentityUnlink": "Anmeldeanbieter getrennt",
     "warehouseSyncTooSoon": "Vor weniger als einer Minute synchronisiert. Versuche es gleich noch einmal.",
     "warehouseSyncDisabled": "Diese Datenquelle ist ausgeschaltet und wurde nicht synchronisiert.",
-    "exportTruncated": "Die CSV enthält nur die neuesten {count} Zeilen. Wähle einen kürzeren Zeitraum, um den Rest in Teilen zu exportieren."
+    "exportTruncated": "Die CSV enthält nur die neuesten {count} Zeilen. Wähle einen kürzeren Zeitraum, um den Rest in Teilen zu exportieren.",
+    "homeMacTitle": "Flareboard für Mac:",
+    "homeMacLead": "Sehen Sie in der Menüleiste, wie viele Personen gerade auf Ihrer Website sind.",
+    "homeMacDownload": "Für Mac laden",
+    "homeMacReleaseNotes": "Versionshinweise",
+    "homeMacRequirements": "Kostenlos · macOS 14 oder neuer · Apple Silicon und Intel",
+    "homeFooterMac": "Mac-App"
   },
   "fr-FR": {
     "language": "Langue",
@@ -10119,6 +10131,12 @@
     "auditOauthIdentityUnlink": "Fournisseur de connexion dissocié",
     "warehouseSyncTooSoon": "Synchronisé il y a moins d’une minute. Réessayez dans un instant.",
     "warehouseSyncDisabled": "Cette source de données est désactivée, elle n’a donc pas été synchronisée.",
-    "exportTruncated": "Le CSV ne contient que les {count} lignes les plus récentes. Choisissez une période plus courte pour exporter le reste en plusieurs fois."
+    "exportTruncated": "Le CSV ne contient que les {count} lignes les plus récentes. Choisissez une période plus courte pour exporter le reste en plusieurs fois.",
+    "homeMacTitle": "Flareboard pour Mac :",
+    "homeMacLead": "voyez depuis la barre des menus combien de personnes sont sur votre site.",
+    "homeMacDownload": "Télécharger pour Mac",
+    "homeMacReleaseNotes": "Notes de version",
+    "homeMacRequirements": "Gratuit · macOS 14 ou ultérieur · Apple Silicon et Intel",
+    "homeFooterMac": "App Mac"
   }
 }

@@ -4,6 +4,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { LandingCapabilities } from '../components/landing/LandingCapabilities';
 import { LandingChrome } from '../components/landing/LandingChrome';
 import { LandingHowItWorks } from '../components/landing/LandingHowItWorks';
+import { LandingMacApp } from '../components/landing/LandingMacApp';
 import { LandingPlanCard, useLandingPlanActions } from '../components/landing/LandingPlanCards';
 import { LandingProductPreview } from '../components/landing/LandingProductPreview';
 import { Button } from '../components/ui/button';
@@ -226,6 +227,10 @@ export default function Landing() {
             ))}
           </div>
         </div>
+      </section>
+
+      <section id="mac" className="home-mac-section" aria-labelledby="home-mac-title">
+        <LandingMacApp />
       </section>
 
       <section className="home-cta-section" aria-labelledby="home-cta-title">

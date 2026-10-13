@@ -2,10 +2,15 @@
 # the keychain profile $NOTARY_PROFILE and waits for the verdict. The network to Apple drops now and
 # then: an upload that did not finish is submitted again (a submission whose upload failed stays
 # "In Progress" forever), and a dropped wait waits again, with a timeout, on the same submission.
+# with_timeout SECONDS CMD... kills CMD after SECONDS: notarytool can hang on a dead connection.
+with_timeout() {
+    /usr/bin/perl -e 'alarm shift; exec @ARGV' "$@"
+}
+
 notarize() {
     local file="$1" log id="" status=""
     for _ in 1 2 3 4; do
-        log="$(xcrun notarytool submit "$file" --keychain-profile "$NOTARY_PROFILE" --wait --timeout 15m 2>&1)" || true
+        log="$(with_timeout 1200 xcrun notarytool submit "$file" --keychain-profile "$NOTARY_PROFILE" --wait --timeout 15m 2>&1)" || true
         echo "$log"
         status="$(awk '/^  status: /{print $2}' <<<"$log" | tail -1)"
         [[ "$status" == "Accepted" ]] && return 0
@@ -22,7 +27,7 @@ notarize() {
     [[ -n "$id" ]] || { echo "Could not upload $file for notarization." >&2; return 1; }
     for _ in 1 2 3 4 5 6; do
         sleep 10
-        log="$(xcrun notarytool wait "$id" --keychain-profile "$NOTARY_PROFILE" --timeout 10m 2>&1)" || true
+        log="$(with_timeout 720 xcrun notarytool wait "$id" --keychain-profile "$NOTARY_PROFILE" --timeout 10m 2>&1)" || true
         echo "$log"
         status="$(awk '/^  status: /{print $2}' <<<"$log" | tail -1)"
         [[ "$status" == "Accepted" ]] && return 0

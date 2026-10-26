@@ -20,10 +20,23 @@ Flareboard 以 [PolyForm Noncommercial License 1.0.0](https://polyformproject.or
 
 ## 开始之前
 
-- 一个 Cloudflare 账户。仓库的部署指南要求使用 Workers 付费套餐，因为 Queues 和 D1 有相应限制。
+- 一个 Cloudflare 账户。Flareboard 可以部署在 Workers 免费套餐上，但它的限制会让真实站点很快碰到上限。需要长期使用的安装请用 Workers 付费套餐。见 [Workers 免费套餐还是付费套餐](#workers-免费套餐还是付费套餐)。
 - 一个可以指向 Workers 的域名。你需要三个主机名：控制台、API 和采集端点各一个。本页使用 `dashboard.YOUR_DOMAIN`、`api.YOUR_DOMAIN` 和 `t.YOUR_DOMAIN`。
 - Node.js 20 或更高版本，以及 pnpm 9（仓库固定为 `pnpm@9.15.0`）。
 - 一个可以对你的账户运行 `wrangler` 的终端。
+
+## Workers 免费套餐还是付费套餐
+
+Flareboard 用到的所有资源（D1、R2、KV、Queues、Durable Objects、Workflows 和 Cron Triggers）在 Workers 免费套餐上都可以创建，所以部署本身可以完成。真正卡住它的是免费套餐的限制：
+
+| Workers 免费套餐的限制 | 对 Flareboard 的影响 |
+| --- | --- |
+| Queues：每个账户每天 10,000 次操作，消息保留 24 小时 | 每个事件是一条队列消息，每条消息要消耗三次操作（写入、读取、删除）。采集上限大约是每天 3,000 个事件。超过之后，发送到队列会失败，这些事件会丢失。 |
+| KV：每天 1,000 次写入 | 采集服务每次收到请求都会写一个 KV 键，用来保持 **实时** 页面的数据。超过限制后，**实时** 页面不再更新，事件仍会正常记录。 |
+| CPU：每次调用 10 ms | aggregator 每批最多把 50 个事件写进对应网站的 Durable Object，控制台的查询也在这个对象里执行。需要更多 CPU 的批次或查询会失败。多大的流量能保持在 10 ms 以内，目前还没有实测。 |
+| Email Sending：仅限 Workers 付费套餐 | 在免费套餐上，`EMAIL` 绑定只能发给在 Email Routing 中验证过的地址。发给其他地址的注册验证、密码重置、邮件报告、告警和工作流邮件都不会送达。 |
+
+Workers 付费套餐（每月 5 美元起）会放宽这四项：Queues 和 KV 改为按用量计费并带每月免费额度，每次调用的 CPU 时间提高到 5 分钟，Email Sending 每月包含 3,000 封邮件。免费套餐适合在小站点上试用 Flareboard，需要长期使用的安装请用付费套餐。最新数字以 Cloudflare 的 [Workers 限制](https://developers.cloudflare.com/workers/platform/limits/) 和 [Queues 价格](https://developers.cloudflare.com/queues/platform/pricing/) 页面为准。
 
 ## 整体结构
 

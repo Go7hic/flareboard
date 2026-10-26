@@ -4,7 +4,7 @@ Flareboard runs as Cloudflare Workers (ingest, API, aggregator, dashboard, blog)
 
 ## Prerequisites
 
-- Cloudflare account (Workers paid plan for Queues/D1 limits)
+- Cloudflare account. Workers Free can deploy everything, but its limits only suit a trial: Queues allow 10,000 operations a day (about 3,000 events, since each event is one message costing write + read + delete), KV allows 1,000 writes a day (the realtime key is written on every ingest request), CPU is 10 ms per invocation (aggregator batches and `EventStore` queries; headroom not measured), and Email Sending only delivers to addresses verified in Email Routing. Use Workers Paid for production.
 - Node.js 20+, pnpm 9+
 - Wrangler authenticated (`wrangler login`)
 

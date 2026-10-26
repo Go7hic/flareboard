@@ -20,10 +20,23 @@ Self-hosted installs have every feature and no plan limits.
 
 ## Before you start
 
-- A Cloudflare account. The repository's deployment guide asks for a Workers paid plan, for the Queues and D1 limits.
+- A Cloudflare account. Flareboard deploys on the Workers Free plan, but its limits stop a real site early. Use Workers Paid for anything you rely on. See [Workers Free or Paid](#workers-free-or-paid).
 - A domain you can point at Workers. You need three hostnames: one each for the dashboard, the API and the ingest endpoint. This page uses `dashboard.YOUR_DOMAIN`, `api.YOUR_DOMAIN` and `t.YOUR_DOMAIN`.
 - Node.js 20 or later, and pnpm 9 (the repository pins `pnpm@9.15.0`).
 - A terminal where you can run `wrangler` against your account.
+
+## Workers Free or Paid
+
+Every resource Flareboard uses (D1, R2, KV, Queues, Durable Objects, Workflows and Cron Triggers) is available on the Workers Free plan, so the deploy itself works there. The Free plan's limits are what stop it:
+
+| Limit on Workers Free | What happens in Flareboard |
+| --- | --- |
+| Queues: 10,000 operations a day per account, messages kept 24 hours | Each event is one queue message, and each message costs three operations (write, read, delete). Ingest tops out at roughly 3,000 events a day. Past that, sending to the queue fails and those events are lost. |
+| KV: 1,000 writes a day | Ingest writes a KV key on every request to keep **Realtime** current. Past the limit, **Realtime** stops updating. Events are still recorded. |
+| CPU: 10 ms per invocation | The aggregator writes up to 50 events per batch into each website's Durable Object, and dashboard queries run inside that object. A batch or query that needs more CPU fails. How much traffic stays under 10 ms has not been measured. |
+| Email Sending: Workers Paid only | On Free, the `EMAIL` binding only delivers to addresses verified in Email Routing. Sign-up verification, password reset, email reports, alerts and workflow emails to any other address are not sent. |
+
+Workers Paid (from $5 a month) raises all four: Queues and KV become usage-based with monthly allowances, CPU time goes up to 5 minutes per invocation, and Email Sending includes 3,000 emails a month. Use Free to try Flareboard on a small site, and Paid for anything you rely on. The current numbers are on Cloudflare's [Workers limits](https://developers.cloudflare.com/workers/platform/limits/) and [Queues pricing](https://developers.cloudflare.com/queues/platform/pricing/) pages.
 
 ## How it fits together
 

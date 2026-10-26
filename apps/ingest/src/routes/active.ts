@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 import type { Env } from '../env';
 import { json } from '../lib/response';
-import { countActiveVisitors } from '../lib/realtime-kv';
+import { countActiveVisitors } from '../lib/realtime';
 import { resolveWebsiteRef } from '../lib/project-keys';
 
 type Ctx = Context<{ Bindings: Env }>;

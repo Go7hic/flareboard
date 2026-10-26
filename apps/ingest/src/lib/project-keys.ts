@@ -1,5 +1,6 @@
 import { DEMO_WEBSITE_IDS, isProjectKey, projectKeyCacheKey } from '@flareboard/shared';
 import type { Env } from '../env';
+import { cacheGet, cachePut } from './kv-cache';
 
 /** Short enough that a key of a website deleted outside the API's delete route stops working soon. */
 const FOUND_TTL_SEC = 15 * 60;
@@ -27,7 +28,7 @@ export function isClosedDemoWebsite(env: Env, websiteId: string): boolean {
 export async function resolveProjectKey(env: Env, key: string): Promise<string | null> {
   if (!isProjectKey(key)) return null;
   const cacheKey = projectKeyCacheKey(key);
-  const cached = await env.CACHE.get(cacheKey);
+  const cached = await cacheGet(env, cacheKey);
   if (cached) return cached === MISSING || isClosedDemoWebsite(env, cached) ? null : cached;
 
   const row = await env.DB.prepare(
@@ -40,7 +41,7 @@ export async function resolveProjectKey(env: Env, key: string): Promise<string |
     .bind(key)
     .first<{ websiteId: string }>();
   const websiteId = row?.websiteId ?? null;
-  await env.CACHE.put(cacheKey, websiteId ?? MISSING, {
+  await cachePut(env, cacheKey, websiteId ?? MISSING, {
     expirationTtl: websiteId ? FOUND_TTL_SEC : MISSING_TTL_SEC,
   });
   return websiteId && !isClosedDemoWebsite(env, websiteId) ? websiteId : null;

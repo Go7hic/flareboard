@@ -1,4 +1,5 @@
 import type { Env } from '../env';
+import { cacheGet, cachePut } from './kv-cache';
 
 /** Per-website tracker behavior (website.autocapture / persist_visitors / respect_dnt). */
 export type TrackerSettings = {
@@ -42,7 +43,7 @@ export async function getTrackerSettings(env: Env, websiteId: string): Promise<T
   if (hit && hit.expires > now) return hit.value;
 
   let value: TrackerSettings | null = null;
-  const cached = await env.CACHE.get(trackerSettingsKey(websiteId));
+  const cached = await cacheGet(env, trackerSettingsKey(websiteId));
   if (cached) {
     try {
       value = JSON.parse(cached) as TrackerSettings | null;
@@ -58,7 +59,7 @@ export async function getTrackerSettings(env: Env, websiteId: string): Promise<T
       .bind(websiteId)
       .first<{ autocapture: number | null; persistVisitors: number | null; respectDnt: number | null }>();
     value = row ? fromRow(row) : null;
-    await env.CACHE.put(trackerSettingsKey(websiteId), JSON.stringify(value), { expirationTtl: KV_TTL_SECONDS });
+    await cachePut(env, trackerSettingsKey(websiteId), JSON.stringify(value), { expirationTtl: KV_TTL_SECONDS });
   }
 
   if (memo.size >= MEMO_MAX) memo.clear();

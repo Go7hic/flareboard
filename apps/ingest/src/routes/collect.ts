@@ -32,7 +32,6 @@ import {
 } from '../lib/response';
 import { getWebsiteById } from '../lib/queries';
 import { hitAllowed, recordHit, sourceExists, type HitSource } from '../lib/link-pixel-hits';
-import { bumpRealtimeVisitor } from '../lib/realtime-kv';
 import { appendMatchedActionTags } from '../lib/actions';
 import { assertEventAllowed, heatmapsAllowedByPlan } from '../lib/hosted-limits';
 import { checkIpRateLimit, checkProjectKeyRateLimit, checkRateLimit, getTrustedClientIp } from '../lib/rate-limit';
@@ -49,6 +48,7 @@ import { recordAlias } from '../lib/person-identity';
 import { writeSiteTables } from '../lib/site-db';
 import { resolveWebsiteRef } from '../lib/project-keys';
 import { isolateMemo } from '../lib/isolate-memo';
+import { cacheGet, cachePut } from '../lib/kv-cache';
 
 const SEND_BODY_MAX_BYTES = 65_536;
 
@@ -136,9 +136,9 @@ const WEBSITE_MEMO_MS = 5 * 60_000;
 /** Whether the website exists: in-isolate memo, then KV (an hour), then D1. */
 function websiteExists(env: Env, websiteId: string): Promise<boolean> {
   return isolateMemo(`website:${websiteId}`, WEBSITE_MEMO_MS, async () => {
-    if (await env.CACHE.get(`website:${websiteId}`)) return true;
+    if (await cacheGet(env, `website:${websiteId}`)) return true;
     if (!(await getWebsiteById(env, websiteId))) return false;
-    await env.CACHE.put(`website:${websiteId}`, '1', { expirationTtl: 3600 });
+    await cachePut(env, `website:${websiteId}`, '1', { expirationTtl: 3600 });
     return true;
   });
 }
@@ -430,11 +430,6 @@ async function processSend(
     }
 
     const messages: QueueMessage[] = [];
-    let realtimeMeta: {
-      urlPath?: string;
-      referrerDomain?: string | null;
-      country?: string | null;
-    } | undefined;
 
     if (!cache?.sessionId) {
       messages.push(
@@ -522,14 +517,6 @@ async function processSend(
           data: (eventDataPayload ?? undefined) as Record<string, unknown> | undefined,
         });
         if (eventDataPayload || Object.keys(tagged).length) eventDataPayload = tagged;
-      }
-
-      if (websiteId && eventType === EVENT_TYPE.pageView) {
-        realtimeMeta = {
-          urlPath: page.urlPath,
-          referrerDomain: page.referrerDomain,
-          country: client.country ?? null,
-        };
       }
 
       messages.push(
@@ -699,10 +686,6 @@ async function processSend(
           ttfb: vitals.ttfb,
         },
       });
-    }
-
-    if (websiteId) {
-      defer(() => bumpRealtimeVisitor(env, websiteId, sessionId, realtimeMeta));
     }
 
     const queuePromise =

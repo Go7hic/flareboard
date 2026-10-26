@@ -61,10 +61,10 @@ Common query params: `range` (`24h`, `7d`, `30d`, `90d`, `custom`), `from`/`to`,
 
 | Method | Path | Auth |
 |--------|------|------|
-| GET | `/api/realtime/:websiteId` | Bearer — active visitors (5 min window; KV only) |
+| GET | `/api/realtime/:websiteId` | Bearer — active visitors (sessions with any event in the last 5 min, read from the website store) |
 | GET | `/api/links/:linkId/stats` | Bearer — link clicks, UV, daily series |
 
-Ingest also exposes `GET /api/websites/:websiteId/active` (KV active users).
+Ingest also exposes `GET /api/websites/:websiteId/active` (the same active-visitor count).
 
 ## Segments
 
@@ -309,7 +309,7 @@ Served from the ingest worker (e.g. `https://t.your-domain.com`).
 | POST | `/api/send`, `/api/batch` | Event collection; batch returns `processed`, `errors`, `cache` |
 | POST | `/api/record` | Session replay chunks |
 | GET | `/api/heartbeat` | Health |
-| GET | `/api/websites/:websiteId/active` | KV active users |
+| GET | `/api/websites/:websiteId/active` | Active visitors (5 min window, website store) |
 | GET | `/api/tracker-config` | Feature flag and survey config for the tracker |
 | POST | `/api/surveys/response` | Survey response collection |
 | GET | `/script.js` | Tracker |

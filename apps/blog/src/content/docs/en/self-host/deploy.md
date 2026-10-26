@@ -32,7 +32,7 @@ Every resource Flareboard uses (D1, R2, KV, Queues, Durable Objects, Workflows a
 | Limit on Workers Free | What happens in Flareboard |
 | --- | --- |
 | Queues: 10,000 operations a day per account, messages kept 24 hours | Each event is one queue message, and each message costs three operations (write, read, delete). Ingest tops out at roughly 3,000 events a day. Past that, sending to the queue fails and those events are lost. |
-| KV: 1,000 writes a day | Ingest writes a KV key on every request to keep **Realtime** current. Past the limit, **Realtime** stops updating. Events are still recorded. |
+| KV: 1,000 writes a day | Ingest caches each website's settings in KV for one to five minutes at a time, up to about 1,700 writes a day for a website with visitors around the clock. Past the limit, ingest skips the cache and reads those settings from D1 on each request. Events are still recorded. |
 | CPU: 10 ms per invocation | The aggregator writes up to 50 events per batch into each website's Durable Object, and dashboard queries run inside that object. A batch or query that needs more CPU fails. How much traffic stays under 10 ms has not been measured. |
 | Email Sending: Workers Paid only | On Free, the `EMAIL` binding only delivers to addresses verified in Email Routing. Sign-up verification, password reset, email reports, alerts and workflow emails to any other address are not sent. |
 
@@ -49,7 +49,7 @@ Workers Paid (from $5 a month) raises all four: Queues and KV become usage-based
 | D1 | Accounts, websites, configuration and usage. |
 | Durable Objects | One SQLite-backed `EventStore` per website holds that website's analytics. `RateLimiter` limits public endpoints. |
 | R2 | Session replay chunks. |
-| KV | Realtime counters and an API response cache. |
+| KV | Caches of website settings and API responses. |
 | Queues | `flareboard-events` carries events from ingest to the aggregator. `flareboard-workflow-triggers` carries workflow triggers from ingest to the API. Each has a dead-letter queue. |
 | Workflows | Cloudflare Workflows run workflow executions (delays, conditions, webhook, email and Slack steps) in the API worker. |
 

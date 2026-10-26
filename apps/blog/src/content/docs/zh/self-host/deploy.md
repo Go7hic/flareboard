@@ -32,7 +32,7 @@ Flareboard 用到的所有资源（D1、R2、KV、Queues、Durable Objects、Wor
 | Workers 免费套餐的限制 | 对 Flareboard 的影响 |
 | --- | --- |
 | Queues：每个账户每天 10,000 次操作，消息保留 24 小时 | 每个事件是一条队列消息，每条消息要消耗三次操作（写入、读取、删除）。采集上限大约是每天 3,000 个事件。超过之后，发送到队列会失败，这些事件会丢失。 |
-| KV：每天 1,000 次写入 | 采集服务每次收到请求都会写一个 KV 键，用来保持 **实时** 页面的数据。超过限制后，**实时** 页面不再更新，事件仍会正常记录。 |
+| KV：每天 1,000 次写入 | 采集服务会把每个网站的设置缓存在 KV 里，每份缓存保留 1 到 5 分钟。一个全天都有访客的网站，每天最多约写入 1,700 次。超过限制后，采集服务不再使用缓存，每次请求都直接从 D1 读取这些设置，事件仍会正常记录。 |
 | CPU：每次调用 10 ms | aggregator 每批最多把 50 个事件写进对应网站的 Durable Object，控制台的查询也在这个对象里执行。需要更多 CPU 的批次或查询会失败。多大的流量能保持在 10 ms 以内，目前还没有实测。 |
 | Email Sending：仅限 Workers 付费套餐 | 在免费套餐上，`EMAIL` 绑定只能发给在 Email Routing 中验证过的地址。发给其他地址的注册验证、密码重置、邮件报告、告警和工作流邮件都不会送达。 |
 
@@ -49,7 +49,7 @@ Workers 付费套餐（每月 5 美元起）会放宽这四项：Queues 和 KV �
 | D1 | 账户、网站、配置和用量。 |
 | Durable Objects | 每个网站一个基于 SQLite 的 `EventStore`，保存该网站的分析数据。`RateLimiter` 限制公开端点。 |
 | R2 | 会话回放分块。 |
-| KV | 实时计数器和 API 响应缓存。 |
+| KV | 网站设置和 API 响应的缓存。 |
 | Queues | `flareboard-events` 把事件从采集端送到聚合端。`flareboard-workflow-triggers` 把工作流触发器从采集端送到 API。每个队列都有一个死信队列。 |
 | Workflows | Cloudflare Workflows 在 API Worker 中运行工作流执行（延迟、条件、webhook、邮件和 Slack 步骤）。 |
 

@@ -4,7 +4,7 @@ Flareboard runs as Cloudflare Workers (ingest, API, aggregator, dashboard, blog)
 
 ## Prerequisites
 
-- Cloudflare account. Workers Free can deploy everything, but its limits only suit a trial: Queues allow 10,000 operations a day (about 3,000 events, since each event is one message costing write + read + delete), KV allows 1,000 writes a day (the realtime key is written on every ingest request), CPU is 10 ms per invocation (aggregator batches and `EventStore` queries; headroom not measured), and Email Sending only delivers to addresses verified in Email Routing. Use Workers Paid for production.
+- Cloudflare account. Workers Free can deploy everything, but its limits only suit a trial: Queues allow 10,000 operations a day (about 3,000 events, since each event is one message costing write + read + delete), KV allows 1,000 writes a day (ingest refreshes its per-website settings caches every one to five minutes, up to ~1,700 writes a day for a site with steady traffic; past the limit it skips the cache and reads D1), CPU is 10 ms per invocation (aggregator batches and `EventStore` queries; headroom not measured), and Email Sending only delivers to addresses verified in Email Routing. Use Workers Paid for production.
 - Node.js 20+, pnpm 9+
 - Wrangler authenticated (`wrangler login`)
 
@@ -18,7 +18,7 @@ wrangler d1 create flareboard-db
 pnpm db:migrate:remote
 pnpm seed:remote -- --username myadmin --password 'secret'   # first admin (password required)
 
-# KV (realtime counters + API response cache)
+# KV (settings and API response caches)
 wrangler kv namespace create flareboard-cache
 
 # R2 (session replay chunks)

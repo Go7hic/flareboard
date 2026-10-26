@@ -9,6 +9,7 @@ import {
 } from '@flareboard/shared';
 import type { Env } from '../env';
 import { isolateMemo } from './isolate-memo';
+import { cacheGet, cacheGetJson, cachePut } from './kv-cache';
 
 /**
  * Monthly usage lives in D1 `usage_monthly`: the aggregator counts product events as it writes
@@ -45,7 +46,7 @@ function getWebsiteOwnerId(env: Env, websiteId: string): Promise<string | null> 
 
 async function loadWebsiteOwnerId(env: Env, websiteId: string): Promise<string | null> {
   const cacheKey = `website:owner:${websiteId}`;
-  const cached = await env.CACHE.get(cacheKey);
+  const cached = await cacheGet(env, cacheKey);
   if (cached) return cached;
 
   const row = await env.DB.prepare(
@@ -54,7 +55,7 @@ async function loadWebsiteOwnerId(env: Env, websiteId: string): Promise<string |
     .bind(websiteId)
     .first<{ user_id: string | null }>();
   const userId = row?.user_id ?? null;
-  if (userId) await env.CACHE.put(cacheKey, userId, { expirationTtl: 3600 });
+  if (userId) await cachePut(env, cacheKey, userId, { expirationTtl: 3600 });
   return userId;
 }
 
@@ -82,10 +83,10 @@ function getQuotaState(env: Env, userId: string): Promise<QuotaState> {
 async function loadCachedQuotaState(env: Env, userId: string): Promise<QuotaState> {
   const monthKey = currentMonthKey();
   const cacheKey = `quota:${userId}:${monthKey}`;
-  const cached = await env.CACHE.get<QuotaState>(cacheKey, 'json');
+  const cached = await cacheGetJson<QuotaState>(env, cacheKey);
   if (cached) return cached;
   const state = await loadQuotaState(env, userId, monthKey);
-  await env.CACHE.put(cacheKey, JSON.stringify(state), { expirationTtl: QUOTA_CACHE_TTL_SEC });
+  await cachePut(env, cacheKey, JSON.stringify(state), { expirationTtl: QUOTA_CACHE_TTL_SEC });
   return state;
 }
 

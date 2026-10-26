@@ -687,14 +687,6 @@ export async function getShareBySlug(env: Env, slug: string) {
 
 const REALTIME_WINDOW_MS = 5 * 60 * 1000;
 const REALTIME_SESSION_LIMIT = 50;
-const REALTIME_KV_PREFIX = (websiteId: string) => `rt:${websiteId}:s:`;
-
-type RealtimeKvMeta = {
-  urlPath?: string;
-  referrerDomain?: string | null;
-  country?: string | null;
-  updatedAt?: number;
-};
 
 type RealtimeSessionRow = {
   sessionId: string;
@@ -704,111 +696,61 @@ type RealtimeSessionRow = {
   createdAt: number;
 };
 
-/** Upper bound on keys scanned per poll (5 KV list pages). */
-const REALTIME_MAX_LISTED = 5000;
+type RealtimeNow = { visitors: number; sessions: RealtimeSessionRow[] };
 
-async function getRealtimeFromKv(
-  env: Env,
-  websiteId: string,
-  since: number,
-): Promise<{ visitors: number; sessions: RealtimeSessionRow[] } | null> {
-  const prefix = REALTIME_KV_PREFIX(websiteId);
-  // Count active sessions from key metadata (written by ingest) without reading every value.
-  const active: { name: string; updatedAt: number }[] = [];
-  let cursor: string | undefined;
-  let listed = 0;
-  do {
-    const page = await env.CACHE.list<{ u?: number }>({ prefix, cursor, limit: 1000 });
-    for (const key of page.keys) {
-      const updatedAt = key.metadata?.u;
-      // Keys from before metadata existed still count; their TTL bounds them to the window.
-      if (updatedAt === undefined || updatedAt >= since) active.push({ name: key.name, updatedAt: updatedAt ?? 0 });
-    }
-    listed += page.keys.length;
-    cursor = page.list_complete ? undefined : page.cursor;
-  } while (cursor && listed < REALTIME_MAX_LISTED);
-  if (!active.length) return null;
-
-  active.sort((a, b) => b.updatedAt - a.updatedAt);
-  const rows = await Promise.all(
-    active.slice(0, REALTIME_SESSION_LIMIT).map(async (key) => {
-      const raw = await env.CACHE.get(key.name);
-      if (!raw) return null;
-      try {
-        const meta = JSON.parse(raw) as RealtimeKvMeta;
-        const updatedAt = meta.updatedAt ?? 0;
-        if (updatedAt < since) return null;
-        return {
-          sessionId: key.name.slice(prefix.length),
-          urlPath: meta.urlPath ?? '',
-          referrerDomain: meta.referrerDomain ?? null,
-          country: meta.country ?? null,
-          createdAt: updatedAt,
-        } satisfies RealtimeSessionRow;
-      } catch {
-        return null;
-      }
-    }),
-  );
-  const sessions = rows.filter((r): r is RealtimeSessionRow => r !== null);
-  if (!sessions.length) return null;
-  sessions.sort((a, b) => b.createdAt - a.createdAt);
-
-  return { visitors: Math.max(active.length, sessions.length), sessions };
-}
-
-/** Per-isolate memo for demo realtime: the dashboard streams realtime every second. */
-const demoRealtimeMemo = new Map<string, { at: number; value: { visitors: number; sessions: RealtimeSessionRow[] } | null }>();
-const DEMO_REALTIME_MEMO_MS = 10_000;
+/** Per-isolate memo: the dashboard streams realtime every second for each open page. */
+const realtimeMemo = new Map<string, { at: number; value: RealtimeNow | null }>();
+const REALTIME_MEMO_MS = 5_000;
 
 /**
- * Demo websites are filled by the daily generator, which writes straight into the store and
- * never touches the realtime keys ingest keeps in KV, so their "active now" would always be
- * empty. Read it from the store instead: sessions with a pageview in the window, newest first.
+ * Visitors online: sessions with any event in the window, latest activity first. Page and
+ * referrer come from the session's latest pageview (also when only other events kept it active
+ * since), the country from its session row. The upper bound leaves out rows dated ahead of time
+ * (the demo generator writes the rest of the day in advance).
  */
-async function getDemoRealtimeFromStore(
-  env: Env,
-  websiteId: string,
-  since: number,
-  now: number,
-): Promise<{ visitors: number; sessions: RealtimeSessionRow[] } | null> {
-  const memo = demoRealtimeMemo.get(websiteId);
-  if (memo && now - memo.at < DEMO_REALTIME_MEMO_MS) return memo.value;
-  // MAX() makes SQLite take url_path and referrer from each session's latest pageview.
-  const rows = await siteDb(env, websiteId)
-    .prepare(
-      `SELECT e.session_id AS sessionId, e.url_path AS urlPath, e.referrer_domain AS referrerDomain,
-              s.country AS country, MAX(e.created_at) AS createdAt
-       FROM website_event e
-       LEFT JOIN session s ON s.session_id = e.session_id
-       WHERE e.website_id = ?1 AND e.event_type = ?2 AND e.created_at >= ?3 AND e.created_at <= ?4
-       GROUP BY e.session_id
-       ORDER BY createdAt DESC
-       LIMIT 500`,
-    )
-    .bind(websiteId, EVENT_TYPE.pageView, since, now)
-    .all<RealtimeSessionRow>();
-  const sessions = (rows.results ?? []).map((row) => ({
+async function getRealtimeFromStore(env: Env, websiteId: string, since: number, now: number): Promise<RealtimeNow | null> {
+  const memo = realtimeMemo.get(websiteId);
+  if (memo && now >= memo.at && now - memo.at < REALTIME_MEMO_MS) return memo.value;
+  const db = siteDb(env, websiteId);
+  const active = `SELECT session_id, MAX(created_at) AS last_at FROM website_event
+                  WHERE website_id = ?1 AND created_at >= ?2 AND created_at <= ?3
+                  GROUP BY session_id`;
+  const latestPageview = (column: string) =>
+    `(SELECT p.${column} FROM website_event p
+      WHERE p.session_id = t.session_id AND p.event_type = ?4 AND p.created_at <= ?3
+      ORDER BY p.created_at DESC LIMIT 1)`;
+  const [count, rows] = await db.batch([
+    db.prepare(`SELECT COUNT(*) AS visitors FROM (${active})`).bind(websiteId, since, now),
+    db
+      .prepare(
+        `SELECT t.session_id AS sessionId, t.last_at AS createdAt, ${latestPageview('url_path')} AS urlPath,
+                ${latestPageview('referrer_domain')} AS referrerDomain, s.country AS country
+         FROM (SELECT session_id, last_at FROM (${active}) ORDER BY last_at DESC, session_id LIMIT ${REALTIME_SESSION_LIMIT}) t
+         LEFT JOIN session s ON s.session_id = t.session_id
+         ORDER BY t.last_at DESC, t.session_id`,
+      )
+      .bind(websiteId, since, now, EVENT_TYPE.pageView),
+  ]);
+  const visitors = Number((count?.results?.[0] as { visitors?: number } | undefined)?.visitors ?? 0);
+  const sessions = ((rows?.results ?? []) as RealtimeSessionRow[]).map((row) => ({
     sessionId: row.sessionId,
     urlPath: row.urlPath ?? '',
     referrerDomain: row.referrerDomain ?? null,
     country: row.country ?? null,
     createdAt: Number(row.createdAt),
   }));
-  const value = sessions.length ? { visitors: sessions.length, sessions: sessions.slice(0, REALTIME_SESSION_LIMIT) } : null;
-  demoRealtimeMemo.set(websiteId, { at: now, value });
+  const value = visitors ? { visitors, sessions } : null;
+  realtimeMemo.set(websiteId, { at: now, value });
   return value;
 }
 
 export async function getRealtime(env: Env, websiteId: string) {
-  const since = Date.now() - REALTIME_WINDOW_MS;
   const endAt = Date.now();
+  const since = endAt - REALTIME_WINDOW_MS;
   const start30 = endAt - 30 * 60 * 1000;
 
-  const [kv, window30] = await Promise.all([
-    isDemoWebsiteId(websiteId)
-      ? getDemoRealtimeFromStore(env, websiteId, since, endAt)
-      : getRealtimeFromKv(env, websiteId, since),
+  const [online, window30] = await Promise.all([
+    getRealtimeFromStore(env, websiteId, since, endAt),
     cachedRead(env, `realtime-30m:${websiteId}`, 30, async () => {
       const row = await siteDb(env, websiteId).prepare(
         `SELECT
@@ -828,10 +770,10 @@ export async function getRealtime(env: Env, websiteId: string) {
     }),
   ]);
 
-  if (kv) {
+  if (online) {
     return {
-      visitors: kv.visitors,
-      sessions: kv.sessions,
+      visitors: online.visitors,
+      sessions: online.sessions,
       pageviews: [],
       window30,
     };

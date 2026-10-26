@@ -1,6 +1,7 @@
 import { computeErrorFingerprint, ERROR_FINGERPRINT_PROPERTY } from '@flareboard/shared';
 import type { Env } from '../env';
 import { fetchApi } from './api-client';
+import { cacheGetJson } from './kv-cache';
 
 type ErrorPayloadInput = {
   data?: Record<string, unknown> | null;
@@ -74,9 +75,10 @@ export type PossibleRegression = {
  * repeated reports are harmless). Returns true when a report was sent.
  */
 export async function reportPossibleRegression(env: Env, input: PossibleRegression, now = Date.now()) {
-  const entry = await env.CACHE.get<{ issue?: string; resolvedAt?: number }>(
+  const entry = await cacheGetJson<{ issue?: string; resolvedAt?: number }>(
+    env,
     resolvedIssueKvKey(input.websiteId, input.fingerprint),
-    { type: 'json', cacheTtl: 60 },
+    60,
   );
   if (!entry?.issue || (entry.resolvedAt ?? 0) >= input.occurredAt) return false;
 

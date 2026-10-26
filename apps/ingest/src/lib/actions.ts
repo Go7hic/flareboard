@@ -6,6 +6,7 @@ import {
 } from '@flareboard/shared';
 import type { Env } from '../env';
 import { isolateMemo } from './isolate-memo';
+import { cacheGet } from './kv-cache';
 
 type CachedActions = {
   loadedAt: number;
@@ -37,7 +38,7 @@ function getActionDefinitionsVersion(env: Env, websiteId: string) {
   return isolateMemo(
     `action-version:${websiteId}`,
     ACTION_VERSION_MEMO_MS,
-    async () => (await env.CACHE.get(`action-definitions-version:${websiteId}`)) ?? '0',
+    async () => (await cacheGet(env, `action-definitions-version:${websiteId}`)) ?? '0',
   );
 }
 

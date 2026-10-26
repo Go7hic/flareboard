@@ -56,7 +56,7 @@ PostHog SDKs can send to Flareboard too: [PostHog compatibility](docs/ingest-pos
 
 **Storage:** every website's analytics (events, sessions, people, logs, spans, rollups) lives in
 its own SQLite-backed Durable Object; D1 holds accounts, websites, configuration and usage; R2
-stores replay recordings; KV caches realtime counters and API responses; Queues absorb ingest
+stores replay recordings; KV caches settings and API responses; Queues absorb ingest
 spikes. Shared packages: `@flareboard/db`, `@flareboard/shared`, `@flareboard/rate-limiter`.
 
 ## Local development

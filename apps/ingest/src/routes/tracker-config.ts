@@ -12,6 +12,7 @@ import { getWebsiteById } from '../lib/queries';
 import { resolveWebsiteRef } from '../lib/project-keys';
 import { listActiveSurveys } from '../lib/surveys';
 import { badRequest, json, notFound } from '../lib/response';
+import { cacheGet, cachePut } from '../lib/kv-cache';
 
 /**
  * What the tracker needs about one enabled flag. Conditions never leave the server: flags that
@@ -91,7 +92,7 @@ export function replaySettings(raw: unknown) {
  */
 export async function getTrackerConfigJson(env: Env, websiteId: string): Promise<string | null> {
   const cacheKey = `tracker-config:${websiteId}`;
-  const cached = await env.CACHE.get(cacheKey);
+  const cached = await cacheGet(env, cacheKey);
   if (cached) return cached;
 
   const website = await getWebsiteById(env, websiteId);
@@ -127,7 +128,7 @@ export async function getTrackerConfigJson(env: Env, websiteId: string): Promise
     surveys,
   };
   const body = JSON.stringify(payload);
-  await env.CACHE.put(cacheKey, body, { expirationTtl: 60 });
+  await cachePut(env, cacheKey, body, { expirationTtl: 60 });
   return body;
 }
 

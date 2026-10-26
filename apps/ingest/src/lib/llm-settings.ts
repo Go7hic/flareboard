@@ -1,4 +1,5 @@
 import type { Env } from '../env';
+import { cacheGet, cachePut } from './kv-cache';
 
 /** The API deletes this key when a website's LLM analytics settings change. */
 export function llmSettingsKey(websiteId: string) {
@@ -28,7 +29,7 @@ export async function llmCaptureContent(env: Env, websiteId: string): Promise<bo
   if (hit && hit.expires > now) return hit.value.captureContent;
 
   let value: LlmSettings | null = null;
-  const cached = await env.CACHE.get(llmSettingsKey(websiteId));
+  const cached = await cacheGet(env, llmSettingsKey(websiteId));
   if (cached) {
     try {
       const parsed = JSON.parse(cached) as Partial<LlmSettings>;
@@ -42,7 +43,7 @@ export async function llmCaptureContent(env: Env, websiteId: string): Promise<bo
       .bind(websiteId)
       .first<{ captureContent: number }>();
     value = { captureContent: row ? row.captureContent !== 0 : true };
-    await env.CACHE.put(llmSettingsKey(websiteId), JSON.stringify(value), { expirationTtl: KV_TTL_SECONDS });
+    await cachePut(env, llmSettingsKey(websiteId), JSON.stringify(value), { expirationTtl: KV_TTL_SECONDS });
   }
 
   if (memo.size >= MEMO_MAX) memo.clear();

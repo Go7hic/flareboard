@@ -9,7 +9,6 @@ import { llmCaptureContent } from '../llm-settings';
 import { writeSiteTables } from '../site-db';
 import { eventMessage, emptyPageContext, pageContext, sessionDataMessage, sessionMessage } from '../queue-messages';
 import { getTrustedClientIp } from '../rate-limit';
-import { bumpRealtimeVisitor } from '../realtime-kv';
 import {
   clientInfo,
   EXCEPTION_PROPERTIES,
@@ -46,7 +45,6 @@ export type CaptureInput = {
 
 type SessionState = {
   message: ReturnType<typeof sessionMessage>['data'];
-  realtime?: { urlPath?: string; referrerDomain?: string | null; country?: string | null };
 };
 
 type PersonUpdate = { set: Json; setOnce: Json; seenAt: number };
@@ -258,13 +256,6 @@ export async function capturePostHogEvents(input: CaptureInput): Promise<{ accep
     if (vitals) Object.assign(message.data, vitals);
     events.push(message);
 
-    if (eventType === EVENT_TYPE.pageView) {
-      sessions.get(sessionId)!.realtime = {
-        urlPath: context.urlPath,
-        referrerDomain: context.referrerDomain,
-        country: geo.country,
-      };
-    }
     if ((eventType === EVENT_TYPE.customEvent || eventType === EVENT_TYPE.ai) && eventName) {
       workflowEvents.push({
         sessionId,
@@ -321,7 +312,6 @@ export async function capturePostHogEvents(input: CaptureInput): Promise<{ accep
         ...[...memberships.values()].map((membership) => () =>
           writeSiteTables(env, websiteId, (db) => upsertPersonGroupMembership(db, { websiteId, ...membership })),
         ),
-        ...[...sessions].map(([sessionId, session]) => () => bumpRealtimeVisitor(env, websiteId, sessionId, session.realtime)),
       ];
       if (workflowEvents.length) {
         tasks.push(() => enqueueWorkflowTriggers(env, { websiteId, trustedIp, events: workflowEvents }));

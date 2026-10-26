@@ -187,8 +187,8 @@ export async function pruneDemoData(env: Env, website: DemoWebsite, now: number)
   const results = await db.batch([
     db.prepare(`DELETE FROM heatmap_cell WHERE rowid IN (SELECT rowid FROM heatmap_cell WHERE day < ?1 LIMIT 5000)`).bind(dayKey(cutoff)),
     db.prepare(
-      `DELETE FROM session WHERE rowid IN (
-         SELECT s.rowid FROM session s
+      `DELETE FROM session WHERE session_id IN (
+         SELECT s.session_id FROM session s
          WHERE s.created_at < ?1 AND NOT EXISTS (SELECT 1 FROM website_event e WHERE e.session_id = s.session_id)
          LIMIT 2000)`,
     ).bind(cutoff),

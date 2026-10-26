@@ -73,14 +73,14 @@ The ingest worker still has an `API` service binding (`fetchApi`, used for error
 ## 3. Deploy workers
 
 ```bash
-pnpm deploy:aggregator
 pnpm deploy:api
+pnpm deploy:aggregator
 pnpm deploy:ingest
 pnpm deploy:dashboard
 pnpm deploy:blog
 ```
 
-Recommended order: aggregator → api → ingest → dashboard → blog.
+Deploy the API first: the aggregator and ingest bind to its `EventStore` class, and website stores update their schema when the new API code first uses them, so an aggregator deployed ahead of the API can write rows the stores do not have tables for yet.
 
 | Script | Description |
 |--------|-------------|

@@ -86,7 +86,7 @@ describe('D1 -> website store backfill', () => {
     const replay = await store.prepare(`SELECT events FROM session_replay WHERE replay_id = 'br1'`).first<ArrayBuffer>('events');
     expect(new TextDecoder().decode(replay!)).toBe('[1,2,3]');
 
-    const pageviews = await store.prepare(`SELECT SUM(pageviews) AS n FROM rollup_stats_daily`).first<number>('n');
+    const pageviews = await store.prepare(`SELECT SUM(pageviews) AS n FROM rollup_session_day`).first<number>('n');
     expect(pageviews).toBe(EVENTS - Math.ceil(EVENTS / 5));
     expect(await store.prepare(`SELECT count FROM rollup_event_daily WHERE event_name = 'signup'`).first('count')).toBe(Math.ceil(EVENTS / 5));
   });

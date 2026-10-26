@@ -79,12 +79,8 @@ describe('getWebsiteStatsFromRollups', () => {
     const env = mockEnv([
       { sql: 'COUNT(*) as count FROM rollup_stats_daily', result: { count: 2 } },
       {
-        sql: 'COALESCE(SUM(pageviews), 0) as pageviews',
-        result: { pageviews: 10, visits: 5, bounces: 1, totaltime_sec: 100 },
-      },
-      {
-        sql: 'COUNT(DISTINCT session_id) as visitors',
-        result: { visitors: 4 },
+        sql: 'FROM rollup_session_day',
+        result: { pageviews: 10, visits: 5, bounces: 1, totaltime_sec: 100, visitors: 4 },
       },
     ]);
     const result = await getWebsiteStatsFromRollups(env, 'site-1', startAt, endAt);

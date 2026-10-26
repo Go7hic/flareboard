@@ -16,6 +16,7 @@ const ROLLUP_TABLES = [
   'rollup_pageview_series',
   'rollup_series_bucket',
   'rollup_dimension_daily',
+  'rollup_session_dims_daily',
   'rollup_event_daily',
 ];
 
@@ -138,16 +139,17 @@ describe('store rollup rebuild', () => {
     await chunk('f', 0, at(34, 9));
     await chunk('f', 1, at(34, 9, 2));
     const refreshed = await stub.refreshRollups(site, { since: at(34, 0), keepFrom: at(30, 6) });
-    const visits = async (unit: string, bucket: string) =>
+    // Month and year visitors are read from the kept days of rollup_session_day.
+    const visits = async (period: string) =>
       (
         await db
-          .prepare('SELECT visit_id FROM rollup_series_bucket WHERE unit = ?1 AND bucket = ?2 ORDER BY visit_id')
-          .bind(unit, bucket)
+          .prepare('SELECT DISTINCT visit_id FROM rollup_session_day WHERE substr(day, 1, ?1) = ?2 ORDER BY visit_id')
+          .bind(period.length, period)
           .all<{ visit_id: string }>()
       ).results.map((row) => row.visit_id);
-    expect(await visits('month', '2026-06')).toEqual(['c', 'd']);
-    expect(await visits('month', '2026-07')).toEqual(['b', 'd', 'e', 'f', 'g']);
-    expect(await visits('year', '2026')).toEqual(['b', 'c', 'd', 'e', 'f', 'g']);
+    expect(await visits('2026-06')).toEqual(['c', 'd']);
+    expect(await visits('2026-07')).toEqual(['b', 'd', 'e', 'f', 'g']);
+    expect(await visits('2026')).toEqual(['b', 'c', 'd', 'e', 'f', 'g']);
 
     // After the retention job, a rebuild over the kept rows lands on the same rollups.
     for (const table of ['website_event', 'session_replay']) {

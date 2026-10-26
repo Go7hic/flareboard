@@ -9,6 +9,14 @@ type SessionMeta = {
   country?: string | null;
 };
 
+/** Session columns that website stores count per combination in rollup_session_dims_daily. */
+export const SESSION_DIMENSIONS = ['browser', 'os', 'device', 'language', 'country'] as const;
+
+/** The rollup values of a session's dimensions ('Unknown' when missing), in SESSION_DIMENSIONS order. */
+export function sessionDimensionValues(meta: SessionMeta): string[] {
+  return SESSION_DIMENSIONS.map((column) => meta[column] || 'Unknown');
+}
+
 export function dayKey(ms: number) {
   return new Date(ms).toISOString().slice(0, 10);
 }
@@ -17,14 +25,6 @@ export function hourBucket(ms: number) {
   const d = new Date(ms);
   d.setUTCMinutes(0, 0, 0);
   return d.toISOString().slice(0, 13).replace('T', ' ') + ':00';
-}
-
-export function monthBucket(ms: number) {
-  return new Date(ms).toISOString().slice(0, 7);
-}
-
-export function yearBucket(ms: number) {
-  return new Date(ms).toISOString().slice(0, 4);
 }
 
 async function bumpPageviewSeries(db: D1Database, websiteId: string, unit: string, bucket: string) {
@@ -94,35 +94,38 @@ async function upsertSessionDay(
     .run();
 }
 
-async function refreshRollupStatsDaily(db: D1Database, websiteId: string, day: string) {
+async function bumpSessionDimensions(db: D1Database, websiteId: string, day: string, meta: SessionMeta) {
   await db
     .prepare(
-      `INSERT INTO rollup_stats_daily (website_id, day, pageviews, visitors, visits, bounces, totaltime_sec)
-       SELECT
-         ?1,
-         ?2,
-         COALESCE(SUM(pageviews), 0),
-         COUNT(DISTINCT session_id),
-         COUNT(*),
-         SUM(CASE WHEN pageviews = 1 THEN 1 ELSE 0 END),
-         COALESCE(SUM((last_at - first_at) / 1000), 0)
-       FROM rollup_session_day
-       WHERE website_id = ?1 AND day = ?2
-       ON CONFLICT(website_id, day) DO UPDATE SET
-         pageviews = excluded.pageviews,
-         visitors = excluded.visitors,
-         visits = excluded.visits,
-         bounces = excluded.bounces,
-         totaltime_sec = excluded.totaltime_sec`,
+      `INSERT INTO rollup_session_dims_daily (website_id, day, browser, os, device, language, country, count)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1)
+       ON CONFLICT(website_id, day, browser, os, device, language, country) DO UPDATE SET count = count + 1`,
+    )
+    .bind(websiteId, day, ...sessionDimensionValues(meta))
+    .run();
+}
+
+/** Marks a day as having rollups. Readers sum its counters from rollup_session_day. */
+async function markRollupDay(db: D1Database, websiteId: string, day: string) {
+  await db
+    .prepare(
+      `INSERT INTO rollup_stats_daily (website_id, day) VALUES (?1, ?2)
+       ON CONFLICT(website_id, day) DO NOTHING`,
     )
     .bind(websiteId, day)
     .run();
 }
 
+/**
+ * Rollups for one event (the per-message fallback). `sessionDimensionsCombined` writes the
+ * session dimensions as one rollup_session_dims_daily row (website stores) instead of one
+ * rollup_dimension_daily row each (legacy D1).
+ */
 export async function maintainRollupsForEvent(
   db: D1Database,
   event: Extract<QueueMessage, { type: 'event' }>['data'],
   sessionMeta?: SessionMeta,
+  sessionDimensionsCombined = false,
 ) {
   const createdAt = event.createdAt;
   const day = dayKey(createdAt);
@@ -130,26 +133,21 @@ export async function maintainRollupsForEvent(
 
   if (event.eventType === EVENT_TYPE.pageView) {
     await upsertSessionDay(db, websiteId, day, event.sessionId, event.visitId, createdAt);
-    await refreshRollupStatsDaily(db, websiteId, day);
+    await markRollupDay(db, websiteId, day);
 
     await bumpPageviewSeries(db, websiteId, 'day', day);
     await bumpPageviewSeries(db, websiteId, 'hour', hourBucket(createdAt));
-    await bumpPageviewSeries(db, websiteId, 'month', monthBucket(createdAt));
-    await bumpPageviewSeries(db, websiteId, 'year', yearBucket(createdAt));
-
-    await recordSeriesBucket(db, websiteId, 'day', day, event.sessionId, event.visitId);
     await recordSeriesBucket(db, websiteId, 'hour', hourBucket(createdAt), event.sessionId, event.visitId);
-    await recordSeriesBucket(db, websiteId, 'month', monthBucket(createdAt), event.sessionId, event.visitId);
-    await recordSeriesBucket(db, websiteId, 'year', yearBucket(createdAt), event.sessionId, event.visitId);
 
     await bumpDimension(db, websiteId, day, 'path', event.urlPath || '');
     await bumpDimension(db, websiteId, day, 'referrer', event.referrerDomain || 'Direct');
-    if (sessionMeta) {
-      await bumpDimension(db, websiteId, day, 'browser', sessionMeta.browser || 'Unknown');
-      await bumpDimension(db, websiteId, day, 'os', sessionMeta.os || 'Unknown');
-      await bumpDimension(db, websiteId, day, 'device', sessionMeta.device || 'Unknown');
-      await bumpDimension(db, websiteId, day, 'language', sessionMeta.language || 'Unknown');
-      await bumpDimension(db, websiteId, day, 'country', sessionMeta.country || 'Unknown');
+    if (sessionMeta && sessionDimensionsCombined) {
+      await bumpSessionDimensions(db, websiteId, day, sessionMeta);
+    } else if (sessionMeta) {
+      const values = sessionDimensionValues(sessionMeta);
+      for (const [i, column] of SESSION_DIMENSIONS.entries()) {
+        await bumpDimension(db, websiteId, day, column, values[i]!);
+      }
     }
   }
 
@@ -203,6 +201,14 @@ export interface DimensionAgg {
   day: string;
   dimension: string;
   value: string;
+  count: number;
+}
+
+export interface SessionDimensionsAgg {
+  websiteId: string;
+  day: string;
+  /** In SESSION_DIMENSIONS order. */
+  values: string[];
   count: number;
 }
 
@@ -289,6 +295,21 @@ export function buildDimensionDailyStatements(
   );
 }
 
+export function buildSessionDimensionsStatements(
+  db: D1Database,
+  items: SessionDimensionsAgg[],
+): D1PreparedStatement[] {
+  return items.map((s) =>
+    db
+      .prepare(
+        `INSERT INTO rollup_session_dims_daily (website_id, day, browser, os, device, language, country, count)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+         ON CONFLICT(website_id, day, browser, os, device, language, country) DO UPDATE SET count = count + ?8`,
+      )
+      .bind(s.websiteId, s.day, ...s.values, s.count),
+  );
+}
+
 export function buildEventDailyStatements(
   db: D1Database,
   items: EventDailyAgg[],
@@ -333,30 +354,16 @@ export function buildHeatmapStatements(
   );
 }
 
-export function buildStatsRefreshStatements(
+/** One rollup_stats_daily row per day that has rollups (see markRollupDay). */
+export function buildRollupDayStatements(
   db: D1Database,
   siteDays: Array<{ websiteId: string; day: string }>,
 ): D1PreparedStatement[] {
   return siteDays.map(({ websiteId, day }) =>
     db
       .prepare(
-        `INSERT INTO rollup_stats_daily (website_id, day, pageviews, visitors, visits, bounces, totaltime_sec)
-         SELECT
-           ?1,
-           ?2,
-           COALESCE(SUM(pageviews), 0),
-           COUNT(DISTINCT session_id),
-           COUNT(*),
-           SUM(CASE WHEN pageviews = 1 THEN 1 ELSE 0 END),
-           COALESCE(SUM((last_at - first_at) / 1000), 0)
-         FROM rollup_session_day
-         WHERE website_id = ?1 AND day = ?2
-         ON CONFLICT(website_id, day) DO UPDATE SET
-           pageviews = excluded.pageviews,
-           visitors = excluded.visitors,
-           visits = excluded.visits,
-           bounces = excluded.bounces,
-           totaltime_sec = excluded.totaltime_sec`,
+        `INSERT INTO rollup_stats_daily (website_id, day) VALUES (?1, ?2)
+         ON CONFLICT(website_id, day) DO NOTHING`,
       )
       .bind(websiteId, day),
   );

@@ -13,20 +13,22 @@ import {
   buildEventDailyStatements,
   buildHeatmapStatements,
   buildPageviewSeriesStatements,
+  buildRollupDayStatements,
   buildSeriesBucketStatements,
   buildSessionDayStatements,
-  buildStatsRefreshStatements,
+  buildSessionDimensionsStatements,
   dayKey,
   hourBucket,
   maintainRollupsForEvent,
-  monthBucket,
-  yearBucket,
+  SESSION_DIMENSIONS,
+  sessionDimensionValues,
   type DimensionAgg,
   type EventDailyAgg,
   type HeatmapAgg,
   type SeriesAgg,
   type SeriesBucketAgg,
   type SessionDayAgg,
+  type SessionDimensionsAgg,
 } from './rollups';
 
 export interface Env {
@@ -215,7 +217,7 @@ async function processEvent(
 
   if (!target.rollups) return true;
   const sessionMeta = await getSessionMeta(db, d.sessionId);
-  await maintainRollupsForEvent(d1, d, sessionMeta);
+  await maintainRollupsForEvent(d1, d, sessionMeta, target.store === 'site');
   return true;
 }
 
@@ -757,9 +759,10 @@ async function processBatchOptimized(
     const series = new Map<string, SeriesAgg>();
     const seriesBuckets = new Map<string, SeriesBucketAgg>();
     const dimension = new Map<string, DimensionAgg>();
+    const sessionDimensions = new Map<string, SessionDimensionsAgg>();
     const eventDaily = new Map<string, EventDailyAgg>();
     const heatmap = new Map<string, HeatmapAgg>();
-    const statsDays = new Map<string, { websiteId: string; day: string }>();
+    const rollupDays = new Map<string, { websiteId: string; day: string }>();
     const SEP = '\u0000';
 
     const addSeries = (websiteId: string, unit: string, bucket: string) => {
@@ -786,6 +789,17 @@ async function processBatchOptimized(
       if (cur) cur.count += 1;
       else dimension.set(key, { websiteId, day, dimension: dim, value, count: 1 });
     };
+    // Website stores count the session dimensions per combination (rollup_session_dims_daily).
+    const addSessionDimensions = (websiteId: string, day: string, values: string[]) => {
+      if (!siteStore) {
+        for (const [i, column] of SESSION_DIMENSIONS.entries()) addDim(websiteId, day, column, values[i]!);
+        return;
+      }
+      const key = `${websiteId}${SEP}${day}${SEP}${values.join(SEP)}`;
+      const cur = sessionDimensions.get(key);
+      if (cur) cur.count += 1;
+      else sessionDimensions.set(key, { websiteId, day, values, count: 1 });
+    };
 
     for (const m of insertedEventMsgs) {
       const d = m.data;
@@ -809,28 +823,18 @@ async function processBatchOptimized(
             lastAt: d.createdAt,
           });
         }
-        statsDays.set(`${d.websiteId}${SEP}${day}`, { websiteId: d.websiteId, day });
+        rollupDays.set(`${d.websiteId}${SEP}${day}`, { websiteId: d.websiteId, day });
 
+        // Month and year pageviews are summed from hours, and day visitors read from
+        // rollup_session_day, when read (apps/api/src/lib/rollups.ts).
         addSeries(d.websiteId, 'day', day);
         addSeries(d.websiteId, 'hour', hourBucket(d.createdAt));
-        addSeries(d.websiteId, 'month', monthBucket(d.createdAt));
-        addSeries(d.websiteId, 'year', yearBucket(d.createdAt));
-
-        addSeriesBucket(d.websiteId, 'day', day, d.sessionId, d.visitId);
         addSeriesBucket(d.websiteId, 'hour', hourBucket(d.createdAt), d.sessionId, d.visitId);
-        addSeriesBucket(d.websiteId, 'month', monthBucket(d.createdAt), d.sessionId, d.visitId);
-        addSeriesBucket(d.websiteId, 'year', yearBucket(d.createdAt), d.sessionId, d.visitId);
 
         addDim(d.websiteId, day, 'path', d.urlPath || '');
         addDim(d.websiteId, day, 'referrer', d.referrerDomain || 'Direct');
         const meta = metaMap.get(d.sessionId);
-        if (meta) {
-          addDim(d.websiteId, day, 'browser', meta.browser || 'Unknown');
-          addDim(d.websiteId, day, 'os', meta.os || 'Unknown');
-          addDim(d.websiteId, day, 'device', meta.device || 'Unknown');
-          addDim(d.websiteId, day, 'language', meta.language || 'Unknown');
-          addDim(d.websiteId, day, 'country', meta.country || 'Unknown');
-        }
+        if (meta) addSessionDimensions(d.websiteId, day, sessionDimensionValues(meta));
       }
 
       if (d.eventType === EVENT_TYPE.customEvent && d.eventName) {
@@ -877,10 +881,11 @@ async function processBatchOptimized(
       ...buildPageviewSeriesStatements(db, [...series.values()]),
       ...buildSeriesBucketStatements(db, [...seriesBuckets.values()]),
       ...buildDimensionDailyStatements(db, [...dimension.values()]),
+      ...buildSessionDimensionsStatements(db, [...sessionDimensions.values()]),
       ...buildEventDailyStatements(db, [...eventDaily.values()]),
       ...buildHeatmapStatements(db, [...heatmap.values()]),
+      ...buildRollupDayStatements(db, [...rollupDays.values()]),
     ]);
-    await runBatched(db, buildStatsRefreshStatements(db, [...statsDays.values()]));
 
     // Bill what this attempt actually wrote: redelivered or duplicate messages are no-ops.
     return getUsageByUser(d1, [...insertedEventMsgs, ...dedupedHeatmapMsgs], hostedBilling);

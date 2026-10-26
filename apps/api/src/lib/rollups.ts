@@ -1,7 +1,7 @@
 import { EVENT_TYPE } from '@flareboard/shared';
 import { rollupDailyRangeEligible, rollupHourlySeriesEligible } from '@flareboard/shared';
 import type { Env } from '../env';
-import { siteDb } from './site-db';
+import { eventStoreMode, siteDb } from './site-db';
 
 export type StatsBlock = {
   pageviews: { value: number; change: number };
@@ -83,6 +83,56 @@ function seriesEndBucket(unitKey: string, endAt: number) {
         : dayKey(endAt);
 }
 
+/** The bucket right after `bucket` ('YYYY-MM-DD', 'YYYY-MM' or 'YYYY'), an exclusive end for ranges. */
+function nextBucket(unitKey: string, bucket: string) {
+  if (unitKey === 'year') return String(Number(bucket) + 1);
+  if (unitKey === 'month') {
+    const [year, month] = bucket.split('-').map(Number) as [number, number];
+    return new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7);
+  }
+  return new Date(Date.parse(`${bucket}T00:00:00Z`) + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+/** Length of a bucket key: a day, month or year is a prefix of the hour and day keys within it. */
+const BUCKET_LENGTH: Record<string, number> = { day: 10, month: 7, year: 4 };
+
+/**
+ * Pageviews per bucket, oldest first. Stores keep day and hour rows; a month or year is the sum
+ * of its hours, whose keys ('YYYY-MM-DD HH:00') start with it.
+ */
+async function loadPageviewSeries(
+  env: Env,
+  websiteId: string,
+  unitKey: string,
+  startBucket: string,
+  endBucket: string,
+): Promise<{ bucket: string; pageviews: number }[]> {
+  const db = siteDb(env, websiteId);
+  if (unitKey === 'month' || unitKey === 'year') {
+    const rows = await db
+      .prepare(
+        `SELECT substr(bucket, 1, ${BUCKET_LENGTH[unitKey]}) AS period, SUM(pageviews) AS pageviews
+         FROM rollup_pageview_series
+         WHERE website_id = ?1 AND unit = 'hour' AND bucket >= ?2 AND bucket < ?3
+         GROUP BY period
+         ORDER BY period ASC`,
+      )
+      .bind(websiteId, startBucket, nextBucket(unitKey, endBucket))
+      .all<{ period: string; pageviews: number }>();
+    return (rows.results ?? []).map((row) => ({ bucket: row.period, pageviews: row.pageviews }));
+  }
+  const rows = await db
+    .prepare(
+      `SELECT bucket, pageviews
+       FROM rollup_pageview_series
+       WHERE website_id = ?1 AND unit = ?2 AND bucket >= ?3 AND bucket <= ?4
+       ORDER BY bucket ASC`,
+    )
+    .bind(websiteId, unitKey, startBucket, endBucket)
+    .all<{ bucket: string; pageviews: number }>();
+  return rows.results ?? [];
+}
+
 /**
  * D1 caps a statement at 100 bound parameters, so long ranges cannot bind one
  * parameter per day. Day lists from daysInRange are contiguous: bind the ends.
@@ -131,57 +181,31 @@ export async function getWebsiteStatsFromRollups(
   const prevDays = daysInRange(prevStart, prevEnd);
   if (!(await rollupDaysComplete(env, websiteId, prevDays))) return null;
 
-  const sumDailyStats = async (targetDays: string[]) => {
-    if (!targetDays.length) {
-      return { pageviews: 0, visits: 0, bounces: 0, totaltime_sec: 0 };
-    }
+  // The per-day counters are sums over rollup_session_day (one row per visit and day).
+  const sumSessionDays = async (targetDays: string[]) => {
+    const empty = { pageviews: 0, visits: 0, bounces: 0, totaltime_sec: 0, visitors: 0 };
+    if (!targetDays.length) return empty;
     return (
       (await siteDb(env, websiteId).prepare(
         `SELECT
            COALESCE(SUM(pageviews), 0) as pageviews,
-           COALESCE(SUM(visits), 0) as visits,
-           COALESCE(SUM(bounces), 0) as bounces,
-           COALESCE(SUM(totaltime_sec), 0) as totaltime_sec
-         FROM rollup_stats_daily
+           COUNT(*) as visits,
+           COALESCE(SUM(CASE WHEN pageviews = 1 THEN 1 ELSE 0 END), 0) as bounces,
+           COALESCE(SUM((last_at - first_at) / 1000), 0) as totaltime_sec,
+           COUNT(DISTINCT session_id) as visitors
+         FROM rollup_session_day
          WHERE website_id = ?1 AND day >= ?2 AND day <= ?3`,
       )
         .bind(websiteId, ...dayBounds(targetDays))
-        .first<{
-          pageviews: number;
-          visits: number;
-          bounces: number;
-          totaltime_sec: number;
-        }>()) ?? {
-        pageviews: 0,
-        visits: 0,
-        bounces: 0,
-        totaltime_sec: 0,
-      }
+        .first<typeof empty>()) ?? empty
     );
   };
 
-  const countDistinctVisitors = async (targetDays: string[]) => {
-    if (!targetDays.length) return 0;
-    const row = await siteDb(env, websiteId).prepare(
-      `SELECT COUNT(DISTINCT session_id) as visitors
-       FROM rollup_session_day
-       WHERE website_id = ?1 AND day >= ?2 AND day <= ?3`,
-    )
-      .bind(websiteId, ...dayBounds(targetDays))
-      .first<{ visitors: number }>();
-    return row?.visitors ?? 0;
-  };
-
-  const [currentStats, previousStats, currentVisitors, previousVisitors] = await Promise.all([
-    sumDailyStats(days),
-    sumDailyStats(prevDays),
-    countDistinctVisitors(days),
-    countDistinctVisitors(prevDays),
-  ]);
+  const [currentStats, previousStats] = await Promise.all([sumSessionDays(days), sumSessionDays(prevDays)]);
 
   return {
     pageviews: statChange(currentStats.pageviews, previousStats.pageviews),
-    visitors: statChange(currentVisitors, previousVisitors),
+    visitors: statChange(currentStats.visitors, previousStats.visitors),
     visits: statChange(currentStats.visits, previousStats.visits),
     bounces: statChange(currentStats.bounces, previousStats.bounces),
     totaltime: statChange(currentStats.totaltime_sec, previousStats.totaltime_sec),
@@ -216,26 +240,21 @@ export async function getPageviewsFromRollups(
     if (!(await rollupDaysComplete(env, websiteId, days))) return null;
   }
 
-  const rows = await siteDb(env, websiteId).prepare(
-    `SELECT bucket, pageviews
-     FROM rollup_pageview_series
-     WHERE website_id = ?1 AND unit = ?2 AND bucket >= ?3 AND bucket <= ?4
-     ORDER BY bucket ASC`,
-  )
-    .bind(websiteId, unitKey, startBucket, endBucket)
-    .all<{ bucket: string; pageviews: number }>();
-
-  if (!rows.results?.length) return null;
+  const rows = await loadPageviewSeries(env, websiteId, unitKey, startBucket, endBucket);
+  if (!rows.length) return null;
 
   if (unitKey === 'hour') {
     const identityRows = await loadSeriesIdentities(env, websiteId, unitKey, startBucket, endBucket);
-    if (!hourSeriesBucketsAligned(rows.results, identityRows)) return null;
+    if (!hourSeriesBucketsAligned(rows, identityRows)) return null;
   }
 
   return {
-    pageviews: rows.results.map((r) => ({ x: r.bucket, y: r.pageviews })),
+    pageviews: rows.map((r) => ({ x: r.bucket, y: r.pageviews })),
   };
 }
+
+/** Columns of rollup_session_dims_daily. */
+const SESSION_DIMENSIONS = new Set(['browser', 'os', 'device', 'language', 'country']);
 
 const METRIC_DIMENSION: Record<string, string> = {
   path: 'path',
@@ -264,13 +283,28 @@ export async function getMetricsFromRollups(
   const days = daysInRange(startAt, endAt);
   if (!(await rollupDaysComplete(env, websiteId, days))) return null;
 
+  // Website stores count the session dimensions per combination; days counted before that keep
+  // their rollup_dimension_daily rows, so both are added.
+  const combined = eventStoreMode(env) === 'do' && SESSION_DIMENSIONS.has(dimension);
   const rows = await siteDb(env, websiteId).prepare(
-    `SELECT value, SUM(count) as count
-     FROM rollup_dimension_daily
-     WHERE website_id = ?1 AND dimension = ?2 AND day >= ?3 AND day <= ?4
-     GROUP BY value
-     ORDER BY count DESC
-     LIMIT ?5`,
+    combined
+      ? `SELECT value, SUM(count) as count
+         FROM (
+           SELECT value, count FROM rollup_dimension_daily
+           WHERE website_id = ?1 AND dimension = ?2 AND day >= ?3 AND day <= ?4
+           UNION ALL
+           SELECT ${dimension} AS value, count FROM rollup_session_dims_daily
+           WHERE website_id = ?1 AND day >= ?3 AND day <= ?4
+         )
+         GROUP BY value
+         ORDER BY count DESC
+         LIMIT ?5`
+      : `SELECT value, SUM(count) as count
+         FROM rollup_dimension_daily
+         WHERE website_id = ?1 AND dimension = ?2 AND day >= ?3 AND day <= ?4
+         GROUP BY value
+         ORDER BY count DESC
+         LIMIT ?5`,
   )
     .bind(websiteId, dimension, ...dayBounds(days), limit)
     .all<{ value: string; count: number }>();
@@ -314,6 +348,10 @@ export type WebsiteMetricsSeries = {
   visitors: { x: string; y: number }[];
 };
 
+/**
+ * Distinct visitors and visits per bucket, oldest first. Hours come from rollup_series_bucket;
+ * days, months and years from rollup_session_day, which holds the same visits per day.
+ */
 async function loadSeriesIdentities(
   env: Env,
   websiteId: string,
@@ -321,18 +359,33 @@ async function loadSeriesIdentities(
   startBucket: string,
   endBucket: string,
 ): Promise<{ bucket: string; visitors: number; visits: number }[]> {
-  const rows = await siteDb(env, websiteId).prepare(
-    `SELECT bucket,
+  const db = siteDb(env, websiteId);
+  if (unitKey === 'hour') {
+    const rows = await db.prepare(
+      `SELECT bucket,
+              COUNT(DISTINCT session_id) as visitors,
+              COUNT(DISTINCT visit_id) as visits
+       FROM rollup_series_bucket
+       WHERE website_id = ?1 AND unit = ?2 AND bucket >= ?3 AND bucket <= ?4
+       GROUP BY bucket
+       ORDER BY bucket ASC`,
+    )
+      .bind(websiteId, unitKey, startBucket, endBucket)
+      .all<{ bucket: string; visitors: number; visits: number }>();
+    return rows.results ?? [];
+  }
+  const rows = await db.prepare(
+    `SELECT substr(day, 1, ${BUCKET_LENGTH[unitKey] ?? 10}) AS period,
             COUNT(DISTINCT session_id) as visitors,
             COUNT(DISTINCT visit_id) as visits
-     FROM rollup_series_bucket
-     WHERE website_id = ?1 AND unit = ?2 AND bucket >= ?3 AND bucket <= ?4
-     GROUP BY bucket
-     ORDER BY bucket ASC`,
+     FROM rollup_session_day
+     WHERE website_id = ?1 AND day >= ?2 AND day < ?3
+     GROUP BY period
+     ORDER BY period ASC`,
   )
-    .bind(websiteId, unitKey, startBucket, endBucket)
-    .all<{ bucket: string; visitors: number; visits: number }>();
-  return rows.results ?? [];
+    .bind(websiteId, startBucket, nextBucket(unitKey, endBucket))
+    .all<{ period: string; visitors: number; visits: number }>();
+  return (rows.results ?? []).map(({ period, visitors, visits }) => ({ bucket: period, visitors, visits }));
 }
 
 async function loadDailyVisitorsFromSessionDay(
@@ -369,29 +422,21 @@ export async function getWebsiteMetricsSeriesFromRollups(
 
   if (unitKey !== 'hour' && !(await rollupDaysComplete(env, websiteId, days))) return null;
 
-  const pageviewRows = await siteDb(env, websiteId).prepare(
-    `SELECT bucket, pageviews
-     FROM rollup_pageview_series
-     WHERE website_id = ?1 AND unit = ?2 AND bucket >= ?3 AND bucket <= ?4
-     ORDER BY bucket ASC`,
-  )
-    .bind(websiteId, unitKey, startBucket, endBucket)
-    .all<{ bucket: string; pageviews: number }>();
-
-  if (!pageviewRows.results?.length) return null;
+  const pageviewRows = await loadPageviewSeries(env, websiteId, unitKey, startBucket, endBucket);
+  if (!pageviewRows.length) return null;
 
   let visitors: { x: string; y: number }[];
   if (unitKey === 'day') {
     visitors = await loadDailyVisitorsFromSessionDay(env, websiteId, days);
   } else {
     const identityRows = await loadSeriesIdentities(env, websiteId, unitKey, startBucket, endBucket);
-    if (unitKey === 'hour' && !hourSeriesBucketsAligned(pageviewRows.results, identityRows)) return null;
+    if (unitKey === 'hour' && !hourSeriesBucketsAligned(pageviewRows, identityRows)) return null;
     if (!identityRows.length) return null;
     visitors = identityRows.map((r) => ({ x: r.bucket, y: r.visitors }));
   }
 
   return {
-    pageviews: pageviewRows.results.map((r) => ({ x: r.bucket, y: r.pageviews })),
+    pageviews: pageviewRows.map((r) => ({ x: r.bucket, y: r.pageviews })),
     visitors,
   };
 }
@@ -422,40 +467,24 @@ export async function getDashboardMetricsFromRollups(
   // Every site has its own store, so query them in parallel and concatenate.
   const perSite = await Promise.all(
     websiteIds.map(async (websiteId) => {
-      const db = siteDb(env, websiteId);
-      const stats = await db
+      const totals = await siteDb(env, websiteId)
         .prepare(
-          `SELECT COALESCE(SUM(pageviews), 0) as pageviews, COALESCE(SUM(visits), 0) as visits, COUNT(*) as dayRows
-           FROM rollup_stats_daily
-           WHERE website_id = ?1 AND day >= ?2 AND day <= ?3`,
-        )
-        .bind(websiteId, ...dayBounds(days))
-        .first<{ pageviews: number; visits: number; dayRows: number }>();
-      const visitors = await db
-        .prepare(
-          `SELECT COUNT(DISTINCT session_id) as visitors
+          `SELECT COALESCE(SUM(pageviews), 0) as pageviews, COUNT(*) as visits, COUNT(DISTINCT session_id) as visitors
            FROM rollup_session_day
            WHERE website_id = ?1 AND day >= ?2 AND day <= ?3`,
         )
         .bind(websiteId, ...dayBounds(days))
-        .first<{ visitors: number }>();
-      return { websiteId, stats, visitors: visitors?.visitors ?? 0 };
+        .first<{ pageviews: number; visits: number; visitors: number }>();
+      return {
+        websiteId,
+        pageviews: totals?.pageviews ?? 0,
+        visitors: totals?.visitors ?? 0,
+        visits: totals?.visits ?? 0,
+      };
     }),
   );
-  const statsResults = perSite
-    .filter((site) => (site.stats?.dayRows ?? 0) > 0)
-    .map((site) => ({ websiteId: site.websiteId, pageviews: site.stats!.pageviews, visits: site.stats!.visits }));
-  const visitorResults = perSite.map((site) => ({ websiteId: site.websiteId, visitors: site.visitors }));
-
-  if (!statsResults.length) return null;
-
-  const visitorsBySite = new Map(visitorResults.map((r) => [r.websiteId, r.visitors]));
-  return statsResults.map((row) => ({
-    websiteId: row.websiteId,
-    pageviews: row.pageviews,
-    visitors: visitorsBySite.get(row.websiteId) ?? 0,
-    visits: row.visits,
-  }));
+  // Every site has a rollup row for every day here (checked above), so each one has a result.
+  return perSite;
 }
 
 export type AggregateMetricsSeries = {
@@ -490,37 +519,20 @@ export async function getAggregateMetricsFromRollups(
   const identityByBucket = new Map<string, { visitors: number; visits: number }>();
   const perSite = await Promise.all(
     websiteIds.map(async (websiteId) => {
-      const db = siteDb(env, websiteId);
-      const pageviews = await db
-        .prepare(
-          `SELECT bucket as x, SUM(pageviews) as pageviews
-           FROM rollup_pageview_series
-           WHERE website_id = ?1 AND unit = ?2 AND bucket >= ?3 AND bucket <= ?4
-           GROUP BY bucket`,
-        )
-        .bind(websiteId, unitKey, startBucket, endBucket)
-        .all<{ x: string; pageviews: number }>();
-      const identities = await db
-        .prepare(
-          `SELECT bucket as x,
-                  COUNT(DISTINCT session_id) as visitors,
-                  COUNT(DISTINCT visit_id) as visits
-           FROM rollup_series_bucket
-           WHERE website_id = ?1 AND unit = ?2 AND bucket >= ?3 AND bucket <= ?4
-           GROUP BY bucket`,
-        )
-        .bind(websiteId, unitKey, startBucket, endBucket)
-        .all<{ x: string; visitors: number; visits: number }>();
-      return { pageviews: pageviews.results ?? [], identities: identities.results ?? [] };
+      const [pageviews, identities] = await Promise.all([
+        loadPageviewSeries(env, websiteId, unitKey, startBucket, endBucket),
+        loadSeriesIdentities(env, websiteId, unitKey, startBucket, endBucket),
+      ]);
+      return { pageviews, identities };
     }),
   );
   for (const site of perSite) {
     for (const row of site.pageviews) {
-      pageviewByBucket.set(row.x, (pageviewByBucket.get(row.x) ?? 0) + row.pageviews);
+      pageviewByBucket.set(row.bucket, (pageviewByBucket.get(row.bucket) ?? 0) + row.pageviews);
     }
     for (const row of site.identities) {
-      const cur = identityByBucket.get(row.x) ?? { visitors: 0, visits: 0 };
-      identityByBucket.set(row.x, { visitors: cur.visitors + row.visitors, visits: cur.visits + row.visits });
+      const cur = identityByBucket.get(row.bucket) ?? { visitors: 0, visits: 0 };
+      identityByBucket.set(row.bucket, { visitors: cur.visitors + row.visitors, visits: cur.visits + row.visits });
     }
   }
   const byBucket = <T,>(map: Map<string, T>) => [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
@@ -546,7 +558,10 @@ export async function getAggregateMetricsFromRollups(
   };
 }
 
-/** Recompute rollup_stats_daily for one website/day from rollup_session_day. */
+/**
+ * Drops the day-level rollups of `days` after an import added raw rows to them: ranges that
+ * include those days are then read from the raw rows.
+ */
 export async function invalidateDailyRollups(env: Env, websiteId: string, days: string[]) {
   if (!days.length) return;
   // Imported days need not be contiguous; chunk them under D1's parameter cap.
@@ -563,6 +578,7 @@ async function invalidateDailyRollupChunk(env: Env, websiteId: string, days: str
     'rollup_session_day',
     'rollup_event_daily',
     'rollup_dimension_daily',
+    ...(eventStoreMode(env) === 'do' ? ['rollup_session_dims_daily'] : []),
   ];
   for (const table of dayTables) {
     await siteDb(env, websiteId).prepare(`DELETE FROM ${table} WHERE website_id = ?1 AND day IN (${dayPlaceholders})`)
@@ -573,35 +589,6 @@ async function invalidateDailyRollupChunk(env: Env, websiteId: string, days: str
     `DELETE FROM rollup_pageview_series WHERE website_id = ?1 AND unit = 'day' AND bucket IN (${dayPlaceholders})`,
   )
     .bind(...binds)
-    .run();
-  await siteDb(env, websiteId).prepare(
-    `DELETE FROM rollup_series_bucket WHERE website_id = ?1 AND unit = 'day' AND bucket IN (${dayPlaceholders})`,
-  )
-    .bind(...binds)
-    .run();
-}
-
-export async function refreshRollupStatsDaily(env: Env, websiteId: string, day: string) {
-  await siteDb(env, websiteId).prepare(
-    `INSERT INTO rollup_stats_daily (website_id, day, pageviews, visitors, visits, bounces, totaltime_sec)
-     SELECT
-       ?1,
-       ?2,
-       COALESCE(SUM(pageviews), 0),
-       COUNT(DISTINCT session_id),
-       COUNT(*),
-       SUM(CASE WHEN pageviews = 1 THEN 1 ELSE 0 END),
-       COALESCE(SUM((last_at - first_at) / 1000), 0)
-     FROM rollup_session_day
-     WHERE website_id = ?1 AND day = ?2
-     ON CONFLICT(website_id, day) DO UPDATE SET
-       pageviews = excluded.pageviews,
-       visitors = excluded.visitors,
-       visits = excluded.visits,
-       bounces = excluded.bounces,
-       totaltime_sec = excluded.totaltime_sec`,
-  )
-    .bind(websiteId, day)
     .run();
 }
 

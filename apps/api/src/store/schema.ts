@@ -487,7 +487,101 @@ export const STORE_MIGRATIONS: ReadonlyArray<{ version: number; statements: stri
     // path and event-name indexes, which serve the same range scans, so it only cost a row per event.
     statements: [`DROP INDEX IF EXISTS website_event_website_created_idx`],
   },
+  {
+    // Fewer written rows per event, with every number a report shows unchanged:
+    // - rollup tables and `session` become WITHOUT ROWID, so a new row is one written row instead
+    //   of the table row plus its primary-key index entry;
+    // - rollup_stats_daily only marks the days that have rollups: lib/rollups.ts sums the counters
+    //   from rollup_session_day, which they were always computed from. Its counter columns are no
+    //   longer written or read; they stay so an aggregator deployed before the API keeps working;
+    // - rollup_pageview_series keeps the day and hour units: month and year are sums of hours;
+    // - rollup_series_bucket keeps the hour unit: day visitors come from rollup_session_day, and
+    //   nothing read the month and year visitor sets;
+    // - browser, os, device, language and country are counted in one row per combination
+    //   (rollup_session_dims_daily) instead of one row per dimension. Days counted before this
+    //   keep their rollup_dimension_daily rows; readers add both;
+    // - the event-name and distinct-id indexes skip rows without a value (pageviews, anonymous
+    //   sessions). Queries that filter on those columns imply IS NOT NULL and still use them.
+    version: 8,
+    statements: [
+      ...rebuildWithoutRowid(
+        'rollup_stats_daily',
+        `website_id TEXT NOT NULL, day TEXT NOT NULL, pageviews INTEGER NOT NULL DEFAULT 0,
+         visitors INTEGER NOT NULL DEFAULT 0, visits INTEGER NOT NULL DEFAULT 0, bounces INTEGER NOT NULL DEFAULT 0,
+         totaltime_sec INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (website_id, day)`,
+        'website_id, day, pageviews, visitors, visits, bounces, totaltime_sec',
+      ),
+      ...rebuildWithoutRowid(
+        'rollup_pageview_series',
+        `website_id TEXT NOT NULL, unit TEXT NOT NULL, bucket TEXT NOT NULL, pageviews INTEGER NOT NULL DEFAULT 0,
+         PRIMARY KEY (website_id, unit, bucket)`,
+        'website_id, unit, bucket, pageviews',
+        `unit IN ('day', 'hour')`,
+      ),
+      ...rebuildWithoutRowid(
+        'rollup_series_bucket',
+        `website_id TEXT NOT NULL, unit TEXT NOT NULL, bucket TEXT NOT NULL, session_id TEXT NOT NULL, visit_id TEXT NOT NULL,
+         PRIMARY KEY (website_id, unit, bucket, session_id, visit_id)`,
+        'website_id, unit, bucket, session_id, visit_id',
+        `unit = 'hour'`,
+      ),
+      ...rebuildWithoutRowid(
+        'rollup_dimension_daily',
+        `website_id TEXT NOT NULL, day TEXT NOT NULL, dimension TEXT NOT NULL, value TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0,
+         PRIMARY KEY (website_id, day, dimension, value)`,
+        'website_id, day, dimension, value, count',
+      ),
+      ...rebuildWithoutRowid(
+        'rollup_event_daily',
+        `website_id TEXT NOT NULL, day TEXT NOT NULL, event_name TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0,
+         PRIMARY KEY (website_id, day, event_name)`,
+        'website_id, day, event_name, count',
+      ),
+      ...rebuildWithoutRowid(
+        'rollup_session_day',
+        `website_id TEXT NOT NULL, day TEXT NOT NULL, session_id TEXT NOT NULL, visit_id TEXT NOT NULL,
+         pageviews INTEGER NOT NULL DEFAULT 0, first_at INTEGER NOT NULL, last_at INTEGER NOT NULL,
+         PRIMARY KEY (website_id, day, session_id, visit_id)`,
+        'website_id, day, session_id, visit_id, pageviews, first_at, last_at',
+      ),
+      `CREATE TABLE rollup_session_dims_daily (
+        website_id TEXT NOT NULL,
+        day TEXT NOT NULL,
+        browser TEXT NOT NULL,
+        os TEXT NOT NULL,
+        device TEXT NOT NULL,
+        language TEXT NOT NULL,
+        country TEXT NOT NULL,
+        count INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (website_id, day, browser, os, device, language, country)
+      ) WITHOUT ROWID`,
+      ...rebuildWithoutRowid(
+        'session',
+        `session_id TEXT PRIMARY KEY NOT NULL, website_id TEXT NOT NULL, browser TEXT, os TEXT, device TEXT, screen TEXT,
+         language TEXT, country TEXT, region TEXT, city TEXT, distinct_id TEXT, created_at INTEGER`,
+        'session_id, website_id, browser, os, device, screen, language, country, region, city, distinct_id, created_at',
+      ),
+      `CREATE INDEX session_website_created_idx ON session (website_id, created_at)`,
+      `CREATE INDEX session_distinct_idx ON session (distinct_id) WHERE distinct_id IS NOT NULL`,
+      `DROP INDEX IF EXISTS website_event_website_event_name_idx`,
+      `CREATE INDEX website_event_website_event_name_idx ON website_event (website_id, created_at, event_name)
+       WHERE event_name IS NOT NULL`,
+    ],
+  },
 ];
+
+/**
+ * Rebuilds `table` as a WITHOUT ROWID table with `definition`, copying the rows `where` keeps.
+ * The old table's indexes go with it: recreate any it needs afterwards.
+ */
+function rebuildWithoutRowid(table: string, definition: string, columns: string, where?: string): string[] {
+  return [
+    `CREATE TABLE ${table}_next (${definition}) WITHOUT ROWID`,
+    `INSERT INTO ${table}_next (${columns}) SELECT ${columns} FROM ${table}${where ? ` WHERE ${where}` : ''}`,
+    `DROP TABLE ${table}`,
+    `ALTER TABLE ${table}_next RENAME TO ${table}`,
+  ];
+}
 
 /** OpenTelemetry logs and spans are kept at most this long (the store alarm purges older rows). */
 export const OTEL_RETENTION_DAYS = 30;
